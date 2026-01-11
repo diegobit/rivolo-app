@@ -2,7 +2,7 @@ export const shareOrDownload = async (filename: string, content: string) => {
   const file = new File([content], filename, { type: 'text/markdown' })
 
   if (navigator.share && navigator.canShare?.({ files: [file] })) {
-    await navigator.share({ files: [file], title: 'Single Note' })
+    await navigator.share({ files: [file], title: 'Rivolo' })
     return
   }
 

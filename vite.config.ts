@@ -11,20 +11,19 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['vite.svg'],
+      includeAssets: ['rivolo.ico'],
       manifest: {
-        name: 'Single Note',
-        short_name: 'Single Note',
+        name: 'Rivolo',
+        short_name: 'Rivolo',
         description: 'Day-block single note PWA',
         theme_color: '#0f172a',
         background_color: '#f8fafc',
         display: 'standalone',
         icons: [
           {
-            src: '/vite.svg',
+            src: '/rivolo.ico',
             sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any maskable',
+            type: 'image/x-icon',
           },
         ],
       },
