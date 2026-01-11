@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
-import { Decoration, EditorView } from '@codemirror/view'
+import { Decoration, EditorView, keymap } from '@codemirror/view'
 import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/state'
 import { pushToDropbox } from '../lib/dropbox'
 import { buttonDanger } from '../lib/ui'
@@ -29,6 +29,7 @@ export default function DayEditor() {
   const syncPendingRef = useRef(false)
   const exitHandledRef = useRef(false)
   const editorViewRef = useRef<EditorView | null>(null)
+  const hasFocusedRef = useRef(false)
 
   const quote = searchParams.get('quote') ?? ''
   const resolvedDayId = dayId ?? ''
@@ -87,6 +88,7 @@ export default function DayEditor() {
     syncTriggeredRef.current = false
     syncPendingRef.current = false
     exitHandledRef.current = false
+    hasFocusedRef.current = false
   }, [resolvedDayId])
 
   const editorTheme = useMemo(
@@ -201,9 +203,12 @@ export default function DayEditor() {
       setDraft(activeDay.contentMd)
       setDateValue(activeDay.dayId)
       setDateError(null)
-      requestAnimationFrame(() => {
-        focusEditor()
-      })
+      if (!hasFocusedRef.current) {
+        requestAnimationFrame(() => {
+          focusEditor()
+          hasFocusedRef.current = true
+        })
+      }
     }
   }, [activeDay, focusEditor, resolvedDayId])
 
@@ -216,7 +221,7 @@ export default function DayEditor() {
         syncPendingRef.current = true
         void updateDayContent(resolvedDayId, draft)
       }
-    }, 400)
+    }, 1000)
 
     return () => window.clearTimeout(handle)
   }, [activeDay?.contentMd, draft, resolvedDayId, updateDayContent])
@@ -340,6 +345,20 @@ export default function DayEditor() {
     navigate('/')
   }
 
+  const escapeKeymap = useMemo(
+    () =>
+      keymap.of([
+        {
+          key: 'Escape',
+          run: () => {
+            void handleClose()
+            return true
+          },
+        },
+      ]),
+    [handleClose],
+  )
+
   if (!resolvedDayId) {
     return (
       <section className="rounded-2xl bg-white p-4">
@@ -406,7 +425,7 @@ export default function DayEditor() {
           <CodeMirror
             value={draft}
             height="360px"
-            extensions={[markdown(), editorTheme, clearActiveLine, EditorView.lineWrapping, ...highlightData.extensions]}
+            extensions={[markdown(), editorTheme, clearActiveLine, escapeKeymap, EditorView.lineWrapping, ...highlightData.extensions]}
             onChange={setDraft}
             onCreateEditor={(view) => {
               editorViewRef.current = view

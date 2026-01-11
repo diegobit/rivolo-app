@@ -6,6 +6,8 @@ import type { EncryptedPayload } from '../lib/crypto'
 
 type Provider = 'gemini'
 
+type TimelineView = 'full' | 'preview'
+
 type LlmSecrets = {
   geminiApiKey: string
 }
@@ -19,9 +21,11 @@ type SettingsState = {
   locked: boolean
   loading: boolean
   passcode: string
+  timelineView: TimelineView
   loadSettings: () => Promise<void>
   saveGeminiKey: (apiKey: string) => Promise<void>
   updatePasscode: (passcode: string) => Promise<boolean>
+  updateTimelineView: (view: TimelineView) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -31,14 +35,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   locked: false,
   loading: false,
   passcode: DEFAULT_PASSCODE,
+  timelineView: 'full',
 
   loadSettings: async () => {
     set({ loading: true })
     const provider = (await getSetting('llm.provider')) as Provider | null
     const storedPasscode = await getSetting('llm.passcode')
+    const storedTimelineView = (await getSetting('timeline.view')) as TimelineView | null
     const passcode = storedPasscode ?? DEFAULT_PASSCODE
+    const timelineView = storedTimelineView ?? 'full'
     if (!storedPasscode) {
       await setSetting('llm.passcode', passcode)
+    }
+    if (!storedTimelineView) {
+      await setSetting('timeline.view', timelineView)
     }
 
     const encrypted = await getJsonSetting<EncryptedPayload>('llm.encrypted')
@@ -61,6 +71,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       encrypted,
       geminiApiKey,
       locked,
+      timelineView,
       loading: false,
     })
   },
@@ -115,5 +126,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     })
 
     return !locked
+  },
+
+  updateTimelineView: async (view: TimelineView) => {
+    await setSetting('timeline.view', view)
+    set({ timelineView: view })
   },
 }))

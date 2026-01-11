@@ -8,10 +8,18 @@ import { useDropboxStore } from '../store/useDropboxStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useDaysStore } from '../store/useDaysStore'
 
-const getLines = (content: string) =>
-  content.split('\n').map((line) => line.trim()).filter(Boolean)
+const getPreview = (content: string, maxLines: number) => {
+  const trimmed = content.trim()
+  if (!trimmed) {
+    return { text: '', truncated: false }
+  }
 
-const getSnippet = (lines: string[]) => lines.slice(0, 5).join('\n')
+  const lines = trimmed.split('\n')
+  return {
+    text: lines.slice(0, maxLines).join('\n'),
+    truncated: lines.length > maxLines,
+  }
+}
 
 const countOpenTasks = (content: string) => (content.match(/- \[ \]/g) ?? []).length
 
@@ -22,6 +30,7 @@ type TimelineDayCard = {
   day: Day
   snippet: string
   open: number
+  truncated: boolean
 }
 
 type TimelineItem =
@@ -33,7 +42,7 @@ export default function Timeline() {
   const navigate = useNavigate()
   const [text, setText] = useState('')
   const { days, loading, loadTimeline, appendToToday } = useDaysStore()
-  const { loadSettings, passcode, locked } = useSettingsStore()
+  const { loadSettings, passcode, locked, timelineView } = useSettingsStore()
   const { loadState, hasAuth, filePath } = useDropboxStore()
 
   const canSync = Boolean(hasAuth && filePath && passcode.trim() && !locked)
@@ -65,12 +74,27 @@ export default function Timeline() {
   const cards = useMemo<TimelineDayCard[]>(
     () =>
       days.map((day) => {
-        const lines = getLines(day.contentMd)
-        const snippet = getSnippet(lines)
+        const trimmed = day.contentMd.trim()
         const open = countOpenTasks(day.contentMd)
-        return { day, snippet, open }
+
+        if (timelineView === 'preview') {
+          const preview = getPreview(day.contentMd, 10)
+          return {
+            day,
+            snippet: preview.text,
+            open,
+            truncated: preview.truncated,
+          }
+        }
+
+        return {
+          day,
+          snippet: trimmed,
+          open,
+          truncated: false,
+        }
       }),
-    [days],
+    [days, timelineView],
   )
 
   const todayId = getTodayId()
@@ -230,7 +254,7 @@ export default function Timeline() {
               )
             }
 
-            const { day, snippet, open } = item.card
+            const { day, snippet, open, truncated } = item.card
             const isToday = day.dayId === todayId
             const isYesterday = day.dayId === yesterdayId
             const isFuture = day.dayId > todayId
@@ -275,6 +299,7 @@ export default function Timeline() {
                 {snippet && (
                   <p className={`mt-3 whitespace-pre-line text-base ${isFuture ? 'text-slate-500/70' : 'text-slate-600'}`}>
                     {snippet}
+                    {truncated && <span className="mt-2 block text-xs text-slate-400">... more</span>}
                   </p>
                 )}
               </Link>

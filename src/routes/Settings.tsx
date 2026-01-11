@@ -17,8 +17,16 @@ const formatSyncTime = (timestamp: number | null) => {
 
 export default function Settings() {
   const { loadTimeline } = useDaysStore()
-  const { loadSettings, saveGeminiKey, updatePasscode, locked, geminiApiKey, passcode } =
-    useSettingsStore()
+  const {
+    loadSettings,
+    saveGeminiKey,
+    updatePasscode,
+    updateTimelineView,
+    locked,
+    geminiApiKey,
+    passcode,
+    timelineView,
+  } = useSettingsStore()
   const { filePath, lastRemoteRev, lastSyncAt, localDirty, hasAuth, loadState, updateFilePath } =
     useDropboxStore()
 
@@ -222,6 +230,26 @@ export default function Settings() {
           </p>
         )}
         {status && <p className="mt-3 text-xs text-slate-500">{status}</p>}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-600">Timeline View</h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            className={timelineView === 'full' ? buttonPrimary : buttonSecondary}
+            type="button"
+            onClick={() => void updateTimelineView('full')}
+          >
+            Full
+          </button>
+          <button
+            className={timelineView === 'preview' ? buttonPrimary : buttonSecondary}
+            type="button"
+            onClick={() => void updateTimelineView('preview')}
+          >
+            Preview (10 lines)
+          </button>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
