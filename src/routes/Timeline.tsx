@@ -179,11 +179,7 @@ export default function Timeline() {
         <div className="space-y-3">
           <div className="flex justify-center">
             <button
-              className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] transition hover:text-[#22B3FF]/80"
-
-
-
-
+              className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
               type="button"
               onClick={() => navigate(`/day/${futureDayId}`)}
             >
