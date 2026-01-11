@@ -11,7 +11,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['rivolo.ico'],
+      includeAssets: ['favicon.ico'],
       manifest: {
         name: 'Rivolo',
         short_name: 'Rivolo',
@@ -21,7 +21,7 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: '/rivolo.ico',
+            src: '/favicon.ico',
             sizes: 'any',
             type: 'image/x-icon',
           },
