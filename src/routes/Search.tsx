@@ -57,10 +57,16 @@ export default function Search() {
     <div className="space-y-2">
       <div className="flex items-center">
         <input
+          id="search-input"
           className="w-full flex-1 rounded-xl bg-transparent px-3 py-2 text-base outline-none"
           placeholder="Search all days"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.currentTarget.blur()
+            }
+          }}
         />
         {/*
         <button

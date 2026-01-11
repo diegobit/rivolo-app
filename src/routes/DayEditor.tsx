@@ -336,6 +336,31 @@ export default function DayEditor() {
     navigate('/')
   }
 
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (event.key !== 'Escape') return
+
+      const activeElement = document.activeElement as HTMLElement | null
+      const isEditable = Boolean(
+        activeElement &&
+          (activeElement.tagName === 'INPUT' ||
+            activeElement.tagName === 'TEXTAREA' ||
+            activeElement.isContentEditable),
+      )
+
+      if (isEditable) {
+        activeElement?.blur()
+        return
+      }
+
+      void handleClose()
+    }
+
+    window.addEventListener('keydown', handleKeydown)
+    return () => window.removeEventListener('keydown', handleKeydown)
+  }, [handleClose])
+
   const handleDelete = async () => {
     if (!resolvedDayId) return
     exitHandledRef.current = true
@@ -351,12 +376,16 @@ export default function DayEditor() {
         {
           key: 'Escape',
           run: () => {
-            void handleClose()
-            return true
+            const view = editorViewRef.current
+            if (view?.hasFocus) {
+              view.contentDOM.blur()
+              return true
+            }
+            return false
           },
         },
       ]),
-    [handleClose],
+    [],
   )
 
   if (!resolvedDayId) {

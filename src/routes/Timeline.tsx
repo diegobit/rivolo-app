@@ -168,10 +168,16 @@ export default function Timeline() {
   const trayContent = (
     <form className="flex items-center gap-3" onSubmit={handleSubmit}>
       <input
+        id="timeline-input"
         className="w-full flex-1 rounded-full bg-transparent px-3 py-2 text-base outline-none"
         placeholder="What am I thinking about today?"
         value={text}
         onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.currentTarget.blur()
+          }
+        }}
       />
       <button
         className="flex h-10 w-10 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90"

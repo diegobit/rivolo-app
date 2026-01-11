@@ -180,11 +180,16 @@ export default function Chat() {
       {error && <p className="text-xs text-rose-500">{error}</p>}
       <div className="flex items-center gap-3">
         <input
+          id="chat-input"
           className="w-full flex-1 rounded-xl bg-transparent px-3 py-2 text-base outline-none"
           placeholder="Ask anything"
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.currentTarget.blur()
+              return
+            }
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
               void handleSend()

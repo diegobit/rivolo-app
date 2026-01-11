@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { pullFromDropbox } from '../lib/dropbox'
 import { useDropboxStore } from '../store/useDropboxStore'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -13,10 +13,11 @@ const backButtonClass =
 
 export default function AppShell() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { loadSettings, passcode, locked } = useSettingsStore()
   const { loadState, hasAuth, filePath } = useDropboxStore()
   const hasAutoPulled = useRef(false)
-  const showBackButton = location.pathname === '/search' || location.pathname === '/settings'
+  const showBackButton = location.pathname === '/settings'
   const isTimeline = location.pathname === '/'
   const isChat = location.pathname === '/chat'
   const isSearch = location.pathname === '/search'
@@ -62,6 +63,77 @@ export default function AppShell() {
       // Auto-pull failures are handled by manual sync.
     })
   }, [filePath, hasAuth, locked, passcode])
+
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+
+      const activeElement = document.activeElement as HTMLElement | null
+      const isEditable = Boolean(
+        activeElement &&
+          (activeElement.tagName === 'INPUT' ||
+            activeElement.tagName === 'TEXTAREA' ||
+            activeElement.tagName === 'SELECT' ||
+            activeElement.isContentEditable),
+      )
+      const key = event.key.toLowerCase()
+
+      if (key === 'i') {
+        if (isEditable) return
+        event.preventDefault()
+        if (isTimeline) {
+          document.getElementById('timeline-input')?.focus()
+          return
+        }
+        if (isChat) {
+          document.getElementById('chat-input')?.focus()
+          return
+        }
+        if (isSearch) {
+          document.getElementById('search-input')?.focus()
+          return
+        }
+        if (location.pathname.startsWith('/day/')) {
+          const editor = document.querySelector<HTMLElement>('.cm-content')
+          editor?.focus()
+          return
+        }
+        if (location.pathname === '/settings') {
+          document.getElementById('settings-passcode')?.focus()
+        }
+        return
+      }
+
+      if (isEditable) return
+
+      if (key === 'c') {
+        event.preventDefault()
+        if (!isChat) {
+          navigate('/chat')
+        }
+        return
+      }
+
+      if (key === 's') {
+        event.preventDefault()
+        if (!isSearch) {
+          navigate('/search')
+        }
+        return
+      }
+
+      if (key === 't') {
+        event.preventDefault()
+        if (!isTimeline) {
+          navigate('/')
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeydown)
+    return () => window.removeEventListener('keydown', handleKeydown)
+  }, [isChat, isSearch, isTimeline, location.pathname, navigate])
 
 
   return (

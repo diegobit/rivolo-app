@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
 import { shareOrDownload } from '../lib/share'
 import { pullFromDropbox, pushToDropbox, saveDropboxAuth } from '../lib/dropbox'
@@ -16,6 +17,7 @@ const formatSyncTime = (timestamp: number | null) => {
 }
 
 export default function Settings() {
+  const navigate = useNavigate()
   const { loadTimeline } = useDaysStore()
   const {
     loadSettings,
@@ -58,6 +60,18 @@ export default function Settings() {
       window.removeEventListener('offline', handleStatus)
     }
   }, [])
+
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      navigate('/')
+    }
+
+    window.addEventListener('keydown', handleKeydown)
+    return () => window.removeEventListener('keydown', handleKeydown)
+  }, [navigate])
 
   const dropboxSummary = useMemo(
     () => ({
@@ -197,6 +211,7 @@ export default function Settings() {
           <label className="text-xs text-slate-500">
             Passcode (default is 0000)
             <input
+              id="settings-passcode"
               className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
               placeholder="0000"
               type="password"
