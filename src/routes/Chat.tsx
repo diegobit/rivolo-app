@@ -179,36 +179,41 @@ export default function Chat() {
     <div className="space-y-2">
       {error && <p className="text-xs text-rose-500">{error}</p>}
       <div className="flex items-center gap-3">
-        <input
-          id="chat-input"
-          className="w-full flex-1 rounded-xl bg-transparent px-3 py-2 text-base outline-none"
-          placeholder="Ask anything"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.currentTarget.blur()
-              return
-            }
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              void handleSend()
-            }
-          }}
-        />
+        <div className="relative flex-1">
+          <img
+            src="/sparkles.svg"
+            alt=""
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-60"
+            style={{ filter: 'grayscale(1) brightness(0.6)' }}
+          />
+          <input
+            id="chat-input"
+            className="w-full rounded-xl bg-transparent py-2 pl-10 pr-3 text-base outline-none"
+            placeholder="Ask anything"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.currentTarget.blur()
+                return
+              }
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                void handleSend()
+              }
+            }}
+          />
+        </div>
         <button
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90 disabled:cursor-not-allowed disabled:opacity-60"
+          className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${
+            input.trim() ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
+          }`}
           onClick={() => void handleSend()}
           disabled={sending}
           type="button"
           aria-label="Send"
         >
-          <img
-            src="/send.svg"
-            alt=""
-            className="h-5 w-5"
-            style={{ filter: 'brightness(0) invert(1)' }}
-          />
+          <img src="/send.svg" alt="" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
         </button>
       </div>
     </div>

@@ -56,18 +56,26 @@ export default function Search() {
   const trayContent = (
     <div className="space-y-2">
       <div className="flex items-center">
-        <input
-          id="search-input"
-          className="w-full flex-1 rounded-xl bg-transparent px-3 py-2 text-base outline-none"
-          placeholder="Search all days"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.currentTarget.blur()
-            }
-          }}
-        />
+        <div className="relative w-full">
+          <img
+            src="/lens.svg"
+            alt=""
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-60"
+            style={{ filter: 'grayscale(1) brightness(0.6)' }}
+          />
+          <input
+            id="search-input"
+            className="w-full rounded-xl bg-transparent py-2 pl-10 pr-3 text-base outline-none"
+            placeholder="Search all days"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.currentTarget.blur()
+              }
+            }}
+          />
+        </div>
         {/*
         <button
           className="flex h-10 w-10 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90"

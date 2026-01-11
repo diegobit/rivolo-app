@@ -167,20 +167,30 @@ export default function Timeline() {
 
   const trayContent = (
     <form className="flex items-center gap-3" onSubmit={handleSubmit}>
-      <input
-        id="timeline-input"
-        className="w-full flex-1 rounded-full bg-transparent px-3 py-2 text-base outline-none"
-        placeholder="What am I thinking about today?"
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.currentTarget.blur()
-          }
-        }}
-      />
+      <div className="relative flex-1">
+        <img
+          src="/notes.svg"
+          alt=""
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-60"
+          style={{ filter: 'grayscale(1) brightness(0.6)' }}
+        />
+        <input
+          id="timeline-input"
+          className="w-full rounded-full bg-transparent py-2 pl-10 pr-3 text-base outline-none"
+          placeholder="What am I thinking about today?"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.currentTarget.blur()
+            }
+          }}
+        />
+      </div>
       <button
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90"
+        className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
+          text.trim() ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
+        }`}
         type="submit"
         aria-label="Add"
       >
