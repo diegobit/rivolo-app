@@ -42,16 +42,16 @@ export default function AppShell() {
 
   return (
     <div className="min-h-full bg-slate-50 text-slate-900">
-      <main className="mx-auto flex min-h-screen w-[min(96%,480px)] flex-col gap-4 pt-4 pb-48">
+      <main className="mx-auto flex min-h-screen w-[min(96%,620px)] flex-col gap-4 pt-4 pb-48">
         <Outlet />
       </main>
 
       <div
         id="bottom-tray"
-        className="fixed bottom-24 left-0 right-0 z-30 mx-auto w-[min(96%,480px)] rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur"
+        className="fixed bottom-24 left-0 right-0 z-30 mx-auto w-[min(96%,620px)] rounded-[2.5rem] border border-slate-200 bg-white/90 p-3 shadow-[0_6px_18px_rgba(15,23,42,0.12)] backdrop-blur-xl"
       />
 
-      <nav className="fixed bottom-4 left-0 right-0 z-40 mx-auto w-[min(96%,480px)] rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-lg backdrop-blur">
+      <nav className="fixed bottom-4 left-0 right-0 z-40 mx-auto w-[min(96%,620px)] rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-lg backdrop-blur">
         <div className="flex items-center justify-between gap-2">
           {navItems.map((item) => (
             <NavLink key={item.to} to={item.to} className={navLinkClass} end>

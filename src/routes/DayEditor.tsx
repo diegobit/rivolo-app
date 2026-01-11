@@ -339,12 +339,13 @@ export default function DayEditor() {
               />
             </button>
             <div>
-              <input
-                className="rounded-lg border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-400"
-                type="date"
-                value={dateValue}
-                onChange={handleDateChange}
-              />
+                <input
+                  className="rounded-lg border border-slate-200 px-3 py-1 text-base font-semibold text-slate-700 outline-none transition focus:border-slate-400"
+                  type="date"
+                  value={dateValue}
+                  onChange={handleDateChange}
+                />
+
             </div>
           </div>
           <div className="flex items-center gap-2">

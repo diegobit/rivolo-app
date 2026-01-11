@@ -181,7 +181,7 @@ export default function Chat() {
       {error && <p className="text-xs text-rose-500">{error}</p>}
       <div className="flex gap-2">
         <input
-          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
+          className="w-full rounded-xl bg-transparent px-3 py-2 text-sm outline-none"
           placeholder="Ask the note anything"
           value={input}
           onChange={(event) => setInput(event.target.value)}

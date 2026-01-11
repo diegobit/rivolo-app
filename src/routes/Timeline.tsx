@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import BottomTrayPortal from '../components/BottomTrayPortal'
 import { pushToDropbox } from '../lib/dropbox'
-import { addDays, getTodayId } from '../lib/dates'
-import { buttonPill, buttonPrimary } from '../lib/ui'
+import { addDays, getTodayId, parseDayId } from '../lib/dates'
 import type { Day } from '../lib/dayRepository'
 import { useDropboxStore } from '../store/useDropboxStore'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -16,6 +15,9 @@ const getSnippet = (lines: string[]) => lines.slice(0, 5).join('\n')
 
 const countOpenTasks = (content: string) => (content.match(/- \[ \]/g) ?? []).length
 
+const formatShortDay = (dayId: string) =>
+  new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(parseDayId(dayId))
+
 type TimelineDayCard = {
   day: Day
   snippet: string
@@ -25,6 +27,7 @@ type TimelineDayCard = {
 type TimelineItem =
   | { type: 'day'; card: TimelineDayCard }
   | { type: 'add-today'; dayId: string }
+  | { type: 'divider' }
 
 export default function Timeline() {
   const navigate = useNavigate()
@@ -101,6 +104,30 @@ export default function Timeline() {
     return items
   }, [cards, hasToday, todayId])
 
+  const renderedItems = useMemo<TimelineItem[]>(() => {
+    const items: TimelineItem[] = []
+    let sawFuture = false
+    let dividerInserted = false
+
+    for (const item of timelineItems) {
+      const isFuture = item.type === 'day' && item.card.day.dayId > todayId
+      if (isFuture) {
+        sawFuture = true
+        items.push(item)
+        continue
+      }
+
+      if (sawFuture && !dividerInserted) {
+        items.push({ type: 'divider' })
+        dividerInserted = true
+      }
+
+      items.push(item)
+    }
+
+    return items
+  }, [timelineItems, todayId])
+
   const futureDayId = useMemo(() => {
     const existing = new Set(cards.map((card) => card.day.dayId))
     let candidate = addDays(cards[0]?.day.dayId ?? todayId, 1)
@@ -111,15 +138,19 @@ export default function Timeline() {
   }, [cards, todayId])
 
   const trayContent = (
-    <form className="flex flex-wrap gap-2" onSubmit={handleSubmit}>
+    <form className="flex items-center gap-3" onSubmit={handleSubmit}>
       <input
-        className="w-full flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-        placeholder="Add a line to today"
+        className="w-full flex-1 rounded-full bg-transparent px-4 py-2.5 text-base outline-none"
+        placeholder="What am I thinking about today?"
         value={text}
         onChange={(event) => setText(event.target.value)}
       />
-      <button className={buttonPrimary} type="submit">
-        Add
+      <button
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90"
+        type="submit"
+        aria-label="Add"
+      >
+        <img src="/plus.svg" alt="" className="h-4 w-4" style={{ filter: 'brightness(0) invert(1)' }} />
       </button>
     </form>
   )
@@ -140,25 +171,62 @@ export default function Timeline() {
         </section>
       )}
 
-      {!loading && timelineItems.length > 0 && (
+      {!loading && renderedItems.length > 0 && (
         <div className="space-y-3">
           <div className="flex justify-center">
-            <button className={buttonPill} type="button" onClick={() => navigate(`/day/${futureDayId}`)}>
-              + Future Day
+            <button
+              className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] transition hover:text-[#22B3FF]/80"
+
+
+
+
+              type="button"
+              onClick={() => navigate(`/day/${futureDayId}`)}
+            >
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22B3FF] transition group-hover:bg-[#22B3FF]/90">
+                <img
+                  src="/plus.svg"
+                  alt=""
+                  className="h-3.5 w-3.5"
+                  style={{ filter: 'brightness(0) invert(1)' }}
+                />
+              </span>
+              {formatShortDay(futureDayId)}
             </button>
           </div>
-          {timelineItems.map((item) => {
+          {renderedItems.map((item, index) => {
             if (item.type === 'add-today') {
               return (
                 <div key={`add-${item.dayId}`} className="flex justify-center">
                   <button
-                    className={buttonPill}
+                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] transition hover:text-[#22B3FF]/80"
+
+
+
+
                     type="button"
                     onClick={() => navigate(`/day/${item.dayId}`)}
                   >
-                    + Add Today
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22B3FF] transition group-hover:bg-[#22B3FF]/90">
+                      <img
+                        src="/plus.svg"
+                        alt=""
+                        className="h-3.5 w-3.5"
+                        style={{ filter: 'brightness(0) invert(1)' }}
+                      />
+                    </span>
+                    Today
                   </button>
                 </div>
+              )
+            }
+
+            if (item.type === 'divider') {
+              return (
+                <div
+                  key={`divider-${index}`}
+                  className="my-2 border-t border-dashed border-slate-200/80"
+                />
               )
             }
 
@@ -183,28 +251,32 @@ export default function Timeline() {
                   <div>
                     <h3
                       className={`${
-                        isToday || isYesterday ? 'text-base' : 'text-sm'
+                        isToday ? 'text-xl' : isYesterday ? 'text-lg' : 'text-base'
                       } font-semibold ${isFuture ? 'text-slate-600/70' : 'text-slate-900'}`}
                     >
                       {title}
                       {showDate && (
-                        <span className="ml-2 text-[0.7rem] font-medium text-slate-400">{day.humanTitle}</span>
+                        <span className={`ml-2 font-semibold ${isToday ? 'text-xl' : 'text-lg'} text-slate-400`}>
+                          • {day.humanTitle}
+                        </span>
                       )}
                     </h3>
                   </div>
-                  {!showDate && open > 0 && (
+                  {open > 0 && (
                     <span
                       className={`rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-800 ${
                         isFuture ? 'opacity-70' : ''
                       }`}
                     >
-                      {open} open tasks
+                      {open === 1 ? '1 todo' : `${open} todos`}
                     </span>
                   )}
                 </div>
-                <p className={`mt-3 whitespace-pre-line text-sm ${isFuture ? 'text-slate-500/70' : 'text-slate-600'}`}>
-                  {snippet || 'No content yet'}
-                </p>
+                {snippet && (
+                  <p className={`mt-3 whitespace-pre-line text-base ${isFuture ? 'text-slate-500/70' : 'text-slate-600'}`}>
+                    {snippet}
+                  </p>
+                )}
               </Link>
             )
           })}

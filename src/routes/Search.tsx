@@ -40,7 +40,7 @@ export default function Search() {
   const normalizedTag = useMemo(() => {
     const trimmed = tag.trim()
     if (!trimmed) return undefined
-    return trimmed.startsWith('@') ? trimmed : `@${trimmed}`
+    return trimmed.startsWith('#') ? trimmed : `#${trimmed}`
   }, [tag])
 
   useEffect(() => {
@@ -76,15 +76,16 @@ export default function Search() {
           />
           Open tasks only
         </label>
-        <input
-          className="rounded-full border border-slate-200 px-3 py-1 text-xs outline-none transition focus:border-slate-400"
-          placeholder="@tag"
-          value={tag}
-          onChange={(event) => setTag(event.target.value)}
-        />
+          <input
+            className="rounded-full bg-transparent px-3 py-1 text-xs outline-none"
+            placeholder="#tag"
+            value={tag}
+            onChange={(event) => setTag(event.target.value)}
+          />
+
       </div>
       <input
-        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
+        className="w-full rounded-xl bg-transparent px-3 py-2 text-sm outline-none"
         placeholder="Search all days"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
