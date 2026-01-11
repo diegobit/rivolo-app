@@ -89,6 +89,27 @@ export default function DayEditor() {
     exitHandledRef.current = false
   }, [resolvedDayId])
 
+  const editorTheme = useMemo(
+    () =>
+      EditorView.theme({
+        '&': {
+          backgroundColor: 'transparent',
+        },
+        '.cm-scroller': {
+          fontSize: '1.25rem',
+          fontWeight: '400',
+          color: '#475569',
+        },
+        '.cm-content': {
+          padding: '24px 0 0',
+        },
+        '.cm-gutters': {
+          display: 'none',
+        },
+      }),
+    [],
+  )
+
   const highlightData = useMemo(() => {
     const trimmedQuote = quote.trim()
     if (!trimmedQuote) {
@@ -102,8 +123,22 @@ export default function DayEditor() {
 
     const builder = new RangeSetBuilder<Decoration>()
     builder.add(index, index + trimmedQuote.length, Decoration.mark({ class: 'cm-highlight' }))
-    return { extensions: [EditorView.decorations.of(builder.finish())], found: true }
+    const highlight = EditorView.decorations.of(builder.finish())
+    return { extensions: [highlight], found: true }
   }, [draft, quote])
+
+  const clearActiveLine = useMemo(
+    () =>
+      EditorView.theme({
+        '.cm-activeLine': {
+          backgroundColor: 'transparent',
+        },
+        '.cm-activeLineGutter': {
+          backgroundColor: 'transparent',
+        },
+      }),
+    [],
+  )
 
   useEffect(() => {
     let isActive = true
@@ -307,7 +342,7 @@ export default function DayEditor() {
 
   if (!resolvedDayId) {
     return (
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl bg-white p-4">
         <p className="text-sm text-slate-500">Missing day id.</p>
       </section>
     )
@@ -315,7 +350,7 @@ export default function DayEditor() {
 
   if (!isReady) {
     return (
-      <section className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-sm text-slate-500">
+      <section className="rounded-2xl bg-white/60 p-6 text-sm text-slate-500">
         Loading day...
       </section>
     )
@@ -323,7 +358,7 @@ export default function DayEditor() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl bg-white p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <button
@@ -367,17 +402,17 @@ export default function DayEditor() {
             {highlightData.found ? 'Highlighting quoted text from citation.' : 'Citation quote not found.'}
           </div>
         )}
-        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+        <div className="mt-4 overflow-hidden rounded-xl">
           <CodeMirror
             value={draft}
             height="360px"
-            extensions={[markdown(), ...highlightData.extensions]}
+            extensions={[markdown(), editorTheme, clearActiveLine, EditorView.lineWrapping, ...highlightData.extensions]}
             onChange={setDraft}
             onCreateEditor={(view) => {
               editorViewRef.current = view
             }}
             autoFocus
-            basicSetup={{ lineNumbers: false }}
+            basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLineGutter: false }}
           />
         </div>
       </section>

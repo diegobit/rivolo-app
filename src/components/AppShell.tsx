@@ -41,8 +41,11 @@ export default function AppShell() {
   }, [filePath, hasAuth, locked, passcode])
 
   return (
-    <div className="min-h-full bg-slate-50 text-slate-900">
+    <div className="min-h-full bg-white text-slate-900">
       <main className="mx-auto flex min-h-screen w-[min(96%,620px)] flex-col gap-4 pt-4 pb-48">
+        <div className="flex justify-center pt-2">
+          <img src="/logo.png" alt="Rivolo" className="h-10 w-auto" />
+        </div>
         <Outlet />
       </main>
 

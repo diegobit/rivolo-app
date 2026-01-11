@@ -105,6 +105,10 @@ export default function Timeline() {
   }, [cards, hasToday, todayId])
 
   const renderedItems = useMemo<TimelineItem[]>(() => {
+    if (!hasToday) {
+      return timelineItems
+    }
+
     const items: TimelineItem[] = []
     let sawFuture = false
     let dividerInserted = false
@@ -117,7 +121,7 @@ export default function Timeline() {
         continue
       }
 
-      if (sawFuture && !dividerInserted) {
+      if (sawFuture && !dividerInserted && item.type === 'day') {
         items.push({ type: 'divider' })
         dividerInserted = true
       }
@@ -126,7 +130,7 @@ export default function Timeline() {
     }
 
     return items
-  }, [timelineItems, todayId])
+  }, [hasToday, timelineItems, todayId])
 
   const futureDayId = useMemo(() => {
     const existing = new Set(cards.map((card) => card.day.dayId))
@@ -225,7 +229,7 @@ export default function Timeline() {
               return (
                 <div
                   key={`divider-${index}`}
-                  className="my-2 border-t border-dashed border-slate-200/80"
+                  className="my-3 border-t border-dashed border-slate-200/80"
                 />
               )
             }
@@ -241,10 +245,10 @@ export default function Timeline() {
               <Link
                 key={day.dayId}
                 to={`/day/${day.dayId}`}
-                className={`block rounded-2xl border p-4 shadow-sm transition ${
+                className={`block rounded-[4px] border p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition ${
                   isFuture
-                    ? 'border-dashed border-slate-200/80 bg-white/70 hover:border-slate-300/70'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
+                    ? 'border-dashed border-slate-200/60 bg-white/70 hover:border-slate-300/60'
+                    : 'border-slate-200/60 bg-white hover:border-slate-300/60'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
