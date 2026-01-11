@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import BottomTrayPortal from '../components/BottomTrayPortal'
-import { buttonPrimary } from '../lib/ui'
 import { chat } from '../lib/llm'
 import type { ChatMessage as LlmMessage } from '../lib/llm'
 import { buildContextDays, formatContext } from '../lib/llmContext'
@@ -179,10 +178,10 @@ export default function Chat() {
   const trayContent = (
     <div className="space-y-2">
       {error && <p className="text-xs text-rose-500">{error}</p>}
-      <div className="flex gap-2">
+      <div className="flex items-center gap-3">
         <input
-          className="w-full rounded-xl bg-transparent px-3 py-2 text-sm outline-none"
-          placeholder="Ask the note anything"
+          className="w-full flex-1 rounded-xl bg-transparent px-3 py-2 text-base outline-none"
+          placeholder="Ask anything"
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
@@ -192,8 +191,19 @@ export default function Chat() {
             }
           }}
         />
-          <button className={buttonPrimary} onClick={() => void handleSend()} disabled={sending}>
-          {sending ? '...' : 'Send'}
+        <button
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90 disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={() => void handleSend()}
+          disabled={sending}
+          type="button"
+          aria-label="Send"
+        >
+          <img
+            src="/send.svg"
+            alt=""
+            className="h-5 w-5"
+            style={{ filter: 'brightness(0) invert(1)' }}
+          />
         </button>
       </div>
     </div>

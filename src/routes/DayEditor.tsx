@@ -100,7 +100,7 @@ export default function DayEditor() {
         '.cm-scroller': {
           fontSize: '1.25rem',
           fontWeight: '400',
-          color: '#475569',
+          color: '#000000',
         },
         '.cm-content': {
           padding: '24px 0 0',

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import BottomTrayPortal from '../components/BottomTrayPortal'
 import { searchDays } from '../lib/dayRepository'
@@ -31,27 +31,16 @@ const highlightText = (text: string, query: string) => {
 
 export default function Search() {
   const [query, setQuery] = useState('')
-  const [tag, setTag] = useState('')
-  const [openOnly, setOpenOnly] = useState(false)
   const [results, setResults] = useState<Day[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const normalizedTag = useMemo(() => {
-    const trimmed = tag.trim()
-    if (!trimmed) return undefined
-    return trimmed.startsWith('#') ? trimmed : `#${trimmed}`
-  }, [tag])
 
   useEffect(() => {
     const handle = window.setTimeout(async () => {
       setLoading(true)
       setError(null)
       try {
-        const data = await searchDays(query, {
-          openOnly,
-          tag: normalizedTag,
-        })
+        const data = await searchDays(query)
         setResults(data)
       } catch {
         setError('Search failed. Try again.')
@@ -62,34 +51,32 @@ export default function Search() {
     }, 250)
 
     return () => window.clearTimeout(handle)
-  }, [normalizedTag, openOnly, query])
+  }, [query])
 
   const trayContent = (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-slate-300"
-            checked={openOnly}
-            onChange={(event) => setOpenOnly(event.target.checked)}
+      <div className="flex items-center">
+        <input
+          className="w-full flex-1 rounded-xl bg-transparent px-3 py-2 text-base outline-none"
+          placeholder="Search all days"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {/*
+        <button
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90"
+          type="button"
+          aria-label="Search"
+        >
+          <img
+            src="/lens.svg"
+            alt=""
+            className="h-5 w-5"
+            style={{ filter: 'brightness(0) invert(1)' }}
           />
-          Open tasks only
-        </label>
-          <input
-            className="rounded-full bg-transparent px-3 py-1 text-xs outline-none"
-            placeholder="#tag"
-            value={tag}
-            onChange={(event) => setTag(event.target.value)}
-          />
-
+        </button>
+        */}
       </div>
-      <input
-        className="w-full rounded-xl bg-transparent px-3 py-2 text-sm outline-none"
-        placeholder="Search all days"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
     </div>
   )
 
@@ -111,9 +98,7 @@ export default function Search() {
 
       {!loading && !error && results.length === 0 && (
         <section className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-sm text-slate-500">
-          {query.trim() || tag.trim() || openOnly
-            ? 'No results yet. Try a different query.'
-            : 'Start typing to search your days.'}
+          {query.trim() ? 'No results yet. Try a different query.' : 'Start typing to search your days.'}
         </section>
       )}
 

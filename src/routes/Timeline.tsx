@@ -168,7 +168,7 @@ export default function Timeline() {
   const trayContent = (
     <form className="flex items-center gap-3" onSubmit={handleSubmit}>
       <input
-        className="w-full flex-1 rounded-full bg-transparent px-4 py-2.5 text-base outline-none"
+        className="w-full flex-1 rounded-full bg-transparent px-3 py-2 text-base outline-none"
         placeholder="What am I thinking about today?"
         value={text}
         onChange={(event) => setText(event.target.value)}
@@ -265,10 +265,10 @@ export default function Timeline() {
               <Link
                 key={day.dayId}
                 to={`/day/${day.dayId}`}
-                className={`block rounded-[4px] border p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition ${
+                className={`block rounded-[4px] border p-4 transition ${
                   isFuture
-                    ? 'border-dashed border-slate-200/60 bg-white/70 hover:border-slate-300/60'
-                    : 'border-slate-200/60 bg-white hover:border-slate-300/60'
+                    ? 'border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.08),0_2px_8px_rgba(0,0,0,0.04)] hover:border-slate-300/60'
+                    : 'border-slate-200/60 bg-white shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] hover:border-slate-300/60'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
