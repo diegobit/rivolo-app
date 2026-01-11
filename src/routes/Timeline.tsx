@@ -4,6 +4,7 @@ import BottomTrayPortal from '../components/BottomTrayPortal'
 import { pushToDropbox } from '../lib/dropbox'
 import { addDays, getTodayId } from '../lib/dates'
 import { buttonPill, buttonPrimary } from '../lib/ui'
+import type { Day } from '../lib/dayRepository'
 import { useDropboxStore } from '../store/useDropboxStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useDaysStore } from '../store/useDaysStore'
@@ -14,6 +15,16 @@ const getLines = (content: string) =>
 const getSnippet = (lines: string[]) => lines.slice(0, 5).join('\n')
 
 const countOpenTasks = (content: string) => (content.match(/- \[ \]/g) ?? []).length
+
+type TimelineDayCard = {
+  day: Day
+  snippet: string
+  open: number
+}
+
+type TimelineItem =
+  | { type: 'day'; card: TimelineDayCard }
+  | { type: 'add-today'; dayId: string }
 
 export default function Timeline() {
   const navigate = useNavigate()
@@ -48,7 +59,7 @@ export default function Timeline() {
     await handleAutoPush()
   }
 
-  const cards = useMemo(
+  const cards = useMemo<TimelineDayCard[]>(
     () =>
       days.map((day) => {
         const lines = getLines(day.contentMd)
@@ -59,14 +70,45 @@ export default function Timeline() {
     [days],
   )
 
+  const todayId = getTodayId()
+  const yesterdayId = addDays(todayId, -1)
+  const hasToday = useMemo(() => cards.some((card) => card.day.dayId === todayId), [cards, todayId])
+
+  const timelineItems = useMemo<TimelineItem[]>(() => {
+    if (cards.length === 0) {
+      return hasToday ? [] : [{ type: 'add-today', dayId: todayId }]
+    }
+
+    if (hasToday) {
+      return cards.map((card) => ({ type: 'day', card }))
+    }
+
+    const items: TimelineItem[] = []
+    let inserted = false
+
+    for (const card of cards) {
+      if (!inserted && card.day.dayId < todayId) {
+        items.push({ type: 'add-today', dayId: todayId })
+        inserted = true
+      }
+      items.push({ type: 'day', card })
+    }
+
+    if (!inserted) {
+      items.push({ type: 'add-today', dayId: todayId })
+    }
+
+    return items
+  }, [cards, hasToday, todayId])
+
   const futureDayId = useMemo(() => {
     const existing = new Set(cards.map((card) => card.day.dayId))
-    let candidate = addDays(cards[0]?.day.dayId ?? getTodayId(), 1)
+    let candidate = addDays(cards[0]?.day.dayId ?? todayId, 1)
     while (existing.has(candidate)) {
       candidate = addDays(candidate, 1)
     }
     return candidate
-  }, [cards])
+  }, [cards, todayId])
 
   const trayContent = (
     <form className="flex flex-wrap gap-2" onSubmit={handleSubmit}>
@@ -98,34 +140,74 @@ export default function Timeline() {
         </section>
       )}
 
-      {!loading && cards.length > 0 && (
+      {!loading && timelineItems.length > 0 && (
         <div className="space-y-3">
           <div className="flex justify-center">
             <button className={buttonPill} type="button" onClick={() => navigate(`/day/${futureDayId}`)}>
               + Future Day
             </button>
           </div>
-          {cards.map(({ day, snippet, open }) => (
-            <Link
-              key={day.dayId}
-              to={`/day/${day.dayId}`}
-              className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900">{day.humanTitle}</h3>
+          {timelineItems.map((item) => {
+            if (item.type === 'add-today') {
+              return (
+                <div key={`add-${item.dayId}`} className="flex justify-center">
+                  <button
+                    className={buttonPill}
+                    type="button"
+                    onClick={() => navigate(`/day/${item.dayId}`)}
+                  >
+                    + Add Today
+                  </button>
                 </div>
-                {open > 0 && (
-                  <span className="rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-800">
-                    {open} open tasks
-                  </span>
-                )}
-              </div>
-              <p className="mt-3 whitespace-pre-line text-sm text-slate-600">
-                {snippet || 'No content yet'}
-              </p>
-            </Link>
-          ))}
+              )
+            }
+
+            const { day, snippet, open } = item.card
+            const isToday = day.dayId === todayId
+            const isYesterday = day.dayId === yesterdayId
+            const isFuture = day.dayId > todayId
+            const title = isToday ? 'Today' : isYesterday ? 'Yesterday' : day.humanTitle
+            const showDate = isToday || isYesterday
+
+            return (
+              <Link
+                key={day.dayId}
+                to={`/day/${day.dayId}`}
+                className={`block rounded-2xl border p-4 shadow-sm transition ${
+                  isFuture
+                    ? 'border-dashed border-slate-200/80 bg-white/70 hover:border-slate-300/70'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3
+                      className={`${
+                        isToday || isYesterday ? 'text-base' : 'text-sm'
+                      } font-semibold ${isFuture ? 'text-slate-600/70' : 'text-slate-900'}`}
+                    >
+                      {title}
+                      {showDate && (
+                        <span className="ml-2 text-[0.7rem] font-medium text-slate-400">{day.humanTitle}</span>
+                      )}
+                    </h3>
+                  </div>
+                  {!showDate && open > 0 && (
+                    <span
+                      className={`rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-800 ${
+                        isFuture ? 'opacity-70' : ''
+                      }`}
+                    >
+                      {open} open tasks
+                    </span>
+                  )}
+                </div>
+                <p className={`mt-3 whitespace-pre-line text-sm ${isFuture ? 'text-slate-500/70' : 'text-slate-600'}`}>
+                  {snippet || 'No content yet'}
+                </p>
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>

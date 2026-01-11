@@ -3,9 +3,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { Decoration, EditorView } from '@codemirror/view'
-import { RangeSetBuilder, type Extension } from '@codemirror/state'
+import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/state'
 import { pushToDropbox } from '../lib/dropbox'
-import { buttonDanger, buttonIcon } from '../lib/ui'
+import { buttonDanger } from '../lib/ui'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -28,11 +28,20 @@ export default function DayEditor() {
   const syncTriggeredRef = useRef(false)
   const syncPendingRef = useRef(false)
   const exitHandledRef = useRef(false)
+  const editorViewRef = useRef<EditorView | null>(null)
 
   const quote = searchParams.get('quote') ?? ''
   const resolvedDayId = dayId ?? ''
   const isReady = activeDay?.dayId === resolvedDayId
   const canSync = Boolean(hasAuth && filePath && passcode.trim() && !locked)
+
+  const focusEditor = useCallback(() => {
+    const view = editorViewRef.current
+    if (!view) return
+    const end = view.state.doc.length
+    view.dispatch({ selection: EditorSelection.single(end), scrollIntoView: true })
+    view.focus()
+  }, [])
 
   const queueDropboxSync = useCallback(
     (context: string) => {
@@ -157,8 +166,11 @@ export default function DayEditor() {
       setDraft(activeDay.contentMd)
       setDateValue(activeDay.dayId)
       setDateError(null)
+      requestAnimationFrame(() => {
+        focusEditor()
+      })
     }
-  }, [activeDay, resolvedDayId])
+  }, [activeDay, focusEditor, resolvedDayId])
 
   useEffect(() => {
     if (!resolvedDayId) return
@@ -314,8 +326,17 @@ export default function DayEditor() {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <button className={buttonIcon} type="button" onClick={handleClose}>
-              &lt;
+            <button
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90"
+              type="button"
+              onClick={handleClose}
+            >
+              <img
+                src="/arrow-back.svg"
+                alt="Back"
+                className="h-5 w-5"
+                style={{ filter: 'brightness(0) invert(1)' }}
+              />
             </button>
             <div>
               <input
@@ -351,6 +372,10 @@ export default function DayEditor() {
             height="360px"
             extensions={[markdown(), ...highlightData.extensions]}
             onChange={setDraft}
+            onCreateEditor={(view) => {
+              editorViewRef.current = view
+            }}
+            autoFocus
             basicSetup={{ lineNumbers: false }}
           />
         </div>

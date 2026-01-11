@@ -15,8 +15,8 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   [
     'flex flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium transition',
     isActive
-      ? 'bg-sky-600 text-white shadow-sm'
-      : 'text-slate-600 hover:bg-sky-50 hover:text-sky-700',
+      ? 'bg-[#22B3FF] text-white shadow-sm'
+      : 'text-slate-600 hover:bg-[#22B3FF]/10 hover:text-[#22B3FF]',
   ].join(' ')
 
 export default function AppShell() {

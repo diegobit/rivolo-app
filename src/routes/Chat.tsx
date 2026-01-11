@@ -221,13 +221,14 @@ export default function Chat() {
               {message.role === 'assistant' && message.meta?.citations?.length ? (
                 <div className="flex flex-wrap gap-2">
                   {message.meta.citations.map((citation, index) => (
-                    <button
-                      key={`${citation.day}-${index}`}
-                      className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-700 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                      onClick={() =>
-                        navigate(`/day/${citation.day}?quote=${encodeURIComponent(citation.quote)}`)
-                      }
-                    >
+                      <button
+                        key={`${citation.day}-${index}`}
+                        className="rounded-full border border-[#22B3FF]/40 bg-[#22B3FF]/10 px-2 py-1 text-xs text-[#22B3FF] shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                        onClick={() =>
+                          navigate(`/day/${citation.day}?quote=${encodeURIComponent(citation.quote)}`)
+                        }
+                      >
+
                       {citation.day} · “{citation.quote.slice(0, 32)}”
                     </button>
                   ))}
@@ -235,10 +236,11 @@ export default function Chat() {
               ) : null}
 
               {message.role === 'assistant' && message.meta?.insertText ? (
-                <button
-                  className="rounded-full border border-sky-200 px-3 py-1 text-xs font-semibold text-sky-700 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                  onClick={() => void handleInsert(message)}
-                >
+                  <button
+                    className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                    onClick={() => void handleInsert(message)}
+                  >
+
                   {message.meta.insertTargetDay
                     ? `Insert into ${message.meta.insertTargetDay}`
                     : 'Insert summary'}
