@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { pullFromDropbox } from '../lib/dropbox'
-import { useDropboxStore } from '../store/useDropboxStore'
+import { pullFromSync } from '../lib/sync'
 import { useSettingsStore } from '../store/useSettingsStore'
+import { useSyncStore } from '../store/useSyncStore'
 
 const topIconButton =
   'flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300'
@@ -15,7 +15,7 @@ export default function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
   const { loadSettings, passcode, locked } = useSettingsStore()
-  const { loadState, hasAuth, filePath } = useDropboxStore()
+  const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const hasAutoPulled = useRef(false)
   const showBackButton = location.pathname === '/settings'
   const isTimeline = location.pathname === '/'
@@ -50,19 +50,19 @@ export default function AppShell() {
 
   useEffect(() => {
     void loadSettings()
-    void loadState()
-  }, [loadSettings, loadState])
+    void loadSyncState()
+  }, [loadSettings, loadSyncState])
 
   useEffect(() => {
     if (hasAutoPulled.current) return
     if (!navigator.onLine || locked) return
-    if (!passcode.trim() || !hasAuth || !filePath) return
+    if (!passcode.trim() || !syncStatus.connected || !syncStatus.filePath) return
 
     hasAutoPulled.current = true
-    void pullFromDropbox(passcode).catch(() => {
+    void pullFromSync(passcode).catch(() => {
       // Auto-pull failures are handled by manual sync.
     })
-  }, [filePath, hasAuth, locked, passcode])
+  }, [locked, passcode, syncStatus.connected, syncStatus.filePath])
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {

@@ -4,18 +4,18 @@ import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, keymap } from '@codemirror/view'
 import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/state'
-import { pushToDropbox } from '../lib/dropbox'
+import { pushToSync } from '../lib/sync'
 import { buttonDanger } from '../lib/ui'
 import { useDaysStore } from '../store/useDaysStore'
-import { useDropboxStore } from '../store/useDropboxStore'
 import { useSettingsStore } from '../store/useSettingsStore'
+import { useSyncStore } from '../store/useSyncStore'
 
 export default function DayEditor() {
   const navigate = useNavigate()
   const { dayId } = useParams()
   const [searchParams] = useSearchParams()
   const { activeDay, loadDay, updateDayContent, moveDayDate, deleteDay, loading } = useDaysStore()
-  const { loadState, hasAuth, filePath } = useDropboxStore()
+  const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { passcode, locked } = useSettingsStore()
   const [draft, setDraft] = useState('')
   const [dateValue, setDateValue] = useState(dayId ?? '')
@@ -34,7 +34,7 @@ export default function DayEditor() {
   const quote = searchParams.get('quote') ?? ''
   const resolvedDayId = dayId ?? ''
   const isReady = activeDay?.dayId === resolvedDayId
-  const canSync = Boolean(hasAuth && filePath && passcode.trim() && !locked)
+  const canSync = Boolean(syncStatus.connected && syncStatus.filePath && passcode.trim() && !locked)
 
   const focusEditor = useCallback(() => {
     const view = editorViewRef.current
@@ -44,33 +44,33 @@ export default function DayEditor() {
     view.focus()
   }, [])
 
-  const queueDropboxSync = useCallback(
+  const queueSync = useCallback(
     (context: string) => {
       if (syncTriggeredRef.current) return
       if (!canSync) return
       if (!navigator.onLine) {
-        console.warn('[DayEditor] dropbox:offline', { context })
+        console.warn('[DayEditor] sync:offline', { context })
         return
       }
 
       syncTriggeredRef.current = true
       void (async () => {
         try {
-          const result = await pushToDropbox(passcode)
-          await loadState()
-          console.info('[DayEditor] dropbox:push', { context, status: result.status })
+          const result = await pushToSync(passcode)
+          await loadSyncState()
+          console.info('[DayEditor] sync:push', { context, status: result.status })
           if (result.status === 'blocked') {
-            console.warn('[DayEditor] dropbox:blocked', { context })
+            console.warn('[DayEditor] sync:blocked', { context })
           }
           if (result.status === 'pushed' || result.status === 'clean') {
             syncPendingRef.current = false
           }
         } catch (error) {
-          console.warn('[DayEditor] dropbox:push-failed', { context, error })
+          console.warn('[DayEditor] sync:push-failed', { context, error })
         }
       })()
     },
-    [canSync, loadState, passcode],
+    [canSync, loadSyncState, passcode],
   )
 
   useEffect(() => {
@@ -251,7 +251,7 @@ export default function DayEditor() {
           syncPendingRef.current = true
           console.info('[DayEditor] cleanup:delete-empty', { dayId: resolvedDayId })
           await deleteDay(resolvedDayId)
-          queueDropboxSync('cleanup-delete')
+          queueSync('cleanup-delete')
           return
         }
 
@@ -264,10 +264,10 @@ export default function DayEditor() {
           await updateDayContent(resolvedDayId, draftRef.current)
         }
 
-        queueDropboxSync('cleanup')
+        queueSync('cleanup')
       })()
     }
-  }, [deleteDay, queueDropboxSync, resolvedDayId, updateDayContent])
+  }, [deleteDay, queueSync, resolvedDayId, updateDayContent])
 
   const handleDateChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextDayId = event.target.value
@@ -299,7 +299,7 @@ export default function DayEditor() {
     exitHandledRef.current = true
 
     if (!hasLoadedRef.current || initialContentRef.current === null) {
-      queueDropboxSync('close')
+      queueSync('close')
       navigate('/')
       return
     }
@@ -318,7 +318,7 @@ export default function DayEditor() {
       syncPendingRef.current = true
       console.info('[DayEditor] close:delete-empty', { dayId: resolvedDayId })
       await deleteDay(resolvedDayId)
-      queueDropboxSync('close-delete')
+      queueSync('close-delete')
       navigate('/')
       return
     }
@@ -332,7 +332,7 @@ export default function DayEditor() {
       await updateDayContent(resolvedDayId, draft)
     }
 
-    queueDropboxSync('close')
+    queueSync('close')
     navigate('/')
   }
 
@@ -366,7 +366,7 @@ export default function DayEditor() {
     exitHandledRef.current = true
     syncPendingRef.current = true
     await deleteDay(resolvedDayId)
-    queueDropboxSync('delete')
+    queueSync('delete')
     navigate('/')
   }
 
@@ -390,7 +390,7 @@ export default function DayEditor() {
 
   if (!resolvedDayId) {
     return (
-      <section className="rounded-2xl bg-white p-4">
+      <section className="rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
         <p className="text-sm text-slate-500">Missing day id.</p>
       </section>
     )
@@ -398,7 +398,7 @@ export default function DayEditor() {
 
   if (!isReady) {
     return (
-      <section className="rounded-2xl bg-white/60 p-6 text-sm text-slate-500">
+      <section className="rounded-[4px] bg-white/60 p-6 text-sm text-slate-500">
         Loading day...
       </section>
     )
@@ -406,7 +406,7 @@ export default function DayEditor() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl bg-white p-4">
+      <section className="rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <button

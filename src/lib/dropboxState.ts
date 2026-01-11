@@ -7,6 +7,9 @@ export type DropboxState = {
   lastRemoteRev: string | null
   lastSyncAt: number | null
   localDirty: boolean
+  accountId: string | null
+  accountEmail: string | null
+  accountName: string | null
 }
 
 const DEFAULT_STATE: DropboxState = {
@@ -15,6 +18,9 @@ const DEFAULT_STATE: DropboxState = {
   lastRemoteRev: null,
   lastSyncAt: null,
   localDirty: false,
+  accountId: null,
+  accountEmail: null,
+  accountName: null,
 }
 
 export const getDropboxState = async () => {

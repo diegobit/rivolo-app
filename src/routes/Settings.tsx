@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
 import { shareOrDownload } from '../lib/share'
-import { pullFromDropbox, pushToDropbox, saveDropboxAuth } from '../lib/dropbox'
+import { DEFAULT_DROPBOX_PATH, startDropboxAuth } from '../lib/dropbox'
+import { disconnectActiveProvider, pullFromSync, pushToSync } from '../lib/sync'
 import { buttonDanger, buttonPrimary, buttonSecondary } from '../lib/ui'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
 import { useSettingsStore } from '../store/useSettingsStore'
+import { useSyncStore } from '../store/useSyncStore'
 
 const formatSyncTime = (timestamp: number | null) => {
   if (!timestamp) return 'Never'
@@ -29,23 +31,33 @@ export default function Settings() {
     passcode,
     timelineView,
   } = useSettingsStore()
-  const { filePath, lastRemoteRev, lastSyncAt, localDirty, hasAuth, loadState, updateFilePath } =
-    useDropboxStore()
+  const {
+    filePath,
+    lastRemoteRev,
+    lastSyncAt,
+    localDirty,
+    hasAuth,
+    accountEmail,
+    accountName,
+    loadState: loadDropboxState,
+    updateFilePath,
+  } = useDropboxStore()
+  const { activeProvider, loadState: loadSyncState } = useSyncStore()
 
   const [passcodeInput, setPasscodeInput] = useState(passcode)
   const [apiKey, setApiKey] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [importStatus, setImportStatus] = useState<string | null>(null)
 
-  const [dropboxToken, setDropboxToken] = useState('')
   const [dropboxStatus, setDropboxStatus] = useState<string | null>(null)
   const [syncBusy, setSyncBusy] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
 
   useEffect(() => {
     void loadSettings()
-    void loadState()
-  }, [loadSettings, loadState])
+    void loadDropboxState()
+    void loadSyncState()
+  }, [loadDropboxState, loadSettings, loadSyncState])
 
   useEffect(() => {
     setPasscodeInput(passcode)
@@ -73,14 +85,23 @@ export default function Settings() {
     return () => window.removeEventListener('keydown', handleKeydown)
   }, [navigate])
 
+  const dropboxConnected = hasAuth && activeProvider === 'dropbox'
+  const dropboxAccount = useMemo(() => {
+    if (accountName && accountEmail) {
+      return `${accountName} (${accountEmail})`
+    }
+    return accountEmail ?? accountName ?? '—'
+  }, [accountEmail, accountName])
+
   const dropboxSummary = useMemo(
     () => ({
-      connected: hasAuth && Boolean(filePath),
+      connected: dropboxConnected,
       lastSync: formatSyncTime(lastSyncAt),
       rev: lastRemoteRev ?? '—',
       dirty: localDirty,
+      account: dropboxAccount,
     }),
-    [filePath, hasAuth, lastRemoteRev, lastSyncAt, localDirty],
+    [dropboxAccount, dropboxConnected, lastRemoteRev, lastSyncAt, localDirty],
   )
 
   const llmStatus = locked ? 'Locked' : geminiApiKey ? 'Ready' : 'No key'
@@ -129,8 +150,7 @@ export default function Settings() {
     await shareOrDownload('inbox.md', content)
   }
 
-  const handleSaveDropbox = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const handleConnectDropbox = async () => {
     setDropboxStatus(null)
 
     if (!passcode.trim()) {
@@ -138,15 +158,29 @@ export default function Settings() {
       return
     }
 
-    if (!dropboxToken || !filePath) {
-      setDropboxStatus('Token and file path required.')
+    if (!online) {
+      setDropboxStatus('Connect to the internet to link Dropbox.')
       return
     }
 
-    await saveDropboxAuth(passcode, dropboxToken, filePath)
-    await loadState()
-    setDropboxStatus('Dropbox token saved.')
-    setDropboxToken('')
+    try {
+      await startDropboxAuth()
+    } catch (error) {
+      setDropboxStatus(error instanceof Error ? error.message : 'Dropbox connect failed.')
+    }
+  }
+
+  const handleDisconnectDropbox = async () => {
+    setDropboxStatus(null)
+
+    try {
+      await disconnectActiveProvider()
+      await loadDropboxState()
+      await loadSyncState()
+      setDropboxStatus('Dropbox disconnected.')
+    } catch (error) {
+      setDropboxStatus(error instanceof Error ? error.message : 'Dropbox disconnect failed.')
+    }
   }
 
   const handlePull = async () => {
@@ -156,11 +190,17 @@ export default function Settings() {
       return
     }
 
+    if (!dropboxConnected) {
+      setDropboxStatus('Connect Dropbox first.')
+      return
+    }
+
     setSyncBusy(true)
     try {
-      const result = await pullFromDropbox(passcode)
+      const result = await pullFromSync(passcode)
       await loadTimeline()
-      await loadState()
+      await loadDropboxState()
+      await loadSyncState()
       setDropboxStatus(
         result.status === 'noop' ? 'No changes on Dropbox.' : 'Pulled and imported.',
       )
@@ -179,10 +219,16 @@ export default function Settings() {
       return
     }
 
+    if (!dropboxConnected) {
+      setDropboxStatus('Connect Dropbox first.')
+      return
+    }
+
     setSyncBusy(true)
     try {
-      const result = await pushToDropbox(passcode, force)
-      await loadState()
+      const result = await pushToSync(passcode, force)
+      await loadDropboxState()
+      await loadSyncState()
       if (result.status === 'clean') {
         setDropboxStatus('No local changes to push.')
       } else if (result.status === 'blocked') {
@@ -290,30 +336,38 @@ export default function Settings() {
 
         <div className="mt-3 grid gap-2 text-xs text-slate-500">
           <div>File: {filePath || '—'}</div>
+          <div>Account: {dropboxSummary.account}</div>
           <div>Last sync: {dropboxSummary.lastSync}</div>
           <div>Remote rev: {dropboxSummary.rev}</div>
           <div>Local dirty: {dropboxSummary.dirty ? 'Yes' : 'No'}</div>
           <div>Network: {online ? 'Online' : 'Offline'}</div>
         </div>
 
-        <form className="mt-4 space-y-3" onSubmit={handleSaveDropbox}>
+        <div className="mt-4 space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {dropboxSummary.connected ? (
+              <button className={buttonDanger} type="button" onClick={handleDisconnectDropbox}>
+                Disconnect Dropbox
+              </button>
+            ) : (
+              <button
+                className={buttonPrimary}
+                type="button"
+                onClick={handleConnectDropbox}
+                disabled={!online}
+              >
+                Connect Dropbox
+              </button>
+            )}
+          </div>
           <input
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-            placeholder="/Apps/SingleNote/inbox.md"
+            placeholder={DEFAULT_DROPBOX_PATH}
             value={filePath}
             onChange={(event) => updateFilePath(event.target.value)}
           />
-          <input
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-            placeholder="Dropbox access token"
-            value={dropboxToken}
-            onChange={(event) => setDropboxToken(event.target.value)}
-          />
           <p className="text-xs text-slate-400">Uses the LLM passcode for encryption.</p>
-          <button className={buttonSecondary} type="submit">
-            Save Dropbox Token
-          </button>
-        </form>
+        </div>
 
         <div className="mt-4 space-y-2">
           <div className="flex flex-wrap gap-2">
@@ -321,7 +375,7 @@ export default function Settings() {
               className={buttonPrimary}
               type="button"
               onClick={handlePull}
-              disabled={syncBusy || !online}
+              disabled={syncBusy || !online || !dropboxSummary.connected}
             >
               Pull from Dropbox
             </button>
@@ -329,7 +383,7 @@ export default function Settings() {
               className={buttonSecondary}
               type="button"
               onClick={() => handlePush(false)}
-              disabled={syncBusy || !online}
+              disabled={syncBusy || !online || !dropboxSummary.connected}
             >
               Push to Dropbox
             </button>
@@ -337,7 +391,7 @@ export default function Settings() {
               className={buttonDanger}
               type="button"
               onClick={() => handlePush(true)}
-              disabled={syncBusy || !online}
+              disabled={syncBusy || !online || !dropboxSummary.connected}
             >
               Force overwrite
             </button>

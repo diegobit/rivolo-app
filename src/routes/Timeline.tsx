@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import BottomTrayPortal from '../components/BottomTrayPortal'
-import { pushToDropbox } from '../lib/dropbox'
+import { pushToSync } from '../lib/sync'
 import { addDays, getTodayId, parseDayId } from '../lib/dates'
 import type { Day } from '../lib/dayRepository'
-import { useDropboxStore } from '../store/useDropboxStore'
 import { useSettingsStore } from '../store/useSettingsStore'
+import { useSyncStore } from '../store/useSyncStore'
 import { useDaysStore } from '../store/useDaysStore'
 
 const getPreview = (content: string, maxLines: number) => {
@@ -43,22 +43,22 @@ export default function Timeline() {
   const [text, setText] = useState('')
   const { days, loading, loadTimeline, appendToToday } = useDaysStore()
   const { loadSettings, passcode, locked, timelineView } = useSettingsStore()
-  const { loadState, hasAuth, filePath } = useDropboxStore()
+  const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
 
-  const canSync = Boolean(hasAuth && filePath && passcode.trim() && !locked)
+  const canSync = Boolean(syncStatus.connected && syncStatus.filePath && passcode.trim() && !locked)
 
   useEffect(() => {
     void loadTimeline()
     void loadSettings()
-    void loadState()
-  }, [loadTimeline, loadSettings, loadState])
+    void loadSyncState()
+  }, [loadSettings, loadSyncState, loadTimeline])
 
   const handleAutoPush = async () => {
     if (!canSync || !navigator.onLine) return
 
     try {
-      await pushToDropbox(passcode)
-      await loadState()
+      await pushToSync(passcode)
+      await loadSyncState()
     } catch {
       // Ignore auto-push errors for now.
     }
@@ -199,41 +199,33 @@ export default function Timeline() {
         </section>
       )}
 
-      {!loading && cards.length === 0 && (
-        <section className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-sm text-slate-500">
-          No days yet. Add a note to get started.
-        </section>
-      )}
-
       {!loading && renderedItems.length > 0 && (
         <div className="space-y-3">
-          <div className="flex justify-center">
-            <button
-              className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
-              type="button"
-              onClick={() => navigate(`/day/${futureDayId}`)}
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22B3FF] transition group-hover:bg-[#22B3FF]/90">
-                <img
-                  src="/plus.svg"
-                  alt=""
-                  className="h-3.5 w-3.5"
-                  style={{ filter: 'brightness(0) invert(1)' }}
-                />
-              </span>
-              {formatShortDay(futureDayId)}
-            </button>
-          </div>
+          {cards.length > 0 && (
+            <div className="flex justify-center">
+              <button
+                className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
+                type="button"
+                onClick={() => navigate(`/day/${futureDayId}`)}
+              >
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22B3FF] transition group-hover:bg-[#22B3FF]/90">
+                  <img
+                    src="/plus.svg"
+                    alt=""
+                    className="h-3.5 w-3.5"
+                    style={{ filter: 'brightness(0) invert(1)' }}
+                  />
+                </span>
+                {formatShortDay(futureDayId)}
+              </button>
+            </div>
+          )}
           {renderedItems.map((item, index) => {
             if (item.type === 'add-today') {
               return (
                 <div key={`add-${item.dayId}`} className="flex justify-center">
                   <button
                     className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] transition hover:text-[#22B3FF]/80"
-
-
-
-
                     type="button"
                     onClick={() => navigate(`/day/${item.dayId}`)}
                   >
@@ -250,6 +242,7 @@ export default function Timeline() {
                 </div>
               )
             }
+
 
             if (item.type === 'divider') {
               return (
