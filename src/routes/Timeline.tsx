@@ -100,6 +100,7 @@ export default function Timeline() {
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const hasToday = useMemo(() => cards.some((card) => card.day.dayId === todayId), [cards, todayId])
+  const hasFuture = useMemo(() => cards.some((card) => card.day.dayId > todayId), [cards, todayId])
 
   const timelineItems = useMemo<TimelineItem[]>(() => {
     if (cards.length === 0) {
@@ -165,6 +166,8 @@ export default function Timeline() {
     return candidate
   }, [cards, todayId])
 
+  const showFutureDayButton = cards.length > 0 && (hasToday || hasFuture)
+
   const trayContent = (
     <form className="flex items-center gap-3" onSubmit={handleSubmit}>
       <div className="relative flex-1">
@@ -211,7 +214,7 @@ export default function Timeline() {
 
       {!loading && renderedItems.length > 0 && (
         <div className="space-y-3">
-          {cards.length > 0 && (
+          {showFutureDayButton && (
             <div className="flex justify-center">
               <button
                 className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
