@@ -140,9 +140,9 @@ export default function AppShell() {
   return (
     <div className="min-h-full bg-white text-slate-900">
       <main
-        className={`mx-auto flex min-h-screen flex-col gap-4 pb-12 ${
-          isDayEditor ? 'w-[min(96%,880px)] pt-4' : 'w-[min(96%,720px)] pt-4'
-        }`}
+        className={`mx-auto flex min-h-screen flex-col gap-4 ${
+          showTrayRow ? 'pb-40' : 'pb-12'
+        } ${isDayEditor ? 'w-[min(96%,880px)] pt-4' : 'w-[min(96%,720px)] pt-4'}`}
       >
         <header className="grid grid-cols-[1fr_auto_1fr] items-center pt-2">
           <div className="flex items-center">
@@ -161,9 +161,11 @@ export default function AppShell() {
             <img src="/logo.png" alt="Rivolo" className="h-10 w-auto" />
           </NavLink>
           <div className="flex items-center justify-end gap-2">
-            <NavLink to="/settings" className={topIconButton} aria-label="Settings">
-              <img src="/gear.svg" alt="" className="h-4 w-4" />
-            </NavLink>
+            {!isDayEditor && (
+              <NavLink to="/settings" className={topIconButton} aria-label="Settings">
+                <img src="/gear.svg" alt="" className="h-4 w-4" />
+              </NavLink>
+            )}
           </div>
 
         </header>
