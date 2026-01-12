@@ -21,6 +21,7 @@ export default function AppShell() {
   const isTimeline = location.pathname === '/'
   const isChat = location.pathname === '/chat'
   const isSearch = location.pathname === '/search'
+  const isDayEditor = location.pathname.startsWith('/day/')
   const showTrayRow = isTimeline || isChat || isSearch
 
   const timelineButton = (
@@ -138,7 +139,11 @@ export default function AppShell() {
 
   return (
     <div className="min-h-full bg-white text-slate-900">
-      <main className="mx-auto flex min-h-screen w-[min(96%,620px)] flex-col gap-4 pt-4 pb-48">
+      <main
+        className={`mx-auto flex min-h-screen flex-col gap-4 pb-12 ${
+          isDayEditor ? 'w-[min(96%,880px)] pt-4' : 'w-[min(96%,720px)] pt-4'
+        }`}
+      >
         <header className="grid grid-cols-[1fr_auto_1fr] items-center pt-2">
           <div className="flex items-center">
             {showBackButton && (

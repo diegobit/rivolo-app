@@ -4,7 +4,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, keymap } from '@codemirror/view'
 import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/state'
-import { addDays, getTodayId } from '../lib/dates'
+import { addDays, formatHumanDate, getTodayId } from '../lib/dates'
 import { pushToSync } from '../lib/sync'
 import { buttonDanger } from '../lib/ui'
 import { useDaysStore } from '../store/useDaysStore'
@@ -38,7 +38,13 @@ export default function DayEditor() {
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath && passcode.trim() && !locked)
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
-  const relativeLabel = dateValue === todayId ? 'Today' : dateValue === yesterdayId ? 'Yesterday' : null
+  const tomorrowId = addDays(todayId, 1)
+  const relativeLabel =
+    dateValue === todayId ? 'Today' : dateValue === yesterdayId ? 'Yesterday' : dateValue === tomorrowId ? 'Tomorrow' : null
+  const humanDateLabel = useMemo(() => {
+    if (!dateValue) return ''
+    return formatHumanDate(dateValue, todayId, { includeRelativeLabel: false })
+  }, [dateValue, todayId])
 
   const focusEditor = useCallback(() => {
     const view = editorViewRef.current
@@ -100,16 +106,17 @@ export default function DayEditor() {
       EditorView.theme({
         '&': {
           backgroundColor: 'transparent',
-          minHeight: '360px',
+          minHeight: '70vh',
         },
         '.cm-scroller': {
-          fontSize: '1.25rem',
+          fontSize: '1.20rem',
           fontWeight: '400',
+          fontFamily: "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace",
           color: '#000000',
           overflow: 'visible',
         },
         '.cm-content': {
-          minHeight: '360px',
+          minHeight: '70vh',
           padding: '24px 0 0',
         },
         '.cm-gutters': {
@@ -428,10 +435,10 @@ export default function DayEditor() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-1 flex-col justify-center pt-4 pb-8">
       <section className="rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
-        <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
-          <div className="flex items-center gap-3">
+        <div className="relative flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-baseline gap-3">
             <button
               className="flex h-8 w-8 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90"
               type="button"
@@ -444,9 +451,12 @@ export default function DayEditor() {
                 style={{ filter: 'brightness(0) invert(1)' }}
               />
             </button>
-            {relativeLabel && <span className="text-[1.25rem] font-bold text-slate-900">{relativeLabel}</span>}
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              {relativeLabel && <span className="text-xl font-bold text-slate-900">{relativeLabel}</span>}
+              {humanDateLabel && <span className="text-xl font-semibold text-slate-400">{humanDateLabel}</span>}
+            </div>
           </div>
-          <div className="flex justify-center">
+          <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center">
             <input
               className="rounded-lg border border-slate-200 px-3 py-1 text-base font-semibold text-slate-700 outline-none transition focus:border-slate-400"
               type="date"
@@ -456,7 +466,7 @@ export default function DayEditor() {
               onKeyDown={handleDateKeyDown}
             />
           </div>
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center gap-2">
             {loading && <span className="text-xs text-slate-400">Saving...</span>}
             <button className={buttonDanger} type="button" onClick={handleDelete}>
               Delete

@@ -20,6 +20,38 @@ export const formatDayTitle = (dayId: string) => {
   }).format(date)
 }
 
+export const formatHumanDate = (
+  dayId: string,
+  referenceDayId = getTodayId(),
+  options: { includeRelativeLabel?: boolean } = {},
+) => {
+  const date = parseDayId(dayId)
+  const reference = parseDayId(referenceDayId)
+  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(date)
+  const day = new Intl.DateTimeFormat('en-US', { day: 'numeric' }).format(date)
+  const month = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
+  const year = date.getFullYear()
+  const includeRelativeLabel = options.includeRelativeLabel ?? true
+
+  if (dayId === referenceDayId) {
+    return includeRelativeLabel ? `Today • ${day}, ${weekday}` : `${day}, ${weekday}`
+  }
+
+  if (dayId === addDays(referenceDayId, -1)) {
+    return includeRelativeLabel ? `Yesterday • ${day}, ${weekday}` : `${day}, ${weekday}`
+  }
+
+  if (dayId === addDays(referenceDayId, 1)) {
+    return includeRelativeLabel ? `Tomorrow • ${day}, ${weekday}` : `${day}, ${weekday}`
+  }
+
+  if (year === reference.getFullYear()) {
+    return `${day} ${month}, ${weekday}`
+  }
+
+  return `${day} ${month} ${year}, ${weekday}`
+}
+
 export const addDays = (dayId: string, days: number) => {
   const date = parseDayId(dayId)
   date.setDate(date.getDate() + days)

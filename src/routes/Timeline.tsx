@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import BottomTrayPortal from '../components/BottomTrayPortal'
 import { pushToSync } from '../lib/sync'
-import { addDays, getTodayId, parseDayId } from '../lib/dates'
+import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import type { Day } from '../lib/dayRepository'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
@@ -99,6 +99,7 @@ export default function Timeline() {
 
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
+  const tomorrowId = addDays(todayId, 1)
   const hasToday = useMemo(() => cards.some((card) => card.day.dayId === todayId), [cards, todayId])
   const hasFuture = useMemo(() => cards.some((card) => card.day.dayId > todayId), [cards, todayId])
 
@@ -129,33 +130,7 @@ export default function Timeline() {
     return items
   }, [cards, hasToday, todayId])
 
-  const renderedItems = useMemo<TimelineItem[]>(() => {
-    if (!hasToday) {
-      return timelineItems
-    }
-
-    const items: TimelineItem[] = []
-    let sawFuture = false
-    let dividerInserted = false
-
-    for (const item of timelineItems) {
-      const isFuture = item.type === 'day' && item.card.day.dayId > todayId
-      if (isFuture) {
-        sawFuture = true
-        items.push(item)
-        continue
-      }
-
-      if (sawFuture && !dividerInserted && item.type === 'day') {
-        items.push({ type: 'divider' })
-        dividerInserted = true
-      }
-
-      items.push(item)
-    }
-
-    return items
-  }, [hasToday, timelineItems, todayId])
+  const renderedItems = useMemo<TimelineItem[]>(() => timelineItems, [timelineItems])
 
   const futureDayId = useMemo(() => {
     const existing = new Set(cards.map((card) => card.day.dayId))
@@ -269,9 +244,11 @@ export default function Timeline() {
             const { day, snippet, open, truncated } = item.card
             const isToday = day.dayId === todayId
             const isYesterday = day.dayId === yesterdayId
+            const isTomorrow = day.dayId === tomorrowId
             const isFuture = day.dayId > todayId
-            const title = isToday ? 'Today' : isYesterday ? 'Yesterday' : day.humanTitle
-            const showDate = isToday || isYesterday
+            const humanDate = formatHumanDate(day.dayId, todayId, { includeRelativeLabel: false })
+            const relativeLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : isTomorrow ? 'Tomorrow' : null
+            const title = relativeLabel ?? humanDate
 
             return (
               <Link
@@ -286,15 +263,17 @@ export default function Timeline() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3
-                      className={`${isToday ? 'text-xl' : isYesterday ? 'text-lg' : 'text-base'} ${
-                        isToday || isYesterday ? 'font-bold' : 'font-semibold'
-                      } ${isFuture ? 'text-slate-600/70' : 'text-slate-900'}`}
+                      className={`${isToday ? 'text-2xl' : isYesterday || isTomorrow ? 'text-lg' : 'text-base'} ${
+                        isToday || isYesterday || isTomorrow ? 'font-bold' : 'font-semibold'
+                      }`}
                     >
-                      {title}
-                      {showDate && (
-                        <span className={`ml-2 font-semibold ${isToday ? 'text-xl' : 'text-lg'} text-slate-400`}>
-                          • {day.humanTitle}
-                        </span>
+                      {relativeLabel ? (
+                        <>
+                          <span className={isFuture ? 'text-slate-600/70' : 'text-slate-900'}>{relativeLabel}</span>
+                          <span className="ml-2 font-semibold text-slate-400">{humanDate}</span>
+                        </>
+                      ) : (
+                        <span className="text-slate-400">{title}</span>
                       )}
                     </h3>
                   </div>
@@ -309,7 +288,10 @@ export default function Timeline() {
                   )}
                 </div>
                 {snippet && (
-                  <p className={`mt-3 whitespace-pre-line text-base ${isFuture ? 'text-slate-500/70' : 'text-slate-600'}`}>
+                  <p
+                    className={`mt-3 whitespace-pre-line text-base ${isFuture ? 'text-slate-500/70' : 'text-slate-600'}`}
+                    style={{ fontFamily: "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                  >
                     {snippet}
                     {truncated && <span className="mt-2 block text-xs text-slate-400">... more</span>}
                   </p>
