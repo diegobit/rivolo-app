@@ -276,29 +276,45 @@ export default function DayEditor() {
     }
   }, [deleteDay, queueSync, resolvedDayId, updateDayContent])
 
-  const handleDateChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextDayId = event.target.value
     setDateValue(nextDayId)
     setDateError(null)
+  }
 
-    if (!nextDayId || nextDayId === resolvedDayId) {
-      return
-    }
+  const commitDateChange = useCallback(
+    async (nextDayId: string) => {
+      if (!nextDayId || nextDayId === resolvedDayId) {
+        setDateValue(resolvedDayId)
+        return
+      }
 
-    if (draft.trim()) {
+      if (draft.trim()) {
+        syncPendingRef.current = true
+        await updateDayContent(resolvedDayId, draft)
+      }
+      const result = await moveDayDate(resolvedDayId, nextDayId)
+
+      if (result.conflict) {
+        setDateError('Day already exists. Choose another date.')
+        setDateValue(resolvedDayId)
+        return
+      }
+
       syncPendingRef.current = true
-      await updateDayContent(resolvedDayId, draft)
-    }
-    const result = await moveDayDate(resolvedDayId, nextDayId)
+      navigate(`/day/${nextDayId}`, { replace: true })
+    },
+    [draft, moveDayDate, navigate, resolvedDayId, updateDayContent],
+  )
 
-    if (result.conflict) {
-      setDateError('Day already exists. Choose another date.')
-      setDateValue(resolvedDayId)
-      return
-    }
+  const handleDateCommit = () => {
+    void commitDateChange(dateValue)
+  }
 
-    syncPendingRef.current = true
-    navigate(`/day/${nextDayId}`, { replace: true })
+  const handleDateKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.currentTarget.blur()
+    }
   }
 
   const handleClose = async () => {
@@ -436,6 +452,8 @@ export default function DayEditor() {
               type="date"
               value={dateValue}
               onChange={handleDateChange}
+              onBlur={handleDateCommit}
+              onKeyDown={handleDateKeyDown}
             />
           </div>
           <div className="flex items-center justify-end gap-2">
