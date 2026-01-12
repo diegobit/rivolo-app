@@ -100,6 +100,7 @@ export default function Timeline() {
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
+  const maxWeekdayOffset = 14
   const hasToday = useMemo(() => cards.some((card) => card.day.dayId === todayId), [cards, todayId])
   const hasFuture = useMemo(() => cards.some((card) => card.day.dayId > todayId), [cards, todayId])
 
@@ -246,7 +247,14 @@ export default function Timeline() {
             const isYesterday = day.dayId === yesterdayId
             const isTomorrow = day.dayId === tomorrowId
             const isFuture = day.dayId > todayId
-            const humanDate = formatHumanDate(day.dayId, todayId, { includeRelativeLabel: false })
+            const dayDate = parseDayId(day.dayId)
+            const todayDate = parseDayId(todayId)
+            const diffDays = Math.round((dayDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24))
+            const showWeekday = Math.abs(diffDays) <= maxWeekdayOffset
+            const humanDate = formatHumanDate(day.dayId, todayId, {
+              includeRelativeLabel: false,
+              includeWeekday: showWeekday,
+            })
             const relativeLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : isTomorrow ? 'Tomorrow' : null
             const title = relativeLabel ?? humanDate
 

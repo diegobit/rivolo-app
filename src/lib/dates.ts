@@ -23,7 +23,7 @@ export const formatDayTitle = (dayId: string) => {
 export const formatHumanDate = (
   dayId: string,
   referenceDayId = getTodayId(),
-  options: { includeRelativeLabel?: boolean } = {},
+  options: { includeRelativeLabel?: boolean; includeWeekday?: boolean } = {},
 ) => {
   const date = parseDayId(dayId)
   const reference = parseDayId(referenceDayId)
@@ -32,24 +32,26 @@ export const formatHumanDate = (
   const month = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
   const year = date.getFullYear()
   const includeRelativeLabel = options.includeRelativeLabel ?? true
+  const includeWeekday = options.includeWeekday ?? true
+  const weekdaySuffix = includeWeekday ? `, ${weekday}` : ''
 
   if (dayId === referenceDayId) {
-    return includeRelativeLabel ? `Today • ${day}, ${weekday}` : `${day}, ${weekday}`
+    return includeRelativeLabel ? `Today • ${day}${weekdaySuffix}` : `${day}${weekdaySuffix}`
   }
 
   if (dayId === addDays(referenceDayId, -1)) {
-    return includeRelativeLabel ? `Yesterday • ${day}, ${weekday}` : `${day}, ${weekday}`
+    return includeRelativeLabel ? `Yesterday • ${day}${weekdaySuffix}` : `${day}${weekdaySuffix}`
   }
 
   if (dayId === addDays(referenceDayId, 1)) {
-    return includeRelativeLabel ? `Tomorrow • ${day}, ${weekday}` : `${day}, ${weekday}`
+    return includeRelativeLabel ? `Tomorrow • ${day}${weekdaySuffix}` : `${day}${weekdaySuffix}`
   }
 
   if (year === reference.getFullYear()) {
-    return `${day} ${month}, ${weekday}`
+    return `${day} ${month}${weekdaySuffix}`
   }
 
-  return `${day} ${month} ${year}, ${weekday}`
+  return `${day} ${month} ${year}${weekdaySuffix}`
 }
 
 export const addDays = (dayId: string, days: number) => {
