@@ -286,9 +286,9 @@ export default function Timeline() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3
-                      className={`${
-                        isToday ? 'text-xl' : isYesterday ? 'text-lg' : 'text-base'
-                      } font-semibold ${isFuture ? 'text-slate-600/70' : 'text-slate-900'}`}
+                      className={`${isToday ? 'text-xl' : isYesterday ? 'text-lg' : 'text-base'} ${
+                        isToday || isYesterday ? 'font-bold' : 'font-semibold'
+                      } ${isFuture ? 'text-slate-600/70' : 'text-slate-900'}`}
                     >
                       {title}
                       {showDate && (

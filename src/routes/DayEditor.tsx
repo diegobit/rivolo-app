@@ -4,6 +4,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, keymap } from '@codemirror/view'
 import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/state'
+import { addDays, getTodayId } from '../lib/dates'
 import { pushToSync } from '../lib/sync'
 import { buttonDanger } from '../lib/ui'
 import { useDaysStore } from '../store/useDaysStore'
@@ -35,6 +36,9 @@ export default function DayEditor() {
   const resolvedDayId = dayId ?? ''
   const isReady = activeDay?.dayId === resolvedDayId
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath && passcode.trim() && !locked)
+  const todayId = getTodayId()
+  const yesterdayId = addDays(todayId, -1)
+  const relativeLabel = dateValue === todayId ? 'Today' : dateValue === yesterdayId ? 'Yesterday' : null
 
   const focusEditor = useCallback(() => {
     const view = editorViewRef.current
@@ -96,13 +100,16 @@ export default function DayEditor() {
       EditorView.theme({
         '&': {
           backgroundColor: 'transparent',
+          minHeight: '360px',
         },
         '.cm-scroller': {
           fontSize: '1.25rem',
           fontWeight: '400',
           color: '#000000',
+          overflow: 'visible',
         },
         '.cm-content': {
+          minHeight: '360px',
           padding: '24px 0 0',
         },
         '.cm-gutters': {
@@ -407,7 +414,7 @@ export default function DayEditor() {
   return (
     <div className="space-y-4">
       <section className="rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
-        <div className="flex items-center justify-between gap-3">
+        <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
           <div className="flex items-center gap-3">
             <button
               className="flex h-8 w-8 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90"
@@ -421,23 +428,24 @@ export default function DayEditor() {
                 style={{ filter: 'brightness(0) invert(1)' }}
               />
             </button>
-            <div>
-                <input
-                  className="rounded-lg border border-slate-200 px-3 py-1 text-base font-semibold text-slate-700 outline-none transition focus:border-slate-400"
-                  type="date"
-                  value={dateValue}
-                  onChange={handleDateChange}
-                />
-
-            </div>
+            {relativeLabel && <span className="text-[1.25rem] font-bold text-slate-900">{relativeLabel}</span>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex justify-center">
+            <input
+              className="rounded-lg border border-slate-200 px-3 py-1 text-base font-semibold text-slate-700 outline-none transition focus:border-slate-400"
+              type="date"
+              value={dateValue}
+              onChange={handleDateChange}
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2">
             {loading && <span className="text-xs text-slate-400">Saving...</span>}
             <button className={buttonDanger} type="button" onClick={handleDelete}>
               Delete
             </button>
           </div>
         </div>
+
 
         {dateError && (
           <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600">
@@ -453,7 +461,6 @@ export default function DayEditor() {
         <div className="mt-4 overflow-hidden rounded-xl">
           <CodeMirror
             value={draft}
-            height="360px"
             extensions={[markdown(), editorTheme, clearActiveLine, escapeKeymap, EditorView.lineWrapping, ...highlightData.extensions]}
             onChange={setDraft}
             onCreateEditor={(view) => {
