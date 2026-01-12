@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { addDays, getTodayId } from '../lib/dates'
 import { pullFromSync } from '../lib/sync'
+import { useDaysStore } from '../store/useDaysStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 
@@ -16,13 +18,26 @@ export default function AppShell() {
   const navigate = useNavigate()
   const { loadSettings, passcode, locked } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
+  const { days } = useDaysStore()
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const hasAutoPulled = useRef(false)
+  const todayId = getTodayId()
   const showBackButton = location.pathname === '/settings'
   const isTimeline = location.pathname === '/'
   const isChat = location.pathname === '/chat'
   const isSearch = location.pathname === '/search'
   const isDayEditor = location.pathname.startsWith('/day/')
   const showTrayRow = isTimeline || isChat || isSearch
+
+  const futureDayId = useMemo(() => {
+    const existing = new Set(days.map((day) => day.dayId))
+    let candidate = addDays(days[0]?.dayId ?? todayId, 1)
+    while (existing.has(candidate)) {
+      candidate = addDays(candidate, 1)
+    }
+    return candidate
+  }, [days, todayId])
 
   const timelineButton = (
     <NavLink to="/" className={trayIconButton} aria-label="Timeline">
@@ -64,6 +79,23 @@ export default function AppShell() {
       // Auto-pull failures are handled by manual sync.
     })
   }, [locked, passcode, syncStatus.connected, syncStatus.filePath])
+
+  useEffect(() => {
+    if (!showShortcuts) return
+    const handleClick = (event: MouseEvent) => {
+      if (shortcutsRef.current?.contains(event.target as Node)) return
+      setShowShortcuts(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showShortcuts])
+
+  useEffect(() => {
+    if (isTimeline) return
+    if (showShortcuts) {
+      setShowShortcuts(false)
+    }
+  }, [isTimeline, showShortcuts])
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
@@ -108,7 +140,7 @@ export default function AppShell() {
 
       if (isEditable) return
 
-      if (key === 'c') {
+      if (key === 'c' || key === 'a') {
         event.preventDefault()
         if (!isChat) {
           navigate('/chat')
@@ -116,7 +148,7 @@ export default function AppShell() {
         return
       }
 
-      if (key === 's') {
+      if (key === 's' || key === 'f') {
         event.preventDefault()
         if (!isSearch) {
           navigate('/search')
@@ -129,12 +161,18 @@ export default function AppShell() {
         if (!isTimeline) {
           navigate('/')
         }
+        return
+      }
+
+      if (key === 'n') {
+        event.preventDefault()
+        navigate(`/day/${futureDayId}`)
       }
     }
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [isChat, isSearch, isTimeline, location.pathname, navigate])
+  }, [futureDayId, isChat, isSearch, isTimeline, location.pathname, navigate])
 
 
   return (
@@ -145,7 +183,7 @@ export default function AppShell() {
         } ${isDayEditor ? 'w-[min(96%,880px)] pt-4' : 'w-[min(96%,720px)] pt-4'}`}
       >
         <header className="grid grid-cols-[1fr_auto_1fr] items-center pt-2">
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
             {showBackButton && (
               <NavLink to="/" className={backButtonClass} aria-label="Back">
                 <img
@@ -155,6 +193,30 @@ export default function AppShell() {
                   style={{ filter: 'brightness(0) invert(1)' }}
                 />
               </NavLink>
+            )}
+            {isTimeline && (
+              <div ref={shortcutsRef} className="relative">
+                <button
+                  className={topIconButton}
+                  type="button"
+                  aria-label="Shortcuts"
+                  onClick={() => setShowShortcuts((prev) => !prev)}
+                >
+                  <img src="/question.svg" alt="" className="h-4 w-4" />
+                </button>
+                {showShortcuts && (
+                  <div className="absolute left-0 z-20 mt-2 w-max rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-600 shadow-lg">
+                    <div className="space-y-1">
+                      <div>A, C → Chat View</div>
+                      <div>T → Timeline View</div>
+                      <div>S, F → Search</div>
+                      <div>N → New future day</div>
+                      <div>I → Focus input box</div>
+                      <div>Esc → Exit focus or back to Timeline</div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <NavLink to="/" className="justify-self-center" aria-label="Home">
@@ -167,7 +229,6 @@ export default function AppShell() {
               </NavLink>
             )}
           </div>
-
         </header>
         <Outlet />
       </main>
