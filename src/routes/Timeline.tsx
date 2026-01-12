@@ -197,7 +197,7 @@ export default function Timeline() {
         type="submit"
         aria-label="Add"
       >
-        <img src="/plus.svg" alt="" className="h-4 w-4" style={{ filter: 'brightness(0) invert(1)' }} />
+        <img src="/plus.svg" alt="" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
       </button>
     </form>
   )
