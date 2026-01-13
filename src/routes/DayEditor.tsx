@@ -31,6 +31,7 @@ export default function DayEditor() {
   const exitHandledRef = useRef(false)
   const editorViewRef = useRef<EditorView | null>(null)
   const hasFocusedRef = useRef(false)
+  const dateInputRef = useRef<HTMLInputElement | null>(null)
 
   const quote = searchParams.get('quote') ?? ''
   const resolvedDayId = dayId ?? ''
@@ -437,8 +438,8 @@ export default function DayEditor() {
   return (
     <div className="flex flex-1 flex-col justify-center pt-4 pb-8">
       <section className="rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
-        <div className="relative flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-baseline gap-3">
+        <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
+          <div className="flex items-center gap-3">
             <button
               className="flex h-8 w-8 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90"
               type="button"
@@ -451,14 +452,35 @@ export default function DayEditor() {
                 style={{ filter: 'brightness(0) invert(1)' }}
               />
             </button>
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              {relativeLabel && <span className="text-xl font-bold text-slate-900">{relativeLabel}</span>}
-              {humanDateLabel && <span className="text-xl font-semibold text-slate-400">{humanDateLabel}</span>}
-            </div>
           </div>
-          <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center">
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {relativeLabel ? (
+                <>
+                  <span className="text-xl font-bold text-slate-900">{relativeLabel}</span>
+                  {humanDateLabel && <span className="text-xl font-semibold text-slate-900">{humanDateLabel}</span>}
+                </>
+              ) : (
+                humanDateLabel && <span className="text-xl font-semibold text-slate-900">{humanDateLabel}</span>
+              )}
+            </div>
+            <button
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300"
+              type="button"
+              aria-label="Pick date"
+              onClick={() => {
+                if (dateInputRef.current?.showPicker) {
+                  dateInputRef.current.showPicker()
+                  return
+                }
+                dateInputRef.current?.click()
+              }}
+            >
+              <img src="/calendar.svg" alt="" className="h-4 w-4" />
+            </button>
             <input
-              className="rounded-lg border border-slate-200 px-3 py-1 text-base font-semibold text-slate-700 outline-none transition focus:border-slate-400"
+              ref={dateInputRef}
+              className="sr-only"
               type="date"
               value={dateValue}
               onChange={handleDateChange}
@@ -466,7 +488,7 @@ export default function DayEditor() {
               onKeyDown={handleDateKeyDown}
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             {loading && <span className="text-xs text-slate-400">Saving...</span>}
             <button className={buttonDanger} type="button" onClick={handleDelete}>
               Delete

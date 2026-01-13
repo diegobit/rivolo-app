@@ -256,6 +256,7 @@ export default function Timeline() {
               includeWeekday: showWeekday,
             })
             const relativeLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : isTomorrow ? 'Tomorrow' : null
+            const [datePart, weekdayPart] = humanDate.split(', ')
             const title = relativeLabel ?? humanDate
 
             return (
@@ -264,7 +265,7 @@ export default function Timeline() {
                 to={`/day/${day.dayId}`}
                 className={`block rounded-[4px] border p-4 transition ${
                   isFuture
-                    ? 'border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.08),0_2px_8px_rgba(0,0,0,0.04)] hover:border-slate-300/60'
+                    ? 'border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.03)] hover:border-slate-300/60'
                     : 'border-slate-200/60 bg-white shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] hover:border-slate-300/60'
                 }`}
               >
@@ -277,11 +278,16 @@ export default function Timeline() {
                     >
                       {relativeLabel ? (
                         <>
-                          <span className={isFuture ? 'text-slate-600/70' : 'text-slate-900'}>{relativeLabel}</span>
+                          <span className="text-slate-900">{relativeLabel}</span>
                           <span className="ml-2 font-semibold text-slate-400">{humanDate}</span>
                         </>
+                      ) : weekdayPart ? (
+                        <>
+                          <span className="text-slate-900">{datePart}</span>
+                          <span className="ml-2 font-semibold text-slate-400">{weekdayPart}</span>
+                        </>
                       ) : (
-                        <span className="text-slate-400">{title}</span>
+                        <span className="text-slate-900">{title}</span>
                       )}
                     </h3>
                   </div>
