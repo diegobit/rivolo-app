@@ -291,12 +291,6 @@ export default function DayEditor() {
     }
   }, [deleteDay, queueSync, resolvedDayId, updateDayContent])
 
-  const handleDateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const nextDayId = event.target.value
-    setDateValue(nextDayId)
-    setDateError(null)
-  }
-
   const commitDateChange = useCallback(
     async (nextDayId: string) => {
       if (!nextDayId || nextDayId === resolvedDayId) {
@@ -322,8 +316,11 @@ export default function DayEditor() {
     [draft, moveDayDate, navigate, resolvedDayId, updateDayContent],
   )
 
-  const handleDateCommit = () => {
-    void commitDateChange(dateValue)
+  const handleDateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextDayId = event.target.value
+    setDateValue(nextDayId)
+    setDateError(null)
+    void commitDateChange(nextDayId)
   }
 
   const handleDateKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -508,7 +505,6 @@ export default function DayEditor() {
               type="date"
               value={dateValue}
               onChange={handleDateChange}
-              onBlur={handleDateCommit}
               onKeyDown={handleDateKeyDown}
             />
           </div>
