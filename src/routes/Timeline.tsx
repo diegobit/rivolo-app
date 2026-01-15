@@ -23,8 +23,17 @@ const getPreview = (content: string, maxLines: number) => {
 
 const countOpenTasks = (content: string) => (content.match(/- \[ \]/g) ?? []).length
 
-const formatShortDay = (dayId: string) =>
-  new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(parseDayId(dayId))
+const formatShortDay = (dayId: string) => {
+  const date = parseDayId(dayId)
+  const today = parseDayId(getTodayId())
+  const formatOptions: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' }
+
+  if (date.getFullYear() !== today.getFullYear()) {
+    formatOptions.year = 'numeric'
+  }
+
+  return new Intl.DateTimeFormat('en-GB', formatOptions).format(date)
+}
 
 type TimelineDayCard = {
   day: Day
@@ -274,7 +283,7 @@ export default function Timeline() {
                     <h3
                       className={`${isToday ? 'text-2xl' : isYesterday || isTomorrow ? 'text-lg' : 'text-base'} ${
                         isToday || isYesterday || isTomorrow ? 'font-bold' : 'font-semibold'
-                      }`}
+                      } ${isFuture ? 'opacity-70' : ''}`}
                     >
                       {relativeLabel ? (
                         <>
