@@ -6,7 +6,6 @@ import { Decoration, EditorView, keymap } from '@codemirror/view'
 import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/state'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import { pushToSync } from '../lib/sync'
-import { buttonDanger } from '../lib/ui'
 import { useDaysStore } from '../store/useDaysStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
@@ -510,8 +509,21 @@ export default function DayEditor() {
           </div>
           <div className="flex items-center justify-end gap-2">
             {loading && <span className="text-xs text-slate-400">Saving...</span>}
-            <button className={buttonDanger} type="button" onClick={handleDelete}>
-              Delete
+            <button
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 max-[370px]:h-7 max-[370px]:w-7"
+              type="button"
+              onClick={handleDelete}
+              aria-label="Delete"
+            >
+              <img
+                src="/trash.svg"
+                alt=""
+                className="h-4 w-4 max-[370px]:h-3.5 max-[370px]:w-3.5"
+                style={{
+                  filter:
+                    'invert(29%) sepia(51%) saturate(2878%) hue-rotate(341deg) brightness(91%) contrast(95%)',
+                }}
+              />
             </button>
           </div>
         </div>
