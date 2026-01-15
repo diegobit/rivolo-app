@@ -4,7 +4,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, keymap } from '@codemirror/view'
 import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/state'
-import { addDays, formatHumanDate, getTodayId } from '../lib/dates'
+import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import { pushToSync } from '../lib/sync'
 import { buttonDanger } from '../lib/ui'
 import { useDaysStore } from '../store/useDaysStore'
@@ -46,6 +46,13 @@ export default function DayEditor() {
     if (!dateValue) return ''
     return formatHumanDate(dateValue, todayId, { includeRelativeLabel: false })
   }, [dateValue, todayId])
+  const compactDateLabel = useMemo(() => {
+    if (!dateValue) return ''
+    const date = parseDayId(dateValue)
+    const day = `${date.getDate()}`.padStart(2, '0')
+    const month = `${date.getMonth() + 1}`.padStart(2, '0')
+    return `${day}/${month}/${date.getFullYear()}`
+  }, [dateValue])
 
   const focusEditor = useCallback(() => {
     const view = editorViewRef.current
@@ -438,7 +445,7 @@ export default function DayEditor() {
   return (
     <div className="flex flex-1 flex-col justify-center pt-4 pb-8">
       <section className="rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
-        <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
+        <div className="flex items-center justify-between gap-2 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:gap-3">
           <div className="flex items-center gap-3">
             <button
               className="flex h-8 w-8 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90"
@@ -453,19 +460,36 @@ export default function DayEditor() {
               />
             </button>
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-x-2 max-[640px]:gap-x-1 max-[370px]:w-full max-[370px]:justify-between">
+            <div className="flex min-w-0 flex-nowrap items-center gap-x-2 max-[640px]:gap-x-1">
               {relativeLabel ? (
                 <>
-                  <span className="text-xl font-bold text-slate-900">{relativeLabel}</span>
-                  {humanDateLabel && <span className="text-xl font-semibold text-slate-900">{humanDateLabel}</span>}
+                  <span className="text-xl font-bold text-slate-900 max-[640px]:text-sm max-[370px]:text-base">
+                    {relativeLabel}
+                  </span>
+                  {humanDateLabel && (
+                    <span className="text-xl font-semibold text-slate-900 max-[370px]:hidden max-[640px]:text-sm">
+                      {humanDateLabel}
+                    </span>
+                  )}
                 </>
               ) : (
-                humanDateLabel && <span className="text-xl font-semibold text-slate-900">{humanDateLabel}</span>
+                <>
+                  {humanDateLabel && (
+                    <span className="text-xl font-semibold text-slate-900 max-[370px]:hidden max-[640px]:text-sm">
+                      {humanDateLabel}
+                    </span>
+                  )}
+                  {compactDateLabel && (
+                    <span className="hidden text-base font-semibold text-slate-900 max-[370px]:inline">
+                      {compactDateLabel}
+                    </span>
+                  )}
+                </>
               )}
             </div>
             <button
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 max-[370px]:h-7 max-[370px]:w-7"
               type="button"
               aria-label="Pick date"
               onClick={() => {
@@ -476,7 +500,7 @@ export default function DayEditor() {
                 dateInputRef.current?.click()
               }}
             >
-              <img src="/calendar.svg" alt="" className="h-4 w-4" />
+              <img src="/calendar.svg" alt="" className="h-4 w-4 max-[370px]:h-3.5 max-[370px]:w-3.5" />
             </button>
             <input
               ref={dateInputRef}
