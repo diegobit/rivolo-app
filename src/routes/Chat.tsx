@@ -188,6 +188,7 @@ export default function Chat() {
           />
           <input
             id="chat-input"
+            autoComplete="off"
             className="w-full rounded-xl bg-transparent py-2 pl-10 pr-3 text-base outline-none"
             placeholder="Ask anything"
             value={input}

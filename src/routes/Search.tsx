@@ -65,6 +65,7 @@ export default function Search() {
           />
           <input
             id="search-input"
+            autoComplete="off"
             className="w-full rounded-xl bg-transparent py-2 pl-10 pr-3 text-base outline-none"
             placeholder="Search all days"
             value={query}

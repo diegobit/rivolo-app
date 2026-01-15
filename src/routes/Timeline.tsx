@@ -164,6 +164,7 @@ export default function Timeline() {
         />
         <input
           id="timeline-input"
+          autoComplete="off"
           className="w-full rounded-full bg-transparent py-2 pl-10 pr-3 text-base outline-none"
           placeholder="What am I thinking about today?"
           value={text}
