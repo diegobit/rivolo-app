@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { addDays, getTodayId } from '../lib/dates'
 import { pullFromSync } from '../lib/sync'
 import { useDaysStore } from '../store/useDaysStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
+import { useUIStore } from '../store/useUIStore'
 
 const topIconButton =
   'flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300'
@@ -19,16 +20,15 @@ export default function AppShell() {
   const { loadSettings, passcode, locked } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { days } = useDaysStore()
+  const { mode, setMode } = useUIStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const hasAutoPulled = useRef(false)
   const todayId = getTodayId()
   const showBackButton = location.pathname === '/settings'
-  const isTimeline = location.pathname === '/'
-  const isChat = location.pathname === '/chat'
-  const isSearch = location.pathname === '/search'
+  const isHome = location.pathname === '/'
   const isDayEditor = location.pathname.startsWith('/day/')
-  const showTrayRow = isTimeline || isChat || isSearch
+  const showTrayRow = isHome
 
   const futureDayId = useMemo(() => {
     const existing = new Set(days.map((day) => day.dayId))
@@ -40,21 +40,33 @@ export default function AppShell() {
   }, [days, todayId])
 
   const timelineButton = (
-    <NavLink to="/" className={trayIconButton} aria-label="Timeline">
+    <button
+      className={`${trayIconButton} ${mode === 'timeline' ? 'bg-slate-50' : ''}`}
+      onClick={() => setMode('timeline')}
+      aria-label="Timeline"
+    >
       <img src="/notes.svg" alt="" className="h-5 w-5" />
-    </NavLink>
+    </button>
   )
 
   const chatButton = (
-    <NavLink to="/chat" className={trayIconButton} aria-label="Chat">
+    <button
+      className={`${trayIconButton} ${mode === 'chat' ? 'bg-slate-50' : ''}`}
+      onClick={() => setMode('chat')}
+      aria-label="Chat"
+    >
       <img src="/sparkles.svg" alt="" className="h-5 w-5" />
-    </NavLink>
+    </button>
   )
 
   const searchButton = (
-    <NavLink to="/search" className={trayIconButton} aria-label="Search">
+    <button
+      className={`${trayIconButton} ${mode === 'search' ? 'bg-slate-50' : ''}`}
+      onClick={() => setMode('search')}
+      aria-label="Search"
+    >
       <img src="/lens.svg" alt="" className="h-5 w-5" />
-    </NavLink>
+    </button>
   )
 
   const trayCenter = (
@@ -91,11 +103,11 @@ export default function AppShell() {
   }, [showShortcuts])
 
   useEffect(() => {
-    if (isTimeline) return
+    if (!isHome) return
     if (showShortcuts) {
       setShowShortcuts(false)
     }
-  }, [isTimeline, showShortcuts])
+  }, [isHome, showShortcuts])
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
@@ -115,17 +127,19 @@ export default function AppShell() {
       if (key === 'i') {
         if (isEditable) return
         event.preventDefault()
-        if (isTimeline) {
-          document.getElementById('timeline-input')?.focus()
-          return
-        }
-        if (isChat) {
-          document.getElementById('chat-input')?.focus()
-          return
-        }
-        if (isSearch) {
-          document.getElementById('search-input')?.focus()
-          return
+        if (isHome) {
+          if (mode === 'timeline') {
+            document.getElementById('timeline-input')?.focus()
+            return
+          }
+          if (mode === 'chat') {
+            document.getElementById('chat-input')?.focus()
+            return
+          }
+          if (mode === 'search') {
+            document.getElementById('search-input')?.focus()
+            return
+          }
         }
         if (location.pathname.startsWith('/day/')) {
           const editor = document.querySelector<HTMLElement>('.cm-content')
@@ -142,24 +156,24 @@ export default function AppShell() {
 
       if (key === 'c' || key === 'a') {
         event.preventDefault()
-        if (!isChat) {
-          navigate('/chat')
+        if (isHome) {
+          setMode('chat')
         }
         return
       }
 
       if (key === 's' || key === 'f') {
         event.preventDefault()
-        if (!isSearch) {
-          navigate('/search')
+        if (isHome) {
+          setMode('search')
         }
         return
       }
 
       if (key === 't') {
         event.preventDefault()
-        if (!isTimeline) {
-          navigate('/')
+        if (isHome) {
+          setMode('timeline')
         }
         return
       }
@@ -172,7 +186,7 @@ export default function AppShell() {
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [futureDayId, isChat, isSearch, isTimeline, location.pathname, navigate])
+  }, [futureDayId, isHome, location.pathname, mode, navigate, setMode])
 
 
   return (
@@ -194,7 +208,7 @@ export default function AppShell() {
                 />
               </NavLink>
             )}
-            {isTimeline && (
+            {isHome && (
               <div ref={shortcutsRef} className="relative">
                 <button
                   className={topIconButton}
@@ -238,27 +252,14 @@ export default function AppShell() {
           <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-20 h-32 bg-gradient-to-t from-white via-white/80 to-transparent" />
 
           <div className="fixed bottom-6 left-0 right-0 z-30 mx-auto flex w-[min(96%,620px)] items-center gap-3">
-            {isTimeline && (
-              <>
-                {trayCenter}
-                {chatButton}
-                {searchButton}
-              </>
-            )}
-            {isChat && (
-              <>
-                {timelineButton}
-                {trayCenter}
-                {searchButton}
-              </>
-            )}
-            {isSearch && (
-              <>
-                {timelineButton}
-                {chatButton}
-                {trayCenter}
-              </>
-            )}
+            {mode !== 'timeline' && <Fragment key="timeline-btn">{timelineButton}</Fragment>}
+            {mode === 'timeline' && <Fragment key="tray">{trayCenter}</Fragment>}
+
+            {mode !== 'chat' && <Fragment key="chat-btn">{chatButton}</Fragment>}
+            {mode === 'chat' && <Fragment key="tray">{trayCenter}</Fragment>}
+
+            {mode !== 'search' && <Fragment key="search-btn">{searchButton}</Fragment>}
+            {mode === 'search' && <Fragment key="tray">{trayCenter}</Fragment>}
           </div>
         </>
       )}
