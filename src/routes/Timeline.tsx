@@ -486,7 +486,7 @@ export default function Timeline() {
       {mode === 'chat' && (
         <div className="fixed bottom-24 left-0 right-0 z-20 mx-auto w-[min(96%,720px)] px-4">
           <div className={`pointer-events-none absolute -bottom-24 -inset-x-8 -top-12 -z-10 bg-gradient-to-t from-white via-white/95 to-transparent transition-opacity duration-500 ${messages.length > 0 ? 'opacity-100' : 'opacity-0'}`} />
-          <div className="flex max-h-[50vh] flex-col-reverse gap-3 overflow-y-auto p-2">
+          <div className="flex max-h-[50vh] flex-col-reverse gap-3 overflow-y-auto p-6">
             {chatError && <p className="text-center text-xs text-rose-500">{chatError}</p>}
             {[...messages].reverse().map((message) => (
                <div
@@ -494,10 +494,10 @@ export default function Timeline() {
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] space-y-2 rounded-2xl px-4 py-3 text-sm shadow-sm ${
+                  className={`max-w-[85%] space-y-2 rounded-2xl px-4 py-3 text-m shadow-[0_0_30px_-0_rgba(0,0,0,0.12)] ${
                     message.role === 'user'
                       ? 'bg-[#22B3FF] text-white'
-                      : 'bg-white text-slate-700 border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)]'
+                      : 'bg-white text-slate-700'
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{message.content || '...'}</p>
