@@ -606,7 +606,6 @@ export default function Timeline() {
          </section>
       )}
 
-
       {/* Main List */}
       {!loading && activeItems.length > 0 && (
         <div className="space-y-3">

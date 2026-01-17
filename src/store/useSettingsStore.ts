@@ -5,6 +5,8 @@ type Provider = 'gemini'
 
 type TimelineView = 'full' | 'preview'
 
+type Wallpaper = 'white' | 'thoughts-light' | 'thoughts-medium' | 'thoughts-high'
+
 type LlmSecrets = {
   geminiApiKey: string
 }
@@ -20,11 +22,13 @@ type SettingsState = {
   aiLanguage: AiLanguage
   loading: boolean
   timelineView: TimelineView
+  wallpaper: Wallpaper
   loadSettings: () => Promise<void>
   saveGeminiKey: (apiKey: string) => Promise<void>
   updateTimelineView: (view: TimelineView) => Promise<void>
   updateGeminiModel: (model: string) => Promise<void>
   updateAiLanguage: (language: AiLanguage) => Promise<void>
+  updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -34,6 +38,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   aiLanguage: 'follow',
   loading: false,
   timelineView: 'full',
+  wallpaper: 'white',
 
   loadSettings: async () => {
     set({ loading: true })
@@ -41,9 +46,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const storedTimelineView = (await getSetting('timeline.view')) as TimelineView | null
     const storedGeminiModel = await getSetting('llm.geminiModel')
     const storedAiLanguage = (await getSetting('ai.language')) as AiLanguage | null
+    const storedWallpaper = (await getSetting('appearance.wallpaper')) as Wallpaper | null
     const timelineView = storedTimelineView ?? 'full'
     const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
     const aiLanguage = storedAiLanguage ?? 'follow'
+    const wallpaper = storedWallpaper ?? 'white'
 
     if (!storedTimelineView) {
       await setSetting('timeline.view', timelineView)
@@ -53,6 +60,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }
     if (!storedAiLanguage) {
       await setSetting('ai.language', aiLanguage)
+    }
+    if (!storedWallpaper) {
+      await setSetting('appearance.wallpaper', wallpaper)
     }
 
     const secrets = await getJsonSetting<LlmSecrets>('llm.secrets')
@@ -64,6 +74,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       geminiModel,
       aiLanguage,
       timelineView,
+      wallpaper,
       loading: false,
     })
   },
@@ -88,5 +99,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   updateAiLanguage: async (language: AiLanguage) => {
     await setSetting('ai.language', language)
     set({ aiLanguage: language })
+  },
+
+  updateWallpaper: async (wallpaper: Wallpaper) => {
+    await setSetting('appearance.wallpaper', wallpaper)
+    set({ wallpaper })
   },
 }))
