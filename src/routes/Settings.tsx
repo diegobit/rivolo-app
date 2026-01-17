@@ -27,9 +27,11 @@ export default function Settings() {
     updatePasscode,
     updateTimelineView,
     updateGeminiModel,
+    updateAiLanguage,
     locked,
     geminiApiKey,
     geminiModel,
+    aiLanguage,
     passcode,
     timelineView,
   } = useSettingsStore()
@@ -294,6 +296,28 @@ export default function Settings() {
               onChange={(event) => void updateGeminiModel(event.target.value)}
             />
           </label>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <span className="text-xs text-slate-500">Reply language</span>
+          <div className="flex items-center gap-2">
+            <button
+              className={aiLanguage === 'follow' ? buttonPrimary : buttonSecondary}
+              type="button"
+              onClick={() => void updateAiLanguage('follow')}
+            >
+              Follow user
+            </button>
+            <input
+              className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
+              placeholder="or type: Italian, English..."
+              value={aiLanguage === 'follow' ? '' : aiLanguage}
+              onChange={(event) => {
+                const value = event.target.value.trim()
+                void updateAiLanguage(value || 'follow')
+              }}
+            />
+          </div>
         </div>
 
         {geminiApiKey && !locked && (

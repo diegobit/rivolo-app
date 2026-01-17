@@ -136,7 +136,7 @@ Quotes must be exact substrings from the cited day. If unsure, omit citations.`
 export default function Timeline() {
   const navigate = useNavigate()
   const { days, loading, loadTimeline, appendToToday } = useDaysStore()
-  const { loadSettings, passcode, locked, timelineView, geminiApiKey, geminiModel } = useSettingsStore()
+  const { loadSettings, passcode, locked, timelineView, geminiApiKey, geminiModel, aiLanguage } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode } = useUIStore()
 
@@ -256,10 +256,14 @@ export default function Timeline() {
       const contextText = formatContext(contextDays)
       const contextMap = new Map(contextDays.map((day) => [day.dayId, day.contentMd]))
 
+      const languageInstruction = aiLanguage === 'follow'
+        ? 'Reply in the same language the user writes in.'
+        : `Always reply in ${aiLanguage}.`
+
       const llmMessages = [
         {
           role: 'system' as const,
-          content: `${SYSTEM_PROMPT}\n\n<user_notes>\n${contextText}\n</user_notes>\n\nGiven the user's notes above, answer their question accurately and concisely.`,
+          content: `${SYSTEM_PROMPT}\n\n<user_notes>\n${contextText}\n</user_notes>\n\nGiven the user's notes above, answer their question accurately and concisely. ${languageInstruction}`,
         },
         ...currentMessages,
       ]
