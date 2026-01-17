@@ -31,7 +31,7 @@ export const useDropboxStore = create<DropboxViewState>((set) => ({
       lastRemoteRev: state.lastRemoteRev,
       lastSyncAt: state.lastSyncAt,
       localDirty: state.localDirty,
-      hasAuth: Boolean(state.encryptedAuth),
+      hasAuth: Boolean(state.auth),
       accountId: state.accountId,
       accountEmail: state.accountEmail,
       accountName: state.accountName,

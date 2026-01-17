@@ -24,15 +24,12 @@ export default function Settings() {
   const {
     loadSettings,
     saveGeminiKey,
-    updatePasscode,
     updateTimelineView,
     updateGeminiModel,
     updateAiLanguage,
-    locked,
     geminiApiKey,
     geminiModel,
     aiLanguage,
-    passcode,
     timelineView,
   } = useSettingsStore()
   const {
@@ -48,7 +45,6 @@ export default function Settings() {
   } = useDropboxStore()
   const { activeProvider, loadState: loadSyncState } = useSyncStore()
 
-  const [passcodeInput, setPasscodeInput] = useState(passcode)
   const [apiKey, setApiKey] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -66,10 +62,6 @@ export default function Settings() {
     void loadDropboxState()
     void loadSyncState()
   }, [loadDropboxState, loadSettings, loadSyncState])
-
-  useEffect(() => {
-    setPasscodeInput(passcode)
-  }, [passcode])
 
   useEffect(() => {
     const handleStatus = () => setOnline(navigator.onLine)
@@ -112,20 +104,7 @@ export default function Settings() {
     [dropboxAccount, dropboxConnected, lastRemoteRev, lastSyncAt, localDirty],
   )
 
-  const llmStatus = locked ? 'Locked' : geminiApiKey ? 'Ready' : 'No key'
-
-  const handleUpdatePasscode = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setStatus(null)
-
-    if (!passcodeInput.trim()) {
-      setStatus('Passcode required.')
-      return
-    }
-
-    const success = await updatePasscode(passcodeInput)
-    setStatus(success ? 'Passcode updated.' : 'Passcode updated. Re-save API key.')
-  }
+  const llmStatus = geminiApiKey ? 'Ready' : 'No key'
 
   const handleSaveKey = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -161,11 +140,6 @@ export default function Settings() {
   const handleConnectDropbox = async () => {
     setDropboxStatus(null)
 
-    if (!passcode.trim()) {
-      setDropboxStatus('Set a passcode in LLM settings first.')
-      return
-    }
-
     if (!online) {
       setDropboxStatus('Connect to the internet to link Dropbox.')
       return
@@ -193,10 +167,6 @@ export default function Settings() {
 
   const handlePull = async () => {
     setDropboxStatus(null)
-    if (!passcode.trim()) {
-      setDropboxStatus('Set a passcode in LLM settings first.')
-      return
-    }
 
     if (!dropboxConnected) {
       setDropboxStatus('Connect Dropbox first.')
@@ -205,7 +175,7 @@ export default function Settings() {
 
     setSyncBusy(true)
     try {
-      const result = await pullFromSync(passcode)
+      const result = await pullFromSync()
       await loadTimeline()
       await loadDropboxState()
       await loadSyncState()
@@ -222,10 +192,6 @@ export default function Settings() {
 
   const handlePush = async (force = false) => {
     setDropboxStatus(null)
-    if (!passcode.trim()) {
-      setDropboxStatus('Set a passcode in LLM settings first.')
-      return
-    }
 
     if (!dropboxConnected) {
       setDropboxStatus('Connect Dropbox first.')
@@ -234,7 +200,7 @@ export default function Settings() {
 
     setSyncBusy(true)
     try {
-      const result = await pushToSync(passcode, force)
+      const result = await pushToSync(force)
       await loadDropboxState()
       await loadSyncState()
       if (result.status === 'clean') {
@@ -260,23 +226,6 @@ export default function Settings() {
             {llmStatus}
           </span>
         </div>
-
-        <form className="mt-4 space-y-2" onSubmit={handleUpdatePasscode}>
-          <label className="text-xs text-slate-500">
-            Passcode (default is 0000)
-            <input
-              id="settings-passcode"
-              className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-              placeholder="0000"
-              type="password"
-              value={passcodeInput}
-              onChange={(event) => setPasscodeInput(event.target.value)}
-            />
-          </label>
-          <button className={buttonSecondary} type="submit">
-            Update Passcode
-          </button>
-        </form>
 
         <form className="mt-4 space-y-3" onSubmit={handleSaveKey}>
           <input
@@ -324,13 +273,8 @@ export default function Settings() {
           </div>
         </div>
 
-        {geminiApiKey && !locked && (
+        {geminiApiKey && (
           <p className="mt-3 text-xs text-emerald-600">Gemini key ready for use.</p>
-        )}
-        {locked && (
-          <p className="mt-3 text-xs text-rose-600">
-            Stored key is locked. Update passcode or re-save the API key.
-          </p>
         )}
         {status && <p className="mt-3 text-xs text-slate-500">{status}</p>}
       </section>
@@ -408,7 +352,6 @@ export default function Settings() {
             value={filePath}
             onChange={(event) => updateFilePath(event.target.value)}
           />
-          <p className="text-xs text-slate-400">Uses the LLM passcode for encryption.</p>
         </div>
 
         <div className="mt-4 space-y-2">

@@ -136,7 +136,7 @@ Quotes must be exact substrings from the cited day. If unsure, omit citations.`
 export default function Timeline() {
   const navigate = useNavigate()
   const { days, loading, loadTimeline, appendToToday } = useDaysStore()
-  const { loadSettings, passcode, locked, timelineView, geminiApiKey, geminiModel, aiLanguage } = useSettingsStore()
+  const { loadSettings, timelineView, geminiApiKey, geminiModel, aiLanguage } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode } = useUIStore()
 
@@ -153,7 +153,7 @@ export default function Timeline() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
 
-  const canSync = Boolean(syncStatus.connected && syncStatus.filePath && passcode.trim() && !locked)
+  const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
 
   const hasRestoredScroll = useRef(false)
 
@@ -214,7 +214,7 @@ export default function Timeline() {
   const handleAutoPush = async () => {
     if (!canSync || !navigator.onLine) return
     try {
-      await pushToSync(passcode)
+      await pushToSync()
       await loadSyncState()
     } catch {
       // Ignore auto-push errors
@@ -225,11 +225,6 @@ export default function Timeline() {
     const trimmed = text.trim()
     if (!trimmed) return
     setChatError(null)
-
-    if (locked) {
-      setChatError('Stored Gemini key is locked. Update passcode or re-save the key.')
-      return
-    }
 
     if (!geminiApiKey) {
       setChatError('Add a Gemini API key in Settings first.')

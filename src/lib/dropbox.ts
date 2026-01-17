@@ -1,4 +1,3 @@
-import { decryptWithPasscode, encryptWithPasscode } from './crypto'
 import { exportMarkdownFromDb, importMarkdownToDb } from './importExport'
 import { getDropboxState, updateDropboxState } from './dropboxState'
 import type { DropboxState } from './dropboxState'
@@ -118,12 +117,11 @@ const resolveDropboxPath = async (state: DropboxState) => {
   return next.filePath ?? DEFAULT_DROPBOX_PATH
 }
 
-const storeDropboxAuth = async (passcode: string, auth: DropboxAuth, account?: DropboxAccount) => {
-  const encryptedAuth = await encryptWithPasscode(passcode, JSON.stringify(auth))
+const storeDropboxAuth = async (auth: DropboxAuth, account?: DropboxAccount) => {
   const current = await getDropboxState()
   const filePath = current.filePath ?? DEFAULT_DROPBOX_PATH
   const updates: Partial<DropboxState> = {
-    encryptedAuth,
+    auth,
     filePath,
   }
 
@@ -136,18 +134,12 @@ const storeDropboxAuth = async (passcode: string, auth: DropboxAuth, account?: D
   return updateDropboxState(updates)
 }
 
-const getDropboxAuth = async (passcode: string) => {
+const getDropboxAuth = async () => {
   const state = await getDropboxState()
-  if (!state.encryptedAuth) {
+  if (!state.auth) {
     throw new Error('Dropbox not connected.')
   }
-
-  try {
-    const decrypted = await decryptWithPasscode(passcode, state.encryptedAuth)
-    return JSON.parse(decrypted) as DropboxAuth
-  } catch {
-    throw new Error('Dropbox auth locked. Update passcode and reconnect.')
-  }
+  return state.auth
 }
 
 const fetchDropboxToken = async (params: URLSearchParams) => {
@@ -203,23 +195,23 @@ const fetchDropboxAccount = async (accessToken: string) => {
   return (await response.json()) as DropboxAccount
 }
 
-const refreshDropboxAuth = async (passcode: string, auth: DropboxAuth) => {
+const refreshDropboxAuth = async (auth: DropboxAuth) => {
   const token = await refreshDropboxToken(auth.refreshToken)
   const nextAuth: DropboxAuth = {
     accessToken: token.access_token,
     refreshToken: token.refresh_token ?? auth.refreshToken,
     expiresAt: Date.now() + token.expires_in * 1000,
   }
-  await storeDropboxAuth(passcode, nextAuth)
+  await storeDropboxAuth(nextAuth)
   return nextAuth
 }
 
-const getValidDropboxAuth = async (passcode: string) => {
-  const auth = await getDropboxAuth(passcode)
+const getValidDropboxAuth = async () => {
+  const auth = await getDropboxAuth()
   if (Date.now() < auth.expiresAt - ACCESS_TOKEN_REFRESH_BUFFER) {
     return auth
   }
-  return refreshDropboxAuth(passcode, auth)
+  return refreshDropboxAuth(auth)
 }
 
 const withAuthHeaders = (headers: HeadersInit | undefined, token: string) => {
@@ -228,15 +220,15 @@ const withAuthHeaders = (headers: HeadersInit | undefined, token: string) => {
   return nextHeaders
 }
 
-const authorizedFetch = async (passcode: string, url: string, init: RequestInit, retry = true) => {
-  const auth = await getValidDropboxAuth(passcode)
+const authorizedFetch = async (url: string, init: RequestInit, retry = true) => {
+  const auth = await getValidDropboxAuth()
   const response = await fetch(url, {
     ...init,
     headers: withAuthHeaders(init.headers, auth.accessToken),
   })
 
   if (response.status === 401 && retry) {
-    const refreshed = await refreshDropboxAuth(passcode, auth)
+    const refreshed = await refreshDropboxAuth(auth)
     return fetch(url, {
       ...init,
       headers: withAuthHeaders(init.headers, refreshed.accessToken),
@@ -246,8 +238,8 @@ const authorizedFetch = async (passcode: string, url: string, init: RequestInit,
   return response
 }
 
-const fetchMetadata = async (passcode: string, path: string) => {
-  const response = await authorizedFetch(passcode, `${DROPBOX_API}/files/get_metadata`, {
+const fetchMetadata = async (path: string) => {
+  const response = await authorizedFetch(`${DROPBOX_API}/files/get_metadata`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -269,8 +261,8 @@ const fetchMetadata = async (passcode: string, path: string) => {
   throw new Error('Failed to fetch Dropbox metadata.')
 }
 
-const downloadFile = async (passcode: string, path: string) => {
-  const response = await authorizedFetch(passcode, `${DROPBOX_CONTENT}/files/download`, {
+const downloadFile = async (path: string) => {
+  const response = await authorizedFetch(`${DROPBOX_CONTENT}/files/download`, {
     method: 'POST',
     headers: {
       'Dropbox-API-Arg': JSON.stringify({ path }),
@@ -285,12 +277,11 @@ const downloadFile = async (passcode: string, path: string) => {
 }
 
 const uploadFile = async (
-  passcode: string,
   path: string,
   content: string,
   mode: DropboxUploadMode,
 ) => {
-  const response = await authorizedFetch(passcode, `${DROPBOX_CONTENT}/files/upload`, {
+  const response = await authorizedFetch(`${DROPBOX_CONTENT}/files/upload`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/octet-stream',
@@ -342,7 +333,6 @@ export const startDropboxAuth = async () => {
 }
 
 export const completeDropboxAuth = async (
-  passcode: string,
   code: string,
   returnedState: string | null,
 ) => {
@@ -366,12 +356,12 @@ export const completeDropboxAuth = async (
     expiresAt: Date.now() + token.expires_in * 1000,
   }
   const account = await fetchDropboxAccount(auth.accessToken)
-  await storeDropboxAuth(passcode, auth, account)
+  await storeDropboxAuth(auth, account)
 }
 
 export const disconnectDropbox = async () => {
   await updateDropboxState({
-    encryptedAuth: null,
+    auth: null,
     accountId: null,
     accountEmail: null,
     accountName: null,
@@ -383,7 +373,7 @@ export const disconnectDropbox = async () => {
 export const getDropboxStatus = async (): Promise<SyncStatus> => {
   const state = await getDropboxState()
   return {
-    connected: Boolean(state.encryptedAuth),
+    connected: Boolean(state.auth),
     filePath: state.filePath,
     lastRemoteVersion: state.lastRemoteRev,
     lastSyncAt: state.lastSyncAt,
@@ -393,11 +383,11 @@ export const getDropboxStatus = async (): Promise<SyncStatus> => {
   }
 }
 
-export const pullFromDropbox = async (passcode: string) => {
+export const pullFromDropbox = async () => {
   const state = await getDropboxState()
   const path = await resolveDropboxPath(state)
 
-  const metadata = await fetchMetadata(passcode, path)
+  const metadata = await fetchMetadata(path)
   if (!metadata) {
     throw new Error('Dropbox file not found. Push to create it first.')
   }
@@ -407,7 +397,7 @@ export const pullFromDropbox = async (passcode: string) => {
     return { status: 'noop' as const, metadata }
   }
 
-  const content = await downloadFile(passcode, path)
+  const content = await downloadFile(path)
   const result = await importMarkdownToDb(content, { replace: true })
 
   await updateDropboxState({
@@ -420,7 +410,7 @@ export const pullFromDropbox = async (passcode: string) => {
   return { status: 'pulled' as const, metadata, result }
 }
 
-export const pushToDropbox = async (passcode: string, force = false) => {
+export const pushToDropbox = async (force = false) => {
   const state = await getDropboxState()
   const path = await resolveDropboxPath(state)
 
@@ -429,7 +419,7 @@ export const pushToDropbox = async (passcode: string, force = false) => {
     return { status: 'clean' as const }
   }
 
-  const metadata = await fetchMetadata(passcode, path)
+  const metadata = await fetchMetadata(path)
 
   if (!force && state.lastRemoteRev && (!metadata || metadata.rev !== state.lastRemoteRev)) {
     console.warn('[Dropbox] push:blocked', {
@@ -441,7 +431,7 @@ export const pushToDropbox = async (passcode: string, force = false) => {
   }
 
   const content = await exportMarkdownFromDb()
-  const upload = await uploadFile(passcode, path, content, resolveUploadMode(state.lastRemoteRev, force))
+  const upload = await uploadFile(path, content, resolveUploadMode(state.lastRemoteRev, force))
 
   await updateDropboxState({
     lastRemoteRev: upload.rev,

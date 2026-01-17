@@ -7,7 +7,6 @@ import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/st
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import { pushToSync } from '../lib/sync'
 import { useDaysStore } from '../store/useDaysStore'
-import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 
 export default function DayEditor() {
@@ -16,7 +15,6 @@ export default function DayEditor() {
   const [searchParams] = useSearchParams()
   const { activeDay, loadDay, updateDayContent, moveDayDate, deleteDay, loading } = useDaysStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
-  const { passcode, locked } = useSettingsStore()
   const [draft, setDraft] = useState('')
   const [dateValue, setDateValue] = useState(dayId ?? '')
   const [dateError, setDateError] = useState<string | null>(null)
@@ -35,7 +33,7 @@ export default function DayEditor() {
   const quote = searchParams.get('quote') ?? ''
   const resolvedDayId = dayId ?? ''
   const isReady = activeDay?.dayId === resolvedDayId
-  const canSync = Boolean(syncStatus.connected && syncStatus.filePath && passcode.trim() && !locked)
+  const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
@@ -73,7 +71,7 @@ export default function DayEditor() {
       syncTriggeredRef.current = true
       void (async () => {
         try {
-          const result = await pushToSync(passcode)
+          const result = await pushToSync()
           await loadSyncState()
           console.info('[DayEditor] sync:push', { context, status: result.status })
           if (result.status === 'blocked') {
@@ -87,7 +85,7 @@ export default function DayEditor() {
         }
       })()
     },
-    [canSync, loadSyncState, passcode],
+    [canSync, loadSyncState],
   )
 
   useEffect(() => {
