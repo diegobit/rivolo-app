@@ -388,7 +388,7 @@ export default function Timeline() {
 
   const futureDayId = useMemo(() => {
     const existing = new Set(timelineCards.map((card) => card.day.dayId))
-    let candidate = addDays(timelineCards[0]?.day.dayId ?? todayId, 1)
+    let candidate = addDays(todayId, 1) // Start from tomorrow
     while (existing.has(candidate)) {
       candidate = addDays(candidate, 1)
     }
@@ -402,7 +402,7 @@ export default function Timeline() {
     }
 
     const items: TimelineItem[] = []
-    const showAddFuture = hasToday || hasFuture
+    const showAddFuture = hasToday
     let addedFutureButton = false
     let addedTodayButton = false
 
@@ -644,7 +644,7 @@ export default function Timeline() {
                         style={{ filter: 'brightness(0) invert(1)' }}
                       />
                     </span>
-                    Future Day
+                    {item.dayId === tomorrowId ? 'Tomorrow' : 'Future Day'}
                   </button>
                 </div>
               )
