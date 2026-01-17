@@ -483,7 +483,7 @@ export default function Timeline() {
           disabled={sending}
           aria-label={mode === 'chat' ? 'Send' : 'Add'}
         >
-          <img src={mode === 'chat' ? "/send.svg" : "/plus.svg"} alt="" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
+          <img src={mode === 'chat' ? "/arrow-up.svg" : "/plus.svg"} alt="" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
         </button>
       )}
     </form>
