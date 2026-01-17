@@ -96,7 +96,7 @@ export const chatWithGemini = async ({
   model,
   messages,
   temperature = 0.2,
-  maxTokens = 512,
+  maxTokens = 2048,
   stream = false,
   onToken,
 }: GeminiChatOptions) => {
