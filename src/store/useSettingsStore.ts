@@ -15,10 +15,13 @@ type LlmSecrets = {
 const DEFAULT_PASSCODE = '0000'
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 
+type AiLanguage = 'follow' | string
+
 type SettingsState = {
   provider: Provider
   geminiApiKey: string | null
   geminiModel: string
+  aiLanguage: AiLanguage
   encrypted: EncryptedPayload | null
   locked: boolean
   loading: boolean
@@ -29,12 +32,14 @@ type SettingsState = {
   updatePasscode: (passcode: string) => Promise<boolean>
   updateTimelineView: (view: TimelineView) => Promise<void>
   updateGeminiModel: (model: string) => Promise<void>
+  updateAiLanguage: (language: AiLanguage) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   provider: 'gemini',
   geminiApiKey: null,
   geminiModel: DEFAULT_GEMINI_MODEL,
+  aiLanguage: 'follow',
   encrypted: null,
   locked: false,
   loading: false,
@@ -47,9 +52,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const storedPasscode = await getSetting('llm.passcode')
     const storedTimelineView = (await getSetting('timeline.view')) as TimelineView | null
     const storedGeminiModel = await getSetting('llm.geminiModel')
+    const storedAiLanguage = (await getSetting('ai.language')) as AiLanguage | null
     const passcode = storedPasscode ?? DEFAULT_PASSCODE
     const timelineView = storedTimelineView ?? 'full'
     const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
+    const aiLanguage = storedAiLanguage ?? 'follow'
     if (!storedPasscode) {
       await setSetting('llm.passcode', passcode)
     }
@@ -58,6 +65,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
     if (!storedGeminiModel) {
       await setSetting('llm.geminiModel', geminiModel)
+    }
+    if (!storedAiLanguage) {
+      await setSetting('ai.language', aiLanguage)
     }
 
     const encrypted = await getJsonSetting<EncryptedPayload>('llm.encrypted')
@@ -80,6 +90,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       encrypted,
       geminiApiKey,
       geminiModel,
+      aiLanguage,
       locked,
       timelineView,
       loading: false,
@@ -147,5 +158,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const normalized = model.trim() || DEFAULT_GEMINI_MODEL
     await setSetting('llm.geminiModel', normalized)
     set({ geminiModel: normalized })
+  },
+
+  updateAiLanguage: async (language: AiLanguage) => {
+    await setSetting('ai.language', language)
+    set({ aiLanguage: language })
   },
 }))
