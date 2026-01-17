@@ -22,6 +22,7 @@ export default function AppShell() {
   const { days } = useDaysStore()
   const { mode, setMode } = useUIStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [isScrolled, setIsScrolled] = useState(false)
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const hasAutoPulled = useRef(false)
   const todayId = getTodayId()
@@ -80,6 +81,13 @@ export default function AppShell() {
     void loadSettings()
     void loadSyncState()
   }, [loadSettings, loadSyncState])
+
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 0)
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   useEffect(() => {
     if (hasAutoPulled.current) return
@@ -191,59 +199,66 @@ export default function AppShell() {
 
   return (
     <div className="min-h-full bg-white text-slate-900">
-      <main
-        className={`mx-auto flex min-h-screen flex-col gap-4 ${
-          showTrayRow ? 'pb-40' : 'pb-12'
-        } ${isDayEditor ? 'w-[min(96%,880px)] pt-4' : 'w-[min(96%,720px)] pt-4'}`}
+      {/* Fixed header with blur */}
+      <div className={`pointer-events-none fixed top-0 left-0 right-0 z-20 h-16 bg-white/30 backdrop-blur-md transition-shadow ${isScrolled ? 'shadow-[0_4px_12px_rgba(0,0,0,0.04)]' : ''}`} />
+      <header
+        className={`fixed top-0 left-0 right-0 z-30 mx-auto grid h-16 grid-cols-[1fr_auto_1fr] items-center ${
+          isDayEditor ? 'w-[min(96%,880px)]' : 'w-[min(96%,720px)]'
+        }`}
       >
-        <header className="grid grid-cols-[1fr_auto_1fr] items-center pt-2">
-          <div className="flex items-center gap-2">
-            {showBackButton && (
-              <NavLink to="/" className={backButtonClass} aria-label="Back">
-                <img
-                  src="/arrow-back.svg"
-                  alt=""
-                  className="h-5 w-5"
-                  style={{ filter: 'brightness(0) invert(1)' }}
-                />
-              </NavLink>
-            )}
-            {isHome && (
-              <div ref={shortcutsRef} className="relative">
-                <button
-                  className={topIconButton}
-                  type="button"
-                  aria-label="Shortcuts"
-                  onClick={() => setShowShortcuts((prev) => !prev)}
-                >
-                  <img src="/question.svg" alt="" className="h-4 w-4" />
-                </button>
-                {showShortcuts && (
-                  <div className="absolute left-0 z-20 mt-2 w-max rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-600 shadow-lg">
-                    <div className="space-y-1">
-                      <div>A, C → Chat View</div>
-                      <div>T → Timeline View</div>
-                      <div>S, F → Search</div>
-                      <div>N → New future day</div>
-                      <div>I → Focus input box</div>
-                      <div>Esc → Exit focus or back to Timeline</div>
-                    </div>
+        <div className="flex items-center gap-2">
+          {showBackButton && (
+            <NavLink to="/" className={backButtonClass} aria-label="Back">
+              <img
+                src="/arrow-back.svg"
+                alt=""
+                className="h-5 w-5"
+                style={{ filter: 'brightness(0) invert(1)' }}
+              />
+            </NavLink>
+          )}
+          {isHome && (
+            <div ref={shortcutsRef} className="relative">
+              <button
+                className={topIconButton}
+                type="button"
+                aria-label="Shortcuts"
+                onClick={() => setShowShortcuts((prev) => !prev)}
+              >
+                <img src="/question.svg" alt="" className="h-4 w-4" />
+              </button>
+              {showShortcuts && (
+                <div className="absolute left-0 z-20 mt-2 w-max rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-600 shadow-lg">
+                  <div className="space-y-1">
+                    <div>A, C → Chat View</div>
+                    <div>T → Timeline View</div>
+                    <div>S, F → Search</div>
+                    <div>N → New future day</div>
+                    <div>I → Focus input box</div>
+                    <div>Esc → Exit focus or back to Timeline</div>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-          <NavLink to="/" className="justify-self-center" aria-label="Home">
-            <img src="/logo.png" alt="Rivolo" className="h-10 w-auto" />
-          </NavLink>
-          <div className="flex items-center justify-end gap-2">
-            {!isDayEditor && (
-              <NavLink to="/settings" className={topIconButton} aria-label="Settings">
-                <img src="/gear.svg" alt="" className="h-4 w-4" />
-              </NavLink>
-            )}
-          </div>
-        </header>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <NavLink to="/" className="justify-self-center" aria-label="Home">
+          <img src="/logo.png" alt="Rivolo" className="h-10 w-auto" />
+        </NavLink>
+        <div className="flex items-center justify-end gap-2">
+          {!isDayEditor && (
+            <NavLink to="/settings" className={topIconButton} aria-label="Settings">
+              <img src="/gear.svg" alt="" className="h-4 w-4" />
+            </NavLink>
+          )}
+        </div>
+      </header>
+
+      <main
+        className={`mx-auto flex min-h-screen flex-col gap-4 pt-20 ${
+          showTrayRow ? 'pb-40' : 'pb-12'
+        } ${isDayEditor ? 'w-[min(96%,880px)]' : 'w-[min(96%,720px)]'}`}
+      >
         <Outlet />
       </main>
 

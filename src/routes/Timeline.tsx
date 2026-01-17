@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import BottomTrayPortal from '../components/BottomTrayPortal'
 import { pushToSync } from '../lib/sync'
@@ -146,6 +146,18 @@ export default function Timeline() {
   const [searchError, setSearchError] = useState<string | null>(null)
 
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath && passcode.trim() && !locked)
+
+  // Refs for auto-scroll
+  const dayRefs = useRef<Map<string, HTMLElement>>(new Map())
+  const hasScrolledRef = useRef(false)
+
+  const setDayRef = useCallback((dayId: string, element: HTMLElement | null) => {
+    if (element) {
+      dayRefs.current.set(dayId, element)
+    } else {
+      dayRefs.current.delete(dayId)
+    }
+  }, [])
 
   // --- Effects ---
 
@@ -354,6 +366,36 @@ export default function Timeline() {
   const maxWeekdayOffset = 14
   const hasToday = useMemo(() => timelineCards.some((card) => card.day.dayId === todayId), [timelineCards, todayId])
   const hasFuture = useMemo(() => timelineCards.some((card) => card.day.dayId > todayId), [timelineCards, todayId])
+
+  // Auto-scroll to show "Today" prominently on initial load
+  useEffect(() => {
+    if (loading || hasScrolledRef.current || !hasFuture) return
+
+    // Find the closest future day to today (smallest dayId > todayId)
+    const futureDays = timelineCards
+      .filter((card) => card.day.dayId > todayId)
+      .sort((a, b) => a.day.dayId.localeCompare(b.day.dayId))
+
+    if (futureDays.length === 0) return
+
+    // Get the closest future day (appears just above Today in the visual list)
+    const closestFutureId = futureDays[0].day.dayId
+
+    // Use requestAnimationFrame to ensure DOM is ready
+    requestAnimationFrame(() => {
+      const element = dayRefs.current.get(closestFutureId)
+      if (!element || hasScrolledRef.current) return
+
+      hasScrolledRef.current = true
+
+      // Scroll so this element is at the top, just below the header
+      const headerHeight = 64 // h-16 = 64px
+      const elementRect = element.getBoundingClientRect()
+      const scrollTarget = window.scrollY + elementRect.top - headerHeight - 8
+
+      window.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'instant' })
+    })
+  }, [loading, hasFuture, timelineCards, todayId])
 
   const standardItems = useMemo<TimelineItem[]>(() => {
     if (timelineCards.length === 0) {
@@ -629,6 +671,7 @@ export default function Timeline() {
             return (
               <Link
                 key={day.dayId}
+                ref={(el) => setDayRef(day.dayId, el)}
                 to={`/day/${day.dayId}`}
                 className={`block rounded-[4px] border p-4 transition ${
                   isFuture
