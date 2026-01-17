@@ -17,7 +17,7 @@ const backButtonClass =
 export default function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { loadSettings } = useSettingsStore()
+  const { loadSettings, wallpaper } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { days } = useDaysStore()
   const { mode, setMode } = useUIStore()
@@ -213,11 +213,29 @@ export default function AppShell() {
 
 
   return (
-    <div className="min-h-full bg-white text-slate-900">
+    <div className="min-h-full text-slate-900">
+      {/* White base + Wallpaper texture */}
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-white" />
+      {wallpaper !== 'white' && (
+        <div
+          className={`pointer-events-none fixed inset-0 -z-10 ${
+            wallpaper === 'thoughts-light'
+              ? 'opacity-5'
+              : wallpaper === 'thoughts-medium'
+                ? 'opacity-10'
+                : 'opacity-15'
+          }`}
+          style={{
+            backgroundImage: 'url(/bg-thoughts.jpg)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+      )}
       {/* Fixed header with blur */}
       <div
         style={{ top: viewportOffset }}
-        className={`pointer-events-none fixed left-0 right-0 z-20 h-16 bg-white/30 backdrop-blur-md transition-shadow ${isScrolled ? 'shadow-[0_4px_12px_rgba(0,0,0,0.04)]' : ''}`}
+        className={`pointer-events-none fixed left-0 right-0 z-20 h-16 transition-all ${isScrolled ? 'bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md' : ''}`}
       />
       <header
         style={{ top: viewportOffset }}

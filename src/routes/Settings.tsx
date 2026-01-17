@@ -27,10 +27,12 @@ export default function Settings() {
     updateTimelineView,
     updateGeminiModel,
     updateAiLanguage,
+    updateWallpaper,
     geminiApiKey,
     geminiModel,
     aiLanguage,
     timelineView,
+    wallpaper,
   } = useSettingsStore()
   const {
     filePath,
@@ -277,6 +279,40 @@ export default function Settings() {
           <p className="mt-3 text-xs text-emerald-600">Gemini key ready for use.</p>
         )}
         {status && <p className="mt-3 text-xs text-slate-500">{status}</p>}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-600">Wallpaper</h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            className={wallpaper === 'white' ? buttonPrimary : buttonSecondary}
+            type="button"
+            onClick={() => void updateWallpaper('white')}
+          >
+            White
+          </button>
+          <button
+            className={wallpaper === 'thoughts-light' ? buttonPrimary : buttonSecondary}
+            type="button"
+            onClick={() => void updateWallpaper('thoughts-light')}
+          >
+            Thoughts Light
+          </button>
+          <button
+            className={wallpaper === 'thoughts-medium' ? buttonPrimary : buttonSecondary}
+            type="button"
+            onClick={() => void updateWallpaper('thoughts-medium')}
+          >
+            Thoughts Medium
+          </button>
+          <button
+            className={wallpaper === 'thoughts-high' ? buttonPrimary : buttonSecondary}
+            type="button"
+            onClick={() => void updateWallpaper('thoughts-high')}
+          >
+            Thoughts High
+          </button>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
