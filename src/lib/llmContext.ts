@@ -1,19 +1,9 @@
-import { ensureDay, listDays, searchDays } from './dayRepository'
-import { getTodayId } from './dates'
+import { listDays } from './dayRepository'
 import type { Day } from './dayRepository'
 
-export const buildContextDays = async (query: string, limit = 6) => {
-  const todayId = getTodayId()
-  const today = await ensureDay(todayId)
-  const recent = await listDays(3)
-  const searchResults = query.trim() ? await searchDays(query, {}, limit) : []
-
-  const map = new Map<string, Day>()
-  ;[today, ...recent, ...searchResults].forEach((day) => {
-    map.set(day.dayId, day)
-  })
-
-  return [...map.values()].slice(0, limit + 3)
+export const buildContextDays = async (_query: string) => {
+  const allDays = await listDays(10000) // Get all days
+  return allDays
 }
 
 export const formatContext = (days: Day[]) => {
