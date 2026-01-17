@@ -247,7 +247,16 @@ export default function AppShell() {
         </NavLink>
         <div className="flex items-center justify-end gap-2">
           {!isDayEditor && (
-            <NavLink to="/settings" className={topIconButton} aria-label="Settings">
+            <NavLink
+              to="/settings"
+              className={topIconButton}
+              aria-label="Settings"
+              onClick={() => {
+                if (isHome) {
+                  sessionStorage.setItem('timeline-scroll', String(window.scrollY))
+                }
+              }}
+            >
               <img src="/gear.svg" alt="" className="h-4 w-4" />
             </NavLink>
           )}

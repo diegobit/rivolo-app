@@ -58,6 +58,10 @@ export default function Settings() {
   const [online, setOnline] = useState(navigator.onLine)
 
   useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
+  useEffect(() => {
     void loadSettings()
     void loadDropboxState()
     void loadSyncState()
