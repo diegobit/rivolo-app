@@ -26,8 +26,10 @@ export default function Settings() {
     saveGeminiKey,
     updatePasscode,
     updateTimelineView,
+    updateGeminiModel,
     locked,
     geminiApiKey,
+    geminiModel,
     passcode,
     timelineView,
   } = useSettingsStore()
@@ -281,6 +283,18 @@ export default function Settings() {
             Save Gemini Key
           </button>
         </form>
+
+        <div className="mt-4 space-y-2">
+          <label className="text-xs text-slate-500">
+            Model
+            <input
+              className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
+              placeholder="gemini-2.5-flash"
+              value={geminiModel}
+              onChange={(event) => void updateGeminiModel(event.target.value)}
+            />
+          </label>
+        </div>
 
         {geminiApiKey && !locked && (
           <p className="mt-3 text-xs text-emerald-600">Gemini key ready for use.</p>

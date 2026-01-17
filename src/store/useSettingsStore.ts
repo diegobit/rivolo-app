@@ -13,10 +13,12 @@ type LlmSecrets = {
 }
 
 const DEFAULT_PASSCODE = '0000'
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 
 type SettingsState = {
   provider: Provider
   geminiApiKey: string | null
+  geminiModel: string
   encrypted: EncryptedPayload | null
   locked: boolean
   loading: boolean
@@ -26,11 +28,13 @@ type SettingsState = {
   saveGeminiKey: (apiKey: string) => Promise<void>
   updatePasscode: (passcode: string) => Promise<boolean>
   updateTimelineView: (view: TimelineView) => Promise<void>
+  updateGeminiModel: (model: string) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   provider: 'gemini',
   geminiApiKey: null,
+  geminiModel: DEFAULT_GEMINI_MODEL,
   encrypted: null,
   locked: false,
   loading: false,
@@ -42,13 +46,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const provider = (await getSetting('llm.provider')) as Provider | null
     const storedPasscode = await getSetting('llm.passcode')
     const storedTimelineView = (await getSetting('timeline.view')) as TimelineView | null
+    const storedGeminiModel = await getSetting('llm.geminiModel')
     const passcode = storedPasscode ?? DEFAULT_PASSCODE
     const timelineView = storedTimelineView ?? 'full'
+    const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
     if (!storedPasscode) {
       await setSetting('llm.passcode', passcode)
     }
     if (!storedTimelineView) {
       await setSetting('timeline.view', timelineView)
+    }
+    if (!storedGeminiModel) {
+      await setSetting('llm.geminiModel', geminiModel)
     }
 
     const encrypted = await getJsonSetting<EncryptedPayload>('llm.encrypted')
@@ -70,6 +79,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       passcode,
       encrypted,
       geminiApiKey,
+      geminiModel,
       locked,
       timelineView,
       loading: false,
@@ -131,5 +141,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   updateTimelineView: async (view: TimelineView) => {
     await setSetting('timeline.view', view)
     set({ timelineView: view })
+  },
+
+  updateGeminiModel: async (model: string) => {
+    const normalized = model.trim() || DEFAULT_GEMINI_MODEL
+    await setSetting('llm.geminiModel', normalized)
+    set({ geminiModel: normalized })
   },
 }))
