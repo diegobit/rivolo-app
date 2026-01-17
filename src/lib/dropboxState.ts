@@ -1,8 +1,13 @@
 import { getJsonSetting, setJsonSetting } from './settingsRepository'
-import type { EncryptedPayload } from './crypto'
+
+type DropboxAuth = {
+  accessToken: string
+  refreshToken: string
+  expiresAt: number
+}
 
 export type DropboxState = {
-  encryptedAuth: EncryptedPayload | null
+  auth: DropboxAuth | null
   filePath: string | null
   lastRemoteRev: string | null
   lastSyncAt: number | null
@@ -13,7 +18,7 @@ export type DropboxState = {
 }
 
 const DEFAULT_STATE: DropboxState = {
-  encryptedAuth: null,
+  auth: null,
   filePath: null,
   lastRemoteRev: null,
   lastSyncAt: null,

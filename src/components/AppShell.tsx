@@ -17,7 +17,7 @@ const backButtonClass =
 export default function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { loadSettings, passcode, locked } = useSettingsStore()
+  const { loadSettings } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { days } = useDaysStore()
   const { mode, setMode } = useUIStore()
@@ -91,14 +91,14 @@ export default function AppShell() {
 
   useEffect(() => {
     if (hasAutoPulled.current) return
-    if (!navigator.onLine || locked) return
-    if (!passcode.trim() || !syncStatus.connected || !syncStatus.filePath) return
+    if (!navigator.onLine) return
+    if (!syncStatus.connected || !syncStatus.filePath) return
 
     hasAutoPulled.current = true
-    void pullFromSync(passcode).catch(() => {
+    void pullFromSync().catch(() => {
       // Auto-pull failures are handled by manual sync.
     })
-  }, [locked, passcode, syncStatus.connected, syncStatus.filePath])
+  }, [syncStatus.connected, syncStatus.filePath])
 
   useEffect(() => {
     if (!showShortcuts) return

@@ -25,8 +25,8 @@ export type SyncPushResult = {
 export type SyncProvider = {
   id: SyncProviderId
   getStatus: () => Promise<SyncStatus>
-  pull: (passcode: string) => Promise<SyncPullResult>
-  push: (passcode: string, force?: boolean) => Promise<SyncPushResult>
+  pull: () => Promise<SyncPullResult>
+  push: (force?: boolean) => Promise<SyncPushResult>
   disconnect: () => Promise<void>
 }
 
@@ -65,20 +65,20 @@ export const getActiveProviderStatus = async () => {
   return provider.getStatus()
 }
 
-export const pullFromSync = async (passcode: string) => {
+export const pullFromSync = async () => {
   const provider = await getActiveProvider()
   if (!provider) {
     throw new Error('No sync provider connected.')
   }
-  return provider.pull(passcode)
+  return provider.pull()
 }
 
-export const pushToSync = async (passcode: string, force = false) => {
+export const pushToSync = async (force = false) => {
   const provider = await getActiveProvider()
   if (!provider) {
     throw new Error('No sync provider connected.')
   }
-  return provider.push(passcode, force)
+  return provider.push(force)
 }
 
 export const disconnectActiveProvider = async () => {
