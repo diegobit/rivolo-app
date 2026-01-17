@@ -159,14 +159,16 @@ export default function Timeline() {
   useEffect(() => {
     if (mode !== 'search') return
 
-    const handle = window.setTimeout(async () => {
-      if (!text.trim()) {
-        setSearchResults([])
-        setSearchLoading(false)
-        return
-      }
+    if (!text.trim()) {
+      setSearchResults([])
+      setSearchLoading(false)
+      return
+    }
 
-      setSearchLoading(true)
+    // Set loading immediately to prevent "no results" flash
+    setSearchLoading(true)
+
+    const handle = window.setTimeout(async () => {
       setSearchError(null)
       try {
         const data = await searchDays(text)
@@ -409,7 +411,10 @@ export default function Timeline() {
   }, [mode, text, searchResults])
 
   // Active Items
-  const activeItems = (mode === 'search' && text.trim()) ? searchCards : standardItems
+  const activeItems = (mode === 'search' && text.trim() && searchResults.length > 0) ? searchCards : standardItems
+
+  // No Results State
+  const noSearchResults = mode === 'search' && !searchLoading && text.trim() && searchResults.length === 0 && !searchError
 
   // --- Render ---
 
@@ -441,7 +446,13 @@ export default function Timeline() {
   }, [mode])
 
   const trayContent = (
-    <form className="flex items-center gap-3" onSubmit={handleSubmit}>
+    <div className="relative">
+      {noSearchResults && (
+        <p className="absolute -top-10 left-1/2 -z-10 -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-sm text-red-400">
+          No results
+        </p>
+      )}
+      <form className="flex items-center gap-3" onSubmit={handleSubmit}>
       <div className="relative flex-1">
         <img
           src={inputConfig.icon}
@@ -476,6 +487,7 @@ export default function Timeline() {
         </button>
       )}
     </form>
+    </div>
   )
 
   return (
@@ -536,21 +548,15 @@ export default function Timeline() {
       )}
 
       {/* Loading States */}
-      {(loading || searchLoading) && (
+      {loading && (
          <section className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-sm text-slate-500">
-           {searchLoading ? 'Searching...' : 'Loading days...'}
+           Loading days...
          </section>
       )}
 
-      {/* Search Empty State */}
-      {mode === 'search' && !searchLoading && text.trim() && searchResults.length === 0 && !searchError && (
-         <section className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-sm text-slate-500">
-           No results found.
-         </section>
-      )}
 
       {/* Main List */}
-      {!loading && !searchLoading && activeItems.length > 0 && (
+      {!loading && activeItems.length > 0 && (
         <div className="space-y-3">
           {showFutureDayButton && (
             <div className="flex justify-center">
