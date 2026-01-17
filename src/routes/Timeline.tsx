@@ -497,7 +497,7 @@ export default function Timeline() {
       {/* Chat Panel - Fixed Overlay */}
       {mode === 'chat' && (
         <div className="fixed bottom-24 left-0 right-0 z-20 mx-auto w-[min(96%,720px)] px-4">
-          <div className={`pointer-events-none absolute -bottom-24 -inset-x-8 -top-12 -z-10 bg-gradient-to-t from-white via-white/95 to-transparent transition-opacity duration-500 ${messages.length > 0 ? 'opacity-100' : 'opacity-0'}`} />
+          <div className={`pointer-events-none absolute -bottom-24 -inset-x-8 -top-4 -z-10 bg-white/30 backdrop-blur-md transition-opacity duration-500 [mask-image:linear-gradient(to_bottom,transparent,black_40%)] ${messages.length > 0 ? 'opacity-100' : 'opacity-0'}`} />
           <div className="flex max-h-[50vh] flex-col-reverse gap-3 overflow-y-auto p-6">
             {chatError && <p className="text-center text-xs text-rose-500">{chatError}</p>}
             {[...messages].reverse().map((message) => (
