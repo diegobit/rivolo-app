@@ -136,7 +136,7 @@ Quotes must be exact substrings from the cited day. If unsure, omit citations.`
 export default function Timeline() {
   const navigate = useNavigate()
   const { days, loading, loadTimeline, appendToToday } = useDaysStore()
-  const { loadSettings, passcode, locked, timelineView, geminiApiKey } = useSettingsStore()
+  const { loadSettings, passcode, locked, timelineView, geminiApiKey, geminiModel } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode } = useUIStore()
 
@@ -270,7 +270,7 @@ export default function Timeline() {
       const { text: responseText } = await chat({
         provider: 'gemini',
         apiKey: geminiApiKey,
-        model: 'gemini-2.5-flash',
+        model: geminiModel,
         messages: llmMessages,
         stream: true,
         onToken: (chunk) => {
