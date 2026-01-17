@@ -23,6 +23,7 @@ export default function AppShell() {
   const { mode, setMode } = useUIStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
+  const [viewportOffset, setViewportOffset] = useState(0)
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const hasAutoPulled = useRef(false)
   const todayId = getTodayId()
@@ -87,6 +88,20 @@ export default function AppShell() {
     handleScroll()
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    if (!viewport) return
+
+    const updateOffset = () => {
+      setViewportOffset(viewport.offsetTop)
+    }
+
+    viewport.addEventListener('resize', updateOffset)
+    return () => {
+      viewport.removeEventListener('resize', updateOffset)
+    }
   }, [])
 
   useEffect(() => {
@@ -200,9 +215,13 @@ export default function AppShell() {
   return (
     <div className="min-h-full bg-white text-slate-900">
       {/* Fixed header with blur */}
-      <div className={`pointer-events-none fixed top-0 left-0 right-0 z-20 h-16 bg-white/30 backdrop-blur-md transition-shadow ${isScrolled ? 'shadow-[0_4px_12px_rgba(0,0,0,0.04)]' : ''}`} />
+      <div
+        style={{ top: viewportOffset }}
+        className={`pointer-events-none fixed left-0 right-0 z-20 h-16 bg-white/30 backdrop-blur-md transition-shadow ${isScrolled ? 'shadow-[0_4px_12px_rgba(0,0,0,0.04)]' : ''}`}
+      />
       <header
-        className={`fixed top-0 left-0 right-0 z-30 mx-auto grid h-16 grid-cols-[1fr_auto_1fr] items-center ${
+        style={{ top: viewportOffset }}
+        className={`fixed left-0 right-0 z-30 mx-auto grid h-16 grid-cols-[1fr_auto_1fr] items-center ${
           isDayEditor ? 'w-[min(96%,880px)]' : 'w-[min(96%,720px)]'
         }`}
       >
