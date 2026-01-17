@@ -55,18 +55,6 @@ const highlightText = (text: string, query: string) => {
 
 const countOpenTasks = (content: string) => (content.match(/- \[ \]/g) ?? []).length
 
-const formatShortDay = (dayId: string) => {
-  const date = parseDayId(dayId)
-  const today = parseDayId(getTodayId())
-  const formatOptions: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' }
-
-  if (date.getFullYear() !== today.getFullYear()) {
-    formatOptions.year = 'numeric'
-  }
-
-  return new Intl.DateTimeFormat('en-GB', formatOptions).format(date)
-}
-
 const formatTimestamp = (date: Date) => {
   const pad = (value: number) => value.toString().padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
@@ -86,6 +74,7 @@ type TimelineDayCard = {
 type TimelineItem =
   | { type: 'day'; card: TimelineDayCard }
   | { type: 'add-today'; dayId: string }
+  | { type: 'add-future'; dayId: string }
   | { type: 'divider' }
 
 type Citation = {
@@ -397,32 +386,6 @@ export default function Timeline() {
     })
   }, [loading, hasFuture, timelineCards, todayId])
 
-  const standardItems = useMemo<TimelineItem[]>(() => {
-    if (timelineCards.length === 0) {
-      return hasToday ? [] : [{ type: 'add-today', dayId: todayId }]
-    }
-    if (hasToday) {
-      return timelineCards.map((card) => ({ type: 'day', card }))
-    }
-
-    const items: TimelineItem[] = []
-    let inserted = false
-
-    for (const card of timelineCards) {
-      if (!inserted && card.day.dayId < todayId) {
-        items.push({ type: 'add-today', dayId: todayId })
-        inserted = true
-      }
-      items.push({ type: 'day', card })
-    }
-
-    if (!inserted) {
-      items.push({ type: 'add-today', dayId: todayId })
-    }
-
-    return items
-  }, [timelineCards, hasToday, todayId])
-
   const futureDayId = useMemo(() => {
     const existing = new Set(timelineCards.map((card) => card.day.dayId))
     let candidate = addDays(timelineCards[0]?.day.dayId ?? todayId, 1)
@@ -432,7 +395,49 @@ export default function Timeline() {
     return candidate
   }, [timelineCards, todayId])
 
-  const showFutureDayButton = timelineCards.length > 0 && (hasToday || hasFuture)
+  const standardItems = useMemo<TimelineItem[]>(() => {
+    // Case: No cards at all → show only +Today
+    if (timelineCards.length === 0) {
+      return [{ type: 'add-today', dayId: todayId }]
+    }
+
+    const items: TimelineItem[] = []
+    const showAddFuture = hasToday || hasFuture
+    let addedFutureButton = false
+    let addedTodayButton = false
+
+    for (const card of timelineCards) {
+      const isFutureCard = card.day.dayId > todayId
+      const isPastCard = card.day.dayId < todayId
+
+      // Insert +FutureDay button when transitioning from future to today/past
+      if (!addedFutureButton && showAddFuture && !isFutureCard) {
+        items.push({ type: 'add-future', dayId: futureDayId })
+        addedFutureButton = true
+      }
+
+      // Insert +Today button when transitioning to past (if no today exists)
+      if (!addedTodayButton && !hasToday && isPastCard) {
+        items.push({ type: 'add-today', dayId: todayId })
+        addedTodayButton = true
+      }
+
+      items.push({ type: 'day', card })
+    }
+
+    // If all cards were future, add the +FutureDay button at the end
+    if (!addedFutureButton && showAddFuture) {
+      items.push({ type: 'add-future', dayId: futureDayId })
+    }
+
+    // If no today and no past cards, add +Today at the end
+    if (!addedTodayButton && !hasToday) {
+      items.push({ type: 'add-today', dayId: todayId })
+    }
+
+    return items
+  }, [timelineCards, hasToday, hasFuture, todayId, futureDayId])
+
 
   // Search Results Cards
   const searchCards = useMemo<TimelineItem[]>(() => {
@@ -600,25 +605,6 @@ export default function Timeline() {
       {/* Main List */}
       {!loading && activeItems.length > 0 && (
         <div className="space-y-3">
-          {showFutureDayButton && (
-            <div className="flex justify-center">
-              <button
-                className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
-                type="button"
-                onClick={() => navigate(`/day/${futureDayId}`)}
-              >
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22B3FF] transition group-hover:bg-[#22B3FF]/90">
-                  <img
-                    src="/plus.svg"
-                    alt=""
-                    className="h-3.5 w-3.5"
-                    style={{ filter: 'brightness(0) invert(1)' }}
-                  />
-                </span>
-                {formatShortDay(futureDayId)}
-              </button>
-            </div>
-          )}
           {activeItems.map((item, index) => {
             if (item.type === 'add-today') {
               return (
@@ -637,6 +623,28 @@ export default function Timeline() {
                       />
                     </span>
                     Today
+                  </button>
+                </div>
+              )
+            }
+
+            if (item.type === 'add-future') {
+              return (
+                <div key={`add-future-${item.dayId}`} className="flex justify-center">
+                  <button
+                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
+                    type="button"
+                    onClick={() => navigate(`/day/${item.dayId}`)}
+                  >
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22B3FF] transition group-hover:bg-[#22B3FF]/90">
+                      <img
+                        src="/plus.svg"
+                        alt=""
+                        className="h-3.5 w-3.5"
+                        style={{ filter: 'brightness(0) invert(1)' }}
+                      />
+                    </span>
+                    Future Day
                   </button>
                 </div>
               )
