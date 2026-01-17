@@ -249,7 +249,7 @@ export default function AppShell() {
 
       {showTrayRow && (
         <>
-          <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-20 h-32 bg-gradient-to-t from-white via-white/80 to-transparent" />
+          <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-20 h-32 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
 
           <div className="fixed bottom-6 left-0 right-0 z-30 mx-auto flex w-[min(96%,620px)] items-center gap-3">
             {mode !== 'timeline' && <Fragment key="timeline-btn">{timelineButton}</Fragment>}
