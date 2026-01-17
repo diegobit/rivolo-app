@@ -215,10 +215,10 @@ export default function AppShell() {
   return (
     <div className="min-h-full text-slate-900">
       {/* White base + Wallpaper texture */}
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-white" />
+      <div className="pointer-events-none fixed left-0 right-0 top-0 -z-10 min-h-[100lvh] bg-white" />
       {wallpaper !== 'white' && (
         <div
-          className={`pointer-events-none fixed inset-0 -z-10 ${
+          className={`pointer-events-none fixed left-0 right-0 top-0 -z-10 min-h-[100lvh] ${
             wallpaper === 'thoughts-light'
               ? 'opacity-5'
               : wallpaper === 'thoughts-medium'
