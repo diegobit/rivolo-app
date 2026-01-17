@@ -16,7 +16,7 @@ export default defineConfig({
         name: 'Rivolo',
         short_name: 'Rivolo',
         description: 'Day-block single note PWA',
-        theme_color: '#0f172a',
+        theme_color: '#ffffff',
         background_color: '#f8fafc',
         display: 'standalone',
         icons: [
