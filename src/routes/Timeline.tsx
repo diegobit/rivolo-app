@@ -505,40 +505,55 @@ export default function Timeline() {
         </p>
       )}
       <form className="flex items-center gap-3" onSubmit={handleSubmit}>
-      <div className="relative flex-1">
-        <img
-          src={inputConfig.icon}
-          alt=""
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-60"
-          style={inputConfig.style}
-        />
-        <input
-          id={inputConfig.id}
-          autoComplete="off"
-          className="w-full rounded-full bg-transparent py-2 pl-10 pr-3 text-base outline-none"
-          placeholder={inputConfig.placeholder}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.currentTarget.blur()
-            }
-          }}
-        />
-      </div>
-      {(mode === 'timeline' || mode === 'chat') && (
-        <button
-          className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
-            text.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
-          }`}
-          type="submit"
-          disabled={sending}
-          aria-label={mode === 'chat' ? 'Send' : 'Add'}
-        >
-          <img src={mode === 'chat' ? "/arrow-up.svg" : "/plus.svg"} alt="" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
-        </button>
-      )}
-    </form>
+        <div className="relative flex-1">
+          <img
+            src={inputConfig.icon}
+            alt=""
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-60"
+            style={inputConfig.style}
+          />
+          <input
+            id={inputConfig.id}
+            autoComplete="off"
+            className="w-full rounded-full bg-transparent py-2 pl-10 pr-3 text-base outline-none"
+            placeholder={inputConfig.placeholder}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.currentTarget.blur()
+              }
+            }}
+          />
+        </div>
+        {(mode === 'timeline' || mode === 'chat') && (
+          <button
+            className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
+              text.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
+            }`}
+            type="submit"
+            disabled={sending}
+            aria-label={mode === 'chat' ? 'Send' : 'Add'}
+          >
+            <img src={mode === 'chat' ? "/arrow-up.svg" : "/plus.svg"} alt="" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
+          </button>
+        )}
+        {mode === 'search' && text.trim() && (
+          <button
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-400 shadow-sm transition hover:bg-slate-500"
+            type="button"
+            aria-label="Clear search"
+            onClick={() => setText('')}
+          >
+            <img
+              src="/plus.svg"
+              alt=""
+              className="h-5 w-5 rotate-45"
+              style={{ filter: 'brightness(0) invert(1)' }}
+            />
+          </button>
+        )}
+      </form>
     </div>
   )
 
