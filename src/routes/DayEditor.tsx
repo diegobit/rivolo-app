@@ -130,6 +130,18 @@ export default function DayEditor() {
       }),
     [],
   )
+  const editorInputAttributes = useMemo(
+    () =>
+      EditorView.contentAttributes.of({
+        autocapitalize: 'off',
+        autocomplete: 'off',
+        autocorrect: 'off',
+        enterkeyhint: 'done',
+        inputmode: 'text',
+        spellcheck: 'false',
+      }),
+    [],
+  )
 
   const highlightData = useMemo(() => {
     const trimmedQuote = quote.trim()
@@ -498,7 +510,13 @@ export default function DayEditor() {
             </button>
             <input
               ref={dateInputRef}
+              autoCapitalize="off"
+              autoComplete="off"
+              autoCorrect="off"
               className="sr-only"
+              enterKeyHint="done"
+              inputMode="text"
+              spellCheck={false}
               type="date"
               value={dateValue}
               onChange={handleDateChange}
@@ -541,7 +559,15 @@ export default function DayEditor() {
         <div className="mt-4 overflow-hidden rounded-xl">
           <CodeMirror
             value={draft}
-            extensions={[markdown(), editorTheme, clearActiveLine, escapeKeymap, EditorView.lineWrapping, ...highlightData.extensions]}
+            extensions={[
+              markdown(),
+              editorTheme,
+              editorInputAttributes,
+              clearActiveLine,
+              escapeKeymap,
+              EditorView.lineWrapping,
+              ...highlightData.extensions,
+            ]}
             onChange={setDraft}
             onCreateEditor={(view) => {
               editorViewRef.current = view

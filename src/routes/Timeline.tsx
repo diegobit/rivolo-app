@@ -478,6 +478,7 @@ export default function Timeline() {
           placeholder: 'Ask anything',
           icon: '/sparkles.svg',
           id: 'chat-input',
+          enterKeyHint: 'send',
           style: { filter: 'grayscale(1) brightness(0.6)' }
         }
       case 'search':
@@ -485,6 +486,7 @@ export default function Timeline() {
           placeholder: 'Search all days',
           icon: '/lens.svg',
           id: 'search-input',
+          enterKeyHint: 'search',
           style: { filter: 'grayscale(1) brightness(0.6)' }
         }
       default:
@@ -492,6 +494,7 @@ export default function Timeline() {
           placeholder: 'What am I thinking about today?',
           icon: '/notes.svg',
           id: 'timeline-input',
+          enterKeyHint: 'done',
           style: { filter: 'grayscale(1) brightness(0.6)' }
         }
     }
@@ -514,9 +517,14 @@ export default function Timeline() {
         />
         <input
           id={inputConfig.id}
+          autoCapitalize="off"
           autoComplete="off"
+          autoCorrect="off"
           className="w-full rounded-full bg-transparent py-2 pl-10 pr-3 text-base outline-none"
+          enterKeyHint={inputConfig.enterKeyHint}
+          inputMode="text"
           placeholder={inputConfig.placeholder}
+          spellCheck={false}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
