@@ -260,10 +260,12 @@ export default function Timeline() {
         ? 'Reply in the same language the user writes in.'
         : `Always reply in ${aiLanguage}.`
 
+      const date = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', weekday: 'long' })
+
       const llmMessages = [
         {
           role: 'system' as const,
-          content: `${SYSTEM_PROMPT}\n\n<user_notes>\n${contextText}\n</user_notes>\n\nGiven the user's notes above, answer their question accurately and concisely. ${languageInstruction}`,
+          content: `${SYSTEM_PROMPT}\n\n<user_notes>\n${contextText}\n</user_notes>\n\nToday is ${date}.\nGiven the user's notes above, answer their question accurately and concisely. ${languageInstruction}`,
         },
         ...currentMessages,
       ]
