@@ -7,6 +7,7 @@ import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/st
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import { pushToSync } from '../lib/sync'
 import { useDaysStore } from '../store/useDaysStore'
+import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 
 export default function DayEditor() {
@@ -15,6 +16,7 @@ export default function DayEditor() {
   const [searchParams] = useSearchParams()
   const { activeDay, loadDay, updateDayContent, moveDayDate, deleteDay, loading } = useDaysStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
+  const { fontPreference } = useSettingsStore()
   const [draft, setDraft] = useState('')
   const [dateValue, setDateValue] = useState(dayId ?? '')
   const [dateError, setDateError] = useState<string | null>(null)
@@ -116,7 +118,10 @@ export default function DayEditor() {
         '.cm-scroller': {
           fontSize: '1.20rem',
           fontWeight: '400',
-          fontFamily: "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace",
+          fontFamily:
+            fontPreference === 'monospace'
+              ? "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace"
+              : "'Inter', system-ui, sans-serif",
           color: '#000000',
           overflow: 'visible',
         },
@@ -128,7 +133,7 @@ export default function DayEditor() {
           display: 'none',
         },
       }),
-    [],
+    [fontPreference],
   )
 
   const highlightData = useMemo(() => {

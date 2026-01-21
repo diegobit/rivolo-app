@@ -28,11 +28,13 @@ export default function Settings() {
     updateGeminiModel,
     updateAiLanguage,
     updateWallpaper,
+    updateFontPreference,
     geminiApiKey,
     geminiModel,
     aiLanguage,
     timelineView,
     wallpaper,
+    fontPreference,
   } = useSettingsStore()
   const {
     filePath,
@@ -282,56 +284,80 @@ export default function Settings() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-600">Wallpaper</h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            className={wallpaper === 'white' ? buttonPrimary : buttonSecondary}
-            type="button"
-            onClick={() => void updateWallpaper('white')}
-          >
-            White
-          </button>
-          <button
-            className={wallpaper === 'thoughts-light' ? buttonPrimary : buttonSecondary}
-            type="button"
-            onClick={() => void updateWallpaper('thoughts-light')}
-          >
-            Thoughts Light
-          </button>
-          <button
-            className={wallpaper === 'thoughts-medium' ? buttonPrimary : buttonSecondary}
-            type="button"
-            onClick={() => void updateWallpaper('thoughts-medium')}
-          >
-            Thoughts Medium
-          </button>
-          <button
-            className={wallpaper === 'thoughts-high' ? buttonPrimary : buttonSecondary}
-            type="button"
-            onClick={() => void updateWallpaper('thoughts-high')}
-          >
-            Thoughts High
-          </button>
+        <h2 className="text-sm font-semibold text-slate-600">Appearance</h2>
+        <div className="mt-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Wallpaper</h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className={wallpaper === 'white' ? buttonPrimary : buttonSecondary}
+              type="button"
+              onClick={() => void updateWallpaper('white')}
+            >
+              White
+            </button>
+            <button
+              className={wallpaper === 'thoughts-light' ? buttonPrimary : buttonSecondary}
+              type="button"
+              onClick={() => void updateWallpaper('thoughts-light')}
+            >
+              Thoughts Light
+            </button>
+            <button
+              className={wallpaper === 'thoughts-medium' ? buttonPrimary : buttonSecondary}
+              type="button"
+              onClick={() => void updateWallpaper('thoughts-medium')}
+            >
+              Thoughts Medium
+            </button>
+            <button
+              className={wallpaper === 'thoughts-high' ? buttonPrimary : buttonSecondary}
+              type="button"
+              onClick={() => void updateWallpaper('thoughts-high')}
+            >
+              Thoughts High
+            </button>
+          </div>
         </div>
-      </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-600">Timeline View</h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            className={timelineView === 'full' ? buttonPrimary : buttonSecondary}
-            type="button"
-            onClick={() => void updateTimelineView('full')}
-          >
-            Full
-          </button>
-          <button
-            className={timelineView === 'preview' ? buttonPrimary : buttonSecondary}
-            type="button"
-            onClick={() => void updateTimelineView('preview')}
-          >
-            Preview
-          </button>
+        <div className="mt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Timeline View</h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className={timelineView === 'full' ? buttonPrimary : buttonSecondary}
+              type="button"
+              onClick={() => void updateTimelineView('full')}
+            >
+              Full
+            </button>
+            <button
+              className={timelineView === 'preview' ? buttonPrimary : buttonSecondary}
+              type="button"
+              onClick={() => void updateTimelineView('preview')}
+            >
+              Preview
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Font</h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className={fontPreference === 'proportional' ? buttonPrimary : buttonSecondary}
+              type="button"
+              onClick={() => void updateFontPreference('proportional')}
+            >
+              Proportional (Default)
+            </button>
+            <button
+              className={fontPreference === 'monospace' ? buttonPrimary : buttonSecondary}
+              type="button"
+              onClick={() => void updateFontPreference('monospace')}
+              style={{ fontFamily: "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace" }}
+            >
+              Monospace
+            </button>
+          </div>
         </div>
       </section>
 

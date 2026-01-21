@@ -175,7 +175,14 @@ Quotes must be exact substrings from the cited day. If unsure, omit citations.`
 export default function Timeline() {
   const navigate = useNavigate()
   const { days, loading, loadTimeline, appendToToday } = useDaysStore()
-  const { loadSettings, timelineView, geminiApiKey, geminiModel, aiLanguage } = useSettingsStore()
+  const {
+    loadSettings,
+    timelineView,
+    geminiApiKey,
+    geminiModel,
+    aiLanguage,
+    fontPreference,
+  } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode } = useUIStore()
 
@@ -794,7 +801,12 @@ export default function Timeline() {
                 {snippet && (
                   <p
                     className={`mt-3 whitespace-pre-line text-base ${isFuture ? 'text-slate-500/70' : 'text-slate-600'}`}
-                    style={{ fontFamily: "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                    style={{
+                      fontFamily:
+                        fontPreference === 'monospace'
+                          ? "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace"
+                          : "'Inter', system-ui, sans-serif",
+                    }}
                   >
                     {snippet}
                     {truncated && <span className="mt-2 block text-xs text-slate-400">... more</span>}
