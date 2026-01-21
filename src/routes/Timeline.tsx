@@ -60,19 +60,34 @@ const highlightText = (text: string, query: string) => {
   const trimmed = query.trim()
   if (!trimmed) return text
 
-  const lower = text.toLowerCase()
-  const index = lower.indexOf(trimmed.toLowerCase())
-  if (index === -1) return text
+  const lowerText = text.toLowerCase()
+  const lowerQuery = trimmed.toLowerCase()
+  let matchIndex = lowerText.indexOf(lowerQuery)
+  if (matchIndex === -1) return text
 
-  return (
-    <>
-      {text.slice(0, index)}
-      <mark className="rounded bg-amber-100 px-1 text-slate-900">
-        {text.slice(index, index + trimmed.length)}
-      </mark>
-      {text.slice(index + trimmed.length)}
-    </>
-  )
+  const nodes: React.ReactNode[] = []
+  let cursor = 0
+
+  while (matchIndex !== -1) {
+    if (matchIndex > cursor) {
+      nodes.push(text.slice(cursor, matchIndex))
+    }
+
+    nodes.push(
+      <mark key={`match-${matchIndex}`} className="rounded bg-amber-100 px-1 text-slate-900">
+        {text.slice(matchIndex, matchIndex + trimmed.length)}
+      </mark>,
+    )
+
+    cursor = matchIndex + trimmed.length
+    matchIndex = lowerText.indexOf(lowerQuery, cursor)
+  }
+
+  if (cursor < text.length) {
+    nodes.push(text.slice(cursor))
+  }
+
+  return <>{nodes}</>
 }
 
 const countOpenTasks = (content: string) => (content.match(/- \[ \]/g) ?? []).length
