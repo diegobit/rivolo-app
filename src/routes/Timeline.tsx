@@ -28,14 +28,15 @@ const getPreview = (content: string, maxLines: number) => {
   }
 }
 
-const getSearchPreview = (content: string, query: string, maxLines: number) => {
+const getSearchPreview = (content: string, query: string, contextLines: number) => {
   const trimmed = content.trim()
   if (!trimmed) {
     return { text: '', truncated: false }
   }
 
   const lines = trimmed.split('\n')
-  if (lines.length <= maxLines) {
+  const totalLines = contextLines * 2 + 1
+  if (lines.length <= totalLines) {
     return { text: lines.join('\n'), truncated: false }
   }
 
@@ -44,14 +45,15 @@ const getSearchPreview = (content: string, query: string, maxLines: number) => {
     ? lines.findIndex((line) => line.toLowerCase().includes(lowerQuery))
     : -1
 
-  const midpoint = Math.floor(maxLines / 2)
-  let start = matchIndex === -1 ? 0 : Math.max(0, matchIndex - midpoint)
-  if (start + maxLines > lines.length) {
-    start = Math.max(0, lines.length - maxLines)
+  let start = matchIndex === -1 ? 0 : Math.max(0, matchIndex - contextLines)
+  let end = start + totalLines
+  if (end > lines.length) {
+    end = lines.length
+    start = Math.max(0, end - totalLines)
   }
 
   return {
-    text: lines.slice(start, start + maxLines).join('\n'),
+    text: lines.slice(start, end).join('\n'),
     truncated: true,
   }
 }
@@ -489,7 +491,7 @@ export default function Timeline() {
     return searchResults.map((day) => {
       const open = countOpenTasks(day.contentMd)
       if (timelineView === 'preview') {
-        const preview = getSearchPreview(day.contentMd, text, 10)
+        const preview = getSearchPreview(day.contentMd, text, 2)
         return {
           type: 'day',
           card: {

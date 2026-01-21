@@ -330,7 +330,7 @@ export default function Settings() {
             type="button"
             onClick={() => void updateTimelineView('preview')}
           >
-            Preview (10 lines)
+            Preview
           </button>
         </div>
       </section>
