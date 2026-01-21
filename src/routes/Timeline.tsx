@@ -577,7 +577,7 @@ export default function Timeline() {
         )}
         {mode === 'search' && text.trim() && (
           <button
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-400 shadow-sm transition hover:bg-slate-500"
+            className="group flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-500"
             type="button"
             aria-label="Clear search"
             onClick={() => setText('')}
@@ -585,8 +585,7 @@ export default function Timeline() {
             <img
               src="/plus.svg"
               alt=""
-              className="h-5 w-5 rotate-45"
-              style={{ filter: 'brightness(0) invert(1)' }}
+              className="h-4 w-4 rotate-45  [filter:invert(0.5)] group-hover:[filter:invert(1)]"
             />
           </button>
         )}
