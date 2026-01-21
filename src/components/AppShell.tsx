@@ -126,7 +126,7 @@ export default function AppShell() {
   }, [showShortcuts])
 
   useEffect(() => {
-    if (!isHome) return
+    if (isHome) return
     if (showShortcuts) {
       setShowShortcuts(false)
     }
