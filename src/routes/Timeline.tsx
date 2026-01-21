@@ -28,10 +28,32 @@ const getPreview = (content: string, maxLines: number) => {
   }
 }
 
-const getSnippet = (content: string) => {
-  const lines = content.split('\n').map((line) => line.trim()).filter(Boolean)
-  const snippet = lines.slice(0, 6).join('\n')
-  return snippet || 'No content yet'
+const getSearchPreview = (content: string, query: string, maxLines: number) => {
+  const trimmed = content.trim()
+  if (!trimmed) {
+    return { text: '', truncated: false }
+  }
+
+  const lines = trimmed.split('\n')
+  if (lines.length <= maxLines) {
+    return { text: lines.join('\n'), truncated: false }
+  }
+
+  const lowerQuery = query.trim().toLowerCase()
+  const matchIndex = lowerQuery
+    ? lines.findIndex((line) => line.toLowerCase().includes(lowerQuery))
+    : -1
+
+  const midpoint = Math.floor(maxLines / 2)
+  let start = matchIndex === -1 ? 0 : Math.max(0, matchIndex - midpoint)
+  if (start + maxLines > lines.length) {
+    start = Math.max(0, lines.length - maxLines)
+  }
+
+  return {
+    text: lines.slice(start, start + maxLines).join('\n'),
+    truncated: true,
+  }
 }
 
 const highlightText = (text: string, query: string) => {
@@ -450,19 +472,32 @@ export default function Timeline() {
   const searchCards = useMemo<TimelineItem[]>(() => {
     if (mode !== 'search' || !text.trim()) return []
     return searchResults.map((day) => {
-      const snippet = highlightText(getSnippet(day.contentMd), text)
       const open = countOpenTasks(day.contentMd)
+      if (timelineView === 'preview') {
+        const preview = getSearchPreview(day.contentMd, text, 10)
+        return {
+          type: 'day',
+          card: {
+            day,
+            snippet: highlightText(preview.text, text),
+            open,
+            truncated: preview.truncated,
+          },
+        }
+      }
+
+      const fullText = day.contentMd.trim()
       return {
         type: 'day',
         card: {
           day,
-          snippet,
+          snippet: highlightText(fullText || 'No content yet', text),
           open,
-          truncated: false, // Search snippets are already short
+          truncated: false,
         },
       }
     })
-  }, [mode, text, searchResults])
+  }, [mode, text, searchResults, timelineView])
 
   // Active Items
   const activeItems = (mode === 'search' && text.trim() && searchResults.length > 0) ? searchCards : standardItems
