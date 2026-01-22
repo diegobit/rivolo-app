@@ -10,7 +10,7 @@ import { useUIStore } from '../store/useUIStore'
 const topIconButton =
   'flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300'
 const trayIconButton =
-  'flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300'
+  'flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:h-10 sm:w-10'
 const backButtonClass =
   'flex h-8 w-8 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90'
 
@@ -74,7 +74,7 @@ export default function AppShell() {
   const trayCenter = (
     <div
       id="bottom-tray"
-      className="flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.12)]"
+      className="flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-2 shadow-[0_6px_18px_rgba(15,23,42,0.12)] sm:p-3"
     />
   )
 
@@ -126,7 +126,7 @@ export default function AppShell() {
   }, [showShortcuts])
 
   useEffect(() => {
-    if (!isHome) return
+    if (isHome) return
     if (showShortcuts) {
       setShowShortcuts(false)
     }
@@ -210,6 +210,15 @@ export default function AppShell() {
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
   }, [futureDayId, isHome, location.pathname, mode, navigate, setMode])
+
+  useEffect(() => {
+    if (!isHome) return
+    const inputId =
+      mode === 'chat' ? 'chat-input' : mode === 'search' ? 'search-input' : 'timeline-input'
+    requestAnimationFrame(() => {
+      document.getElementById(inputId)?.focus()
+    })
+  }, [isHome, mode])
 
 
   return (
@@ -312,7 +321,7 @@ export default function AppShell() {
         <>
           <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-20 h-32 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
 
-          <div className="fixed bottom-6 left-0 right-0 z-30 mx-auto flex w-[min(96%,620px)] items-center gap-3">
+          <div className="fixed bottom-2 left-0 right-0 z-30 mx-auto flex w-[min(96%,620px)] items-center gap-2 px-2 sm:bottom-6 sm:gap-3 sm:px-0">
             {mode !== 'timeline' && <Fragment key="timeline-btn">{timelineButton}</Fragment>}
             {mode === 'timeline' && <Fragment key="tray">{trayCenter}</Fragment>}
 

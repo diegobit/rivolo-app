@@ -28,29 +28,68 @@ const getPreview = (content: string, maxLines: number) => {
   }
 }
 
-const getSnippet = (content: string) => {
-  const lines = content.split('\n').map((line) => line.trim()).filter(Boolean)
-  const snippet = lines.slice(0, 6).join('\n')
-  return snippet || 'No content yet'
+const getSearchPreview = (content: string, query: string, contextLines: number) => {
+  const trimmed = content.trim()
+  if (!trimmed) {
+    return { text: '', truncated: false }
+  }
+
+  const lines = trimmed.split('\n')
+  const totalLines = contextLines * 2 + 1
+  if (lines.length <= totalLines) {
+    return { text: lines.join('\n'), truncated: false }
+  }
+
+  const lowerQuery = query.trim().toLowerCase()
+  const matchIndex = lowerQuery
+    ? lines.findIndex((line) => line.toLowerCase().includes(lowerQuery))
+    : -1
+
+  let start = matchIndex === -1 ? 0 : Math.max(0, matchIndex - contextLines)
+  let end = start + totalLines
+  if (end > lines.length) {
+    end = lines.length
+    start = Math.max(0, end - totalLines)
+  }
+
+  return {
+    text: lines.slice(start, end).join('\n'),
+    truncated: true,
+  }
 }
 
 const highlightText = (text: string, query: string) => {
   const trimmed = query.trim()
   if (!trimmed) return text
 
-  const lower = text.toLowerCase()
-  const index = lower.indexOf(trimmed.toLowerCase())
-  if (index === -1) return text
+  const lowerText = text.toLowerCase()
+  const lowerQuery = trimmed.toLowerCase()
+  let matchIndex = lowerText.indexOf(lowerQuery)
+  if (matchIndex === -1) return text
 
-  return (
-    <>
-      {text.slice(0, index)}
-      <mark className="rounded bg-amber-100 px-1 text-slate-900">
-        {text.slice(index, index + trimmed.length)}
-      </mark>
-      {text.slice(index + trimmed.length)}
-    </>
-  )
+  const nodes: React.ReactNode[] = []
+  let cursor = 0
+
+  while (matchIndex !== -1) {
+    if (matchIndex > cursor) {
+      nodes.push(text.slice(cursor, matchIndex))
+    }
+
+    nodes.push(
+      <mark key={`match-${matchIndex}`} className="rounded bg-amber-100 px-1 text-slate-900">
+        {text.slice(matchIndex, matchIndex + trimmed.length)}
+      </mark>,
+    )
+
+    cursor = matchIndex + trimmed.length
+    matchIndex = lowerText.indexOf(lowerQuery, cursor)
+  }
+
+  if (cursor < text.length) {
+    nodes.push(text.slice(cursor))
+  }
+
+  return <>{nodes}</>
 }
 
 const countOpenTasks = (content: string) => (content.match(/- \[ \]/g) ?? []).length
@@ -136,12 +175,34 @@ Quotes must be exact substrings from the cited day. If unsure, omit citations.`
 export default function Timeline() {
   const navigate = useNavigate()
   const { days, loading, loadTimeline, appendToToday } = useDaysStore()
-  const { loadSettings, timelineView, geminiApiKey, geminiModel, aiLanguage } = useSettingsStore()
+  const {
+    loadSettings,
+    timelineView,
+    geminiApiKey,
+    geminiModel,
+    aiLanguage,
+    fontPreference,
+  } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode } = useUIStore()
 
-  // Shared Input State
-  const [text, setText] = useState('')
+  // Mode-specific Input State
+  const [timelineText, setTimelineText] = useState('')
+  const [chatText, setChatText] = useState('')
+  const [searchText, setSearchText] = useState('')
+
+  const activeText = mode === 'chat' ? chatText : mode === 'search' ? searchText : timelineText
+  const updateActiveText = (nextValue: string) => {
+    if (mode === 'chat') {
+      setChatText(nextValue)
+      return
+    }
+    if (mode === 'search') {
+      setSearchText(nextValue)
+      return
+    }
+    setTimelineText(nextValue)
+  }
 
   // Chat State
   const [messages, setMessages] = useState<ChatUiMessage[]>([])
@@ -184,7 +245,7 @@ export default function Timeline() {
   useEffect(() => {
     if (mode !== 'search') return
 
-    if (!text.trim()) {
+    if (!searchText.trim()) {
       setSearchResults([])
       setSearchLoading(false)
       return
@@ -196,7 +257,7 @@ export default function Timeline() {
     const handle = window.setTimeout(async () => {
       setSearchError(null)
       try {
-        const data = await searchDays(text)
+        const data = await searchDays(searchText)
         setSearchResults(data)
       } catch {
         setSearchError('Search failed. Try again.')
@@ -207,7 +268,7 @@ export default function Timeline() {
     }, 250)
 
     return () => window.clearTimeout(handle)
-  }, [mode, text])
+  }, [mode, searchText])
 
   // --- Handlers ---
 
@@ -222,7 +283,7 @@ export default function Timeline() {
   }
 
   const handleChatSend = async () => {
-    const trimmed = text.trim()
+    const trimmed = chatText.trim()
     if (!trimmed) return
     setChatError(null)
 
@@ -246,7 +307,7 @@ export default function Timeline() {
     }
 
     setMessages((state) => [...state, userMessage, assistantMessage])
-    setText('')
+    setChatText('')
     setSending(true)
 
     const currentMessages = [...messages, userMessage].map((m) => ({ role: m.role, content: m.content })) as LlmMessage[]
@@ -345,11 +406,11 @@ export default function Timeline() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!text.trim()) return
+    if (!activeText.trim()) return
 
     if (mode === 'timeline') {
-      await appendToToday(text)
-      setText('')
+      await appendToToday(timelineText)
+      setTimelineText('')
       await handleAutoPush()
     } else if (mode === 'chat') {
       await handleChatSend()
@@ -448,27 +509,40 @@ export default function Timeline() {
 
   // Search Results Cards
   const searchCards = useMemo<TimelineItem[]>(() => {
-    if (mode !== 'search' || !text.trim()) return []
+    if (mode !== 'search' || !searchText.trim()) return []
     return searchResults.map((day) => {
-      const snippet = highlightText(getSnippet(day.contentMd), text)
       const open = countOpenTasks(day.contentMd)
+      if (timelineView === 'preview') {
+        const preview = getSearchPreview(day.contentMd, searchText, 2)
+        return {
+          type: 'day',
+          card: {
+            day,
+            snippet: highlightText(preview.text, searchText),
+            open,
+            truncated: preview.truncated,
+          },
+        }
+      }
+
+      const fullText = day.contentMd.trim()
       return {
         type: 'day',
         card: {
           day,
-          snippet,
+          snippet: highlightText(fullText || 'No content yet', searchText),
           open,
-          truncated: false, // Search snippets are already short
+          truncated: false,
         },
       }
     })
-  }, [mode, text, searchResults])
+  }, [mode, searchText, searchResults, timelineView])
 
   // Active Items
-  const activeItems = (mode === 'search' && text.trim() && searchResults.length > 0) ? searchCards : standardItems
+  const activeItems = (mode === 'search' && searchText.trim() && searchResults.length > 0) ? searchCards : standardItems
 
   // No Results State
-  const noSearchResults = mode === 'search' && !searchLoading && text.trim() && searchResults.length === 0 && !searchError
+  const noSearchResults = mode === 'search' && !searchLoading && searchText.trim() && searchResults.length === 0 && !searchError
 
   // --- Render ---
 
@@ -510,45 +584,54 @@ export default function Timeline() {
         </p>
       )}
       <form className="flex items-center gap-3" onSubmit={handleSubmit}>
-      <div className="relative flex-1">
-        <img
-          src={inputConfig.icon}
-          alt=""
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-60"
-          style={inputConfig.style}
-        />
-        <input
-          id={inputConfig.id}
-          autoCapitalize="off"
-          autoComplete="off"
-          autoCorrect="off"
-          className="w-full rounded-full bg-transparent py-2 pl-10 pr-3 text-base outline-none"
-          enterKeyHint={inputConfig.enterKeyHint}
-          inputMode="text"
-          placeholder={inputConfig.placeholder}
-          spellCheck={false}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.currentTarget.blur()
-            }
-          }}
-        />
-      </div>
-      {(mode === 'timeline' || mode === 'chat') && (
-        <button
-          className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
-            text.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
-          }`}
-          type="submit"
-          disabled={sending}
-          aria-label={mode === 'chat' ? 'Send' : 'Add'}
-        >
-          <img src={mode === 'chat' ? "/arrow-up.svg" : "/plus.svg"} alt="" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
-        </button>
-      )}
-    </form>
+        <div className="relative flex-1">
+          <img
+            src={inputConfig.icon}
+            alt=""
+            className="pointer-events-none absolute left-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 opacity-60 sm:block"
+            style={inputConfig.style}
+          />
+          <input
+            id={inputConfig.id}
+            autoComplete="off"
+            className="w-full rounded-full bg-transparent py-2 pl-3 pr-3 text-base outline-none sm:pl-10"
+            placeholder={inputConfig.placeholder}
+            value={activeText}
+            onChange={(event) => updateActiveText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.currentTarget.blur()
+              }
+            }}
+          />
+        </div>
+        {(mode === 'timeline' || mode === 'chat') && (
+          <button
+            className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
+              activeText.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
+            }`}
+            type="submit"
+            disabled={sending}
+            aria-label={mode === 'chat' ? 'Send' : 'Add'}
+          >
+            <img src={mode === 'chat' ? "/arrow-up.svg" : "/plus.svg"} alt="" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
+          </button>
+        )}
+        {mode === 'search' && searchText.trim() && (
+          <button
+            className="group flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-500"
+            type="button"
+            aria-label="Clear search"
+            onClick={() => setSearchText('')}
+          >
+            <img
+              src="/plus.svg"
+              alt=""
+              className="h-4 w-4 rotate-45  [filter:invert(0.5)] group-hover:[filter:invert(1)]"
+            />
+          </button>
+        )}
+      </form>
     </div>
   )
 
@@ -736,7 +819,12 @@ export default function Timeline() {
                 {snippet && (
                   <p
                     className={`mt-3 whitespace-pre-line text-base ${isFuture ? 'text-slate-500/70' : 'text-slate-600'}`}
-                    style={{ fontFamily: "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                    style={{
+                      fontFamily:
+                        fontPreference === 'monospace'
+                          ? "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace"
+                          : "'Inter', system-ui, sans-serif",
+                    }}
                   >
                     {snippet}
                     {truncated && <span className="mt-2 block text-xs text-slate-400">... more</span>}

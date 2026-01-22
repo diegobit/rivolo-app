@@ -7,6 +7,8 @@ type TimelineView = 'full' | 'preview'
 
 type Wallpaper = 'white' | 'thoughts-light' | 'thoughts-medium' | 'thoughts-high'
 
+type FontPreference = 'proportional' | 'monospace'
+
 type LlmSecrets = {
   geminiApiKey: string
 }
@@ -23,12 +25,14 @@ type SettingsState = {
   loading: boolean
   timelineView: TimelineView
   wallpaper: Wallpaper
+  fontPreference: FontPreference
   loadSettings: () => Promise<void>
   saveGeminiKey: (apiKey: string) => Promise<void>
   updateTimelineView: (view: TimelineView) => Promise<void>
   updateGeminiModel: (model: string) => Promise<void>
   updateAiLanguage: (language: AiLanguage) => Promise<void>
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
+  updateFontPreference: (fontPreference: FontPreference) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -38,7 +42,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   aiLanguage: 'follow',
   loading: false,
   timelineView: 'full',
-  wallpaper: 'white',
+  wallpaper: 'thoughts-light',
+  fontPreference: 'proportional',
 
   loadSettings: async () => {
     set({ loading: true })
@@ -47,10 +52,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const storedGeminiModel = await getSetting('llm.geminiModel')
     const storedAiLanguage = (await getSetting('ai.language')) as AiLanguage | null
     const storedWallpaper = (await getSetting('appearance.wallpaper')) as Wallpaper | null
+    const storedFontPreference = (await getSetting('appearance.font')) as FontPreference | null
     const timelineView = storedTimelineView ?? 'full'
     const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
     const aiLanguage = storedAiLanguage ?? 'follow'
-    const wallpaper = storedWallpaper ?? 'white'
+    const wallpaper = storedWallpaper ?? 'thoughts-light'
+    const fontPreference = storedFontPreference ?? 'proportional'
 
     if (!storedTimelineView) {
       await setSetting('timeline.view', timelineView)
@@ -64,6 +71,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     if (!storedWallpaper) {
       await setSetting('appearance.wallpaper', wallpaper)
     }
+    if (!storedFontPreference) {
+      await setSetting('appearance.font', fontPreference)
+    }
 
     const secrets = await getJsonSetting<LlmSecrets>('llm.secrets')
     const geminiApiKey = secrets?.geminiApiKey ?? null
@@ -75,6 +85,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       aiLanguage,
       timelineView,
       wallpaper,
+      fontPreference,
       loading: false,
     })
   },
@@ -101,8 +112,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ aiLanguage: language })
   },
 
-  updateWallpaper: async (wallpaper: Wallpaper) => {
+    updateWallpaper: async (wallpaper: Wallpaper) => {
     await setSetting('appearance.wallpaper', wallpaper)
     set({ wallpaper })
   },
-}))
+
+  updateFontPreference: async (fontPreference: FontPreference) => {
+    await setSetting('appearance.font', fontPreference)
+    set({ fontPreference })
+  },
+})
+)
