@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import BottomTrayPortal from '../components/BottomTrayPortal'
+import { getMonospaceFontFamily } from '../lib/fonts'
 import { pushToSync } from '../lib/sync'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import type { Day } from '../lib/dayRepository'
@@ -182,6 +183,7 @@ export default function Timeline() {
     geminiModel,
     aiLanguage,
     fontPreference,
+    monospaceFont,
   } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode } = useUIStore()
@@ -822,7 +824,7 @@ export default function Timeline() {
                     style={{
                       fontFamily:
                         fontPreference === 'monospace'
-                          ? "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace"
+                          ? getMonospaceFontFamily(monospaceFont)
                           : "'Inter', system-ui, sans-serif",
                     }}
                   >
