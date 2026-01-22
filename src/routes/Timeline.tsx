@@ -570,13 +570,13 @@ export default function Timeline() {
           <img
             src={inputConfig.icon}
             alt=""
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-60"
+            className="pointer-events-none absolute left-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 opacity-60 sm:block"
             style={inputConfig.style}
           />
           <input
             id={inputConfig.id}
             autoComplete="off"
-            className="w-full rounded-full bg-transparent py-2 pl-10 pr-3 text-base outline-none"
+            className="w-full rounded-full bg-transparent py-2 pl-3 pr-3 text-base outline-none sm:pl-10"
             placeholder={inputConfig.placeholder}
             value={text}
             onChange={(event) => setText(event.target.value)}
