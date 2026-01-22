@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
+import { type MonospaceFont, monospaceFontOptions } from '../lib/fonts'
 import { shareOrDownload } from '../lib/share'
 import { DEFAULT_DROPBOX_PATH, startDropboxAuth } from '../lib/dropbox'
 import { disconnectActiveProvider, pullFromSync, pushToSync } from '../lib/sync'
@@ -35,12 +36,14 @@ export default function Settings() {
     updateAiLanguage,
     updateWallpaper,
     updateFontPreference,
+    updateMonospaceFont,
     geminiApiKey,
     geminiModel,
     aiLanguage,
     timelineView,
     wallpaper,
     fontPreference,
+    monospaceFont,
   } = useSettingsStore()
   const {
     filePath,
@@ -66,6 +69,11 @@ export default function Settings() {
 
   const savedDropboxPath = filePath || DEFAULT_DROPBOX_PATH
   const isDropboxPathDirty = dropboxPath.trim() !== savedDropboxPath
+
+  const handleMonospaceFont = (font: MonospaceFont) => {
+    void updateMonospaceFont(font)
+    void updateFontPreference('monospace')
+  }
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -374,14 +382,21 @@ export default function Settings() {
               >
                 Proportional
               </button>
-              <button
-                className={fontPreference === 'monospace' ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateFontPreference('monospace')}
-                style={{ fontFamily: "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace" }}
-              >
-                Monospace
-              </button>
+              {monospaceFontOptions.map((option) => (
+                <button
+                  key={option.id}
+                  className={
+                    fontPreference === 'monospace' && monospaceFont === option.id
+                      ? buttonPillActive
+                      : buttonPill
+                  }
+                  type="button"
+                  onClick={() => handleMonospaceFont(option.id)}
+                  style={{ fontFamily: option.fontFamily }}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
 

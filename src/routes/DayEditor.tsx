@@ -5,6 +5,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, keymap } from '@codemirror/view'
 import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/state'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
+import { getMonospaceFontFamily } from '../lib/fonts'
 import { pushToSync } from '../lib/sync'
 import { useDaysStore } from '../store/useDaysStore'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -16,7 +17,7 @@ export default function DayEditor() {
   const [searchParams] = useSearchParams()
   const { activeDay, loadDay, updateDayContent, moveDayDate, deleteDay, loading } = useDaysStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
-  const { fontPreference } = useSettingsStore()
+  const { fontPreference, monospaceFont } = useSettingsStore()
   const [draft, setDraft] = useState('')
   const [dateValue, setDateValue] = useState(dayId ?? '')
   const [dateError, setDateError] = useState<string | null>(null)
@@ -120,7 +121,7 @@ export default function DayEditor() {
           fontWeight: '400',
           fontFamily:
             fontPreference === 'monospace'
-              ? "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace"
+              ? getMonospaceFontFamily(monospaceFont)
               : "'Inter', system-ui, sans-serif",
           color: '#000000',
           overflow: 'visible',
@@ -133,7 +134,7 @@ export default function DayEditor() {
           display: 'none',
         },
       }),
-    [fontPreference],
+    [fontPreference, monospaceFont],
   )
 
   const highlightData = useMemo(() => {
