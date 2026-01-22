@@ -42,7 +42,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   aiLanguage: 'follow',
   loading: false,
   timelineView: 'full',
-  wallpaper: 'white',
+  wallpaper: 'thoughts-light',
   fontPreference: 'proportional',
 
   loadSettings: async () => {
@@ -56,7 +56,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const timelineView = storedTimelineView ?? 'full'
     const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
     const aiLanguage = storedAiLanguage ?? 'follow'
-    const wallpaper = storedWallpaper ?? 'white'
+    const wallpaper = storedWallpaper ?? 'thoughts-light'
     const fontPreference = storedFontPreference ?? 'proportional'
 
     if (!storedTimelineView) {
