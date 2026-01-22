@@ -186,8 +186,23 @@ export default function Timeline() {
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode } = useUIStore()
 
-  // Shared Input State
-  const [text, setText] = useState('')
+  // Mode-specific Input State
+  const [timelineText, setTimelineText] = useState('')
+  const [chatText, setChatText] = useState('')
+  const [searchText, setSearchText] = useState('')
+
+  const activeText = mode === 'chat' ? chatText : mode === 'search' ? searchText : timelineText
+  const updateActiveText = (nextValue: string) => {
+    if (mode === 'chat') {
+      setChatText(nextValue)
+      return
+    }
+    if (mode === 'search') {
+      setSearchText(nextValue)
+      return
+    }
+    setTimelineText(nextValue)
+  }
 
   // Chat State
   const [messages, setMessages] = useState<ChatUiMessage[]>([])
@@ -230,7 +245,7 @@ export default function Timeline() {
   useEffect(() => {
     if (mode !== 'search') return
 
-    if (!text.trim()) {
+    if (!searchText.trim()) {
       setSearchResults([])
       setSearchLoading(false)
       return
@@ -242,7 +257,7 @@ export default function Timeline() {
     const handle = window.setTimeout(async () => {
       setSearchError(null)
       try {
-        const data = await searchDays(text)
+        const data = await searchDays(searchText)
         setSearchResults(data)
       } catch {
         setSearchError('Search failed. Try again.')
@@ -253,7 +268,7 @@ export default function Timeline() {
     }, 250)
 
     return () => window.clearTimeout(handle)
-  }, [mode, text])
+  }, [mode, searchText])
 
   // --- Handlers ---
 
@@ -268,7 +283,7 @@ export default function Timeline() {
   }
 
   const handleChatSend = async () => {
-    const trimmed = text.trim()
+    const trimmed = chatText.trim()
     if (!trimmed) return
     setChatError(null)
 
@@ -292,7 +307,7 @@ export default function Timeline() {
     }
 
     setMessages((state) => [...state, userMessage, assistantMessage])
-    setText('')
+    setChatText('')
     setSending(true)
 
     const currentMessages = [...messages, userMessage].map((m) => ({ role: m.role, content: m.content })) as LlmMessage[]
@@ -391,11 +406,11 @@ export default function Timeline() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!text.trim()) return
+    if (!activeText.trim()) return
 
     if (mode === 'timeline') {
-      await appendToToday(text)
-      setText('')
+      await appendToToday(timelineText)
+      setTimelineText('')
       await handleAutoPush()
     } else if (mode === 'chat') {
       await handleChatSend()
@@ -494,16 +509,16 @@ export default function Timeline() {
 
   // Search Results Cards
   const searchCards = useMemo<TimelineItem[]>(() => {
-    if (mode !== 'search' || !text.trim()) return []
+    if (mode !== 'search' || !searchText.trim()) return []
     return searchResults.map((day) => {
       const open = countOpenTasks(day.contentMd)
       if (timelineView === 'preview') {
-        const preview = getSearchPreview(day.contentMd, text, 2)
+        const preview = getSearchPreview(day.contentMd, searchText, 2)
         return {
           type: 'day',
           card: {
             day,
-            snippet: highlightText(preview.text, text),
+            snippet: highlightText(preview.text, searchText),
             open,
             truncated: preview.truncated,
           },
@@ -515,19 +530,19 @@ export default function Timeline() {
         type: 'day',
         card: {
           day,
-          snippet: highlightText(fullText || 'No content yet', text),
+          snippet: highlightText(fullText || 'No content yet', searchText),
           open,
           truncated: false,
         },
       }
     })
-  }, [mode, text, searchResults, timelineView])
+  }, [mode, searchText, searchResults, timelineView])
 
   // Active Items
-  const activeItems = (mode === 'search' && text.trim() && searchResults.length > 0) ? searchCards : standardItems
+  const activeItems = (mode === 'search' && searchText.trim() && searchResults.length > 0) ? searchCards : standardItems
 
   // No Results State
-  const noSearchResults = mode === 'search' && !searchLoading && text.trim() && searchResults.length === 0 && !searchError
+  const noSearchResults = mode === 'search' && !searchLoading && searchText.trim() && searchResults.length === 0 && !searchError
 
   // --- Render ---
 
@@ -578,8 +593,8 @@ export default function Timeline() {
             autoComplete="off"
             className="w-full rounded-full bg-transparent py-2 pl-3 pr-3 text-base outline-none sm:pl-10"
             placeholder={inputConfig.placeholder}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
+            value={activeText}
+            onChange={(event) => updateActiveText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.currentTarget.blur()
@@ -590,7 +605,7 @@ export default function Timeline() {
         {(mode === 'timeline' || mode === 'chat') && (
           <button
             className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
-              text.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
+              activeText.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
             }`}
             type="submit"
             disabled={sending}
@@ -599,12 +614,12 @@ export default function Timeline() {
             <img src={mode === 'chat' ? "/arrow-up.svg" : "/plus.svg"} alt="" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
           </button>
         )}
-        {mode === 'search' && text.trim() && (
+        {mode === 'search' && searchText.trim() && (
           <button
             className="group flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-500"
             type="button"
             aria-label="Clear search"
-            onClick={() => setText('')}
+            onClick={() => setSearchText('')}
           >
             <img
               src="/plus.svg"
