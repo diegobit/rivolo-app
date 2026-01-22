@@ -575,11 +575,14 @@ export default function Timeline() {
 
   const trayContent = (
     <div className="relative">
-      {noSearchResults && (
-        <p className="absolute -top-10 left-1/2 -z-10 -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-sm text-red-400">
-          No results
-        </p>
-      )}
+      <p
+        className={`absolute -top-10 left-1/2 -z-10 -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-sm text-red-400 ${
+          noSearchResults ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        aria-hidden={!noSearchResults}
+      >
+        No results
+      </p>
       <form className="flex items-center gap-3" onSubmit={handleSubmit}>
         <div className="relative flex-1">
           <img
