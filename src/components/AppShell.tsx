@@ -224,10 +224,13 @@ export default function AppShell() {
   return (
     <div className="min-h-full text-slate-900">
       {/* White base + Wallpaper texture */}
-      <div className="pointer-events-none fixed left-0 right-0 top-0 -z-10 min-h-[100lvh] bg-white" />
+      <div
+        style={{ top: -viewportOffset }}
+        className="pointer-events-none fixed left-0 right-0 -z-10 min-h-[100lvh] bg-white"
+      />
       {wallpaper !== 'white' && (
         <div
-          className={`pointer-events-none fixed left-0 right-0 top-0 -z-10 min-h-[100lvh] ${
+          className={`pointer-events-none fixed left-0 right-0 -z-10 min-h-[100lvh] ${
             wallpaper === 'thoughts-light'
               ? 'opacity-5'
               : wallpaper === 'thoughts-medium'
@@ -235,6 +238,7 @@ export default function AppShell() {
                 : 'opacity-15'
           }`}
           style={{
+            top: -viewportOffset,
             backgroundImage: 'url(/bg-thoughts.jpg)',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
