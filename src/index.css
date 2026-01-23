@@ -3,94 +3,6 @@
 @tailwind utilities;
 
 @font-face {
-  font-family: 'CartographCF';
-  src: url('/fonts/CartographCF-Regular.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Sevka';
-  src: url('/fonts/Sevka-Light.woff2') format('woff2');
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Sevka';
-  src: url('/fonts/Sevka-LightItalic.woff2') format('woff2');
-  font-weight: 300;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Sevka';
-  src: url('/fonts/Sevka-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Sevka';
-  src: url('/fonts/Sevka-Italic.woff2') format('woff2');
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Sevka';
-  src: url('/fonts/Sevka-Medium.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Sevka';
-  src: url('/fonts/Sevka-MediumItalic.woff2') format('woff2');
-  font-weight: 500;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Sevka';
-  src: url('/fonts/Sevka-SemiBold.woff2') format('woff2');
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Sevka';
-  src: url('/fonts/Sevka-SemiBoldItalic.woff2') format('woff2');
-  font-weight: 600;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Sevka';
-  src: url('/fonts/Sevka-Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Sevka';
-  src: url('/fonts/Sevka-BoldItalic.woff2') format('woff2');
-  font-weight: 700;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
   font-family: 'Fantasque Sans Mono';
   src: url('/fonts/FantasqueSansMono-Regular.otf') format('opentype');
   font-weight: 400;
@@ -155,6 +67,61 @@
   .cm-highlight {
     background-color: #fde68a;
     border-radius: 3px;
+  }
+
+  .hljs {
+    color: #0f172a;
+    background: transparent;
+    font-family: inherit;
+  }
+
+  .hljs-comment,
+  .hljs-quote {
+    color: #64748b;
+    font-style: italic;
+  }
+
+  .hljs-emphasis {
+    color: #475569;
+    font-style: italic;
+  }
+
+  .hljs-strong {
+    color: #0f172a;
+    font-weight: 700;
+  }
+
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-literal,
+  .hljs-built_in {
+    color: #0f766e;
+    font-weight: 600;
+  }
+
+  .hljs-string,
+  .hljs-title,
+  .hljs-section,
+  .hljs-attr {
+    color: #2563eb;
+  }
+
+  .hljs-number,
+  .hljs-symbol,
+  .hljs-bullet {
+    color: #b45309;
+  }
+
+  .hljs-meta {
+    color: #1d4ed8;
+  }
+
+  .hljs-addition {
+    color: #15803d;
+  }
+
+  .hljs-deletion {
+    color: #be123c;
   }
 }
 

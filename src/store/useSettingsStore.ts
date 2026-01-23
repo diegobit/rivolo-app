@@ -47,7 +47,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   timelineView: 'full',
   wallpaper: 'thoughts-light',
   fontPreference: 'proportional',
-  monospaceFont: 'cartograph',
+  monospaceFont: 'fantasque',
 
   loadSettings: async () => {
     set({ loading: true })
@@ -63,7 +63,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const aiLanguage = storedAiLanguage ?? 'follow'
     const wallpaper = storedWallpaper ?? 'thoughts-light'
     const fontPreference = storedFontPreference ?? 'proportional'
-    const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'cartograph'
+    const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'fantasque'
 
     if (!storedTimelineView) {
       await setSetting('timeline.view', timelineView)
