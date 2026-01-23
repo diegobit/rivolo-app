@@ -1,6 +1,6 @@
 export type MonospaceFont =
   | 'cartograph'
-  | 'iosevka'
+  | 'sevka'
   | 'fantasque'
   | 'iawriter'
   | 'iawriterduo'
@@ -8,7 +8,7 @@ export type MonospaceFont =
 
 export const monospaceFontFamilies: Record<MonospaceFont, string> = {
   cartograph: "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace",
-  iosevka: "'Iosevka', ui-monospace, SFMono-Regular, Menlo, monospace",
+  sevka: "'Sevka', ui-monospace, SFMono-Regular, Menlo, monospace",
   fantasque: "'Fantasque Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
   iawriter: "'iA Writer Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
   iawriterduo: "'iA Writer Duo', ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -22,9 +22,9 @@ export const monospaceFontOptions = [
     fontFamily: monospaceFontFamilies.cartograph,
   },
   {
-    id: 'iosevka',
-    label: 'Iosevka',
-    fontFamily: monospaceFontFamilies.iosevka,
+    id: 'sevka',
+    label: 'Sevka',
+    fontFamily: monospaceFontFamilies.sevka,
   },
   {
     id: 'fantasque',
@@ -52,7 +52,7 @@ export const getMonospaceFontFamily = (font: MonospaceFont) => monospaceFontFami
 
 export const isMonospaceFont = (value: string | null): value is MonospaceFont =>
   value === 'cartograph' ||
-  value === 'iosevka' ||
+  value === 'sevka' ||
   value === 'fantasque' ||
   value === 'iawriter' ||
   value === 'iawriterduo' ||

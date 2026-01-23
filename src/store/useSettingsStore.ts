@@ -58,12 +58,15 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const storedWallpaper = (await getSetting('appearance.wallpaper')) as Wallpaper | null
     const storedFontPreference = (await getSetting('appearance.font')) as FontPreference | null
     const storedMonospaceFont = await getSetting('appearance.monospaceFont')
+    const normalizedMonospaceFont = storedMonospaceFont === 'iosevka' ? 'sevka' : storedMonospaceFont
     const timelineView = storedTimelineView ?? 'full'
     const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
     const aiLanguage = storedAiLanguage ?? 'follow'
     const wallpaper = storedWallpaper ?? 'thoughts-light'
     const fontPreference = storedFontPreference ?? 'proportional'
-    const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'cartograph'
+    const monospaceFont = isMonospaceFont(normalizedMonospaceFont)
+      ? normalizedMonospaceFont
+      : 'cartograph'
 
     if (!storedTimelineView) {
       await setSetting('timeline.view', timelineView)
@@ -80,7 +83,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     if (!storedFontPreference) {
       await setSetting('appearance.font', fontPreference)
     }
-    if (!storedMonospaceFont || !isMonospaceFont(storedMonospaceFont)) {
+    if (!storedMonospaceFont || !isMonospaceFont(normalizedMonospaceFont)) {
       await setSetting('appearance.monospaceFont', monospaceFont)
     }
 
