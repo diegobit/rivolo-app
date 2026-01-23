@@ -12,6 +12,7 @@
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
     "@uiw/react-codemirror": "^4.25.4",
+    "highlight.js": "^11.11.1",
     "idb-keyval": "^6.2.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
