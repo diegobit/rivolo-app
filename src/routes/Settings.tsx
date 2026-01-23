@@ -34,7 +34,14 @@ Things to do:
 - [ ] @Beppe prenotare parrucchiere
 
 ### Note call con Marco
-Ha proposto se vogliamo andare al cinema.
+
+Ha proposto se vogliamo andare al cinema. Lista film:
+
+| Titolo     | Creato da          |
+| ---------- | ------------------ |
+| Star Wars  | George Lucas       |
+| The Matrix | Fratelli Wachowski |
+
 Poi ha detto che dovremmo cucinare le lasagne come le faceva sua nonna.
 
 \`\`\`python
