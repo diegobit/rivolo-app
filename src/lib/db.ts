@@ -1,143 +1,95 @@
-import initSqlJs from 'sql.js'
-import type { Database, SqlJsStatic } from 'sql.js'
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
-import { get, set } from 'idb-keyval'
+type SqlValue = string | number | bigint | null
 
-const DB_KEY = 'single-note-db'
+type WorkerRequestPayload =
+  | { type: 'init' }
+  | { type: 'run'; sql: string; params: SqlValue[] }
+  | { type: 'queryAll'; sql: string; params: SqlValue[] }
+  | { type: 'isFtsAvailable' }
+  | { type: 'upsertFts'; dayId: string; humanTitle: string; content: string }
 
-let sqlPromise: Promise<SqlJsStatic> | null = null
-let dbPromise: Promise<Database> | null = null
-let saveTimer: number | null = null
-let ftsAvailable: boolean | null = null
+type WorkerResponse = { id: number; result?: unknown; error?: string }
 
-const ensureSql = () => {
-  if (!sqlPromise) {
-    sqlPromise = initSqlJs({ locateFile: () => sqlWasmUrl })
-  }
-
-  return sqlPromise
+type PendingRequest = {
+  resolve: (value: unknown) => void
+  reject: (error: Error) => void
 }
 
-const ensureSchema = (db: Database) => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS days (
-      day_id TEXT PRIMARY KEY,
-      human_title TEXT NOT NULL,
-      content_md TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-  `)
+let worker: Worker | null = null
+let nextRequestId = 1
+const pendingRequests = new Map<number, PendingRequest>()
 
-  try {
-    db.run(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS days_fts
-      USING fts5(day_id UNINDEXED, human_title, content_md);
-    `)
-    ftsAvailable = true
-  } catch (error) {
-    ftsAvailable = false
-    console.warn('FTS5 unavailable, falling back to LIKE search.', error)
-  }
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-  `)
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS chat_messages (
-      id TEXT PRIMARY KEY,
-      created_at INTEGER NOT NULL,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      meta_json TEXT
-    );
-  `)
+const rejectAll = (error: Error) => {
+  pendingRequests.forEach((pending) => pending.reject(error))
+  pendingRequests.clear()
 }
 
-const scheduleSave = (db: Database) => {
-  if (saveTimer) {
-    window.clearTimeout(saveTimer)
-  }
+const handleWorkerMessage = (event: MessageEvent<WorkerResponse>) => {
+  const { id, result, error } = event.data
+  const pending = pendingRequests.get(id)
+  if (!pending) return
+  pendingRequests.delete(id)
 
-  saveTimer = window.setTimeout(() => {
-    const data = db.export()
-    void set(DB_KEY, data)
-  }, 400)
-}
-
-export const getDatabase = async () => {
-  if (!dbPromise) {
-    dbPromise = (async () => {
-      const SQL = await ensureSql()
-      const stored = await get(DB_KEY)
-      const db = stored ? new SQL.Database(new Uint8Array(stored)) : new SQL.Database()
-      ensureSchema(db)
-      return db
-    })()
-  }
-
-  return dbPromise
-}
-
-export const run = async (sql: string, params: (string | number | null)[] = []) => {
-  const db = await getDatabase()
-  db.run(sql, params)
-  scheduleSave(db)
-}
-
-export const queryAll = async <T = Record<string, string | number | null>>(
-  sql: string,
-  params: (string | number | null)[] = [],
-): Promise<T[]> => {
-  const db = await getDatabase()
-  const statement = db.prepare(sql)
-  statement.bind(params)
-  const rows: T[] = []
-
-  while (statement.step()) {
-    rows.push(statement.getAsObject() as T)
-  }
-
-  statement.free()
-  return rows
-}
-
-export const queryOne = async <T = Record<string, string | number | null>>(
-  sql: string,
-  params: (string | number | null)[] = [],
-): Promise<T | null> => {
-  const db = await getDatabase()
-  const statement = db.prepare(sql)
-  statement.bind(params)
-  const result = statement.step() ? (statement.getAsObject() as T) : null
-  statement.free()
-  return result
-}
-
-export const isFtsAvailable = async () => {
-  await getDatabase()
-  return Boolean(ftsAvailable)
-}
-
-export const upsertFts = async (
-  dayId: string,
-  humanTitle: string,
-  content: string,
-) => {
-  if (!(await isFtsAvailable())) {
+  if (error) {
+    pending.reject(new Error(error))
     return
   }
 
-  const db = await getDatabase()
-  db.run('DELETE FROM days_fts WHERE day_id = ?', [dayId])
-  db.run('INSERT INTO days_fts (day_id, human_title, content_md) VALUES (?, ?, ?)', [
-    dayId,
-    humanTitle,
-    content,
-  ])
-  scheduleSave(db)
+  pending.resolve(result)
+}
+
+const ensureWorker = () => {
+  if (!worker) {
+    worker = new Worker(new URL('./sqliteWorker.ts', import.meta.url), { type: 'module' })
+    worker.addEventListener('message', handleWorkerMessage)
+    worker.addEventListener('messageerror', () => rejectAll(new Error('SQLite worker message error.')))
+    worker.addEventListener('error', (event) =>
+      rejectAll(new Error(event.message || 'SQLite worker error.')),
+    )
+  }
+
+  return worker
+}
+
+const sendRequest = <T>(payload: WorkerRequestPayload) => {
+  const requestId = nextRequestId++
+  const workerInstance = ensureWorker()
+
+  return new Promise<T>((resolve, reject) => {
+    pendingRequests.set(requestId, {
+      resolve: (value) => resolve(value as T),
+      reject,
+    })
+    workerInstance.postMessage({ id: requestId, ...payload })
+  })
+}
+
+export const getDatabase = async () => {
+  await sendRequest<void>({ type: 'init' })
+}
+
+export const run = async (sql: string, params: SqlValue[] = []) => {
+  await sendRequest<void>({ type: 'run', sql, params })
+}
+
+export const queryAll = async <T = Record<string, string | number | bigint | null>>(
+  sql: string,
+  params: SqlValue[] = [],
+): Promise<T[]> => {
+  return sendRequest<T[]>({ type: 'queryAll', sql, params })
+}
+
+export const queryOne = async <T = Record<string, string | number | bigint | null>>(
+  sql: string,
+  params: SqlValue[] = [],
+): Promise<T | null> => {
+  const rows = await queryAll<T>(sql, params)
+  return rows[0] ?? null
+}
+
+export const isFtsAvailable = async () => {
+  return sendRequest<boolean>({ type: 'isFtsAvailable' })
+}
+
+export const upsertFts = async (dayId: string, humanTitle: string, content: string) => {
+  await sendRequest<void>({ type: 'upsertFts', dayId, humanTitle, content })
 }
