@@ -46,8 +46,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   loading: false,
   timelineView: 'full',
   wallpaper: 'thoughts-light',
-  fontPreference: 'proportional',
-  monospaceFont: 'fantasque',
+  fontPreference: 'monospace',
+  monospaceFont: 'iawriter',
 
   loadSettings: async () => {
     set({ loading: true })
@@ -62,8 +62,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
     const aiLanguage = storedAiLanguage ?? 'follow'
     const wallpaper = storedWallpaper ?? 'thoughts-light'
-    const fontPreference = storedFontPreference ?? 'proportional'
-    const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'fantasque'
+    const fontPreference = storedFontPreference ?? 'monospace'
+    const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
 
     if (!storedTimelineView) {
       await setSetting('timeline.view', timelineView)
