@@ -264,7 +264,7 @@ export default function AppShell() {
           {showBackButton && (
             <NavLink to="/" className={backButtonClass} aria-label="Back">
               <img
-                src="/arrow-left.svg"
+                src="/caret-left.svg"
                 alt=""
                 className="h-5 w-5"
                 style={{ filter: 'brightness(0) invert(1)' }}
