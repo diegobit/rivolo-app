@@ -122,7 +122,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ aiLanguage: language })
   },
 
-  updateWallpaper: async (wallpaper: Wallpaper) => {
+    updateWallpaper: async (wallpaper: Wallpaper) => {
     await setSetting('appearance.wallpaper', wallpaper)
     set({ wallpaper })
   },
