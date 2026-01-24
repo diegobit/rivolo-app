@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { type MonospaceFont, isMonospaceFont } from '../lib/fonts'
 import { getJsonSetting, getSetting, setJsonSetting, setSetting } from '../lib/settingsRepository'
 
 type Provider = 'gemini'
@@ -23,12 +24,14 @@ type SettingsState = {
   loading: boolean
   wallpaper: Wallpaper
   fontPreference: FontPreference
+  monospaceFont: MonospaceFont
   loadSettings: () => Promise<void>
   saveGeminiKey: (apiKey: string) => Promise<void>
   updateGeminiModel: (model: string) => Promise<void>
   updateAiLanguage: (language: AiLanguage) => Promise<void>
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
   updateFontPreference: (fontPreference: FontPreference) => Promise<void>
+  updateMonospaceFont: (monospaceFont: MonospaceFont) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -38,7 +41,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   aiLanguage: 'follow',
   loading: false,
   wallpaper: 'thoughts-light',
-  fontPreference: 'proportional',
+  fontPreference: 'monospace',
+  monospaceFont: 'iawriter',
 
   loadSettings: async () => {
     set({ loading: true })
@@ -47,10 +51,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const storedAiLanguage = (await getSetting('ai.language')) as AiLanguage | null
     const storedWallpaper = (await getSetting('appearance.wallpaper')) as Wallpaper | null
     const storedFontPreference = (await getSetting('appearance.font')) as FontPreference | null
+    const storedMonospaceFont = await getSetting('appearance.monospaceFont')
+    const timelineView = storedTimelineView ?? 'full'
     const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
     const aiLanguage = storedAiLanguage ?? 'follow'
     const wallpaper = storedWallpaper ?? 'thoughts-light'
-    const fontPreference = storedFontPreference ?? 'proportional'
+    const fontPreference = storedFontPreference ?? 'monospace'
+    const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
 
     if (!storedGeminiModel) {
       await setSetting('llm.geminiModel', geminiModel)
@@ -64,6 +71,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     if (!storedFontPreference) {
       await setSetting('appearance.font', fontPreference)
     }
+    if (!storedMonospaceFont || !isMonospaceFont(storedMonospaceFont)) {
+      await setSetting('appearance.monospaceFont', monospaceFont)
+    }
 
     const secrets = await getJsonSetting<LlmSecrets>('llm.secrets')
     const geminiApiKey = secrets?.geminiApiKey ?? null
@@ -75,6 +85,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       aiLanguage,
       wallpaper,
       fontPreference,
+      monospaceFont,
       loading: false,
     })
   },
@@ -104,6 +115,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   updateFontPreference: async (fontPreference: FontPreference) => {
     await setSetting('appearance.font', fontPreference)
     set({ fontPreference })
+  },
+
+  updateMonospaceFont: async (monospaceFont: MonospaceFont) => {
+    await setSetting('appearance.monospaceFont', monospaceFont)
+    set({ monospaceFont })
   },
 })
 )

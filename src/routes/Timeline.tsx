@@ -4,6 +4,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, keymap, type DecorationSet } from '@codemirror/view'
 import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/state'
 import BottomTrayPortal from '../components/BottomTrayPortal'
+import { getMonospaceFontFamily } from '../lib/fonts'
 import { pushToSync } from '../lib/sync'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import type { Day } from '../lib/dayRepository'
@@ -482,6 +483,7 @@ export default function Timeline() {
     geminiModel,
     aiLanguage,
     fontPreference,
+    monospaceFont,
   } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode } = useUIStore()
@@ -539,7 +541,7 @@ export default function Timeline() {
           fontWeight: '400',
           fontFamily:
             fontPreference === 'monospace'
-              ? "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace"
+              ? getMonospaceFontFamily(monospaceFont)
               : "'Inter', system-ui, sans-serif",
           color: '#000000',
         },
@@ -551,7 +553,7 @@ export default function Timeline() {
           display: 'none',
         },
       }),
-    [fontPreference],
+    [fontPreference, monospaceFont],
   )
   const clearActiveLine = useMemo(
     () =>
@@ -1042,7 +1044,7 @@ export default function Timeline() {
   }, [futureDayId, handleCreateDay])
 
   const standardItems = useMemo<TimelineItem[]>(() => {
-    // Case: No cards at all → show only +Today
+    // Case: No cards at all -> show only +Today
     if (timelineCards.length === 0) {
       return [{ type: 'add-today', dayId: todayId }]
     }
@@ -1083,7 +1085,6 @@ export default function Timeline() {
 
     return items
   }, [timelineCards, hasToday, todayId, futureDayId])
-
 
   // Search Results Cards
   const searchCards = useMemo<TimelineItem[]>(() => {

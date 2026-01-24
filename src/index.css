@@ -3,8 +3,40 @@
 @tailwind utilities;
 
 @font-face {
-  font-family: 'CartographCF';
-  src: url('/fonts/CartographCF-Regular.otf') format('opentype');
+  font-family: 'Fantasque Sans Mono';
+  src: url('/fonts/FantasqueSansMono-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'iA Writer Mono';
+  src: url('/fonts/iAWriterMonoV.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'iA Writer Mono';
+  src: url('/fonts/iAWriterMonoV-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'iA Writer Duo';
+  src: url('/fonts/iAWriterDuoV.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inconsolata';
+  src: url('/fonts/Inconsolata-VariableFont_wdth,wght.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -35,6 +67,61 @@
   .cm-highlight {
     background-color: #fde68a;
     border-radius: 3px;
+  }
+
+  .hljs {
+    color: #0f172a;
+    background: transparent;
+    font-family: inherit;
+  }
+
+  .hljs-comment,
+  .hljs-quote {
+    color: #64748b;
+    font-style: italic;
+  }
+
+  .hljs-emphasis {
+    color: #475569;
+    font-style: italic;
+  }
+
+  .hljs-strong {
+    color: #0f172a;
+    font-weight: 700;
+  }
+
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-literal,
+  .hljs-built_in {
+    color: #0f766e;
+    font-weight: 600;
+  }
+
+  .hljs-string,
+  .hljs-title,
+  .hljs-section,
+  .hljs-attr {
+    color: #2563eb;
+  }
+
+  .hljs-number,
+  .hljs-symbol,
+  .hljs-bullet {
+    color: #b45309;
+  }
+
+  .hljs-meta {
+    color: #1d4ed8;
+  }
+
+  .hljs-addition {
+    color: #15803d;
+  }
+
+  .hljs-deletion {
+    color: #be123c;
   }
 }
 
