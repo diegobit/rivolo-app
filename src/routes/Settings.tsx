@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
-import { getMonospaceFontFamily, type MonospaceFont, monospaceFontOptions } from '../lib/fonts'
+import {
+  getMonospaceFontFamily,
+  getBodyFontFamily,
+  getTitleFontFamily,
+  type BodyFont,
+  type MonospaceFont,
+  type TitleFont,
+  bodyFontOptions,
+  monospaceFontOptions,
+  titleFontOptions,
+} from '../lib/fonts'
 import { shareOrDownload } from '../lib/share'
 import { DEFAULT_DROPBOX_PATH, startDropboxAuth } from '../lib/dropbox'
 import { disconnectActiveProvider, pullFromSync, pushToSync } from '../lib/sync'
@@ -62,6 +72,8 @@ const applyInlineHighlight = (value: string) =>
     .replace(/\*\*([^*]+)\*\*/g, '<span class="hljs-strong">$1</span>')
     .replace(/\*([^*]+)\*/g, '<span class="hljs-emphasis">$1</span>')
     .replace(/`([^`]+)`/g, '<span class="hljs-attr">$1</span>')
+    .replace(/(^|[^A-Za-z0-9_])(#[-A-Za-z0-9_/-]+)/g, '$1<span class="hljs-hashtag">$2</span>')
+    .replace(/(^|[^A-Za-z0-9_])(@[-A-Za-z0-9_/-]+)/g, '$1<span class="hljs-mention">$2</span>')
 
 const buildPreviewHtml = (text: string, hljs: HighlightCore) => {
   const lines = text.split('\n')
@@ -113,8 +125,16 @@ const buildPreviewHtml = (text: string, hljs: HighlightCore) => {
     const bulletMatch = line.match(/^(\s*)-\s+(.*)$/)
     if (bulletMatch) {
       const [, indent, content] = bulletMatch
-      const highlighted = applyInlineHighlight(escapeHtml(content))
-      htmlLines.push(`${escapeHtml(indent)}<span class="hljs-bullet">-</span> ${highlighted}`)
+      const todoMatch = content.match(/^\[ \]\s+(.*)$/)
+      if (todoMatch) {
+        const highlighted = applyInlineHighlight(escapeHtml(todoMatch[1]))
+        htmlLines.push(
+          `${escapeHtml(indent)}<span class="hljs-todo-marker">- [ ]</span> ${highlighted}`,
+        )
+      } else {
+        const highlighted = applyInlineHighlight(escapeHtml(content))
+        htmlLines.push(`${escapeHtml(indent)}<span class="hljs-bullet">-</span> ${highlighted}`)
+      }
       continue
     }
 
@@ -138,13 +158,17 @@ export default function Settings() {
     updateAiLanguage,
     updateWallpaper,
     updateFontPreference,
+    updateBodyFont,
     updateMonospaceFont,
+    updateTitleFont,
     geminiApiKey,
     geminiModel,
     aiLanguage,
     wallpaper,
     fontPreference,
+    bodyFont,
     monospaceFont,
+    titleFont,
   } = useSettingsStore()
   const {
     filePath,
@@ -176,6 +200,15 @@ export default function Settings() {
   const handleMonospaceFont = (font: MonospaceFont) => {
     void updateMonospaceFont(font)
     void updateFontPreference('monospace')
+  }
+
+  const handleBodyFont = (font: BodyFont) => {
+    void updateBodyFont(font)
+    void updateFontPreference('proportional')
+  }
+
+  const handleTitleFont = (font: TitleFont) => {
+    void updateTitleFont(font)
   }
 
   const handleFontPreviewToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
@@ -260,10 +293,11 @@ export default function Settings() {
   }, [navigate])
 
   const dropboxConnected = hasAuth && activeProvider === 'dropbox'
-  const previewFontFamily =
+  const bodyPreviewFontFamily =
     fontPreference === 'monospace'
       ? getMonospaceFontFamily(monospaceFont)
-      : "'Inter', system-ui, sans-serif"
+      : getBodyFontFamily(bodyFont)
+  const titlePreviewFontFamily = getTitleFontFamily(titleFont)
   const dropboxAccount = useMemo(() => {
     if (accountName && accountEmail) {
       return `${accountName} (${accountEmail})`
@@ -505,15 +539,37 @@ export default function Settings() {
           </div>
 
           <div className="mt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Font</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Title Font</h3>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                className={fontPreference === 'proportional' ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateFontPreference('proportional')}
-              >
-                System
-              </button>
+              {titleFontOptions.map((option) => (
+                <button
+                  key={option.id}
+                  className={titleFont === option.id ? buttonPillActive : buttonPill}
+                  type="button"
+                  onClick={() => handleTitleFont(option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Body Font</h3>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {bodyFontOptions.map((option) => (
+                <button
+                  key={option.id}
+                  className={
+                    fontPreference === 'proportional' && bodyFont === option.id
+                      ? buttonPillActive
+                      : buttonPill
+                  }
+                  type="button"
+                  onClick={() => handleBodyFont(option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
               {monospaceFontOptions.map((option) => (
                 <button
                   key={option.id}
@@ -537,14 +593,21 @@ export default function Settings() {
                 Font Preview
               </summary>
               {showFontPreview && (
-                <div className="mt-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
+                <div className="mt-3 space-y-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
+                  <div
+                    className="flex flex-wrap items-baseline gap-2 text-xl text-slate-900"
+                    style={{ fontFamily: titlePreviewFontFamily }}
+                  >
+                    <span className="font-bold">Today</span>
+                    <span className="font-semibold">24, Saturday</span>
+                  </div>
                   <pre
-                    className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm text-slate-700"
-                    style={{ fontFamily: previewFontFamily }}
+                    className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm font-normal text-slate-900"
+                    style={{ fontFamily: bodyPreviewFontFamily }}
                   >
                     <code
                       className="hljs language-markdown"
-                      style={{ fontFamily: previewFontFamily }}
+                      style={{ fontFamily: bodyPreviewFontFamily }}
                       dangerouslySetInnerHTML={{ __html: previewHtml ?? escapeHtml(previewText) }}
                     />
                   </pre>

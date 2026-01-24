@@ -42,6 +42,72 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Bree Serif';
+  src: url('/fonts/BreeSerif-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Caveat';
+  src: url('/fonts/Caveat-VariableFont_wght.ttf') format('truetype');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Grandstander';
+  src: url('/fonts/Grandstander-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Grandstander';
+  src: url('/fonts/Grandstander-Italic-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+
+@font-face {
+  font-family: 'Dosis';
+  src: url('/fonts/Dosis-VariableFont_wght.ttf') format('truetype');
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/SpaceGrotesk-VariableFont_wght.ttf') format('truetype');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter Tight';
+  src: url('/fonts/InterTight-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter Tight';
+  src: url('/fonts/InterTight-Italic-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     color-scheme: light;
@@ -79,6 +145,21 @@
     border-radius: 3px;
   }
 
+  .cm-hashtag {
+    color: #c779da;
+    font-weight: 700;
+  }
+
+  .cm-mention {
+    color: #0098e5;
+    font-weight: 600;
+  }
+
+  .cm-todo-marker {
+    color: #ed9b38;
+    font-weight: 600;
+  }
+
   .hljs {
     color: #0f172a;
     background: transparent;
@@ -114,6 +195,26 @@
   .hljs-section,
   .hljs-attr {
     color: #2563eb;
+  }
+
+  .hljs-section {
+    color: #368b1c;
+    font-weight: 900;
+  }
+
+  .hljs-mention {
+    color: #0098e5;
+    font-weight: 600;
+  }
+
+  .hljs-hashtag {
+    color: #c779da;
+    font-weight: 700;
+  }
+
+  .hljs-todo-marker {
+    color: #ed9b38;
+    font-weight: 600;
   }
 
   .hljs-number,
