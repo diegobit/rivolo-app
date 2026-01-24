@@ -126,6 +126,45 @@
   body {
     @apply bg-white text-slate-900 antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    position: relative;
+  }
+
+  body::before,
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    transform: translateZ(0);
+  }
+
+  body::before {
+    background: #ffffff;
+  }
+
+  body::after {
+    background-image: url('/bg-thoughts.jpg');
+    background-size: cover;
+    background-position: center;
+    opacity: 0.05;
+  }
+
+  body[data-wallpaper='white']::after {
+    opacity: 0;
+  }
+
+  body[data-wallpaper='thoughts-medium']::after {
+    opacity: 0.1;
+  }
+
+  body[data-wallpaper='thoughts-high']::after {
+    opacity: 0.15;
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
   }
 }
 
