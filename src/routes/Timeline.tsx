@@ -142,11 +142,9 @@ type DayEditorCardProps = {
   onBlur: (dayId: string, event?: FocusEvent) => void
   onDelete: (dayId: string) => void
   onDateChange: (dayId: string, nextDayId: string) => void
-  onDateOpen: (dayId: string) => void
   onFocusDay: (dayId: string, position: 'start' | 'end') => void
   registerEditor: (dayId: string, view: EditorView | null) => void
   registerDayRef: (dayId: string, node: HTMLDivElement | null) => void
-  registerDateInputRef: (dayId: string, node: HTMLInputElement | null) => void
 }
 
 const DayEditorCard = ({
@@ -174,11 +172,9 @@ const DayEditorCard = ({
   onBlur,
   onDelete,
   onDateChange,
-  onDateOpen,
   onFocusDay,
   registerEditor,
   registerDayRef,
-  registerDateInputRef,
 }: DayEditorCardProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const longPressTimeoutRef = useRef<number | null>(null)
@@ -213,7 +209,7 @@ const DayEditorCard = ({
     }
   }, [showDelete])
 
-  const handleLongPressStart = (event: React.PointerEvent<HTMLButtonElement>) => {
+  const handleLongPressStart = (event: React.PointerEvent<HTMLInputElement>) => {
     if (event.pointerType !== 'touch') return
     longPressTriggeredRef.current = false
     if (longPressTimeoutRef.current) {
@@ -275,12 +271,14 @@ const DayEditorCard = ({
     }
   }, [])
 
-  const handleTitleClick = () => {
+  const handleDateInputClick = (event: React.MouseEvent<HTMLInputElement>) => {
     if (longPressTriggeredRef.current) {
       longPressTriggeredRef.current = false
+      event.preventDefault()
+      event.stopPropagation()
+      event.currentTarget.blur()
       return
     }
-    onDateOpen(day.dayId)
   }
 
   const navigationKeymap = useMemo(
@@ -352,16 +350,7 @@ const DayEditorCard = ({
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <button
-          className="text-left"
-          type="button"
-          aria-label={`Change date for ${day.dayId}`}
-          onClick={handleTitleClick}
-          onPointerDown={handleLongPressStart}
-          onPointerUp={clearLongPress}
-          onPointerCancel={clearLongPress}
-          onPointerLeave={clearLongPress}
-        >
+        <div className="relative text-left">
           <h3
             className={`day-title ${
               isToday ? 'text-[1.8rem]' : isYesterday || isTomorrow ? 'text-[1.5rem]' : 'text-[1.3rem]'
@@ -382,7 +371,24 @@ const DayEditorCard = ({
               <span className="font-bold text-[#113355]">{title}</span>
             )}
           </h3>
-        </button>
+          <input
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            type="date"
+            aria-label={`Change date for ${day.dayId}`}
+            value={day.dayId}
+            onChange={(event) => void onDateChange(day.dayId, event.target.value)}
+            onClick={handleDateInputClick}
+            onPointerDown={handleLongPressStart}
+            onPointerUp={clearLongPress}
+            onPointerCancel={clearLongPress}
+            onPointerLeave={clearLongPress}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur()
+              }
+            }}
+          />
+        </div>
         <div className="flex items-center gap-2">
           {open > 0 && (
             <span
@@ -417,18 +423,6 @@ const DayEditorCard = ({
           </button>
         </div>
       </div>
-      <input
-        ref={(node) => registerDateInputRef(day.dayId, node)}
-        className="sr-only"
-        type="date"
-        value={day.dayId}
-        onChange={(event) => void onDateChange(day.dayId, event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.currentTarget.blur()
-          }
-        }}
-      />
       {dateError && (
         <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600">
           {dateError}
@@ -532,7 +526,6 @@ export default function Timeline() {
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
   const dayRefs = useRef(new Map<string, HTMLDivElement>())
-  const dateInputRefs = useRef(new Map<string, HTMLInputElement>())
   const saveTimeouts = useRef(new Map<string, number>())
   const createdDayIdsRef = useRef(new Set<string>())
   const highlightTimeoutRef = useRef<number | null>(null)
@@ -839,16 +832,6 @@ export default function Timeline() {
     [handleAutoPush, moveDayDate, revealDay, updateDayContent],
   )
 
-  const handleDatePickerOpen = useCallback((dayId: string) => {
-    const input = dateInputRefs.current.get(dayId)
-    if (!input) return
-    if (input.showPicker) {
-      input.showPicker()
-      return
-    }
-    input.click()
-  }, [])
-
   const handleEditorChange = useCallback(
     (dayId: string, value: string) => {
       if (value.trim() && createdDayIdsRef.current.has(dayId)) {
@@ -887,14 +870,6 @@ export default function Timeline() {
       return
     }
     dayRefs.current.delete(dayId)
-  }, [])
-
-  const registerDateInputRef = useCallback((dayId: string, node: HTMLInputElement | null) => {
-    if (node) {
-      dateInputRefs.current.set(dayId, node)
-      return
-    }
-    dateInputRefs.current.delete(dayId)
   }, [])
 
   const handleChatSend = async () => {
@@ -1458,11 +1433,9 @@ export default function Timeline() {
                 onBlur={handleEditorBlur}
                 onDelete={handleDeleteDay}
                 onDateChange={handleDateCommit}
-                onDateOpen={handleDatePickerOpen}
                 onFocusDay={focusDayEditor}
                 registerEditor={registerEditor}
                 registerDayRef={registerDayRef}
-                registerDateInputRef={registerDateInputRef}
               />
             )
           })}
