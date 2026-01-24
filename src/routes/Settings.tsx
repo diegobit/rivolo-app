@@ -26,8 +26,6 @@ const formatSyncTime = (timestamp: number | null) => {
 }
 
 const previewText = `The quick brown fox jumps over the lazy dog.
-0123456789 ~ !  @  #  $  %  ^  &  *  (  )  _  +  - =
-12*34=56 $\{var\} (a && b) == True
 
 Things to do:
 - [X] Buy milk
@@ -48,7 +46,11 @@ Poi ha detto che dovremmo cucinare le lasagne come le faceva sua nonna.
 def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
   total_ingredients = layers * 100 + sauce + cheese
   return f"Lasagna prepared."
-\`\`\``
+\`\`\`
+
+0123456789 ~ !  @  #  $  %  ^  &  *  (  )  _  +  - =
+12*34=56 $\{var\} (a && b) == True
+`
 
 type HighlightCore = typeof import('highlight.js/lib/core')['default']
 
