@@ -14,7 +14,7 @@ const backButtonClass =
 
 export default function AppShell() {
   const location = useLocation()
-  const { loadSettings, wallpaper } = useSettingsStore()
+  const { loadSettings, wallpaper, highlightInputMode } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode, setMode } = useUIStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
@@ -61,6 +61,7 @@ export default function AppShell() {
     <div
       id="bottom-tray"
       data-mode={mode}
+      data-highlight-input={highlightInputMode}
       className="bottom-tray-shell flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-2 shadow-[0_6px_18px_rgba(15,23,42,0.12)] transition duration-300 sm:p-3"
     />
   )
