@@ -299,3 +299,7 @@
 #bottom-tray.bottom-tray-shell[data-mode='search']:focus-within .tray-input-icon {
   background-color: #22c55e;
 }
+
+.scroll-anchor {
+  scroll-margin-top: 80px;
+}

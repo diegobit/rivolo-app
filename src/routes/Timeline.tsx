@@ -344,7 +344,8 @@ const DayEditorCard = ({
       }}
       onPointerEnter={handleHoverStart}
       onPointerLeave={handleHoverEnd}
-      className={`group rounded-[4px] border p-4 transition ${
+      data-scroll-target={isToday ? 'today' : undefined}
+      className={`scroll-anchor group rounded-[4px] border p-4 transition ${
         isFuture
           ? 'border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.03)] hover:border-slate-300/60'
           : 'border-slate-200/60 bg-white shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] hover:border-slate-300/60'
@@ -535,6 +536,7 @@ export default function Timeline() {
   const saveTimeouts = useRef(new Map<string, number>())
   const createdDayIdsRef = useRef(new Set<string>())
   const highlightTimeoutRef = useRef<number | null>(null)
+  const addTodayRef = useRef<HTMLDivElement | null>(null)
 
   const markdownExtension = useMemo(() => markdown(), [])
   const editorTheme = useMemo(
@@ -683,11 +685,12 @@ export default function Timeline() {
     [handleAutoPush, updateDayContent],
   )
 
-  const focusDayEditor = useCallback((dayId: string, position: 'start' | 'end') => {
+  const focusDayEditor = useCallback(
+    (dayId: string, position: 'start' | 'end', shouldScroll = true) => {
     const view = editorRefs.current.get(dayId)
     if (!view) return false
     const target = position === 'end' ? view.state.doc.length : 0
-    view.dispatch({ selection: EditorSelection.single(target), scrollIntoView: true })
+    view.dispatch({ selection: EditorSelection.single(target), scrollIntoView: shouldScroll })
     view.focus()
     return true
   }, [])
@@ -709,18 +712,24 @@ export default function Timeline() {
   }, [])
 
   const revealDay = useCallback(
-    (dayId: string, focusPosition?: 'start' | 'end') => {
+    (
+      dayId: string,
+      focusPosition?: 'start' | 'end',
+      scrollBlock: ScrollLogicalPosition = 'center',
+      focusScroll = true,
+    ) => {
       let attempts = 0
+      const maxAttempts = 12
       const run = () => {
         const node = dayRefs.current.get(dayId)
         const view = editorRefs.current.get(dayId)
         if (node) {
-          node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          node.scrollIntoView({ behavior: 'smooth', block: scrollBlock })
         }
         if (focusPosition && view) {
-          focusDayEditor(dayId, focusPosition)
+          focusDayEditor(dayId, focusPosition, focusScroll)
         }
-        if ((!node || (focusPosition && !view)) && attempts < 4) {
+        if ((!node || (focusPosition && !view)) && attempts < maxAttempts) {
           attempts += 1
           requestAnimationFrame(run)
         }
@@ -731,12 +740,23 @@ export default function Timeline() {
   )
 
   const handleCreateDay = useCallback(
-    async (dayId: string) => {
+    async (
+      dayId: string,
+      options?: {
+        focusPosition?: 'start' | 'end'
+        scrollBlock?: ScrollLogicalPosition
+        focusScroll?: boolean
+      },
+    ) => {
       const result = await loadDay(dayId)
       if (result.created) {
         createdDayIdsRef.current.add(dayId)
       }
-      revealDay(dayId, 'end')
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve())
+      })
+      const { focusPosition = 'end', scrollBlock = 'center', focusScroll = true } = options ?? {}
+      revealDay(dayId, focusPosition, scrollBlock, focusScroll)
     },
     [loadDay, revealDay],
   )
@@ -1041,19 +1061,44 @@ export default function Timeline() {
     return candidate
   }, [timelineCards, todayId])
 
+  const handleScrollToToday = useCallback(() => {
+    if (hasToday) {
+      revealDay(todayId, undefined, 'start')
+      return
+    }
+    addTodayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [hasToday, revealDay, todayId])
+
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
       if (event.metaKey || event.ctrlKey || event.altKey) return
-      if (event.key.toLowerCase() !== 'n') return
+      const key = event.key.toLowerCase()
+      if (key !== 'n' && key !== 't') return
       if (isEditableElement(document.activeElement as HTMLElement | null)) return
       event.preventDefault()
-      void handleCreateDay(futureDayId)
+      if (key === 'n') {
+        void handleCreateDay(futureDayId, {
+          focusPosition: 'start',
+          scrollBlock: 'start',
+          focusScroll: false,
+        })
+        return
+      }
+      handleScrollToToday()
     }
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [futureDayId, handleCreateDay])
+  }, [futureDayId, handleCreateDay, handleScrollToToday])
+
+  useEffect(() => {
+    const handleScrollEvent = () => {
+      handleScrollToToday()
+    }
+    window.addEventListener('timeline-scroll-today', handleScrollEvent)
+    return () => window.removeEventListener('timeline-scroll-today', handleScrollEvent)
+  }, [handleScrollToToday])
 
   const standardItems = useMemo<TimelineItem[]>(() => {
     // Case: No cards at all -> show only +Today
@@ -1297,7 +1342,14 @@ export default function Timeline() {
           {activeItems.map((item, index) => {
             if (item.type === 'add-today') {
               return (
-                <div key={`add-${item.dayId}`} className="flex justify-center">
+                <div
+                  key={`add-${item.dayId}`}
+                  ref={(node) => {
+                    addTodayRef.current = node
+                  }}
+                  data-scroll-target="today"
+                  className="scroll-anchor flex justify-center"
+                >
                   <button
                     className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[#22B3FF] transition hover:text-[#22B3FF]/80"
                     type="button"
