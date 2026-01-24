@@ -363,7 +363,7 @@ const DayEditorCard = ({
         >
           <h3
             className={`day-title ${
-              isToday ? 'text-[2rem]' : isYesterday || isTomorrow ? 'text-[1.5rem]' : 'text-[1.3rem]'
+              isToday ? 'text-[1.8rem]' : isYesterday || isTomorrow ? 'text-[1.5rem]' : 'text-[1.3rem]'
             } ${isFuture ? 'opacity-70' : ''}`}
             style={{ fontFamily: titleFontFamily }}
           >
