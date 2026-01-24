@@ -72,20 +72,10 @@ const isEditableElement = (element: HTMLElement | null) =>
         element.isContentEditable),
   )
 
-const countOpenTasks = (content: string) => (content.match(/- \[ \]/g) ?? []).length
-
-const formatTimestamp = (date: Date) => {
-  const pad = (value: number) => value.toString().padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`
-}
-
 // --- Types ---
 
 type TimelineDayCard = {
   day: Day
-  open: number
 }
 
 type TimelineItem =
@@ -121,7 +111,6 @@ type TrayMode = 'timeline' | 'chat' | 'search'
 
 type DayEditorCardProps = {
   day: Day
-  open: number
   isFuture: boolean
   isToday: boolean
   isYesterday: boolean
@@ -151,7 +140,6 @@ type DayEditorCardProps = {
 
 const DayEditorCard = memo(({
   day,
-  open,
   isFuture,
   isToday,
   isYesterday,
@@ -180,6 +168,7 @@ const DayEditorCard = memo(({
 }: DayEditorCardProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const dateInputRef = useRef<HTMLInputElement | null>(null)
   const hoverTimeoutRef = useRef<number | null>(null)
   const [showDeleteMenu, setShowDeleteMenu] = useState(false)
   const [showDesktopDelete, setShowDesktopDelete] = useState(false)
@@ -293,6 +282,18 @@ const DayEditorCard = memo(({
     return extensions
   }, [clearActiveLine, editorTheme, markdownExtension, navigationKeymap, quoteHighlight, searchHighlight])
 
+  const handleOpenDatePicker = () => {
+    const input = dateInputRef.current
+    if (!input) return
+    const picker = (input as HTMLInputElement & { showPicker?: () => void }).showPicker
+    if (picker) {
+      picker.call(input)
+      return
+    }
+    input.focus()
+    input.click()
+  }
+
   return (
     <div
       ref={(node) => {
@@ -309,7 +310,7 @@ const DayEditorCard = memo(({
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="relative text-left">
+        <div className="relative flex items-center gap-2 text-left" onClick={handleOpenDatePicker}>
           <h3
             className={`day-title ${
               isToday ? 'text-[1.8rem]' : isYesterday || isTomorrow ? 'text-[1.5rem]' : 'text-[1.3rem]'
@@ -335,6 +336,7 @@ const DayEditorCard = memo(({
             type="date"
             aria-label={`Change date for ${day.dayId}`}
             value={day.dayId}
+            ref={dateInputRef}
             onChange={(event) => void onDateChange(day.dayId, event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
@@ -344,15 +346,6 @@ const DayEditorCard = memo(({
           />
         </div>
         <div className="flex items-center gap-2">
-          {open > 0 && (
-            <span
-              className={`rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-800 ${
-                isFuture ? 'opacity-70' : ''
-              }`}
-            >
-              {open === 1 ? '1 todo' : `${open} todos`}
-            </span>
-          )}
           <div ref={menuRef} className="relative sm:hidden">
             <button
               className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300"
@@ -1212,7 +1205,6 @@ export default function Timeline() {
     if (!insertText) return
 
     const targetDay = message.meta?.insertTargetDay ?? getTodayId()
-    const timestamp = formatTimestamp(new Date())
     const payload = `${insertText.trim()}`
     await appendToDay(targetDay, payload)
     await loadTimeline()
@@ -1233,14 +1225,7 @@ export default function Timeline() {
   // --- Computed Data ---
 
   // Standard Timeline Cards
-  const timelineCards = useMemo<TimelineDayCard[]>(
-    () =>
-      days.map((day) => ({
-        day,
-        open: countOpenTasks(day.contentMd),
-      })),
-    [days],
-  )
+  const timelineCards = useMemo<TimelineDayCard[]>(() => days.map((day) => ({ day })), [days])
 
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
@@ -1342,15 +1327,10 @@ export default function Timeline() {
   // Search Results Cards
   const searchCards = useMemo<TimelineItem[]>(() => {
     if (mode !== 'search' || !searchText.trim()) return []
-    return searchResults.map((day) => {
-      return {
-        type: 'day',
-        card: {
-          day,
-          open: countOpenTasks(day.contentMd),
-        },
-      }
-    })
+    return searchResults.map((day) => ({
+      type: 'day',
+      card: { day },
+    }))
   }, [mode, searchText, searchResults])
 
   // Active Items
@@ -1516,7 +1496,7 @@ export default function Timeline() {
               )
             }
 
-            const { day, open } = item.card
+            const { day } = item.card
             const isToday = day.dayId === todayId
             const isYesterday = day.dayId === yesterdayId
             const isTomorrow = day.dayId === tomorrowId
@@ -1542,7 +1522,6 @@ export default function Timeline() {
               <DayEditorCard
                 key={day.dayId}
                 day={day}
-                open={open}
                 isFuture={isFuture}
                 isToday={isToday}
                 isYesterday={isYesterday}
