@@ -102,12 +102,14 @@ export const chatWithGemini = async ({
 }: GeminiChatOptions) => {
   const endpoint = stream ? 'streamGenerateContent' : 'generateContent'
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${apiKey}`
+  const tools = [{ googleSearch: {} }]
 
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: messages,
+      tools,
       generationConfig: {
         temperature,
         maxOutputTokens: maxTokens,
