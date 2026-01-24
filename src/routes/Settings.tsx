@@ -125,11 +125,12 @@ const buildPreviewHtml = (text: string, hljs: HighlightCore) => {
     const bulletMatch = line.match(/^(\s*)-\s+(.*)$/)
     if (bulletMatch) {
       const [, indent, content] = bulletMatch
-      const todoMatch = content.match(/^\[ \]\s+(.*)$/)
+      const todoMatch = content.match(/^\[([ xX])\]\s+(.*)$/)
       if (todoMatch) {
-        const highlighted = applyInlineHighlight(escapeHtml(todoMatch[1]))
+        const marker = todoMatch[1]
+        const highlighted = applyInlineHighlight(escapeHtml(todoMatch[2]))
         htmlLines.push(
-          `${escapeHtml(indent)}<span class="hljs-todo-marker">- [ ]</span> ${highlighted}`,
+          `${escapeHtml(indent)}<span class="hljs-todo-marker">- [${escapeHtml(marker)}]</span> ${highlighted}`,
         )
       } else {
         const highlighted = applyInlineHighlight(escapeHtml(content))
