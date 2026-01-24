@@ -7,6 +7,13 @@ export const importMarkdownToDb = async (
   options: { replace?: boolean } = {},
 ) => {
   const { days, warnings } = parseMarkdown(source)
+  const hasNoMarkersWarning = warnings.some((warning) =>
+    warning.toLowerCase().includes('no day markers'),
+  )
+
+  if (options.replace && days.length === 0 && hasNoMarkersWarning) {
+    return { imported: 0, warnings }
+  }
 
   if (options.replace) {
     await clearDays()
