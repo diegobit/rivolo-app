@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
+import { getMonospaceFontFamily, type MonospaceFont, monospaceFontOptions } from '../lib/fonts'
 import { shareOrDownload } from '../lib/share'
 import { DEFAULT_DROPBOX_PATH, startDropboxAuth } from '../lib/dropbox'
 import { disconnectActiveProvider, pullFromSync, pushToSync } from '../lib/sync'
@@ -24,6 +25,109 @@ const formatSyncTime = (timestamp: number | null) => {
   }).format(new Date(timestamp))
 }
 
+const previewText = `The quick brown fox jumps over the lazy dog.
+
+Things to do:
+- [X] Buy milk
+- [ ] @Beppe prenotare parrucchiere
+
+### Note call con Marco
+
+Ha proposto di andare al cinema. Lista film:
+
+| Titolo     | Quando            |
+| ---------- | ----------------- |
+| Star Wars  | 15 gennaio, 15:30 |
+| The Matrix | 2 febbraio, 21:00 |
+
+Poi ha detto che dovremmo cucinare le lasagne come le faceva sua nonna.
+
+\`\`\`python
+def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
+  total_ingredients = layers * 100 + sauce + cheese
+  return f"Lasagna prepared."
+\`\`\`
+
+0123456789 ~ !  @  #  $  %  ^  &  *  (  )  _  +  - =
+12*34=56 $\{var\} (a && b) == True
+`
+
+type HighlightCore = typeof import('highlight.js/lib/core')['default']
+
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+const applyInlineHighlight = (value: string) =>
+  value
+    .replace(/\*\*([^*]+)\*\*/g, '<span class="hljs-strong">$1</span>')
+    .replace(/\*([^*]+)\*/g, '<span class="hljs-emphasis">$1</span>')
+    .replace(/`([^`]+)`/g, '<span class="hljs-attr">$1</span>')
+
+const buildPreviewHtml = (text: string, hljs: HighlightCore) => {
+  const lines = text.split('\n')
+  const htmlLines: string[] = []
+  let inFence = false
+  let fenceLang = ''
+  let fenceLines: string[] = []
+
+  const flushFence = () => {
+    const code = fenceLines.join('\n')
+    if (!code) return
+    try {
+      htmlLines.push(hljs.highlight(code, { language: fenceLang || 'python', ignoreIllegals: true }).value)
+    } catch (error) {
+      htmlLines.push(escapeHtml(code))
+    }
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('```')) {
+      if (inFence) {
+        flushFence()
+        htmlLines.push('<span class="hljs-meta">```</span>')
+        inFence = false
+        fenceLang = ''
+        fenceLines = []
+      } else {
+        inFence = true
+        fenceLang = trimmed.slice(3).trim()
+        htmlLines.push('<span class="hljs-meta">```' + escapeHtml(fenceLang) + '</span>')
+      }
+      continue
+    }
+
+    if (inFence) {
+      fenceLines.push(line)
+      continue
+    }
+
+    const headingMatch = line.match(/^(\s*)(#{1,3})\s+(.*)$/)
+    if (headingMatch) {
+      const [, indent, hashes, content] = headingMatch
+      const highlighted = applyInlineHighlight(escapeHtml(`${hashes} ${content}`))
+      htmlLines.push(`${escapeHtml(indent)}<span class="hljs-section">${highlighted}</span>`)
+      continue
+    }
+
+    const bulletMatch = line.match(/^(\s*)-\s+(.*)$/)
+    if (bulletMatch) {
+      const [, indent, content] = bulletMatch
+      const highlighted = applyInlineHighlight(escapeHtml(content))
+      htmlLines.push(`${escapeHtml(indent)}<span class="hljs-bullet">-</span> ${highlighted}`)
+      continue
+    }
+
+    htmlLines.push(applyInlineHighlight(escapeHtml(line)))
+  }
+
+  if (inFence) {
+    flushFence()
+  }
+
+  return htmlLines.join('\n')
+}
+
 export default function Settings() {
   const navigate = useNavigate()
   const { loadTimeline } = useDaysStore()
@@ -34,11 +138,13 @@ export default function Settings() {
     updateAiLanguage,
     updateWallpaper,
     updateFontPreference,
+    updateMonospaceFont,
     geminiApiKey,
     geminiModel,
     aiLanguage,
     wallpaper,
     fontPreference,
+    monospaceFont,
   } = useSettingsStore()
   const {
     filePath,
@@ -61,9 +167,61 @@ export default function Settings() {
   const [syncBusy, setSyncBusy] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
   const [dropboxPath, setDropboxPath] = useState('')
+  const [showFontPreview, setShowFontPreview] = useState(false)
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
 
   const savedDropboxPath = filePath || DEFAULT_DROPBOX_PATH
   const isDropboxPathDirty = dropboxPath.trim() !== savedDropboxPath
+
+  const handleMonospaceFont = (font: MonospaceFont) => {
+    void updateMonospaceFont(font)
+    void updateFontPreference('monospace')
+  }
+
+  const handleFontPreviewToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    setShowFontPreview(event.currentTarget.open)
+  }
+
+  useEffect(() => {
+    let active = true
+
+    if (!showFontPreview) {
+      setPreviewHtml(null)
+      return () => {
+        active = false
+      }
+    }
+
+    const loadHighlighting = async () => {
+      try {
+        const [{ default: hljs }, { default: markdown }, { default: python }] = await Promise.all([
+          import('highlight.js/lib/core'),
+          import('highlight.js/lib/languages/markdown'),
+          import('highlight.js/lib/languages/python'),
+        ])
+
+        if (!hljs.getLanguage('markdown')) {
+          hljs.registerLanguage('markdown', markdown)
+        }
+        if (!hljs.getLanguage('python')) {
+          hljs.registerLanguage('python', python)
+        }
+
+        if (!active) return
+        setPreviewHtml(buildPreviewHtml(previewText, hljs))
+      } catch (error) {
+        if (active) {
+          setPreviewHtml(null)
+        }
+      }
+    }
+
+    void loadHighlighting()
+
+    return () => {
+      active = false
+    }
+  }, [showFontPreview])
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -102,6 +260,10 @@ export default function Settings() {
   }, [navigate])
 
   const dropboxConnected = hasAuth && activeProvider === 'dropbox'
+  const previewFontFamily =
+    fontPreference === 'monospace'
+      ? getMonospaceFontFamily(monospaceFont)
+      : "'Inter', system-ui, sans-serif"
   const dropboxAccount = useMemo(() => {
     if (accountName && accountEmail) {
       return `${accountName} (${accountEmail})`
@@ -350,17 +512,45 @@ export default function Settings() {
                 type="button"
                 onClick={() => void updateFontPreference('proportional')}
               >
-                Proportional
+                System
               </button>
-              <button
-                className={fontPreference === 'monospace' ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateFontPreference('monospace')}
-                style={{ fontFamily: "'CartographCF', ui-monospace, SFMono-Regular, Menlo, monospace" }}
-              >
-                Monospace
-              </button>
+              {monospaceFontOptions.map((option) => (
+                <button
+                  key={option.id}
+                  className={
+                    fontPreference === 'monospace' && monospaceFont === option.id
+                      ? buttonPillActive
+                      : buttonPill
+                  }
+                  type="button"
+                  onClick={() => handleMonospaceFont(option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
+            <details
+              className="mt-4 rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-3"
+              onToggle={handleFontPreviewToggle}
+            >
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Font Preview
+              </summary>
+              {showFontPreview && (
+                <div className="mt-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
+                  <pre
+                    className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm text-slate-700"
+                    style={{ fontFamily: previewFontFamily }}
+                  >
+                    <code
+                      className="hljs language-markdown"
+                      style={{ fontFamily: previewFontFamily }}
+                      dangerouslySetInnerHTML={{ __html: previewHtml ?? escapeHtml(previewText) }}
+                    />
+                  </pre>
+                </div>
+              )}
+            </details>
           </div>
 
       </section>
