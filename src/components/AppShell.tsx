@@ -1,8 +1,6 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { addDays, getTodayId } from '../lib/dates'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { pullFromSync } from '../lib/sync'
-import { useDaysStore } from '../store/useDaysStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useUIStore } from '../store/useUIStore'
@@ -16,30 +14,17 @@ const backButtonClass =
 
 export default function AppShell() {
   const location = useLocation()
-  const navigate = useNavigate()
   const { loadSettings, wallpaper } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
-  const { days } = useDaysStore()
   const { mode, setMode } = useUIStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [viewportOffset, setViewportOffset] = useState(0)
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const hasAutoPulled = useRef(false)
-  const todayId = getTodayId()
   const showBackButton = location.pathname === '/settings'
   const isHome = location.pathname === '/'
-  const isDayEditor = location.pathname.startsWith('/day/')
   const showTrayRow = isHome
-
-  const futureDayId = useMemo(() => {
-    const existing = new Set(days.map((day) => day.dayId))
-    let candidate = addDays(days[0]?.dayId ?? todayId, 1)
-    while (existing.has(candidate)) {
-      candidate = addDays(candidate, 1)
-    }
-    return candidate
-  }, [days, todayId])
 
   const timelineButton = (
     <button
@@ -164,11 +149,6 @@ export default function AppShell() {
             return
           }
         }
-        if (location.pathname.startsWith('/day/')) {
-          const editor = document.querySelector<HTMLElement>('.cm-content')
-          editor?.focus()
-          return
-        }
         if (location.pathname === '/settings') {
           document.getElementById('settings-passcode')?.focus()
         }
@@ -201,15 +181,11 @@ export default function AppShell() {
         return
       }
 
-      if (key === 'n') {
-        event.preventDefault()
-        navigate(`/day/${futureDayId}`)
-      }
     }
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [futureDayId, isHome, location.pathname, mode, navigate, setMode])
+  }, [isHome, location.pathname, mode, setMode])
 
   useEffect(() => {
     if (!isHome) return
@@ -252,9 +228,7 @@ export default function AppShell() {
       />
       <header
         style={{ top: viewportOffset }}
-        className={`fixed left-0 right-0 z-30 mx-auto grid h-16 grid-cols-[1fr_auto_1fr] items-center ${
-          isDayEditor ? 'w-[min(96%,880px)]' : 'w-[min(96%,720px)]'
-        }`}
+        className="fixed left-0 right-0 z-30 mx-auto grid h-16 w-[min(96%,720px)] grid-cols-[1fr_auto_1fr] items-center"
       >
         <div className="flex items-center gap-2">
           {showBackButton && (
@@ -296,27 +270,25 @@ export default function AppShell() {
           <img src="/logo.png" alt="Rivolo" className="h-10 w-auto" />
         </NavLink>
         <div className="flex items-center justify-end gap-2">
-          {!isDayEditor && (
-            <NavLink
-              to="/settings"
-              className={topIconButton}
-              aria-label="Settings"
-              onClick={() => {
-                if (isHome) {
-                  sessionStorage.setItem('timeline-scroll', String(window.scrollY))
-                }
-              }}
-            >
-              <img src="/gear.svg" alt="" className="h-4 w-4" />
-            </NavLink>
-          )}
+          <NavLink
+            to="/settings"
+            className={topIconButton}
+            aria-label="Settings"
+            onClick={() => {
+              if (isHome) {
+                sessionStorage.setItem('timeline-scroll', String(window.scrollY))
+              }
+            }}
+          >
+            <img src="/gear.svg" alt="" className="h-4 w-4" />
+          </NavLink>
         </div>
       </header>
 
       <main
-        className={`mx-auto flex min-h-screen flex-col gap-4 pt-20 ${
+        className={`mx-auto flex min-h-screen w-[min(96%,720px)] flex-col gap-4 pt-20 ${
           showTrayRow ? 'pb-40' : 'pb-12'
-        } ${isDayEditor ? 'w-[min(96%,880px)]' : 'w-[min(96%,720px)]'}`}
+        }`}
       >
         <Outlet />
       </main>

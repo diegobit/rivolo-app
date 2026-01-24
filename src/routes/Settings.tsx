@@ -30,7 +30,6 @@ export default function Settings() {
   const {
     loadSettings,
     saveGeminiKey,
-    updateTimelineView,
     updateGeminiModel,
     updateAiLanguage,
     updateWallpaper,
@@ -38,7 +37,6 @@ export default function Settings() {
     geminiApiKey,
     geminiModel,
     aiLanguage,
-    timelineView,
     wallpaper,
     fontPreference,
   } = useSettingsStore()
@@ -340,26 +338,6 @@ export default function Settings() {
                 onClick={() => void updateWallpaper('thoughts-high')}
               >
                 Thoughts High
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Timeline View</h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                className={timelineView === 'full' ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateTimelineView('full')}
-              >
-                Full
-              </button>
-              <button
-                className={timelineView === 'preview' ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateTimelineView('preview')}
-              >
-                Preview
               </button>
             </div>
           </div>
