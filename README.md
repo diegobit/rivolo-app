@@ -2,6 +2,24 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## COOP/COEP (Cross-Origin Isolation)
+
+What COOP/COEP are (and why they came up)
+
+COOP/COEP are HTTP response headers that put your site into cross-origin isolation.
+
+Why it matters:
+
+Cross-origin isolation is often required to use SharedArrayBuffer safely.
+
+SharedArrayBuffer is important because it enables some of the fastest patterns for running SQLite in a Web Worker (background thread) with efficient communication.
+
+If you don't set COOP/COEP:
+
+You can still run SQLite WASM, but some turbo mode options (especially around threading and shared memory) may be unavailable, and performance can be lower.
+
+This mainly becomes a concern if you want maximum performance and you have third-party scripts/embeds that don't play nicely with isolation.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
