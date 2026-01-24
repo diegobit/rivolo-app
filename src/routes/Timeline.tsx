@@ -1213,8 +1213,8 @@ export default function Timeline() {
 
     const targetDay = message.meta?.insertTargetDay ?? getTodayId()
     const timestamp = formatTimestamp(new Date())
-    const payload = `LLM summary (${timestamp}):\n${insertText.trim()}`
-    await prependToDay(targetDay, payload)
+    const payload = `${insertText.trim()}`
+    await appendToDay(targetDay, payload)
     await loadTimeline()
     await handleAutoPush()
   }
