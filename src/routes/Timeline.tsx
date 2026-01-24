@@ -437,12 +437,6 @@ type TrayInputProps = {
   onSearchTextChange: (value: string) => void
 }
 
-type TrayDrafts = {
-  timeline: string
-  chat: string
-  search: string
-}
-
 type TrayInputConfig = {
   placeholder: string
   icon: string
@@ -459,11 +453,7 @@ const TrayInput = memo(({
   onChatSubmit,
   onSearchTextChange,
 }: TrayInputProps) => {
-  const [drafts, setDrafts] = useState<TrayDrafts>({
-    timeline: '',
-    chat: '',
-    search: '',
-  })
+  const [draftText, setDraftText] = useState('')
   const debounceRef = useRef<number | null>(null)
   const prevModeRef = useRef<TrayMode>(mode)
 
@@ -493,13 +483,13 @@ const TrayInput = memo(({
     }
   }, [mode])
 
-  const activeText = drafts[mode]
+  const activeText = draftText
 
   const updateDraft = useCallback(
     (value: string) => {
-      setDrafts((prev) => ({ ...prev, [mode]: value }))
+      setDraftText(value)
     },
-    [mode],
+    [],
   )
 
   useEffect(() => {
@@ -510,7 +500,7 @@ const TrayInput = memo(({
     }
 
     debounceRef.current = window.setTimeout(() => {
-      onSearchTextChange(drafts.search)
+      onSearchTextChange(draftText)
     }, 200)
 
     return () => {
@@ -519,16 +509,16 @@ const TrayInput = memo(({
         debounceRef.current = null
       }
     }
-  }, [drafts.search, mode, onSearchTextChange])
+  }, [draftText, mode, onSearchTextChange])
 
   useEffect(() => {
     const previousMode = prevModeRef.current
     prevModeRef.current = mode
 
     if (mode === 'search' && previousMode !== 'search') {
-      onSearchTextChange(drafts.search)
+      onSearchTextChange(draftText)
     }
-  }, [drafts.search, mode, onSearchTextChange])
+  }, [draftText, mode, onSearchTextChange])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -537,14 +527,14 @@ const TrayInput = memo(({
     if (!trimmed) return
 
     if (mode === 'chat') {
-      setDrafts((prev) => ({ ...prev, chat: '' }))
+      setDraftText('')
       await onChatSubmit(activeText)
       return
     }
 
     if (mode === 'timeline') {
       await onTimelineSubmit(activeText)
-      setDrafts((prev) => ({ ...prev, timeline: '' }))
+      setDraftText('')
     }
   }
 
@@ -553,11 +543,11 @@ const TrayInput = memo(({
       window.clearTimeout(debounceRef.current)
       debounceRef.current = null
     }
-    setDrafts((prev) => ({ ...prev, search: '' }))
+    setDraftText('')
     onSearchTextChange('')
   }
 
-  const showNoResults = noSearchResults && Boolean(drafts.search.trim())
+  const showNoResults = noSearchResults && Boolean(draftText.trim())
   const showChatError = Boolean(chatError) && mode === 'chat'
 
   return (
