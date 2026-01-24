@@ -528,6 +528,7 @@ export default function Timeline() {
   const dayRefs = useRef(new Map<string, HTMLDivElement>())
   const saveTimeouts = useRef(new Map<string, number>())
   const createdDayIdsRef = useRef(new Set<string>())
+  const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
   const highlightTimeoutRef = useRef<number | null>(null)
   const addTodayRef = useRef<HTMLDivElement | null>(null)
 
@@ -741,6 +742,8 @@ export default function Timeline() {
         focusScroll?: boolean
       },
     ) => {
+      const { focusPosition = 'end', scrollBlock = 'center', focusScroll = true } = options ?? {}
+      pendingFocusRef.current = { dayId, position: focusPosition }
       const result = await loadDay(dayId)
       if (result.created) {
         createdDayIdsRef.current.add(dayId)
@@ -748,8 +751,10 @@ export default function Timeline() {
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => resolve())
       })
-      const { focusPosition = 'end', scrollBlock = 'center', focusScroll = true } = options ?? {}
       revealDay(dayId, focusPosition, scrollBlock, focusScroll)
+      if (editorRefs.current.has(dayId)) {
+        pendingFocusRef.current = null
+      }
     },
     [loadDay, revealDay],
   )
@@ -856,13 +861,21 @@ export default function Timeline() {
     [days, loadDay, scrollToDay],
   )
 
-  const registerEditor = useCallback((dayId: string, view: EditorView | null) => {
-    if (view) {
-      editorRefs.current.set(dayId, view)
-      return
-    }
-    editorRefs.current.delete(dayId)
-  }, [])
+  const registerEditor = useCallback(
+    (dayId: string, view: EditorView | null) => {
+      if (view) {
+        editorRefs.current.set(dayId, view)
+        const pending = pendingFocusRef.current
+        if (pending && pending.dayId === dayId) {
+          focusDayEditor(dayId, pending.position, false)
+          pendingFocusRef.current = null
+        }
+        return
+      }
+      editorRefs.current.delete(dayId)
+    },
+    [focusDayEditor],
+  )
 
   const registerDayRef = useCallback((dayId: string, node: HTMLDivElement | null) => {
     if (node) {
