@@ -27,7 +27,7 @@ const buildTagDecorations = (text: string) => {
     match = tagRegex.exec(text)
   }
 
-  const todoRegex = /(^|\n)(\s*- \[ \])/g
+  const todoRegex = /(^|\n)(\s*- \[[ xX]\])/g
   match = todoRegex.exec(text)
 
   while (match) {
