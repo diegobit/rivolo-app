@@ -64,6 +64,10 @@
 }
 
 @layer components {
+  .day-title {
+    font-family: system-ui, sans-serif;
+  }
+
   .caret-blue {
     caret-color: #22b3ff;
     caret-width: 2px;

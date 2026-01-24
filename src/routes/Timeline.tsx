@@ -358,7 +358,7 @@ const DayEditorCard = ({
           onPointerLeave={clearLongPress}
         >
           <h3
-            className={`${isToday ? 'text-2xl' : isYesterday || isTomorrow ? 'text-lg' : 'text-base'} ${
+            className={`day-title ${isToday ? 'text-2xl' : isYesterday || isTomorrow ? 'text-lg' : 'text-base'} ${
               isToday || isYesterday || isTomorrow ? 'font-bold' : 'font-semibold'
             } ${isFuture ? 'opacity-70' : ''}`}
           >
