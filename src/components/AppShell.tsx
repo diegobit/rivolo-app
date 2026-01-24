@@ -174,7 +174,7 @@ export default function AppShell() {
         return
       }
 
-      if (key === 't') {
+      if (key === 'q') {
         event.preventDefault()
         if (isHome) {
           setMode('timeline')
@@ -253,14 +253,75 @@ export default function AppShell() {
                 <img src="/question-mark.svg" alt="" className="h-5 w-5" />
               </button>
               {showShortcuts && (
-                <div className="absolute left-0 z-20 mt-2 w-max rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-600 shadow-lg">
-                  <div className="space-y-1">
-                    <div>A, C → Chat View</div>
-                    <div>T → Timeline View</div>
-                    <div>S, F → Search</div>
-                    <div>N → New future day</div>
-                    <div>I → Focus input box</div>
-                    <div>Esc → Exit focus or back to Timeline</div>
+                <div className="absolute left-0 z-20 mt-2 w-max rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 shadow-lg">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Input Modes:
+                      </div>
+                      <div className="grid gap-1">
+                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                          <span className="flex items-center gap-1">
+                            <kbd className="kbd">A</kbd>
+                            <span className="text-slate-400">,</span>
+                            <kbd className="kbd">C</kbd>
+                          </span>
+                          <span className="text-slate-400">-&gt;</span>
+                          <span>Chat with AI</span>
+                        </div>
+                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                          <span className="flex items-center gap-1">
+                            <kbd className="kbd">Q</kbd>
+                          </span>
+                          <span className="text-slate-400">-&gt;</span>
+                          <span>Quick add</span>
+                        </div>
+                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                          <span className="flex items-center gap-1">
+                            <kbd className="kbd">S</kbd>
+                            <span className="text-slate-400">,</span>
+                            <kbd className="kbd">F</kbd>
+                          </span>
+                          <span className="text-slate-400">-&gt;</span>
+                          <span>Search/Find</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Others:
+                      </div>
+                      <div className="grid gap-1">
+                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                          <span className="flex items-center gap-1">
+                            <kbd className="kbd">T</kbd>
+                          </span>
+                          <span className="text-slate-400">-&gt;</span>
+                          <span>Scroll to Today</span>
+                        </div>
+                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                          <span className="flex items-center gap-1">
+                            <kbd className="kbd">N</kbd>
+                          </span>
+                          <span className="text-slate-400">-&gt;</span>
+                          <span>New Future Day</span>
+                        </div>
+                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                          <span className="flex items-center gap-1">
+                            <kbd className="kbd">I</kbd>
+                          </span>
+                          <span className="text-slate-400">-&gt;</span>
+                          <span>Focus Input Box</span>
+                        </div>
+                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                          <span className="flex items-center gap-1">
+                            <kbd className="kbd">Esc</kbd>
+                          </span>
+                          <span className="text-slate-400">-&gt;</span>
+                          <span>Exit focus or back to Homepage</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
