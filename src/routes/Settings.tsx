@@ -35,12 +35,12 @@ Things to do:
 
 ### Note call con Marco
 
-Ha proposto se vogliamo andare al cinema. Lista film:
+Ha proposto di andare al cinema. Lista film:
 
-| Titolo     | Creato da          |
-| ---------- | ------------------ |
-| Star Wars  | George Lucas       |
-| The Matrix | Fratelli Wachowski |
+| Titolo     | Quando            |
+| ---------- | ----------------- |
+| Star Wars  | 15 gennaio, 15:30 |
+| The Matrix | 2 febbraio, 21:00 |
 
 Poi ha detto che dovremmo cucinare le lasagne come le faceva sua nonna.
 
