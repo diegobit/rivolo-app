@@ -121,6 +121,10 @@ export default function AppShell() {
   }, [])
 
   useEffect(() => {
+    document.body.dataset.wallpaper = wallpaper
+  }, [wallpaper])
+
+  useEffect(() => {
     if (hasAutoPulled.current) return
     if (!navigator.onLine) return
     if (!syncStatus.connected || !syncStatus.filePath) return
@@ -230,24 +234,6 @@ export default function AppShell() {
 
   return (
     <div className="min-h-full text-slate-900">
-      {/* White base + Wallpaper texture */}
-      <div className="pointer-events-none fixed inset-0 -z-10 min-h-[100lvh] bg-white" />
-      {wallpaper !== 'white' && (
-        <div
-          className={`pointer-events-none fixed inset-0 -z-10 min-h-[100lvh] ${
-            wallpaper === 'thoughts-light'
-              ? 'opacity-5'
-              : wallpaper === 'thoughts-medium'
-                ? 'opacity-10'
-                : 'opacity-15'
-          }`}
-          style={{
-            backgroundImage: 'url(/bg-thoughts.jpg)',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-      )}
       {/* Fixed header with blur */}
       <div
         style={{ top: viewportOffset }}
