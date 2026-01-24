@@ -64,6 +64,12 @@
 }
 
 @layer components {
+  .caret-blue {
+    caret-color: #22b3ff;
+    caret-width: 2px;
+    caret-shape: block;
+  }
+
   .cm-highlight {
     background-color: #fde68a;
     border-radius: 3px;
