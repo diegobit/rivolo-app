@@ -552,6 +552,10 @@ export default function Timeline() {
         '.cm-gutters': {
           display: 'none',
         },
+        '.cm-cursor, .cm-dropCursor': {
+          borderLeft: '2px solid #22B3FF',
+          borderRadius: '2px',
+        },
       }),
     [fontPreference, monospaceFont],
   )
@@ -1118,6 +1122,7 @@ export default function Timeline() {
 
   // No Results State
   const noSearchResults = mode === 'search' && !searchLoading && searchText.trim() && searchResults.length === 0 && !searchError
+  const showChatError = mode === 'chat' && !!chatError
 
   // --- Render ---
 
@@ -1151,12 +1156,20 @@ export default function Timeline() {
   const trayContent = (
     <div className="relative">
       <p
-        className={`absolute -top-10 left-1/2 -z-10 -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-sm text-red-400 ${
+        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,520px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
           noSearchResults ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         aria-hidden={!noSearchResults}
       >
         No results
+      </p>
+      <p
+        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,520px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
+          showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        aria-hidden={!showChatError}
+      >
+        {chatError}
       </p>
       <form className="flex items-center gap-3" onSubmit={handleSubmit}>
         <div className="relative flex-1">
@@ -1219,7 +1232,6 @@ export default function Timeline() {
         <div className="fixed bottom-24 left-0 right-0 z-20 mx-auto w-[min(96%,720px)] px-4">
           <div className={`pointer-events-none absolute -bottom-24 -inset-x-8 -top-4 -z-10 bg-white/30 backdrop-blur-md transition-opacity duration-500 [mask-image:linear-gradient(to_bottom,transparent,black_40%)] ${messages.length > 0 ? 'opacity-100' : 'opacity-0'}`} />
           <div className="flex max-h-[50vh] flex-col-reverse gap-3 overflow-y-auto p-6">
-            {chatError && <p className="text-center text-xs text-rose-500">{chatError}</p>}
             {[...messages].reverse().map((message) => (
                <div
                 key={message.id}

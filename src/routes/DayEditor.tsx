@@ -133,6 +133,10 @@ export default function DayEditor() {
         '.cm-gutters': {
           display: 'none',
         },
+        '.cm-cursor, .cm-dropCursor': {
+          borderLeft: '2px solid #22B3FF',
+          borderRadius: '2px',
+        },
       }),
     [fontPreference, monospaceFont],
   )
