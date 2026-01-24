@@ -946,8 +946,12 @@ export default function Timeline() {
         ...currentMessages,
       ]
 
-      // DEBUG: Log the full prompt being sent to the LLM
-      console.log('[LLM Request]', JSON.stringify(llmMessages, null, 2))
+      console.info('[LLM Request]', {
+        messageCount: llmMessages.length,
+        contextDays: contextDays.length,
+        contextChars: contextText.length,
+        userChars: trimmed.length,
+      })
 
       const { text: responseText } = await chat({
         provider: 'gemini',
@@ -966,16 +970,13 @@ export default function Timeline() {
         },
       })
 
-      // DEBUG: Log the LLM response
-      console.log('[LLM Response]', responseText)
-
       const sanitized = responseText.replace(/```json\s*/gi, '').replace(/```/g, '').trim()
-      console.log('[LLM Sanitized]', sanitized)
+      console.info('[LLM Response]', { chars: responseText.length, sanitizedChars: sanitized.length })
 
       let payload: AssistantPayload | null = null
       try {
         payload = JSON.parse(sanitized) as AssistantPayload
-        console.log('[LLM Parsed]', payload)
+        console.info('[LLM Parsed]', { hasCitations: Boolean(payload.citations?.length) })
       } catch (parseError) {
         console.error('[LLM Parse Error]', parseError)
         payload = { answer: responseText }
