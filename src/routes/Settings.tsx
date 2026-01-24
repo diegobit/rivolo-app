@@ -550,23 +550,25 @@ export default function Settings() {
               ))}
             </div>
             <details
-              className="mt-4 rounded-xl border border-slate-200 bg-[#FFFFFF] px-4 py-3"
+              className="mt-4 rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-3"
               onToggle={handleFontPreviewToggle}
             >
               <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Font Preview
               </summary>
               {showFontPreview && (
-                <pre
-                  className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-lg bg-transparent p-3 text-sm text-slate-700"
-                  style={{ fontFamily: previewFontFamily }}
-                >
-                  <code
-                    className="hljs language-markdown"
+                <div className="mt-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
+                  <pre
+                    className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm text-slate-700"
                     style={{ fontFamily: previewFontFamily }}
-                    dangerouslySetInnerHTML={{ __html: previewHtml ?? escapeHtml(previewText) }}
-                  />
-                </pre>
+                  >
+                    <code
+                      className="hljs language-markdown"
+                      style={{ fontFamily: previewFontFamily }}
+                      dangerouslySetInnerHTML={{ __html: previewHtml ?? escapeHtml(previewText) }}
+                    />
+                  </pre>
+                </div>
               )}
             </details>
           </div>
