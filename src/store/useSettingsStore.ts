@@ -23,6 +23,7 @@ type SettingsState = {
   aiLanguage: AiLanguage
   loading: boolean
   wallpaper: Wallpaper
+  highlightInputMode: boolean
   fontPreference: FontPreference
   bodyFont: BodyFont
   monospaceFont: MonospaceFont
@@ -32,6 +33,7 @@ type SettingsState = {
   updateGeminiModel: (model: string) => Promise<void>
   updateAiLanguage: (language: AiLanguage) => Promise<void>
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
+  updateHighlightInputMode: (enabled: boolean) => Promise<void>
   updateFontPreference: (fontPreference: FontPreference) => Promise<void>
   updateBodyFont: (bodyFont: BodyFont) => Promise<void>
   updateMonospaceFont: (monospaceFont: MonospaceFont) => Promise<void>
@@ -45,6 +47,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   aiLanguage: 'follow',
   loading: false,
   wallpaper: 'thoughts-light',
+  highlightInputMode: false,
   fontPreference: 'monospace',
   bodyFont: 'system',
   monospaceFont: 'iawriter',
@@ -56,6 +59,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const storedGeminiModel = await getSetting('llm.geminiModel')
     const storedAiLanguage = (await getSetting('ai.language')) as AiLanguage | null
     const storedWallpaper = (await getSetting('appearance.wallpaper')) as Wallpaper | null
+    const storedHighlightInputMode = await getSetting('appearance.highlightInputMode')
     const storedFontPreference = (await getSetting('appearance.font')) as FontPreference | null
     const storedBodyFont = await getSetting('appearance.bodyFont')
     const storedMonospaceFont = await getSetting('appearance.monospaceFont')
@@ -63,6 +67,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
     const aiLanguage = storedAiLanguage ?? 'follow'
     const wallpaper = storedWallpaper ?? 'thoughts-light'
+    const highlightInputMode = storedHighlightInputMode === 'true'
+    const shouldPersistHighlightInputMode =
+      storedHighlightInputMode === null ||
+      (storedHighlightInputMode !== 'true' && storedHighlightInputMode !== 'false')
     const fontPreference = storedFontPreference ?? 'monospace'
     const bodyFont = isBodyFont(storedBodyFont) ? storedBodyFont : 'system'
     const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
@@ -76,6 +84,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }
     if (!storedWallpaper) {
       await setSetting('appearance.wallpaper', wallpaper)
+    }
+    if (shouldPersistHighlightInputMode) {
+      await setSetting('appearance.highlightInputMode', highlightInputMode ? 'true' : 'false')
     }
     if (!storedFontPreference) {
       await setSetting('appearance.font', fontPreference)
@@ -99,6 +110,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       geminiModel,
       aiLanguage,
       wallpaper,
+      highlightInputMode,
       fontPreference,
       bodyFont,
       monospaceFont,
@@ -127,6 +139,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   updateWallpaper: async (wallpaper: Wallpaper) => {
     await setSetting('appearance.wallpaper', wallpaper)
     set({ wallpaper })
+  },
+
+  updateHighlightInputMode: async (enabled: boolean) => {
+    await setSetting('appearance.highlightInputMode', enabled ? 'true' : 'false')
+    set({ highlightInputMode: enabled })
   },
 
   updateFontPreference: async (fontPreference: FontPreference) => {

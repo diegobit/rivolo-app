@@ -158,6 +158,7 @@ export default function Settings() {
     updateGeminiModel,
     updateAiLanguage,
     updateWallpaper,
+    updateHighlightInputMode,
     updateFontPreference,
     updateBodyFont,
     updateMonospaceFont,
@@ -166,6 +167,7 @@ export default function Settings() {
     geminiModel,
     aiLanguage,
     wallpaper,
+    highlightInputMode,
     fontPreference,
     bodyFont,
     monospaceFont,
@@ -535,6 +537,28 @@ export default function Settings() {
                 onClick={() => void updateWallpaper('thoughts-high')}
               >
                 Thoughts High
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Highlight Input Mode
+            </h3>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                className={highlightInputMode ? buttonPillActive : buttonPill}
+                type="button"
+                onClick={() => void updateHighlightInputMode(true)}
+              >
+                YES
+              </button>
+              <button
+                className={!highlightInputMode ? buttonPillActive : buttonPill}
+                type="button"
+                onClick={() => void updateHighlightInputMode(false)}
+              >
+                NO
               </button>
             </div>
           </div>
