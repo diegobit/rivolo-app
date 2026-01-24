@@ -1188,18 +1188,24 @@ export default function Timeline() {
           placeholder: 'Ask anything',
           icon: '/sparkle.svg',
           id: 'chat-input'
+          enterKeyHint: 'send',
+          style: { filter: 'grayscale(1) brightness(0.6)' }
         }
       case 'search':
         return {
           placeholder: 'Search all days',
           icon: '/magnifying-glass.svg',
           id: 'search-input'
+          enterKeyHint: 'search',
+          style: { filter: 'grayscale(1) brightness(0.6)' }
         }
       default:
         return {
           placeholder: 'What am I thinking about today?',
           icon: '/pencil-simple-line.svg',
           id: 'timeline-input'
+          enterKeyHint: 'done',
+          style: { filter: 'grayscale(1) brightness(0.6)' }
         }
     }
   }, [mode])
