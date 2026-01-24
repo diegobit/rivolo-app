@@ -4,7 +4,8 @@ import { markdown } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, keymap, type DecorationSet } from '@codemirror/view'
 import { EditorSelection, RangeSetBuilder, type Extension } from '@codemirror/state'
 import BottomTrayPortal from '../components/BottomTrayPortal'
-import { getMonospaceFontFamily } from '../lib/fonts'
+import { getBodyFontFamily, getMonospaceFontFamily, getTitleFontFamily } from '../lib/fonts'
+import { editorHighlights } from '../lib/editorHighlights'
 import { pushToSync } from '../lib/sync'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import type { Day } from '../lib/dayRepository'
@@ -134,6 +135,7 @@ type DayEditorCardProps = {
   markdownExtension: Extension
   editorTheme: Extension
   clearActiveLine: Extension
+  titleFontFamily: string
   previousDayId: string | null
   nextDayId: string | null
   onChange: (dayId: string, value: string) => void
@@ -165,6 +167,7 @@ const DayEditorCard = ({
   markdownExtension,
   editorTheme,
   clearActiveLine,
+  titleFontFamily,
   previousDayId,
   nextDayId,
   onChange,
@@ -322,6 +325,7 @@ const DayEditorCard = ({
       clearActiveLine,
       EditorView.lineWrapping,
       navigationKeymap,
+      ...editorHighlights,
     ]
     if (searchHighlight) {
       extensions.push(searchHighlight)
@@ -358,22 +362,23 @@ const DayEditorCard = ({
           onPointerLeave={clearLongPress}
         >
           <h3
-            className={`day-title ${isToday ? 'text-2xl' : isYesterday || isTomorrow ? 'text-lg' : 'text-base'} ${
-              isToday || isYesterday || isTomorrow ? 'font-bold' : 'font-semibold'
+            className={`day-title ${
+              isToday ? 'text-[2rem]' : isYesterday || isTomorrow ? 'text-[1.5rem]' : 'text-[1.3rem]'
             } ${isFuture ? 'opacity-70' : ''}`}
+            style={{ fontFamily: titleFontFamily }}
           >
             {relativeLabel ? (
               <>
-                <span className="text-slate-900">{relativeLabel}</span>
-                <span className="ml-2 font-semibold text-slate-400">{humanDate}</span>
+                <span className="font-bold text-[#113355]">{relativeLabel}</span>
+                <span className="ml-2 font-normal text-[#8899aa]">{humanDate}</span>
               </>
             ) : weekdayPart ? (
               <>
-                <span className="text-slate-900">{datePart}</span>
-                <span className="ml-2 font-semibold text-slate-400">{weekdayPart}</span>
+                <span className="font-bold text-[#113355]">{datePart}</span>
+                <span className="ml-2 font-normal text-[#8899aa]">{weekdayPart}</span>
               </>
             ) : (
-              <span className="text-slate-900">{title}</span>
+              <span className="font-bold text-[#113355]">{title}</span>
             )}
           </h3>
         </button>
@@ -483,7 +488,9 @@ export default function Timeline() {
     geminiModel,
     aiLanguage,
     fontPreference,
+    bodyFont,
     monospaceFont,
+    titleFont,
   } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode } = useUIStore()
@@ -542,7 +549,7 @@ export default function Timeline() {
           fontFamily:
             fontPreference === 'monospace'
               ? getMonospaceFontFamily(monospaceFont)
-              : "'Inter', system-ui, sans-serif",
+              : getBodyFontFamily(bodyFont),
           color: '#000000',
         },
         '.cm-content': {
@@ -557,8 +564,9 @@ export default function Timeline() {
           borderRadius: '2px',
         },
       }),
-    [fontPreference, monospaceFont],
+    [fontPreference, bodyFont, monospaceFont],
   )
+  const titleFontFamily = useMemo(() => getTitleFontFamily(titleFont), [titleFont])
   const clearActiveLine = useMemo(
     () =>
       EditorView.theme({
@@ -1314,9 +1322,10 @@ export default function Timeline() {
               return (
                 <div key={`add-future-${item.dayId}`} className="flex justify-center">
                   <button
-                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
+                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
                     type="button"
                     onClick={() => void handleCreateDay(item.dayId)}
+                    style={{ fontFamily: titleFontFamily }}
                   >
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22B3FF] transition group-hover:bg-[#22B3FF]/90">
                       <img
@@ -1383,6 +1392,7 @@ export default function Timeline() {
                 markdownExtension={markdownExtension}
                 editorTheme={editorTheme}
                 clearActiveLine={clearActiveLine}
+                titleFontFamily={titleFontFamily}
                 previousDayId={previousDayId}
                 nextDayId={nextDayId}
                 onChange={handleEditorChange}

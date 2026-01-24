@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { type MonospaceFont, isMonospaceFont } from '../lib/fonts'
+import { type BodyFont, type MonospaceFont, type TitleFont, isBodyFont, isMonospaceFont, isTitleFont } from '../lib/fonts'
 import { getJsonSetting, getSetting, setJsonSetting, setSetting } from '../lib/settingsRepository'
 
 type Provider = 'gemini'
@@ -24,14 +24,18 @@ type SettingsState = {
   loading: boolean
   wallpaper: Wallpaper
   fontPreference: FontPreference
+  bodyFont: BodyFont
   monospaceFont: MonospaceFont
+  titleFont: TitleFont
   loadSettings: () => Promise<void>
   saveGeminiKey: (apiKey: string) => Promise<void>
   updateGeminiModel: (model: string) => Promise<void>
   updateAiLanguage: (language: AiLanguage) => Promise<void>
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
   updateFontPreference: (fontPreference: FontPreference) => Promise<void>
+  updateBodyFont: (bodyFont: BodyFont) => Promise<void>
   updateMonospaceFont: (monospaceFont: MonospaceFont) => Promise<void>
+  updateTitleFont: (titleFont: TitleFont) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -42,7 +46,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   loading: false,
   wallpaper: 'thoughts-light',
   fontPreference: 'monospace',
+  bodyFont: 'system',
   monospaceFont: 'iawriter',
+  titleFont: 'system',
 
   loadSettings: async () => {
     set({ loading: true })
@@ -51,13 +57,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const storedAiLanguage = (await getSetting('ai.language')) as AiLanguage | null
     const storedWallpaper = (await getSetting('appearance.wallpaper')) as Wallpaper | null
     const storedFontPreference = (await getSetting('appearance.font')) as FontPreference | null
+    const storedBodyFont = await getSetting('appearance.bodyFont')
     const storedMonospaceFont = await getSetting('appearance.monospaceFont')
-    const timelineView = storedTimelineView ?? 'full'
+    const storedTitleFont = await getSetting('appearance.titleFont')
     const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
     const aiLanguage = storedAiLanguage ?? 'follow'
     const wallpaper = storedWallpaper ?? 'thoughts-light'
     const fontPreference = storedFontPreference ?? 'monospace'
+    const bodyFont = isBodyFont(storedBodyFont) ? storedBodyFont : 'system'
     const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
+    const titleFont = isTitleFont(storedTitleFont) ? storedTitleFont : 'system'
 
     if (!storedGeminiModel) {
       await setSetting('llm.geminiModel', geminiModel)
@@ -71,8 +80,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     if (!storedFontPreference) {
       await setSetting('appearance.font', fontPreference)
     }
+    if (!storedBodyFont || !isBodyFont(storedBodyFont)) {
+      await setSetting('appearance.bodyFont', bodyFont)
+    }
     if (!storedMonospaceFont || !isMonospaceFont(storedMonospaceFont)) {
       await setSetting('appearance.monospaceFont', monospaceFont)
+    }
+    if (!storedTitleFont || !isTitleFont(storedTitleFont)) {
+      await setSetting('appearance.titleFont', titleFont)
     }
 
     const secrets = await getJsonSetting<LlmSecrets>('llm.secrets')
@@ -85,7 +100,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       aiLanguage,
       wallpaper,
       fontPreference,
+      bodyFont,
       monospaceFont,
+      titleFont,
       loading: false,
     })
   },
@@ -117,9 +134,19 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ fontPreference })
   },
 
+  updateBodyFont: async (bodyFont: BodyFont) => {
+    await setSetting('appearance.bodyFont', bodyFont)
+    set({ bodyFont })
+  },
+
   updateMonospaceFont: async (monospaceFont: MonospaceFont) => {
     await setSetting('appearance.monospaceFont', monospaceFont)
     set({ monospaceFont })
+  },
+
+  updateTitleFont: async (titleFont: TitleFont) => {
+    await setSetting('appearance.titleFont', titleFont)
+    set({ titleFont })
   },
 })
 )
