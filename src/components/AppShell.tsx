@@ -32,7 +32,7 @@ export default function AppShell() {
       onClick={() => setMode('timeline')}
       aria-label="Timeline"
     >
-      <img src="/notes.svg" alt="" className="h-5 w-5" />
+      <img src="/pencil-simple-line.svg" alt="" className="h-5 w-5" />
     </button>
   )
 
@@ -42,7 +42,7 @@ export default function AppShell() {
       onClick={() => setMode('chat')}
       aria-label="Chat"
     >
-      <img src="/sparkles.svg" alt="" className="h-5 w-5" />
+      <img src="/sparkle.svg" alt="" className="h-5 w-5" />
     </button>
   )
 
@@ -52,14 +52,15 @@ export default function AppShell() {
       onClick={() => setMode('search')}
       aria-label="Search"
     >
-      <img src="/lens.svg" alt="" className="h-5 w-5" />
+      <img src="/magnifying-glass.svg" alt="" className="h-5 w-5" />
     </button>
   )
 
   const trayCenter = (
     <div
       id="bottom-tray"
-      className="flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-2 shadow-[0_6px_18px_rgba(15,23,42,0.12)] sm:p-3"
+      data-mode={mode}
+      className="bottom-tray-shell flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-2 shadow-[0_6px_18px_rgba(15,23,42,0.12)] transition duration-300 sm:p-3"
     />
   )
 
@@ -234,7 +235,7 @@ export default function AppShell() {
           {showBackButton && (
             <NavLink to="/" className={backButtonClass} aria-label="Back">
               <img
-                src="/arrow-back.svg"
+                src="/arrow-left.svg"
                 alt=""
                 className="h-5 w-5"
                 style={{ filter: 'brightness(0) invert(1)' }}
@@ -249,7 +250,7 @@ export default function AppShell() {
                 aria-label="Shortcuts"
                 onClick={() => setShowShortcuts((prev) => !prev)}
               >
-                <img src="/question.svg" alt="" className="h-4 w-4" />
+                <img src="/question-mark.svg" alt="" className="h-4 w-4" />
               </button>
               {showShortcuts && (
                 <div className="absolute left-0 z-20 mt-2 w-max rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-600 shadow-lg">
