@@ -1161,7 +1161,7 @@ export default function Timeline() {
   const trayContent = (
     <div className="relative">
       <p
-        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,520px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
+        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,300px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
           noSearchResults ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         aria-hidden={!noSearchResults}
@@ -1169,7 +1169,7 @@ export default function Timeline() {
         No results
       </p>
       <p
-        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,520px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
+        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,300px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
           showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         aria-hidden={!showChatError}
