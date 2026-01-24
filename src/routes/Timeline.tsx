@@ -1300,7 +1300,7 @@ export default function Timeline() {
               return (
                 <div key={`add-${item.dayId}`} className="flex justify-center">
                   <button
-                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-xs font-semibold text-[#22B3FF] transition hover:text-[#22B3FF]/80"
+                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[#22B3FF] transition hover:text-[#22B3FF]/80"
                     type="button"
                     onClick={() => void handleCreateDay(item.dayId)}
                   >
@@ -1325,7 +1325,6 @@ export default function Timeline() {
                     className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
                     type="button"
                     onClick={() => void handleCreateDay(item.dayId)}
-                    style={{ fontFamily: titleFontFamily }}
                   >
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22B3FF] transition group-hover:bg-[#22B3FF]/90">
                       <img
