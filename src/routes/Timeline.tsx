@@ -1140,23 +1140,20 @@ export default function Timeline() {
       case 'chat':
         return {
           placeholder: 'Ask anything',
-          icon: '/sparkles.svg',
-          id: 'chat-input',
-          style: { filter: 'grayscale(1) brightness(0.6)' }
+          icon: '/sparkle.svg',
+          id: 'chat-input'
         }
       case 'search':
         return {
           placeholder: 'Search all days',
-          icon: '/lens.svg',
-          id: 'search-input',
-          style: { filter: 'grayscale(1) brightness(0.6)' }
+          icon: '/magnifying-glass.svg',
+          id: 'search-input'
         }
       default:
         return {
           placeholder: 'What am I thinking about today?',
-          icon: '/notes.svg',
-          id: 'timeline-input',
-          style: { filter: 'grayscale(1) brightness(0.6)' }
+          icon: '/pencil-simple-line.svg',
+          id: 'timeline-input'
         }
     }
   }, [mode])
@@ -1181,15 +1178,17 @@ export default function Timeline() {
       </p>
       <form className="flex items-center gap-3" onSubmit={handleSubmit}>
         <div className="relative flex-1">
-          <img
-            src={inputConfig.icon}
-            alt=""
-            className="pointer-events-none absolute left-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 opacity-60 sm:block"
-            style={inputConfig.style}
+          <span
+            aria-hidden="true"
+            className="tray-input-icon pointer-events-none absolute left-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 opacity-80 sm:block"
+            style={{
+              maskImage: `url(${inputConfig.icon})`,
+              WebkitMaskImage: `url(${inputConfig.icon})`,
+            }}
           />
           <input
             id={inputConfig.id}
-            autoComplete="on"
+            autoComplete="off"
             className="w-full rounded-full bg-transparent py-2 pl-3 pr-3 text-base outline-none sm:pl-10"
             placeholder={inputConfig.placeholder}
             value={activeText}
