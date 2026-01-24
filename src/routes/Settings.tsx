@@ -625,10 +625,12 @@ export default function Settings() {
           <h2 className="text-sm font-semibold text-slate-600">Dropbox Sync</h2>
           <span
             className={`rounded-full px-2 py-1 text-xs font-semibold ${
-              geminiApiKey ? 'bg-emerald-200 text-emerald-800' : 'bg-slate-100 text-slate-500'
+              dropboxSummary.connected
+                ? 'bg-emerald-200 text-emerald-800'
+                : 'bg-slate-100 text-slate-500'
             }`}
           >
-            {geminiApiKey ? 'Ready' : llmStatus}
+            {dropboxSummary.connected ? 'Connected' : 'Not connected'}
           </span>
 
         </div>
