@@ -19,6 +19,7 @@ export default function AppShell() {
   const { mode, setMode } = useUIStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
+  const [showScrollToToday, setShowScrollToToday] = useState(false)
   const [viewportOffset, setViewportOffset] = useState(0)
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const hasAutoPulled = useRef(false)
@@ -70,11 +71,39 @@ export default function AppShell() {
   }, [loadSettings, loadSyncState])
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 0)
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 0)
+
+      if (!isHome) {
+        setShowScrollToToday(false)
+        return
+      }
+
+      const scrolledFar = window.scrollY > window.innerHeight * 2.5
+      if (!scrolledFar) {
+        setShowScrollToToday(false)
+        return
+      }
+
+      const todayTarget = document.querySelector<HTMLElement>("[data-scroll-target='today']")
+      if (!todayTarget) {
+        setShowScrollToToday(false)
+        return
+      }
+
+      const rect = todayTarget.getBoundingClientRect()
+      const farFromToday = Math.abs(rect.top) > window.innerHeight * 1.5
+      setShowScrollToToday(farFromToday)
+    }
+
     handleScroll()
     window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
+    window.addEventListener('resize', handleScroll)
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('resize', handleScroll)
+    }
+  }, [isHome])
 
   useEffect(() => {
     const viewport = window.visualViewport
@@ -368,6 +397,19 @@ export default function AppShell() {
 
             {mode !== 'search' && <Fragment key="search-btn">{searchButton}</Fragment>}
             {mode === 'search' && <Fragment key="tray">{trayCenter}</Fragment>}
+
+            {showScrollToToday && (
+              <button
+                type="button"
+                className="absolute right-2 top-[-3.1rem] flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:right-0 sm:h-10 sm:w-10"
+                aria-label="Scroll to Today"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('timeline-scroll-today'))
+                }}
+              >
+                <img src="/arrow-line-up.svg" alt="" className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </>
       )}
