@@ -11,7 +11,7 @@ const DROPBOX_SCOPE = 'files.content.read files.content.write files.metadata.rea
 const DROPBOX_OAUTH_STORAGE = 'dropbox.oauth'
 const ACCESS_TOKEN_REFRESH_BUFFER = 60_000
 
-export const DEFAULT_DROPBOX_PATH = '/Apps/Rivolo/inbox.md'
+export const DEFAULT_DROPBOX_PATH = '/inbox.md'
 
 type DropboxMetadata = {
   rev: string
