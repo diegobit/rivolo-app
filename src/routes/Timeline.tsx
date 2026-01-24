@@ -1241,6 +1241,8 @@ export default function Timeline() {
           <input
             id={inputConfig.id}
             autoComplete="off"
+            type="Text"
+            inputMode="text"
             className="w-full rounded-full bg-transparent py-2 pl-3 pr-3 text-base outline-none sm:pl-10"
             placeholder={inputConfig.placeholder}
             value={activeText}

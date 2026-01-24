@@ -451,6 +451,9 @@ export default function Settings() {
         <form className="mt-4" onSubmit={handleSaveKey}>
           <div className="flex flex-wrap items-center gap-3">
             <input
+              autoComplete="off"
+              type="Text"
+              inputMode="text"
               className="min-w-[220px] flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
               placeholder="Gemini API key"
               value={apiKey}
@@ -473,6 +476,9 @@ export default function Settings() {
         <div className="mt-5 space-y-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Model</span>
           <input
+            autoComplete="off"
+            type="Text"
+            inputMode="text"
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
             placeholder="gemini-2.5-flash"
             value={geminiModel}
@@ -491,6 +497,9 @@ export default function Settings() {
               Follow User
             </button>
             <input
+              autoComplete="off"
+              type="Text"
+              inputMode="text"
               className="min-w-[220px] flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
               placeholder="or type: Italian, English..."
               value={aiLanguage === 'follow' ? '' : aiLanguage}
@@ -687,6 +696,9 @@ export default function Settings() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
+              autoComplete="off"
+              type="Text"
+              inputMode="text"
               className="min-w-[220px] flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
               placeholder={DEFAULT_DROPBOX_PATH}
               value={dropboxPath}
