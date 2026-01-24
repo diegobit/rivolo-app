@@ -274,15 +274,6 @@ export default function AppShell() {
                       <div className="grid gap-1">
                         <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                           <span className="flex items-center gap-1">
-                            <kbd className="kbd">A</kbd>
-                            <span className="text-slate-400">,</span>
-                            <kbd className="kbd">C</kbd>
-                          </span>
-                          <span className="text-slate-400">-&gt;</span>
-                          <span>Chat with AI</span>
-                        </div>
-                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                          <span className="flex items-center gap-1">
                             <kbd className="kbd">Q</kbd>
                           </span>
                           <span className="text-slate-400">-&gt;</span>
@@ -290,8 +281,17 @@ export default function AppShell() {
                         </div>
                         <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                           <span className="flex items-center gap-1">
+                            <kbd className="kbd">A</kbd>
+                            <span className="text-slate-400">or</span>
+                            <kbd className="kbd">C</kbd>
+                          </span>
+                          <span className="text-slate-400">-&gt;</span>
+                          <span>Chat with AI</span>
+                        </div>
+                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                          <span className="flex items-center gap-1">
                             <kbd className="kbd">S</kbd>
-                            <span className="text-slate-400">,</span>
+                            <span className="text-slate-400">or</span>
                             <kbd className="kbd">F</kbd>
                           </span>
                           <span className="text-slate-400">-&gt;</span>
