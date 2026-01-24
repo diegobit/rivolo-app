@@ -13,7 +13,7 @@ const highlightStyle = HighlightStyle.define([
 ])
 
 const buildTagDecorations = (text: string) => {
-  const builder = new RangeSetBuilder<Decoration>()
+  const ranges: Array<{ from: number; to: number; className: string }> = []
   const tagRegex = /(^|[^A-Za-z0-9_])([#@][A-Za-z0-9_/-]+)/g
   let match = tagRegex.exec(text)
 
@@ -23,7 +23,7 @@ const buildTagDecorations = (text: string) => {
     const start = match.index + prefixLength
     const end = start + token.length
     const className = token.startsWith('#') ? 'cm-hashtag' : 'cm-mention'
-    builder.add(start, end, Decoration.mark({ class: className }))
+    ranges.push({ from: start, to: end, className })
     match = tagRegex.exec(text)
   }
 
@@ -35,8 +35,15 @@ const buildTagDecorations = (text: string) => {
     const token = match[2]
     const start = match.index + prefixLength
     const end = start + token.length
-    builder.add(start, end, Decoration.mark({ class: 'cm-todo-marker' }))
+    ranges.push({ from: start, to: end, className: 'cm-todo-marker' })
     match = todoRegex.exec(text)
+  }
+
+  ranges.sort((a, b) => a.from - b.from || a.to - b.to)
+
+  const builder = new RangeSetBuilder<Decoration>()
+  for (const range of ranges) {
+    builder.add(range.from, range.to, Decoration.mark({ class: range.className }))
   }
 
   return builder.finish()
