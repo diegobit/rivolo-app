@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, keymap, type DecorationSet } from '@codemirror/view'
@@ -117,6 +117,8 @@ type ChatUiMessage = {
   }
 }
 
+type TrayMode = 'timeline' | 'chat' | 'search'
+
 type DayEditorCardProps = {
   day: Day
   open: number
@@ -147,7 +149,7 @@ type DayEditorCardProps = {
   registerDayRef: (dayId: string, node: HTMLDivElement | null) => void
 }
 
-const DayEditorCard = ({
+const DayEditorCard = memo(({
   day,
   open,
   isFuture,
@@ -423,7 +425,221 @@ const DayEditorCard = ({
       </div>
     </div>
   )
+})
+
+type TrayInputProps = {
+  mode: TrayMode
+  sending: boolean
+  chatError: string | null
+  noSearchResults: boolean
+  onTimelineSubmit: (value: string) => Promise<void>
+  onChatSubmit: (value: string) => Promise<void>
+  onSearchTextChange: (value: string) => void
 }
+
+type TrayDrafts = {
+  timeline: string
+  chat: string
+  search: string
+}
+
+type TrayInputConfig = {
+  placeholder: string
+  icon: string
+  id: string
+  enterKeyHint: 'send' | 'search' | 'done'
+}
+
+const TrayInput = memo(({
+  mode,
+  sending,
+  chatError,
+  noSearchResults,
+  onTimelineSubmit,
+  onChatSubmit,
+  onSearchTextChange,
+}: TrayInputProps) => {
+  const [drafts, setDrafts] = useState<TrayDrafts>({
+    timeline: '',
+    chat: '',
+    search: '',
+  })
+  const debounceRef = useRef<number | null>(null)
+  const prevModeRef = useRef<TrayMode>(mode)
+
+  const inputConfig = useMemo<TrayInputConfig>(() => {
+    switch (mode) {
+      case 'chat':
+        return {
+          placeholder: 'Ask anything',
+          icon: '/sparkle.svg',
+          id: 'chat-input',
+          enterKeyHint: 'send',
+        }
+      case 'search':
+        return {
+          placeholder: 'Search all days',
+          icon: '/magnifying-glass.svg',
+          id: 'search-input',
+          enterKeyHint: 'search',
+        }
+      default:
+        return {
+          placeholder: 'What am I thinking about today?',
+          icon: '/pencil-simple-line.svg',
+          id: 'timeline-input',
+          enterKeyHint: 'done',
+        }
+    }
+  }, [mode])
+
+  const activeText = drafts[mode]
+
+  const updateDraft = useCallback(
+    (value: string) => {
+      setDrafts((prev) => ({ ...prev, [mode]: value }))
+    },
+    [mode],
+  )
+
+  useEffect(() => {
+    if (mode !== 'search') return
+
+    if (debounceRef.current) {
+      window.clearTimeout(debounceRef.current)
+    }
+
+    debounceRef.current = window.setTimeout(() => {
+      onSearchTextChange(drafts.search)
+    }, 200)
+
+    return () => {
+      if (debounceRef.current) {
+        window.clearTimeout(debounceRef.current)
+        debounceRef.current = null
+      }
+    }
+  }, [drafts.search, mode, onSearchTextChange])
+
+  useEffect(() => {
+    const previousMode = prevModeRef.current
+    prevModeRef.current = mode
+
+    if (mode === 'search' && previousMode !== 'search') {
+      onSearchTextChange(drafts.search)
+    }
+  }, [drafts.search, mode, onSearchTextChange])
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const trimmed = activeText.trim()
+    if (!trimmed) return
+
+    if (mode === 'chat') {
+      setDrafts((prev) => ({ ...prev, chat: '' }))
+      await onChatSubmit(activeText)
+      return
+    }
+
+    if (mode === 'timeline') {
+      await onTimelineSubmit(activeText)
+      setDrafts((prev) => ({ ...prev, timeline: '' }))
+    }
+  }
+
+  const handleClearSearch = () => {
+    if (debounceRef.current) {
+      window.clearTimeout(debounceRef.current)
+      debounceRef.current = null
+    }
+    setDrafts((prev) => ({ ...prev, search: '' }))
+    onSearchTextChange('')
+  }
+
+  const showNoResults = noSearchResults && Boolean(drafts.search.trim())
+  const showChatError = Boolean(chatError) && mode === 'chat'
+
+  return (
+    <div className="relative">
+      <p
+        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,300px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
+          showNoResults ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        aria-hidden={!showNoResults}
+      >
+        No results
+      </p>
+      <p
+        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,300px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
+          showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        aria-hidden={!showChatError}
+      >
+        {chatError}
+      </p>
+      <form className="flex items-center gap-3" onSubmit={handleSubmit}>
+        <div className="relative flex-1">
+          <span
+            aria-hidden="true"
+            className="tray-input-icon pointer-events-none absolute left-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 opacity-80 sm:block"
+            style={{
+              maskImage: `url(${inputConfig.icon})`,
+              WebkitMaskImage: `url(${inputConfig.icon})`,
+            }}
+          />
+          <input
+            id={inputConfig.id}
+            autoComplete="off"
+            type="Text"
+            inputMode="text"
+            className="w-full rounded-full bg-transparent py-2 pl-3 pr-3 text-base outline-none sm:pl-10"
+            placeholder={inputConfig.placeholder}
+            value={activeText}
+            onChange={(event) => updateDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.currentTarget.blur()
+              }
+            }}
+            enterKeyHint={inputConfig.enterKeyHint}
+          />
+        </div>
+        {(mode === 'timeline' || mode === 'chat') && (
+          <button
+            className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
+              activeText.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
+            }`}
+            type="submit"
+            disabled={sending}
+            aria-label={mode === 'chat' ? 'Send' : 'Add'}
+          >
+            <img
+              src={mode === 'chat' ? '/arrow-up.svg' : '/plus.svg'}
+              alt=""
+              className="h-5 w-5"
+              style={{ filter: 'brightness(0) invert(1)' }}
+            />
+          </button>
+        )}
+        {mode === 'search' && activeText.trim() && (
+          <button
+            className="group flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-500"
+            type="button"
+            aria-label="Clear search"
+            onClick={handleClearSearch}
+          >
+            <img
+              src="/plus.svg"
+              alt=""
+              className="h-4 w-4 rotate-45  [filter:invert(0.5)] group-hover:[filter:invert(1)]"
+            />
+          </button>
+        )}
+      </form>
+    </div>
+  )
+})
 
 // --- Constants ---
 
@@ -474,27 +690,23 @@ export default function Timeline() {
   const { mode } = useUIStore()
 
   // Mode-specific Input State
-  const [timelineText, setTimelineText] = useState('')
-  const [chatText, setChatText] = useState('')
   const [searchText, setSearchText] = useState('')
-
-  const activeText = mode === 'chat' ? chatText : mode === 'search' ? searchText : timelineText
-  const updateActiveText = (nextValue: string) => {
-    if (mode === 'chat') {
-      setChatText(nextValue)
-      return
-    }
-    if (mode === 'search') {
+  const handleSearchTextChange = useCallback(
+    (nextValue: string) => {
       setSearchText(nextValue)
-      return
-    }
-    setTimelineText(nextValue)
-  }
+    },
+    [setSearchText],
+  )
 
   // Chat State
   const [messages, setMessages] = useState<ChatUiMessage[]>([])
   const [sending, setSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
+  const messagesRef = useRef<ChatUiMessage[]>([])
+
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
 
   // Search State
   const [searchResults, setSearchResults] = useState<Day[]>([])
@@ -504,7 +716,9 @@ export default function Timeline() {
   const [highlightedQuote, setHighlightedQuote] = useState<Citation | null>(null)
 
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
-  const searchQuery = mode === 'search' ? searchText.trim() : ''
+  const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
+  const deferredSearchQuery = useDeferredValue(rawSearchQuery)
+  const searchQuery = mode === 'search' ? deferredSearchQuery : ''
 
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
@@ -582,7 +796,7 @@ export default function Timeline() {
     }
   }, [])
 
-  // Search Debounce
+  // Search
   useEffect(() => {
     if (mode !== 'search') return
 
@@ -592,23 +806,31 @@ export default function Timeline() {
       return
     }
 
-    // Set loading immediately to prevent "no results" flash
+    let cancelled = false
     setSearchLoading(true)
+    setSearchError(null)
 
-    const handle = window.setTimeout(async () => {
-      setSearchError(null)
+    const runSearch = async () => {
       try {
         const data = await searchDays(searchText)
+        if (cancelled) return
         setSearchResults(data)
       } catch {
+        if (cancelled) return
         setSearchError('Search failed. Try again.')
         setSearchResults([])
       } finally {
-        setSearchLoading(false)
+        if (!cancelled) {
+          setSearchLoading(false)
+        }
       }
-    }, 250)
+    }
 
-    return () => window.clearTimeout(handle)
+    void runSearch()
+
+    return () => {
+      cancelled = true
+    }
   }, [mode, searchText])
 
   useEffect(() => {
@@ -868,117 +1090,132 @@ export default function Timeline() {
     dayRefs.current.delete(dayId)
   }, [])
 
-  const handleChatSend = async () => {
-    const trimmed = chatText.trim()
-    if (!trimmed) return
-    setChatError(null)
+  const handleChatSend = useCallback(
+    async (draft: string) => {
+      const trimmed = draft.trim()
+      if (!trimmed) return
+      setChatError(null)
 
-    if (!geminiApiKey) {
-      setChatError('Add a Gemini API key in Settings first.')
-      return
-    }
-
-    const userMessage: ChatUiMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: trimmed,
-    }
-
-    const assistantId = crypto.randomUUID()
-    const assistantMessage: ChatUiMessage = {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      meta: { citations: [] },
-    }
-
-    setMessages((state) => [...state, userMessage, assistantMessage])
-    setChatText('')
-    setSending(true)
-
-    const currentMessages = [...messages, userMessage].map((m) => ({ role: m.role, content: m.content })) as LlmMessage[]
-
-    try {
-      const contextDays = await buildContextDays(trimmed)
-      const contextText = formatContext(contextDays)
-      const contextMap = new Map(contextDays.map((day) => [day.dayId, day.contentMd]))
-
-      const languageInstruction = aiLanguage === 'follow'
-        ? 'Reply in the same language the user writes in.'
-        : `Always reply in ${aiLanguage}.`
-
-      const date = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', weekday: 'long' })
-
-      const llmMessages = [
-        {
-          role: 'system' as const,
-          content: `${SYSTEM_PROMPT}\n\n<user_notes>\n${contextText}\n</user_notes>\n\nToday is ${date}.\nGiven the user's notes above, answer their question accurately and concisely. ${languageInstruction}`,
-        },
-        ...currentMessages,
-      ]
-
-      console.info('[LLM Request]', {
-        messageCount: llmMessages.length,
-        contextDays: contextDays.length,
-        contextChars: contextText.length,
-        userChars: trimmed.length,
-      })
-
-      const { text: responseText } = await chat({
-        provider: 'gemini',
-        apiKey: geminiApiKey,
-        model: geminiModel,
-        messages: llmMessages,
-        stream: true,
-        onToken: (chunk) => {
-          setMessages((state) =>
-            state.map((message) =>
-              message.id === assistantId
-                ? { ...message, content: `${message.content}${chunk}` }
-                : message,
-            ),
-          )
-        },
-      })
-
-      const sanitized = responseText.replace(/```json\s*/gi, '').replace(/```/g, '').trim()
-      console.info('[LLM Response]', { chars: responseText.length, sanitizedChars: sanitized.length })
-
-      let payload: AssistantPayload | null = null
-      try {
-        payload = JSON.parse(sanitized) as AssistantPayload
-        console.info('[LLM Parsed]', { hasCitations: Boolean(payload.citations?.length) })
-      } catch (parseError) {
-        console.error('[LLM Parse Error]', parseError)
-        payload = { answer: responseText }
+      if (!geminiApiKey) {
+        setChatError('Add a Gemini API key in Settings first.')
+        return
       }
 
-      const citations = (payload.citations ?? []).filter((citation) => {
-        const content = contextMap.get(citation.day)
-        return content ? content.includes(citation.quote) : false
-      })
+      const userMessage: ChatUiMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: trimmed,
+      }
 
-      setMessages((state) =>
-        state.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                content: payload?.answer ?? responseText,
-                meta: {
-                  citations,
-                  insertText: payload?.insert_text ?? null,
-                  insertTargetDay: payload?.insert_target_day ?? null,
-                },
-              }
-            : message,
-        ),
-      )
-    } catch (err) {
-      setChatError(err instanceof Error ? err.message : 'LLM request failed.')
-    } finally {
-      setSending(false)
-    }
-  }
+      const assistantId = crypto.randomUUID()
+      const assistantMessage: ChatUiMessage = {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        meta: { citations: [] },
+      }
+
+      setMessages((state) => [...state, userMessage, assistantMessage])
+      setSending(true)
+
+      const currentMessages = [...messagesRef.current, userMessage].map((m) => ({
+        role: m.role,
+        content: m.content,
+      })) as LlmMessage[]
+
+      try {
+        const contextDays = await buildContextDays(trimmed)
+        const contextText = formatContext(contextDays)
+        const contextMap = new Map(contextDays.map((day) => [day.dayId, day.contentMd]))
+
+        const languageInstruction = aiLanguage === 'follow'
+          ? 'Reply in the same language the user writes in.'
+          : `Always reply in ${aiLanguage}.`
+
+        const date = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', weekday: 'long' })
+
+        const llmMessages = [
+          {
+            role: 'system' as const,
+            content: `${SYSTEM_PROMPT}\n\n<user_notes>\n${contextText}\n</user_notes>\n\nToday is ${date}.\nGiven the user's notes above, answer their question accurately and concisely. ${languageInstruction}`,
+          },
+          ...currentMessages,
+        ]
+
+        console.info('[LLM Request]', {
+          messageCount: llmMessages.length,
+          contextDays: contextDays.length,
+          contextChars: contextText.length,
+          userChars: trimmed.length,
+        })
+
+        const { text: responseText } = await chat({
+          provider: 'gemini',
+          apiKey: geminiApiKey,
+          model: geminiModel,
+          messages: llmMessages,
+          stream: true,
+          onToken: (chunk) => {
+            setMessages((state) =>
+              state.map((message) =>
+                message.id === assistantId
+                  ? { ...message, content: `${message.content}${chunk}` }
+                  : message,
+              ),
+            )
+          },
+        })
+
+        const sanitized = responseText.replace(/```json\s*/gi, '').replace(/```/g, '').trim()
+        console.info('[LLM Response]', { chars: responseText.length, sanitizedChars: sanitized.length })
+
+        let payload: AssistantPayload | null = null
+        try {
+          payload = JSON.parse(sanitized) as AssistantPayload
+          console.info('[LLM Parsed]', { hasCitations: Boolean(payload.citations?.length) })
+        } catch (parseError) {
+          console.error('[LLM Parse Error]', parseError)
+          payload = { answer: responseText }
+        }
+
+        const citations = (payload.citations ?? []).filter((citation) => {
+          const content = contextMap.get(citation.day)
+          return content ? content.includes(citation.quote) : false
+        })
+
+        setMessages((state) =>
+          state.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  content: payload?.answer ?? responseText,
+                  meta: {
+                    citations,
+                    insertText: payload?.insert_text ?? null,
+                    insertTargetDay: payload?.insert_target_day ?? null,
+                  },
+                }
+              : message,
+          ),
+        )
+      } catch (err) {
+        setChatError(err instanceof Error ? err.message : 'LLM request failed.')
+      } finally {
+        setSending(false)
+      }
+    },
+    [
+      aiLanguage,
+      buildContextDays,
+      chat,
+      formatContext,
+      geminiApiKey,
+      geminiModel,
+      setChatError,
+      setMessages,
+      setSending,
+    ],
+  )
 
   const handleChatInsert = async (message: ChatUiMessage) => {
     const insertText = message.meta?.insertText
@@ -992,19 +1229,16 @@ export default function Timeline() {
     await handleAutoPush()
   }
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!activeText.trim()) return
+  const handleTimelineSubmit = useCallback(
+    async (draft: string) => {
+      const trimmed = draft.trim()
+      if (!trimmed) return
 
-    if (mode === 'timeline') {
-      await appendToToday(timelineText)
-      setTimelineText('')
+      await appendToToday(draft)
       await handleAutoPush()
-    } else if (mode === 'chat') {
-      await handleChatSend()
-    }
-    // Search is handled by debounce
-  }
+    },
+    [appendToToday, handleAutoPush],
+  )
 
   // --- Computed Data ---
 
@@ -1146,113 +1380,25 @@ export default function Timeline() {
   }, [dayOrder])
 
   // No Results State
-  const noSearchResults = mode === 'search' && !searchLoading && searchText.trim() && searchResults.length === 0 && !searchError
-  const showChatError = mode === 'chat' && !!chatError
+  const noSearchResults =
+    mode === 'search' &&
+    !searchLoading &&
+    Boolean(searchText.trim()) &&
+    searchResults.length === 0 &&
+    !searchError
 
   // --- Render ---
 
-  // Input Config based on mode
-  const inputConfig = useMemo(() => {
-    switch (mode) {
-      case 'chat':
-        return {
-          placeholder: 'Ask anything',
-          icon: '/sparkle.svg',
-          id: 'chat-input',
-          enterKeyHint: 'send',
-          style: { filter: 'grayscale(1) brightness(0.6)' }
-        }
-      case 'search':
-        return {
-          placeholder: 'Search all days',
-          icon: '/magnifying-glass.svg',
-          id: 'search-input',
-          enterKeyHint: 'search',
-          style: { filter: 'grayscale(1) brightness(0.6)' }
-        }
-      default:
-        return {
-          placeholder: 'What am I thinking about today?',
-          icon: '/pencil-simple-line.svg',
-          id: 'timeline-input',
-          enterKeyHint: 'done',
-          style: { filter: 'grayscale(1) brightness(0.6)' }
-        }
-    }
-  }, [mode])
-
   const trayContent = (
-    <div className="relative">
-      <p
-        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,300px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
-          noSearchResults ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-        aria-hidden={!noSearchResults}
-      >
-        No results
-      </p>
-      <p
-        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,300px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
-          showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-        aria-hidden={!showChatError}
-      >
-        {chatError}
-      </p>
-      <form className="flex items-center gap-3" onSubmit={handleSubmit}>
-        <div className="relative flex-1">
-          <span
-            aria-hidden="true"
-            className="tray-input-icon pointer-events-none absolute left-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 opacity-80 sm:block"
-            style={{
-              maskImage: `url(${inputConfig.icon})`,
-              WebkitMaskImage: `url(${inputConfig.icon})`,
-            }}
-          />
-          <input
-            id={inputConfig.id}
-            autoComplete="off"
-            type="Text"
-            inputMode="text"
-            className="w-full rounded-full bg-transparent py-2 pl-3 pr-3 text-base outline-none sm:pl-10"
-            placeholder={inputConfig.placeholder}
-            value={activeText}
-            onChange={(event) => updateActiveText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.currentTarget.blur()
-              }
-            }}
-          />
-        </div>
-        {(mode === 'timeline' || mode === 'chat') && (
-          <button
-            className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
-              activeText.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
-            }`}
-            type="submit"
-            disabled={sending}
-            aria-label={mode === 'chat' ? 'Send' : 'Add'}
-          >
-            <img src={mode === 'chat' ? "/arrow-up.svg" : "/plus.svg"} alt="" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
-          </button>
-        )}
-        {mode === 'search' && searchText.trim() && (
-          <button
-            className="group flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-500"
-            type="button"
-            aria-label="Clear search"
-            onClick={() => setSearchText('')}
-          >
-            <img
-              src="/plus.svg"
-              alt=""
-              className="h-4 w-4 rotate-45  [filter:invert(0.5)] group-hover:[filter:invert(1)]"
-            />
-          </button>
-        )}
-      </form>
-    </div>
+    <TrayInput
+      mode={mode}
+      sending={sending}
+      chatError={chatError}
+      noSearchResults={noSearchResults}
+      onTimelineSubmit={handleTimelineSubmit}
+      onChatSubmit={handleChatSend}
+      onSearchTextChange={handleSearchTextChange}
+    />
   )
 
   return (
