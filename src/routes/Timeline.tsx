@@ -176,6 +176,12 @@ const DayEditorCard = ({
   registerDayRef,
   registerDateInputRef,
 }: DayEditorCardProps) => {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const longPressTimeoutRef = useRef<number | null>(null)
+  const longPressTriggeredRef = useRef(false)
+  const hoverTimeoutRef = useRef<number | null>(null)
+  const deleteSourceRef = useRef<'hover' | 'longpress' | null>(null)
+  const [showDelete, setShowDelete] = useState(false)
   const searchHighlight = useMemo(() => createHighlightPlugin(searchQuery), [searchQuery])
   const quoteHighlight = useMemo(() => (quote ? createHighlightPlugin(quote) : null), [quote])
 
@@ -184,6 +190,94 @@ const DayEditorCard = ({
       registerEditor(day.dayId, null)
     }
   }, [day.dayId, registerEditor])
+
+  useEffect(() => {
+    if (!showDelete) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && containerRef.current?.contains(target)) {
+        return
+      }
+      setShowDelete(false)
+      deleteSourceRef.current = null
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [showDelete])
+
+  const handleLongPressStart = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== 'touch') return
+    longPressTriggeredRef.current = false
+    if (longPressTimeoutRef.current) {
+      window.clearTimeout(longPressTimeoutRef.current)
+    }
+    longPressTimeoutRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true
+      deleteSourceRef.current = 'longpress'
+      setShowDelete(true)
+    }, 500)
+  }
+
+  const clearLongPress = () => {
+    if (longPressTimeoutRef.current) {
+      window.clearTimeout(longPressTimeoutRef.current)
+      longPressTimeoutRef.current = null
+    }
+  }
+
+  const clearHoverTimeout = () => {
+    if (hoverTimeoutRef.current) {
+      window.clearTimeout(hoverTimeoutRef.current)
+      hoverTimeoutRef.current = null
+    }
+  }
+
+  const handleHoverStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse') return
+    deleteSourceRef.current = 'hover'
+    setShowDelete(true)
+    clearHoverTimeout()
+    hoverTimeoutRef.current = window.setTimeout(() => {
+      if (deleteSourceRef.current === 'hover') {
+        setShowDelete(false)
+        deleteSourceRef.current = null
+      }
+    }, 10000)
+  }
+
+  const handleHoverEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse') return
+    clearHoverTimeout()
+    if (deleteSourceRef.current === 'hover') {
+      setShowDelete(false)
+      deleteSourceRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (longPressTimeoutRef.current) {
+        window.clearTimeout(longPressTimeoutRef.current)
+        longPressTimeoutRef.current = null
+      }
+      if (hoverTimeoutRef.current) {
+        window.clearTimeout(hoverTimeoutRef.current)
+        hoverTimeoutRef.current = null
+      }
+    }
+  }, [])
+
+  const handleTitleClick = () => {
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false
+      return
+    }
+    onDateOpen(day.dayId)
+  }
 
   const navigationKeymap = useMemo(
     () =>
@@ -239,8 +333,13 @@ const DayEditorCard = ({
 
   return (
     <div
-      ref={(node) => registerDayRef(day.dayId, node)}
-      className={`rounded-[4px] border p-4 transition ${
+      ref={(node) => {
+        containerRef.current = node
+        registerDayRef(day.dayId, node)
+      }}
+      onPointerEnter={handleHoverStart}
+      onPointerLeave={handleHoverEnd}
+      className={`group rounded-[4px] border p-4 transition ${
         isFuture
           ? 'border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.03)] hover:border-slate-300/60'
           : 'border-slate-200/60 bg-white shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] hover:border-slate-300/60'
@@ -251,7 +350,11 @@ const DayEditorCard = ({
           className="text-left"
           type="button"
           aria-label={`Change date for ${day.dayId}`}
-          onClick={() => onDateOpen(day.dayId)}
+          onClick={handleTitleClick}
+          onPointerDown={handleLongPressStart}
+          onPointerUp={clearLongPress}
+          onPointerCancel={clearLongPress}
+          onPointerLeave={clearLongPress}
         >
           <h3
             className={`${isToday ? 'text-2xl' : isYesterday || isTomorrow ? 'text-lg' : 'text-base'} ${
@@ -285,11 +388,15 @@ const DayEditorCard = ({
           )}
           <button
             className={`flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 ${
-              isFuture ? 'opacity-70' : ''
+              showDelete ? 'opacity-100' : 'pointer-events-none opacity-0'
             }`}
             type="button"
             aria-label="Delete"
-            onClick={() => void onDelete(day.dayId)}
+            onClick={() => {
+              setShowDelete(false)
+              deleteSourceRef.current = null
+              void onDelete(day.dayId)
+            }}
           >
             <img
               src="/trash.svg"
@@ -438,7 +545,7 @@ export default function Timeline() {
         },
         '.cm-content': {
           minHeight: '48px',
-          padding: '12px 0 0',
+          padding: '0',
         },
         '.cm-gutters': {
           display: 'none',
