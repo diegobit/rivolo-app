@@ -250,7 +250,7 @@ export default function AppShell() {
                 aria-label="Shortcuts"
                 onClick={() => setShowShortcuts((prev) => !prev)}
               >
-                <img src="/question-mark.svg" alt="" className="h-4 w-4" />
+                <img src="/question-mark.svg" alt="" className="h-5 w-5" />
               </button>
               {showShortcuts && (
                 <div className="absolute left-0 z-20 mt-2 w-max rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-600 shadow-lg">
@@ -281,7 +281,7 @@ export default function AppShell() {
               }
             }}
           >
-            <img src="/gear.svg" alt="" className="h-4 w-4" />
+            <img src="/gear.svg" alt="" className="h-5 w-5" />
           </NavLink>
         </div>
       </header>
