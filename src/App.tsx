@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AppShell from './components/AppShell'
-import Capture from './routes/Capture.tsx'
 import DropboxCallback from './routes/DropboxCallback.tsx'
 import Settings from './routes/Settings.tsx'
 import Timeline from './routes/Timeline.tsx'
@@ -12,7 +11,6 @@ export default function App() {
         <Route path="/" element={<Timeline />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/auth/dropbox/callback" element={<DropboxCallback />} />
-        <Route path="/capture" element={<Capture />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
