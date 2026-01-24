@@ -177,11 +177,10 @@ const DayEditorCard = ({
   registerDayRef,
 }: DayEditorCardProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const longPressTimeoutRef = useRef<number | null>(null)
-  const longPressTriggeredRef = useRef(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const hoverTimeoutRef = useRef<number | null>(null)
-  const deleteSourceRef = useRef<'hover' | 'longpress' | null>(null)
-  const [showDelete, setShowDelete] = useState(false)
+  const [showDeleteMenu, setShowDeleteMenu] = useState(false)
+  const [showDesktopDelete, setShowDesktopDelete] = useState(false)
   const searchHighlight = useMemo(() => createHighlightPlugin(searchQuery), [searchQuery])
   const quoteHighlight = useMemo(() => (quote ? createHighlightPlugin(quote) : null), [quote])
 
@@ -192,42 +191,21 @@ const DayEditorCard = ({
   }, [day.dayId, registerEditor])
 
   useEffect(() => {
-    if (!showDelete) return
+    if (!showDeleteMenu) return
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target
-      if (target instanceof Node && containerRef.current?.contains(target)) {
+      if (target instanceof Node && menuRef.current?.contains(target)) {
         return
       }
-      setShowDelete(false)
-      deleteSourceRef.current = null
+      setShowDeleteMenu(false)
     }
 
     document.addEventListener('pointerdown', handlePointerDown)
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown)
     }
-  }, [showDelete])
-
-  const handleLongPressStart = (event: React.PointerEvent<HTMLInputElement>) => {
-    if (event.pointerType !== 'touch') return
-    longPressTriggeredRef.current = false
-    if (longPressTimeoutRef.current) {
-      window.clearTimeout(longPressTimeoutRef.current)
-    }
-    longPressTimeoutRef.current = window.setTimeout(() => {
-      longPressTriggeredRef.current = true
-      deleteSourceRef.current = 'longpress'
-      setShowDelete(true)
-    }, 500)
-  }
-
-  const clearLongPress = () => {
-    if (longPressTimeoutRef.current) {
-      window.clearTimeout(longPressTimeoutRef.current)
-      longPressTimeoutRef.current = null
-    }
-  }
+  }, [showDeleteMenu])
 
   const clearHoverTimeout = () => {
     if (hoverTimeoutRef.current) {
@@ -238,48 +216,27 @@ const DayEditorCard = ({
 
   const handleHoverStart = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'mouse') return
-    deleteSourceRef.current = 'hover'
-    setShowDelete(true)
+    setShowDesktopDelete(true)
     clearHoverTimeout()
     hoverTimeoutRef.current = window.setTimeout(() => {
-      if (deleteSourceRef.current === 'hover') {
-        setShowDelete(false)
-        deleteSourceRef.current = null
-      }
+      setShowDesktopDelete(false)
     }, 10000)
   }
 
   const handleHoverEnd = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'mouse') return
     clearHoverTimeout()
-    if (deleteSourceRef.current === 'hover') {
-      setShowDelete(false)
-      deleteSourceRef.current = null
-    }
+    setShowDesktopDelete(false)
   }
 
   useEffect(() => {
     return () => {
-      if (longPressTimeoutRef.current) {
-        window.clearTimeout(longPressTimeoutRef.current)
-        longPressTimeoutRef.current = null
-      }
       if (hoverTimeoutRef.current) {
         window.clearTimeout(hoverTimeoutRef.current)
         hoverTimeoutRef.current = null
       }
     }
   }, [])
-
-  const handleDateInputClick = (event: React.MouseEvent<HTMLInputElement>) => {
-    if (longPressTriggeredRef.current) {
-      longPressTriggeredRef.current = false
-      event.preventDefault()
-      event.stopPropagation()
-      event.currentTarget.blur()
-      return
-    }
-  }
 
   const navigationKeymap = useMemo(
     () =>
@@ -377,11 +334,6 @@ const DayEditorCard = ({
             aria-label={`Change date for ${day.dayId}`}
             value={day.dayId}
             onChange={(event) => void onDateChange(day.dayId, event.target.value)}
-            onClick={handleDateInputClick}
-            onPointerDown={handleLongPressStart}
-            onPointerUp={clearLongPress}
-            onPointerCancel={clearLongPress}
-            onPointerLeave={clearLongPress}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.currentTarget.blur()
@@ -399,15 +351,46 @@ const DayEditorCard = ({
               {open === 1 ? '1 todo' : `${open} todos`}
             </span>
           )}
+          <div ref={menuRef} className="relative sm:hidden">
+            <button
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300"
+              type="button"
+              aria-label="Open note actions"
+              onClick={() => setShowDeleteMenu((state) => !state)}
+            >
+              <img src="/dots-three.svg" alt="" className="h-4 w-4 opacity-70" />
+            </button>
+            {showDeleteMenu && (
+              <div className="absolute right-0 top-10 z-10 min-w-[150px] rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                <button
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteMenu(false)
+                    void onDelete(day.dayId)
+                  }}
+                >
+                  <img
+                    src="/trash.svg"
+                    alt=""
+                    className="h-4 w-4"
+                    style={{
+                      filter:
+                        'invert(29%) sepia(51%) saturate(2878%) hue-rotate(341deg) brightness(91%) contrast(95%)',
+                    }}
+                  />
+                  Delete note
+                </button>
+              </div>
+            )}
+          </div>
           <button
-            className={`flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 ${
-              showDelete ? 'opacity-100' : 'pointer-events-none opacity-0'
+            className={`hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:flex ${
+              showDesktopDelete ? 'opacity-100' : 'pointer-events-none opacity-0'
             }`}
             type="button"
             aria-label="Delete"
             onClick={() => {
-              setShowDelete(false)
-              deleteSourceRef.current = null
               void onDelete(day.dayId)
             }}
           >
