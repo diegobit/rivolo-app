@@ -132,11 +132,11 @@ export const appendLineToDay = async (dayId: string, line: string) => {
   return saveDay(dayId, nextContent, existing.humanTitle)
 }
 
-export const prependToDay = async (dayId: string, text: string) => {
+export const appendToDay = async (dayId: string, text: string) => {
   const existing = await ensureDay(dayId)
   const trimmed = text.trim()
   const nextContent = existing.contentMd
-    ? `${trimmed}\n\n${existing.contentMd.trimStart()}`
+    ? `${existing.contentMd.trimStart()}\n\n${trimmed}`
     : trimmed
   return saveDay(dayId, nextContent, existing.humanTitle)
 }
