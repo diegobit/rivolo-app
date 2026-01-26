@@ -197,6 +197,12 @@
   .cm-todo-marker {
     color: #ed9b38;
     font-weight: 600;
+    cursor: pointer;
+  }
+
+  .cm-todo-marker:hover {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
   }
 
   .hljs {

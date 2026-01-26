@@ -318,6 +318,22 @@ export default function AppShell() {
                           <span className="text-slate-400">-&gt;</span>
                           <span>New Future Day</span>
                         </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Editing:
+                      </div>
+                      <div className="grid gap-1">
+                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                          <span className="flex items-center gap-1">
+                            <kbd className="kbd">Cmd/Ctrl</kbd>
+                            <span className="text-slate-400">+</span>
+                            <kbd className="kbd">Enter</kbd>
+                          </span>
+                          <span className="text-slate-400">-&gt;</span>
+                          <span>Toggle todo</span>
+                        </div>
                         <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                           <span className="flex items-center gap-1">
                             <kbd className="kbd">I</kbd>

@@ -34,8 +34,12 @@ const buildTagDecorations = (text: string) => {
     const prefixLength = match[1].length
     const token = match[2]
     const start = match.index + prefixLength
-    const end = start + token.length
-    ranges.push({ from: start, to: end, className: 'cm-todo-marker' })
+    const bracketMatch = token.match(/\[[ xX]\]/)
+    if (bracketMatch) {
+      const bracketStart = start + (bracketMatch.index ?? 0)
+      const bracketEnd = bracketStart + bracketMatch[0].length
+      ranges.push({ from: bracketStart, to: bracketEnd, className: 'cm-todo-marker' })
+    }
     match = todoRegex.exec(text)
   }
 
