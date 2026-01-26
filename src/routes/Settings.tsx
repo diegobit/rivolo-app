@@ -156,6 +156,8 @@ export default function Settings() {
     loadSettings,
     saveGeminiKey,
     updateGeminiModel,
+    updateAllowThinking,
+    updateAllowWebSearch,
     updateAiLanguage,
     updateWallpaper,
     updateHighlightInputMode,
@@ -165,6 +167,8 @@ export default function Settings() {
     updateTitleFont,
     geminiApiKey,
     geminiModel,
+    allowThinking,
+    allowWebSearch,
     aiLanguage,
     wallpaper,
     highlightInputMode,
@@ -508,6 +512,50 @@ export default function Settings() {
                 void updateAiLanguage(value || 'follow')
               }}
             />
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Allow thinking for supported models
+          </h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className={allowThinking ? buttonPillActive : buttonPill}
+              type="button"
+              onClick={() => void updateAllowThinking(true)}
+            >
+              YES
+            </button>
+            <button
+              className={!allowThinking ? buttonPillActive : buttonPill}
+              type="button"
+              onClick={() => void updateAllowThinking(false)}
+            >
+              NO
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Allow web search for supported models
+          </h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className={allowWebSearch ? buttonPillActive : buttonPill}
+              type="button"
+              onClick={() => void updateAllowWebSearch(true)}
+            >
+              YES
+            </button>
+            <button
+              className={!allowWebSearch ? buttonPillActive : buttonPill}
+              type="button"
+              onClick={() => void updateAllowWebSearch(false)}
+            >
+              NO
+            </button>
           </div>
         </div>
 

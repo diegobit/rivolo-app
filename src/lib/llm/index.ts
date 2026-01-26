@@ -11,6 +11,8 @@ export type ChatOptions = {
   apiKey: string
   model: string
   messages: ChatMessage[]
+  allowThinking?: boolean
+  allowWebSearch?: boolean
   temperature?: number
   maxTokens?: number
   stream?: boolean

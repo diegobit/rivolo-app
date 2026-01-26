@@ -7,6 +7,8 @@ export type GeminiChatOptions = {
   apiKey: string
   model: string
   messages: GeminiMessage[]
+  allowThinking?: boolean
+  allowWebSearch?: boolean
   temperature?: number
   maxTokens?: number
   stream?: boolean
@@ -19,9 +21,13 @@ const extractText = (payload: unknown) => {
   return entries
     .map((entry) => {
       const typed = entry as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[]
+        candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[]
       }
-      return typed.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? ''
+      const parts = typed.candidates?.[0]?.content?.parts ?? []
+      return parts
+        .filter((part) => !part.thought)
+        .map((part) => part.text ?? '')
+        .join('')
     })
     .join('')
 }
@@ -95,6 +101,8 @@ export const chatWithGemini = async ({
   apiKey,
   model,
   messages,
+  allowThinking = false,
+  allowWebSearch = true,
   temperature = 0.2,
   maxTokens = 2048,
   stream = false,
@@ -102,23 +110,59 @@ export const chatWithGemini = async ({
 }: GeminiChatOptions) => {
   const endpoint = stream ? 'streamGenerateContent' : 'generateContent'
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${apiKey}`
-  const tools = [{ googleSearch: {} }]
+  const tools = allowWebSearch ? [{ googleSearch: {} }] : null
+  const thinkingConfig = { thinkingBudget: 0, includeThoughts: false }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const toRequestBody = (includeThinkingConfig: boolean) => {
+    const body = {
       contents: messages,
-      tools,
       generationConfig: {
         temperature,
         maxOutputTokens: maxTokens,
+        ...(includeThinkingConfig ? { thinkingConfig } : {}),
       },
-    }),
-  })
+    }
+
+    if (tools) {
+      return JSON.stringify({ ...body, tools })
+    }
+
+    return JSON.stringify(body)
+  }
+
+  const summarizeError = (errorText: string) => {
+    const trimmed = errorText.trim()
+    if (!trimmed) return ''
+    return trimmed.length > 200 ? `${trimmed.slice(0, 200)}...` : trimmed
+  }
+
+  const request = async (includeThinkingConfig: boolean) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: toRequestBody(includeThinkingConfig),
+    })
+
+    if (response.ok) {
+      return { response, errorText: null as string | null }
+    }
+
+    const errorText = await response.text()
+    return { response, errorText }
+  }
+
+  const disableThinking = !allowThinking
+  let { response, errorText } = await request(disableThinking)
+
+  if (!response.ok && disableThinking && errorText && /thinking/i.test(errorText)) {
+    const retry = await request(false)
+    response = retry.response
+    errorText = retry.errorText
+  }
 
   if (!response.ok) {
-    throw new Error(`Gemini error: ${response.status}`)
+    const details = errorText ? ` - ${summarizeError(errorText)}` : ''
+    throw new Error(`Gemini error: ${response.status}${details}`)
   }
 
   if (stream && response.body) {
@@ -128,11 +172,10 @@ export const chatWithGemini = async ({
   }
 
   const data = (await response.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[]
+    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[]
   }
 
-  const text =
-    data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? ''
+  const text = extractText(data)
 
   return { text, raw: data }
 }
