@@ -20,6 +20,8 @@ type SettingsState = {
   provider: Provider
   geminiApiKey: string | null
   geminiModel: string
+  allowThinking: boolean
+  allowWebSearch: boolean
   aiLanguage: AiLanguage
   loading: boolean
   wallpaper: Wallpaper
@@ -31,6 +33,8 @@ type SettingsState = {
   loadSettings: () => Promise<void>
   saveGeminiKey: (apiKey: string) => Promise<void>
   updateGeminiModel: (model: string) => Promise<void>
+  updateAllowThinking: (enabled: boolean) => Promise<void>
+  updateAllowWebSearch: (enabled: boolean) => Promise<void>
   updateAiLanguage: (language: AiLanguage) => Promise<void>
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
   updateHighlightInputMode: (enabled: boolean) => Promise<void>
@@ -44,6 +48,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   provider: 'gemini',
   geminiApiKey: null,
   geminiModel: DEFAULT_GEMINI_MODEL,
+  allowThinking: false,
+  allowWebSearch: true,
   aiLanguage: 'follow',
   loading: false,
   wallpaper: 'thoughts-light',
@@ -57,6 +63,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ loading: true })
     const provider = (await getSetting('llm.provider')) as Provider | null
     const storedGeminiModel = await getSetting('llm.geminiModel')
+    const storedAllowThinking = await getSetting('llm.allowThinking')
+    const storedAllowWebSearch = await getSetting('llm.allowWebSearch')
     const storedAiLanguage = (await getSetting('ai.language')) as AiLanguage | null
     const storedWallpaper = (await getSetting('appearance.wallpaper')) as Wallpaper | null
     const storedHighlightInputMode = await getSetting('appearance.highlightInputMode')
@@ -65,6 +73,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const storedMonospaceFont = await getSetting('appearance.monospaceFont')
     const storedTitleFont = await getSetting('appearance.titleFont')
     const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
+    const allowThinking = storedAllowThinking === 'true'
+    const allowWebSearch = storedAllowWebSearch !== 'false'
+    const shouldPersistAllowThinking =
+      storedAllowThinking === null || (storedAllowThinking !== 'true' && storedAllowThinking !== 'false')
+    const shouldPersistAllowWebSearch =
+      storedAllowWebSearch === null || (storedAllowWebSearch !== 'true' && storedAllowWebSearch !== 'false')
     const aiLanguage = storedAiLanguage ?? 'follow'
     const wallpaper = storedWallpaper ?? 'thoughts-light'
     const highlightInputMode = storedHighlightInputMode === 'true'
@@ -78,6 +92,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
     if (!storedGeminiModel) {
       await setSetting('llm.geminiModel', geminiModel)
+    }
+    if (shouldPersistAllowThinking) {
+      await setSetting('llm.allowThinking', allowThinking ? 'true' : 'false')
+    }
+    if (shouldPersistAllowWebSearch) {
+      await setSetting('llm.allowWebSearch', allowWebSearch ? 'true' : 'false')
     }
     if (!storedAiLanguage) {
       await setSetting('ai.language', aiLanguage)
@@ -108,6 +128,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       provider: provider ?? 'gemini',
       geminiApiKey,
       geminiModel,
+      allowThinking,
+      allowWebSearch,
       aiLanguage,
       wallpaper,
       highlightInputMode,
@@ -129,6 +151,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const normalized = model.trim() || DEFAULT_GEMINI_MODEL
     await setSetting('llm.geminiModel', normalized)
     set({ geminiModel: normalized })
+  },
+
+  updateAllowThinking: async (enabled: boolean) => {
+    await setSetting('llm.allowThinking', enabled ? 'true' : 'false')
+    set({ allowThinking: enabled })
+  },
+
+  updateAllowWebSearch: async (enabled: boolean) => {
+    await setSetting('llm.allowWebSearch', enabled ? 'true' : 'false')
+    set({ allowWebSearch: enabled })
   },
 
   updateAiLanguage: async (language: AiLanguage) => {

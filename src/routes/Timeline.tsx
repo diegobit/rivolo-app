@@ -663,6 +663,8 @@ export default function Timeline() {
     loadSettings,
     geminiApiKey,
     geminiModel,
+    allowThinking,
+    allowWebSearch,
     aiLanguage,
     fontPreference,
     bodyFont,
@@ -1137,6 +1139,8 @@ export default function Timeline() {
           apiKey: geminiApiKey,
           model: geminiModel,
           messages: llmMessages,
+          allowThinking,
+          allowWebSearch,
           stream: true,
           onToken: (chunk) => {
             setMessages((state) =>
