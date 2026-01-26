@@ -729,7 +729,7 @@ export default function Timeline() {
           color: '#000000',
         },
         '.cm-content': {
-          minHeight: '48px',
+          minHeight: '30px',
           padding: '0',
         },
         '.cm-gutters': {
