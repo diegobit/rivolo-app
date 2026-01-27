@@ -14,7 +14,7 @@ import {
 } from '../lib/fonts'
 import { shareOrDownload } from '../lib/share'
 import { DEFAULT_DROPBOX_PATH, startDropboxAuth } from '../lib/dropbox'
-import { disconnectActiveProvider, pullFromSync, pushToSync } from '../lib/sync'
+import { disconnectActiveProvider, pushToSync } from '../lib/sync'
 import {
   buttonDanger,
   buttonPill,
@@ -22,6 +22,7 @@ import {
   buttonPrimary,
   buttonSecondary,
 } from '../lib/ui'
+import { pullFromSyncAndRefresh } from '../store/syncActions'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -395,10 +396,8 @@ export default function Settings() {
 
     setSyncBusy(true)
     try {
-      const result = await pullFromSync()
-      await loadTimeline()
+      const result = await pullFromSyncAndRefresh()
       await loadDropboxState()
-      await loadSyncState()
       setDropboxStatus(
         result.status === 'noop' ? 'No changes on Dropbox.' : 'Pulled and imported.',
       )
