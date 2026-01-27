@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { pullFromSync } from '../lib/sync'
+import { pullFromSyncAndRefresh } from '../store/syncActions'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useUIStore } from '../store/useUIStore'
@@ -130,7 +130,7 @@ export default function AppShell() {
     if (!syncStatus.connected || !syncStatus.filePath) return
 
     hasAutoPulled.current = true
-    void pullFromSync().catch(() => {
+    void pullFromSyncAndRefresh().catch(() => {
       // Auto-pull failures are handled by manual sync.
     })
   }, [syncStatus.connected, syncStatus.filePath])
