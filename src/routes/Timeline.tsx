@@ -1624,14 +1624,14 @@ export default function Timeline() {
             />
           </div>
           <div className="max-w-[420px] space-y-3">
-            <h2 className="text-2xl font-semibold text-slate-900" style={{ fontFamily: titleFontFamily }}>
-              Stop organizing. Start writing.
-            </h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-lg text-slate-500">
               Rivolo replaces notes with a daily flow. 
             </p>
-            <p className="text-sm text-slate-500">
+            <p className="text-lg text-slate-500">
               Structure emerges only when you ask for it.
+            </p>
+            <p className="text-lg text-slate-500">
+              Stop organizing. Start writing.
             </p>
           </div>
           <div className="flex flex-col items-center gap-3">
@@ -1642,13 +1642,7 @@ export default function Timeline() {
             >
               Start Today
             </button>
-            <p className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-400">
-              <span className="font-semibold text-slate-500">Tip:</span>
-              <span className="inline-flex items-center gap-1">
-                <kbd className="kbd">I</kbd>
-                <span>focus quick add input</span>
-              </span>
-            </p>
+            <p></p>
           </div>
         </section>
       )}
