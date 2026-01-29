@@ -6,17 +6,17 @@ import { EditorSelection, Prec, RangeSetBuilder, type Extension, type Line } fro
 import BottomTrayPortal from '../components/BottomTrayPortal'
 import { getBodyFontFamily, getMonospaceFontFamily, getTitleFontFamily } from '../lib/fonts'
 import { editorHighlights } from '../lib/editorHighlights'
-import { pushToSync } from '../lib/sync'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import type { Day } from '../lib/dayRepository'
 import { searchDays, appendToDay } from '../lib/dayRepository'
+import { chat } from '../lib/llm'
+import type { ChatMessage as LlmMessage } from '../lib/llm'
+import { buildContextDays, formatContext } from '../lib/llmContext'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useDaysStore } from '../store/useDaysStore'
 import { useUIStore } from '../store/useUIStore'
-import { chat } from '../lib/llm'
-import type { ChatMessage as LlmMessage } from '../lib/llm'
-import { buildContextDays, formatContext } from '../lib/llmContext'
+import { pushToSyncAndRefresh } from '../store/syncActions'
 
 // --- Helpers ---
 
@@ -939,12 +939,11 @@ export default function Timeline() {
   const handleAutoPush = useCallback(async () => {
     if (!canSync || !navigator.onLine) return
     try {
-      await pushToSync()
-      await loadSyncState()
+      await pushToSyncAndRefresh()
     } catch {
       // Ignore auto-push errors
     }
-  }, [canSync, loadSyncState])
+  }, [canSync, pushToSyncAndRefresh])
 
   const scheduleSave = useCallback(
     (dayId: string, content: string) => {

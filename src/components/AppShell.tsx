@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { pullFromSyncAndRefresh } from '../store/syncActions'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -15,17 +15,19 @@ const backButtonClass =
 export default function AppShell() {
   const location = useLocation()
   const { loadSettings, wallpaper, highlightInputMode } = useSettingsStore()
-  const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
+  const { loadState: loadSyncState, status: syncStatus, syncing, syncOperation } = useSyncStore()
   const { mode, setMode } = useUIStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
   const [viewportOffset, setViewportOffset] = useState(0)
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
-  const hasAutoPulled = useRef(false)
+  const lastAutoPullAt = useRef(0)
+  const autoPullInFlight = useRef(false)
   const showBackButton = location.pathname === '/settings'
   const isHome = location.pathname === '/'
   const showTrayRow = isHome
+  const syncLabel = syncOperation === 'push' ? 'Pushing to Dropbox' : 'Pulling from Dropbox'
 
   const timelineButton = (
     <button
@@ -124,16 +126,52 @@ export default function AppShell() {
     document.body.dataset.wallpaper = wallpaper
   }, [wallpaper])
 
-  useEffect(() => {
-    if (hasAutoPulled.current) return
-    if (!navigator.onLine) return
-    if (!syncStatus.connected || !syncStatus.filePath) return
+  const maybeAutoPull = useCallback(
+    (reason: 'start' | 'reconnect' | 'visibility') => {
+      if (!navigator.onLine) return
+      if (!syncStatus.connected || !syncStatus.filePath) return
+      if (autoPullInFlight.current) return
 
-    hasAutoPulled.current = true
-    void pullFromSyncAndRefresh().catch(() => {
-      // Auto-pull failures are handled by manual sync.
-    })
-  }, [syncStatus.connected, syncStatus.filePath])
+      const now = Date.now()
+      if (now - lastAutoPullAt.current < 2 * 60 * 1000) return
+
+      autoPullInFlight.current = true
+      lastAutoPullAt.current = now
+      console.info('[Sync] auto-pull:trigger', { reason })
+      void pullFromSyncAndRefresh()
+        .catch(() => {
+          // Auto-pull failures are handled by manual sync.
+        })
+        .finally(() => {
+          autoPullInFlight.current = false
+        })
+    },
+    [syncStatus.connected, syncStatus.filePath],
+  )
+
+  useEffect(() => {
+    console.info('[Sync] auto-pull:event', { reason: 'start' })
+    maybeAutoPull('start')
+  }, [maybeAutoPull])
+
+  useEffect(() => {
+    const handleOnline = () => {
+      console.info('[Sync] auto-pull:event', { reason: 'reconnect' })
+      maybeAutoPull('reconnect')
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return
+      console.info('[Sync] auto-pull:event', { reason: 'visibility' })
+      maybeAutoPull('visibility')
+    }
+
+    window.addEventListener('online', handleOnline)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [maybeAutoPull])
 
   useEffect(() => {
     if (!showShortcuts) return
@@ -360,6 +398,16 @@ export default function AppShell() {
           <img src="/logo.png" alt="Rivolo" className="h-10 w-auto" />
         </NavLink>
         <div className="flex items-center justify-end gap-2">
+          {syncing && (
+            <div
+              className="flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-xs text-slate-400 shadow-sm"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="whitespace-nowrap">{syncLabel}</span>
+              <span className="loader text-slate-300" aria-hidden="true" />
+            </div>
+          )}
           <NavLink
             to="/settings"
             className={topIconButton}
