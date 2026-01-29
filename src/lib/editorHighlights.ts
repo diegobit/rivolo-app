@@ -10,6 +10,23 @@ const highlightStyle = HighlightStyle.define([
     color: '#368b1c',
     fontWeight: '900',
   },
+  {
+    tag: tags.strong,
+    fontWeight: '700',
+  },
+  {
+    tag: tags.emphasis,
+    fontStyle: 'italic',
+  },
+  {
+    tag: tags.quote,
+    fontStyle: 'italic',
+  },
+  {
+    tag: tags.strikethrough,
+    color: '#64748b',
+    textDecoration: 'line-through',
+  },
 ])
 
 const buildTagDecorations = (text: string) => {
@@ -41,6 +58,18 @@ const buildTagDecorations = (text: string) => {
       ranges.push({ from: bracketStart, to: bracketEnd, className: 'cm-todo-marker' })
     }
     match = todoRegex.exec(text)
+  }
+
+  const listRegex = /(^|\n)(\s*(?:[-+*]|\d+[.)]))(?=\s+)/g
+  match = listRegex.exec(text)
+
+  while (match) {
+    const prefixLength = match[1].length
+    const token = match[2]
+    const start = match.index + prefixLength
+    const end = start + token.length
+    ranges.push({ from: start, to: end, className: 'cm-list-marker' })
+    match = listRegex.exec(text)
   }
 
   ranges.sort((a, b) => a.from - b.from || a.to - b.to)
