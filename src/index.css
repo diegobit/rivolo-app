@@ -173,6 +173,10 @@
     font-family: system-ui, sans-serif;
   }
 
+  body[data-empty-state='true'] .app-logo {
+    opacity: 0;
+  }
+
   .caret-blue {
     caret-color: #22b3ff;
     caret-width: 2px;

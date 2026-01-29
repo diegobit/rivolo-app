@@ -12,6 +12,7 @@ import { searchDays, appendToDay } from '../lib/dayRepository'
 import { chat } from '../lib/llm'
 import type { ChatMessage as LlmMessage } from '../lib/llm'
 import { buildContextDays, formatContext } from '../lib/llmContext'
+import { buttonPrimary } from '../lib/ui'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useDaysStore } from '../store/useDaysStore'
@@ -765,6 +766,7 @@ export default function Timeline() {
   } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
   const { mode } = useUIStore()
+  const hasNoNotes = !loading && days.length === 0
 
   // Mode-specific Input State
   const [searchText, setSearchText] = useState('')
@@ -791,11 +793,13 @@ export default function Timeline() {
   const [searchError, setSearchError] = useState<string | null>(null)
   const [dateErrors, setDateErrors] = useState<Record<string, string | null>>({})
   const [highlightedQuote, setHighlightedQuote] = useState<Citation | null>(null)
+  const [isLogoAnimating, setIsLogoAnimating] = useState(false)
 
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
+  const todayId = getTodayId()
 
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
@@ -805,6 +809,7 @@ export default function Timeline() {
   const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
   const highlightTimeoutRef = useRef<number | null>(null)
   const addTodayRef = useRef<HTMLDivElement | null>(null)
+  const heroLogoRef = useRef<HTMLImageElement | null>(null)
 
   const markdownExtension = useMemo(() => markdown(), [])
   const editorTheme = useMemo(
@@ -857,6 +862,20 @@ export default function Timeline() {
     void loadSettings()
     void loadSyncState()
   }, [loadSettings, loadSyncState, loadTimeline])
+
+  useEffect(() => {
+    if (hasNoNotes || isLogoAnimating) {
+      document.body.dataset.emptyState = 'true'
+    } else {
+      delete document.body.dataset.emptyState
+    }
+  }, [hasNoNotes, isLogoAnimating])
+
+  useEffect(() => {
+    return () => {
+      delete document.body.dataset.emptyState
+    }
+  }, [])
 
   // Restore scroll position when returning to Timeline
   useEffect(() => {
@@ -918,6 +937,7 @@ export default function Timeline() {
     }
   }, [])
 
+
   useEffect(() => {
     if (!highlightedQuote) return
     if (highlightTimeoutRef.current) {
@@ -944,6 +964,61 @@ export default function Timeline() {
       // Ignore auto-push errors
     }
   }, [canSync, pushToSyncAndRefresh])
+
+  const runLogoTransition = useCallback(() => {
+    const heroLogo = heroLogoRef.current
+    const headerLogo = document.querySelector<HTMLImageElement>('.app-logo')
+    if (!heroLogo || !headerLogo) return false
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
+
+    const heroRect = heroLogo.getBoundingClientRect()
+    const headerRect = headerLogo.getBoundingClientRect()
+    if (!heroRect.width || !heroRect.height || !headerRect.width || !headerRect.height) return false
+
+    const clone = heroLogo.cloneNode(true) as HTMLImageElement
+    clone.style.position = 'fixed'
+    clone.style.left = `${heroRect.left}px`
+    clone.style.top = `${heroRect.top}px`
+    clone.style.width = `${heroRect.width}px`
+    clone.style.height = `${heroRect.height}px`
+    clone.style.margin = '0'
+    clone.style.pointerEvents = 'none'
+    clone.style.zIndex = '60'
+    clone.style.transformOrigin = 'top left'
+    clone.style.transition = 'transform 600ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 500ms ease'
+
+    document.body.appendChild(clone)
+    setIsLogoAnimating(true)
+
+    const deltaX = headerRect.left - heroRect.left
+    const deltaY = headerRect.top - heroRect.top
+    const scaleX = headerRect.width / heroRect.width
+    const scaleY = headerRect.height / heroRect.height
+
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      clone.remove()
+      setIsLogoAnimating(false)
+    }
+
+    const timeout = window.setTimeout(finish, 700)
+    clone.addEventListener(
+      'transitionend',
+      () => {
+        window.clearTimeout(timeout)
+        finish()
+      },
+      { once: true },
+    )
+
+    requestAnimationFrame(() => {
+      clone.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(${scaleX}, ${scaleY})`
+    })
+
+    return true
+  }, [])
 
   const scheduleSave = useCallback(
     (dayId: string, content: string) => {
@@ -1131,6 +1206,7 @@ export default function Timeline() {
     [scheduleSave, setSearchResults],
   )
 
+
   const handleCitationClick = useCallback(
     async (citation: Citation) => {
       if (!days.some((day) => day.dayId === citation.day)) {
@@ -1317,12 +1393,17 @@ export default function Timeline() {
     [appendToToday, handleAutoPush],
   )
 
+  const handleEmptyCta = useCallback(() => {
+    runLogoTransition()
+    void handleCreateDay(todayId)
+  }, [handleCreateDay, runLogoTransition, todayId])
+
+
   // --- Computed Data ---
 
   // Standard Timeline Cards
   const timelineCards = useMemo<TimelineDayCard[]>(() => days.map((day) => ({ day })), [days])
 
-  const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
   const maxWeekdayOffset = 14
@@ -1524,11 +1605,56 @@ export default function Timeline() {
       {loading && (
          <section className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-sm text-slate-500">
            Loading days...
-         </section>
+          </section>
+      )}
+
+      {hasNoNotes && (
+        <section className="relative flex min-h-[50vh] flex-col items-center justify-center gap-6 overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/70 px-6 py-12 text-center shadow-[0_20px_60px_-40px_rgba(15,23,42,0.45)] sm:px-12">
+          <div className="absolute -right-16 -top-20 h-44 w-44 rounded-full bg-[#22B3FF]/10 blur-3xl" aria-hidden="true" />
+          <div className="absolute -bottom-24 -left-10 h-36 w-36 rounded-full bg-[#22B3FF]/10 blur-3xl" aria-hidden="true" />
+          <div className="relative flex items-center justify-center">
+            <span className="absolute -inset-6 rounded-full bg-white/70 blur-2xl" aria-hidden="true" />
+            <img
+              ref={heroLogoRef}
+              src="/logo.png"
+              alt=""
+              className={`relative h-16 w-auto drop-shadow-[0_12px_30px_rgba(15,23,42,0.16)] transition-opacity duration-300 sm:h-20 ${
+                isLogoAnimating ? 'opacity-0' : 'opacity-100'
+              }`}
+            />
+          </div>
+          <div className="max-w-[420px] space-y-3">
+            <h2 className="text-2xl font-semibold text-slate-900" style={{ fontFamily: titleFontFamily }}>
+              Stop organizing. Start writing.
+            </h2>
+            <p className="text-sm text-slate-500">
+              Rivolo replaces notes with a daily flow. 
+            </p>
+            <p className="text-sm text-slate-500">
+              Structure emerges only when you ask for it.
+            </p>
+          </div>
+          <div className="flex flex-col items-center gap-3">
+            <button
+              className={`${buttonPrimary} px-6 py-3 text-base`}
+              type="button"
+              onClick={handleEmptyCta}
+            >
+              Start Today
+            </button>
+            <p className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-400">
+              <span className="font-semibold text-slate-500">Tip:</span>
+              <span className="inline-flex items-center gap-1">
+                <kbd className="kbd">I</kbd>
+                <span>focus quick add input</span>
+              </span>
+            </p>
+          </div>
+        </section>
       )}
 
       {/* Main List */}
-      {!loading && activeItems.length > 0 && (
+      {!loading && !hasNoNotes && activeItems.length > 0 && (
         <div className="space-y-3">
           {activeItems.map((item, index) => {
             if (item.type === 'add-today') {
