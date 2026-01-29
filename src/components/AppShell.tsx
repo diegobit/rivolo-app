@@ -395,7 +395,7 @@ export default function AppShell() {
           )}
         </div>
         <NavLink to="/" className="justify-self-center" aria-label="Home">
-          <img src="/logo.png" alt="Rivolo" className="h-10 w-auto" />
+          <img src="/logo.png" alt="Rivolo" className="app-logo h-10 w-auto" />
         </NavLink>
         <div className="flex items-center justify-end gap-2">
           {syncing && (
