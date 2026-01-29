@@ -180,6 +180,13 @@
     background-size: cover;
     background-position: center;
     opacity: 0.05;
+    transition: opacity 600ms ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body::after {
+      transition: none;
+    }
   }
 
   body[data-wallpaper='white']::after {
@@ -191,6 +198,10 @@
   }
 
   body[data-wallpaper='thoughts-high']::after {
+    opacity: 0.15;
+  }
+
+  body[data-hero-wallpaper='true'][data-wallpaper='thoughts-light']::after {
     opacity: 0.15;
   }
 
@@ -207,6 +218,26 @@
 
   body[data-empty-state='true'] .app-logo {
     opacity: 0;
+  }
+
+  .hero-ui-fade-up,
+  .hero-ui-fade-down {
+    transform: translateY(0);
+    transition: opacity 600ms ease-in-out, transform 600ms ease-in-out;
+  }
+
+  body[data-hero-ui='true'] .hero-ui-fade-up,
+  body[data-hero-ui='true'] .hero-ui-fade-down {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body[data-hero-ui='true'] .hero-ui-fade-up {
+    transform: translateY(-8px);
+  }
+
+  body[data-hero-ui='true'] .hero-ui-fade-down {
+    transform: translateY(8px);
   }
 
   .caret-blue {
