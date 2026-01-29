@@ -293,7 +293,7 @@ export default function AppShell() {
             </NavLink>
           )}
           {isHome && (
-            <div ref={shortcutsRef} className="relative">
+            <div ref={shortcutsRef} className="hero-ui-fade-up relative">
               <button
                 className={topIconButton}
                 type="button"
@@ -410,7 +410,7 @@ export default function AppShell() {
           )}
           <NavLink
             to="/settings"
-            className={topIconButton}
+            className={`${topIconButton} hero-ui-fade-up`}
             aria-label="Settings"
             onClick={() => {
               if (isHome) {
@@ -433,9 +433,9 @@ export default function AppShell() {
 
       {showTrayRow && (
         <>
-          <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-20 h-32 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
+          <div className="hero-ui-fade-down pointer-events-none fixed bottom-0 left-0 right-0 z-20 h-32 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
 
-          <div className="fixed bottom-2 left-0 right-0 z-30 mx-auto flex w-[min(96%,620px)] items-center gap-2 px-2 sm:bottom-6 sm:gap-3 sm:px-0">
+          <div className="hero-ui-fade-down fixed bottom-2 left-0 right-0 z-30 mx-auto flex w-[min(96%,620px)] items-center gap-2 px-2 sm:bottom-6 sm:gap-3 sm:px-0">
             {mode !== 'timeline' && <Fragment key="timeline-btn">{timelineButton}</Fragment>}
             {mode === 'timeline' && <Fragment key="tray">{trayCenter}</Fragment>}
 

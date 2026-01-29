@@ -1,4 +1,4 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, keymap, type DecorationSet } from '@codemirror/view'
@@ -864,17 +864,31 @@ export default function Timeline() {
     void loadSyncState()
   }, [loadSettings, loadSyncState, loadTimeline])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (hasNoNotes || isLogoAnimating) {
       document.body.dataset.emptyState = 'true'
     } else {
       delete document.body.dataset.emptyState
+    }
+
+    if (hasNoNotes && !isLogoAnimating) {
+      document.body.dataset.heroWallpaper = 'true'
+    } else {
+      delete document.body.dataset.heroWallpaper
+    }
+
+    if (hasNoNotes && !isLogoAnimating) {
+      document.body.dataset.heroUi = 'true'
+    } else {
+      delete document.body.dataset.heroUi
     }
   }, [hasNoNotes, isLogoAnimating])
 
   useEffect(() => {
     return () => {
       delete document.body.dataset.emptyState
+      delete document.body.dataset.heroWallpaper
+      delete document.body.dataset.heroUi
     }
   }, [])
 
@@ -1610,7 +1624,7 @@ export default function Timeline() {
       )}
 
       {hasNoNotes && (
-        <section className="relative flex min-h-[50vh] flex-col items-center justify-center gap-6 overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/70 px-6 py-12 text-center shadow-[0_20px_60px_-40px_rgba(15,23,42,0.45)] sm:px-12">
+        <section className="relative my-auto flex min-h-[60vh] flex-col items-center justify-center gap-8 px-6 py-16 text-center sm:px-12 sm:py-20">
           <div className="absolute -right-16 -top-20 h-44 w-44 rounded-full bg-[#22B3FF]/10 blur-3xl" aria-hidden="true" />
           <div className="absolute -bottom-24 -left-10 h-36 w-36 rounded-full bg-[#22B3FF]/10 blur-3xl" aria-hidden="true" />
           <div className="relative flex items-center justify-center">
@@ -1624,18 +1638,18 @@ export default function Timeline() {
               }`}
             />
           </div>
-          <div className="max-w-[420px] space-y-3">
-            <p className="text-lg text-slate-500">
+          <div className="max-w-[420px] space-y-4">
+            <p className="text-lg text-slate-600">
               Rivolo replaces notes with a daily flow. 
             </p>
-            <p className="text-lg text-slate-500">
+            <p className="text-lg text-slate-600">
               Structure emerges only when you ask for it.
             </p>
-            <p className="text-lg text-slate-500">
+            <p className="text-lg text-slate-600">
               Stop organizing. Start writing.
             </p>
           </div>
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-col items-center gap-4">
             <button
               className={`${buttonPrimary} px-6 py-3 text-base`}
               type="button"
