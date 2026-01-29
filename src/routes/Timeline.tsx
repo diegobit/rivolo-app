@@ -1,6 +1,6 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
-import { markdown } from '@codemirror/lang-markdown'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, keymap, type DecorationSet } from '@codemirror/view'
 import { EditorSelection, Prec, RangeSetBuilder, type Extension, type Line } from '@codemirror/state'
 import BottomTrayPortal from '../components/BottomTrayPortal'
@@ -811,7 +811,7 @@ export default function Timeline() {
   const addTodayRef = useRef<HTMLDivElement | null>(null)
   const heroLogoRef = useRef<HTMLImageElement | null>(null)
 
-  const markdownExtension = useMemo(() => markdown(), [])
+  const markdownExtension = useMemo(() => markdown({ base: markdownLanguage }), [])
   const editorTheme = useMemo(
     () =>
       EditorView.theme({
@@ -825,6 +825,7 @@ export default function Timeline() {
             fontPreference === 'monospace'
               ? getMonospaceFontFamily(monospaceFont)
               : getBodyFontFamily(bodyFont),
+          fontSynthesis: 'weight style',
           color: '#000000',
         },
         '.cm-content': {
