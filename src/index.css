@@ -11,9 +11,33 @@
 }
 
 @font-face {
+  font-family: 'Fantasque Sans Mono';
+  src: url('/fonts/FantasqueSansMono-Italic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Fantasque Sans Mono';
+  src: url('/fonts/FantasqueSansMono-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Fantasque Sans Mono';
+  src: url('/fonts/FantasqueSansMono-BoldItalic.otf') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
   font-family: 'iA Writer Mono';
   src: url('/fonts/iAWriterMonoV.ttf') format('truetype');
-  font-weight: 400;
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
@@ -21,7 +45,7 @@
 @font-face {
   font-family: 'iA Writer Mono';
   src: url('/fonts/iAWriterMonoV-Italic.ttf') format('truetype');
-  font-weight: 400;
+  font-weight: 400 700;
   font-style: italic;
   font-display: swap;
 }
@@ -29,15 +53,23 @@
 @font-face {
   font-family: 'iA Writer Duo';
   src: url('/fonts/iAWriterDuoV.ttf') format('truetype');
-  font-weight: 400;
+  font-weight: 400 700;
   font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'iA Writer Duo';
+  src: url('/fonts/iAWriterDuoV-Italic.ttf') format('truetype');
+  font-weight: 400 700;
+  font-style: italic;
   font-display: swap;
 }
 
 @font-face {
   font-family: 'Inconsolata';
   src: url('/fonts/Inconsolata-VariableFont_wdth,wght.ttf') format('truetype');
-  font-weight: 400;
+  font-weight: 200 900;
   font-style: normal;
   font-display: swap;
 }
@@ -203,6 +235,11 @@
   .cm-todo-marker:hover {
     text-decoration: underline;
     text-decoration-thickness: 1px;
+  }
+
+  .cm-list-marker {
+    color: #b45309;
+    font-weight: 600;
   }
 
   .hljs {
