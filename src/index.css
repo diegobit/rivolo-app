@@ -298,6 +298,42 @@
   }
 }
 
+.loader {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  position: relative;
+}
+
+.loader::after,
+.loader::before {
+  content: '';
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: currentColor;
+  position: absolute;
+  left: 0;
+  top: 0;
+  animation: sync-loader 2s linear infinite;
+}
+
+.loader::after {
+  animation-delay: 1s;
+}
+
+@keyframes sync-loader {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
 #bottom-tray:empty {
   display: none;
 }
