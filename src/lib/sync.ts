@@ -30,6 +30,8 @@ export type SyncProvider = {
   disconnect: () => Promise<void>
 }
 
+let pushInFlight: Promise<SyncPushResult> | null = null
+
 const EMPTY_STATUS: SyncStatus = {
   connected: false,
   filePath: null,
@@ -78,7 +80,15 @@ export const pushToSync = async (force = false) => {
   if (!provider) {
     throw new Error('No sync provider connected.')
   }
-  return provider.push(force)
+  if (pushInFlight) {
+    console.info('[Sync] push:coalesced')
+    return pushInFlight
+  }
+  pushInFlight = provider.push(force)
+  pushInFlight.finally(() => {
+    pushInFlight = null
+  })
+  return pushInFlight
 }
 
 export const disconnectActiveProvider = async () => {
