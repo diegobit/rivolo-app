@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
 import {
   getMonospaceFontFamily,
+  getMonospaceFontSize,
   getBodyFontFamily,
   getTitleFontFamily,
   type BodyFont,
@@ -305,6 +306,10 @@ export default function Settings() {
     fontPreference === 'monospace'
       ? getMonospaceFontFamily(monospaceFont)
       : getBodyFontFamily(bodyFont)
+  const bodyPreviewFontSize =
+    fontPreference === 'monospace'
+      ? getMonospaceFontSize(monospaceFont)
+      : '1rem'
   const titlePreviewFontFamily = getTitleFontFamily(titleFont)
   const dropboxAccount = useMemo(() => {
     if (accountName && accountEmail) {
@@ -683,11 +688,11 @@ export default function Settings() {
                   </div>
                   <pre
                     className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm font-normal text-slate-900"
-                    style={{ fontFamily: bodyPreviewFontFamily }}
+                    style={{ fontFamily: bodyPreviewFontFamily, fontSize: bodyPreviewFontSize }}
                   >
                     <code
                       className="hljs language-markdown"
-                      style={{ fontFamily: bodyPreviewFontFamily }}
+                      style={{ fontFamily: bodyPreviewFontFamily, fontSize: bodyPreviewFontSize }}
                       dangerouslySetInnerHTML={{ __html: previewHtml ?? escapeHtml(previewText) }}
                     />
                   </pre>

@@ -57,7 +57,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   fontPreference: 'monospace',
   bodyFont: 'system',
   monospaceFont: 'iawriter',
-  titleFont: 'system',
+  titleFont: 'handlee',
 
   loadSettings: async () => {
     set({ loading: true })
@@ -88,7 +88,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const fontPreference = storedFontPreference ?? 'monospace'
     const bodyFont = isBodyFont(storedBodyFont) ? storedBodyFont : 'system'
     const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
-    const titleFont = isTitleFont(storedTitleFont) ? storedTitleFont : 'system'
+    const titleFont = isTitleFont(storedTitleFont) ? storedTitleFont : 'handlee'
 
     if (!storedGeminiModel) {
       await setSetting('llm.geminiModel', geminiModel)

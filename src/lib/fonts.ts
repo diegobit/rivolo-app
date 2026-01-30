@@ -1,38 +1,32 @@
 export type MonospaceFont =
   | 'fantasque'
   | 'iawriter'
-  | 'iawriterduo'
   | 'inconsolata'
 
-export type BodyFont = 'system' | 'intertight'
+export type BodyFont = 'system' | 'lato'
 
 export type TitleFont =
   | 'system'
   | 'bree'
   | 'grandstander'
-  | 'caveat'
-  | 'dosis'
-  | 'spacegrotesk'
+  | 'handlee'
 
 export const monospaceFontFamilies: Record<MonospaceFont, string> = {
   fantasque: "'Fantasque Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
   iawriter: "'iA Writer Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
-  iawriterduo: "'iA Writer Duo', ui-monospace, SFMono-Regular, Menlo, monospace",
   inconsolata: "'Inconsolata', ui-monospace, SFMono-Regular, Menlo, monospace",
 }
 
 export const bodyFontFamilies: Record<BodyFont, string> = {
-  system: "'Inter', system-ui, sans-serif",
-  intertight: "'Inter Tight', 'Inter', system-ui, sans-serif",
+  system: "'Lato', 'Inter', system-ui, sans-serif",
+  lato: "'Lato', 'Inter', system-ui, sans-serif",
 }
 
 export const titleFontFamilies: Record<TitleFont, string> = {
-  system: "'Inter', system-ui, sans-serif",
+  system: "'Lato', 'Inter', system-ui, sans-serif",
   bree: "'Bree Serif', 'Times New Roman', serif",
   grandstander: "'Grandstander', 'Trebuchet MS', cursive",
-  caveat: "'Caveat', 'Trebuchet MS', cursive",
-  dosis: "'Dosis', 'Trebuchet MS', sans-serif",
-  spacegrotesk: "'Space Grotesk', 'Trebuchet MS', sans-serif",
+  handlee: "'Handlee', 'Trebuchet MS', cursive",
 }
 
 export const monospaceFontOptions = [
@@ -40,11 +34,6 @@ export const monospaceFontOptions = [
     id: 'iawriter',
     label: 'iA Writer Mono',
     fontFamily: monospaceFontFamilies.iawriter,
-  },
-  {
-    id: 'iawriterduo',
-    label: 'iA Writer Duo',
-    fontFamily: monospaceFontFamilies.iawriterduo,
   },
   {
     id: 'inconsolata',
@@ -61,20 +50,15 @@ export const monospaceFontOptions = [
 export const bodyFontOptions = [
   {
     id: 'system',
-    label: 'System',
+    label: 'Lato',
     fontFamily: bodyFontFamilies.system,
-  },
-  {
-    id: 'intertight',
-    label: 'Inter Tight',
-    fontFamily: bodyFontFamilies.intertight,
   },
 ] as const
 
 export const titleFontOptions = [
   {
     id: 'system',
-    label: 'System',
+    label: 'Lato',
     fontFamily: titleFontFamilies.system,
   },
   {
@@ -88,19 +72,9 @@ export const titleFontOptions = [
     fontFamily: titleFontFamilies.grandstander,
   },
   {
-    id: 'caveat',
-    label: 'Caveat',
-    fontFamily: titleFontFamilies.caveat,
-  },
-  {
-    id: 'dosis',
-    label: 'Dosis',
-    fontFamily: titleFontFamilies.dosis,
-  },
-  {
-    id: 'spacegrotesk',
-    label: 'Space Grotesk',
-    fontFamily: titleFontFamilies.spacegrotesk,
+    id: 'handlee',
+    label: 'Handlee',
+    fontFamily: titleFontFamilies.handlee,
   },
 ] as const
 
@@ -110,19 +84,22 @@ export const getBodyFontFamily = (font: BodyFont) => bodyFontFamilies[font]
 
 export const getTitleFontFamily = (font: TitleFont) => titleFontFamilies[font]
 
+export const getMonospaceFontSize = (font: MonospaceFont) => {
+  if (font === 'iawriter') return '0.95em'
+  if (font === 'inconsolata') return '1.05rem'
+  return '1rem'
+}
+
 export const isMonospaceFont = (value: string | null): value is MonospaceFont =>
   value === 'fantasque' ||
   value === 'iawriter' ||
-  value === 'iawriterduo' ||
   value === 'inconsolata'
 
 export const isBodyFont = (value: string | null): value is BodyFont =>
-  value === 'system' || value === 'intertight'
+  value === 'system' || value === 'lato'
 
 export const isTitleFont = (value: string | null): value is TitleFont =>
   value === 'system' ||
   value === 'bree' ||
   value === 'grandstander' ||
-  value === 'caveat' ||
-  value === 'dosis' ||
-  value === 'spacegrotesk'
+  value === 'handlee'
