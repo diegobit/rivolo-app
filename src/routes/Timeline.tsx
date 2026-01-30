@@ -1161,6 +1161,9 @@ export default function Timeline() {
       const view = editorRefs.current.get(dayId)
       const content = view?.state.doc.toString() ?? ''
       if (!content.trim() && createdDayIdsRef.current.has(dayId)) {
+        if (days.length <= 1) {
+          return
+        }
         const existing = saveTimeouts.current.get(dayId)
         if (existing) {
           window.clearTimeout(existing)
@@ -1171,7 +1174,7 @@ export default function Timeline() {
         await handleAutoPush()
       }
     },
-    [deleteDay, handleAutoPush],
+    [days, deleteDay, handleAutoPush],
   )
 
   const handleDateCommit = useCallback(
