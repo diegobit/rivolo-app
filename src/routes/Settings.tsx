@@ -680,11 +680,11 @@ export default function Settings() {
               {showFontPreview && (
                 <div className="mt-3 space-y-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
                   <div
-                    className="flex flex-wrap items-baseline gap-2 text-xl text-slate-900"
+                    className="flex flex-wrap items-baseline gap-2 text-3xl text-slate-900"
                     style={{ fontFamily: titlePreviewFontFamily }}
                   >
                     <span className="font-bold">Today</span>
-                    <span className="font-semibold">24, Saturday</span>
+                    <span className="font-normal text-slate-500">24, Saturday</span>
                   </div>
                   <pre
                     className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm font-normal text-slate-900"
