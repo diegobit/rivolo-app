@@ -27,7 +27,7 @@ export default function AppShell() {
   const showBackButton = location.pathname === '/settings'
   const isHome = location.pathname === '/'
   const showTrayRow = isHome
-  const syncLabel = syncOperation === 'push' ? 'Pushing to Dropbox' : 'Pulling from Dropbox'
+  const syncLabel = syncOperation === 'push' ? 'Pushing...' : 'Pulling...'
 
   const timelineButton = (
     <button
