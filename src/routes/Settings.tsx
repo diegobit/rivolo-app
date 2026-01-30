@@ -331,7 +331,7 @@ export default function Settings() {
 
   const llmStatus = geminiApiKey ? 'Ready' : 'No key'
   const llmStatusClass = geminiApiKey
-    ? 'bg-slate-100 text-slate-500'
+    ? 'bg-green-200 text-green-800'
     : 'bg-rose-100 text-rose-700'
 
   const handleSaveKey = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -715,7 +715,7 @@ export default function Settings() {
           <span
             className={`rounded-full px-2 py-1 text-xs font-semibold ${
               dropboxSummary.connected
-                ? 'bg-emerald-200 text-emerald-800'
+                ? 'bg-green-200 text-green-800'
                 : 'bg-slate-100 text-slate-500'
             }`}
           >
