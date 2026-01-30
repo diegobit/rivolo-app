@@ -222,22 +222,14 @@
 
   .hero-ui-fade-up,
   .hero-ui-fade-down {
-    transform: translateY(0);
-    transition: opacity 600ms ease-in-out, transform 600ms ease-in-out;
+    transition: none;
   }
 
   body[data-hero-ui='true'] .hero-ui-fade-up,
   body[data-hero-ui='true'] .hero-ui-fade-down {
     opacity: 0;
     pointer-events: none;
-  }
-
-  body[data-hero-ui='true'] .hero-ui-fade-up {
-    transform: translateY(-8px);
-  }
-
-  body[data-hero-ui='true'] .hero-ui-fade-down {
-    transform: translateY(8px);
+    visibility: hidden;
   }
 
   .caret-blue {
