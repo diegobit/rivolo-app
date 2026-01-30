@@ -20,7 +20,6 @@ export default function AppShell() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
-  const [viewportOffset, setViewportOffset] = useState(0)
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const lastAutoPullAt = useRef(0)
   const autoPullInFlight = useRef(false)
@@ -107,20 +106,6 @@ export default function AppShell() {
       window.removeEventListener('resize', handleScroll)
     }
   }, [isHome])
-
-  useEffect(() => {
-    const viewport = window.visualViewport
-    if (!viewport) return
-
-    const updateOffset = () => {
-      setViewportOffset(viewport.offsetTop)
-    }
-
-    viewport.addEventListener('resize', updateOffset)
-    return () => {
-      viewport.removeEventListener('resize', updateOffset)
-    }
-  }, [])
 
   useEffect(() => {
     document.body.dataset.wallpaper = wallpaper
@@ -274,12 +259,14 @@ export default function AppShell() {
     <div className="min-h-full text-slate-900">
       {/* Fixed header with blur */}
       <div
-        style={{ top: viewportOffset }}
-        className={`pointer-events-none fixed left-0 right-0 z-20 h-16 transition-all ${isScrolled ? 'bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md' : ''}`}
+        className={`pointer-events-none hidden left-0 right-0 z-20 h-16 transition-all sm:fixed sm:block ${
+          isScrolled
+            ? 'bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md'
+            : ''
+        }`}
       />
       <header
-        style={{ top: viewportOffset }}
-        className="fixed left-0 right-0 z-30 mx-auto grid h-16 w-[min(96%,720px)] grid-cols-[1fr_auto_1fr] items-center"
+        className="relative left-0 right-0 z-30 mx-auto grid h-16 w-[min(96%,720px)] grid-cols-[1fr_auto_1fr] items-center sm:fixed"
       >
         <div className="flex items-center gap-2">
           {showBackButton && (
@@ -424,7 +411,7 @@ export default function AppShell() {
       </header>
 
       <main
-        className={`mx-auto flex min-h-screen w-full flex-col gap-4 pt-20 sm:w-[min(96%,720px)] ${
+        className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 pt-0 sm:w-[min(96%,720px)] sm:pt-20 ${
           showTrayRow ? 'pb-40' : 'pb-12'
         }`}
       >
