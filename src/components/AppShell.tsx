@@ -424,7 +424,7 @@ export default function AppShell() {
       </header>
 
       <main
-        className={`mx-auto flex min-h-screen w-[min(96%,720px)] flex-col gap-4 pt-20 ${
+        className={`mx-auto flex min-h-screen w-full flex-col gap-4 pt-20 sm:w-[min(96%,720px)] ${
           showTrayRow ? 'pb-40' : 'pb-12'
         }`}
       >
