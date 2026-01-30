@@ -4,7 +4,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, keymap, type DecorationSet } from '@codemirror/view'
 import { EditorSelection, Prec, RangeSetBuilder, type Extension, type Line } from '@codemirror/state'
 import BottomTrayPortal from '../components/BottomTrayPortal'
-import { getBodyFontFamily, getMonospaceFontFamily, getTitleFontFamily } from '../lib/fonts'
+import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { editorHighlights } from '../lib/editorHighlights'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import type { Day } from '../lib/dayRepository'
@@ -819,7 +819,10 @@ export default function Timeline() {
           backgroundColor: 'transparent',
         },
         '.cm-scroller': {
-          fontSize: '1rem',
+          fontSize:
+            fontPreference === 'monospace'
+              ? getMonospaceFontSize(monospaceFont)
+              : '1rem',
           fontWeight: '400',
           fontFamily:
             fontPreference === 'monospace'
@@ -843,6 +846,7 @@ export default function Timeline() {
     [fontPreference, bodyFont, monospaceFont],
   )
   const titleFontFamily = useMemo(() => getTitleFontFamily(titleFont), [titleFont])
+  const heroFontFamily = useMemo(() => getTitleFontFamily('handlee'), [])
   const clearActiveLine = useMemo(
     () =>
       EditorView.theme({
@@ -1641,14 +1645,14 @@ export default function Timeline() {
               }`}
             />
           </div>
-          <div className="max-w-[420px] space-y-4">
-            <p className="text-lg text-slate-600">
+          <div className="max-w-[550px] space-y-4" style={{ fontFamily: heroFontFamily }}>
+            <p className="text-2xl text-slate-600">
               Rivolo replaces notes with a daily flow. 
             </p>
-            <p className="text-lg text-slate-600">
+            <p className="text-2xl text-slate-600">
               Structure emerges only when you ask for it.
             </p>
-            <p className="text-lg text-slate-600">
+            <p className="text-2xl text-slate-600">
               Stop organizing. Start writing.
             </p>
           </div>
