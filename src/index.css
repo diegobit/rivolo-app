@@ -263,6 +263,45 @@
     visibility: hidden;
   }
 
+  .hero-break {
+    display: none;
+  }
+
+  body[data-empty-state='true'] .app-main {
+    padding-bottom: 1.5rem;
+  }
+
+  @media (max-height: 700px) {
+    body[data-empty-state='true'] .app-main {
+      padding-bottom: 1rem;
+    }
+
+    .hero-empty {
+      min-height: 0;
+      padding-top: 2.5rem;
+      padding-bottom: 2.5rem;
+      gap: 1.25rem;
+    }
+
+    .hero-copy {
+      gap: 0.75rem;
+    }
+
+    .hero-copy p {
+      font-size: 1.1rem;
+    }
+
+    .hero-logo {
+      height: 3.25rem;
+    }
+  }
+
+  @media (max-width: 470px) {
+    .hero-break {
+      display: inline;
+    }
+  }
+
   .caret-blue {
     caret-color: #22b3ff;
     caret-width: 2px;
