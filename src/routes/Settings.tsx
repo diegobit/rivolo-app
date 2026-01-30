@@ -330,6 +330,9 @@ export default function Settings() {
   )
 
   const llmStatus = geminiApiKey ? 'Ready' : 'No key'
+  const llmStatusClass = geminiApiKey
+    ? 'bg-slate-100 text-slate-500'
+    : 'bg-rose-100 text-rose-700'
 
   const handleSaveKey = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -450,7 +453,9 @@ export default function Settings() {
               Add a Gemini API key to enable the Ask Anything assistant.
             </p>
           </div>
-          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500">
+          <span
+            className={`rounded-full px-2 py-1 text-xs font-semibold whitespace-nowrap ${llmStatusClass}`}
+          >
             {llmStatus}
           </span>
         </div>
