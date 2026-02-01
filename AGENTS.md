@@ -143,7 +143,7 @@ Follow existing patterns; keep changes minimal and consistent.
 - Sync API: `src/lib/sync.ts`.
 - Dropbox OAuth: `src/lib/dropbox.ts`.
 - LLM API: `src/lib/llm/index.ts`.
-- Styles: `src/index.css`, `src/App.css`.
+- Styles: `src/index.css`.
 
 ## How to add tests later
 - Pick a runner (Vitest recommended for Vite projects).
