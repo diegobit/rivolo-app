@@ -444,7 +444,7 @@ const DayEditorCard = memo(({
           />
         </div>
         <div className="flex items-center gap-2">
-          <div ref={menuRef} className="relative sm:hidden">
+          <div ref={menuRef} className="relative sm:hidden touch-actions">
             <button
               className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300"
               type="button"
@@ -478,7 +478,7 @@ const DayEditorCard = memo(({
             )}
           </div>
           <button
-            className={`hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:flex ${
+            className={`hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:flex touch-hide ${
               showDesktopDelete ? 'opacity-100' : 'pointer-events-none opacity-0'
             }`}
             type="button"
