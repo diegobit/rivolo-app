@@ -446,7 +446,7 @@
 }
 
 @layer utilities {
-  @media (hover: none) and (pointer: coarse) {
+  @media (any-pointer: coarse) {
     .touch-actions {
       display: block;
     }
