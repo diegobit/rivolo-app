@@ -332,6 +332,12 @@ const DayEditorCard = memo(({
     }
   }, [])
 
+  useEffect(() => {
+    return () => {
+      document.body.dataset.dayEditorFocus = 'false'
+    }
+  }, [])
+
   const navigationKeymap = useMemo(
     () =>
       keymap.of([
@@ -518,6 +524,9 @@ const DayEditorCard = memo(({
           value={day.contentMd}
           extensions={editorExtensions}
           onChange={(value) => onChange(day.dayId, value)}
+          onFocus={() => {
+            document.body.dataset.dayEditorFocus = 'true'
+          }}
           onBlur={(event) => void onBlur(day.dayId, event.nativeEvent)}
           onCreateEditor={(view) => registerEditor(day.dayId, view)}
           basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLineGutter: false }}
@@ -1213,6 +1222,8 @@ export default function Timeline() {
       if (relatedTarget && card?.contains(relatedTarget)) {
         return
       }
+
+      document.body.dataset.dayEditorFocus = 'false'
 
       const view = editorRefs.current.get(dayId)
       const content = view?.state.doc.toString() ?? ''
