@@ -4,6 +4,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, keymap, type DecorationSet } from '@codemirror/view'
 import { EditorSelection, Prec, RangeSetBuilder, type Extension, type Line } from '@codemirror/state'
 import BottomTrayPortal from '../components/BottomTrayPortal'
+import { isIOS } from '../lib/device'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { editorHighlights } from '../lib/editorHighlights'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
@@ -811,6 +812,7 @@ export default function Timeline() {
   const heroFadeDuration = 600
   const heroRevealFallback = 1000
   const heroLogoDuration = 600
+  const isIosDevice = isIOS()
 
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
@@ -833,7 +835,9 @@ export default function Timeline() {
         '.cm-scroller': {
           fontSize:
             fontPreference === 'monospace'
-              ? getMonospaceFontSize(monospaceFont)
+              ? isIosDevice && monospaceFont === 'iawriter'
+                ? '1rem'
+                : getMonospaceFontSize(monospaceFont)
               : '1rem',
           fontWeight: '400',
           fontFamily:
@@ -855,7 +859,7 @@ export default function Timeline() {
           borderRadius: '2px',
         },
       }),
-    [fontPreference, bodyFont, monospaceFont],
+    [fontPreference, bodyFont, monospaceFont, isIosDevice],
   )
   const titleFontFamily = useMemo(() => getTitleFontFamily(titleFont), [titleFont])
   const heroFontFamily = useMemo(() => getTitleFontFamily('handlee'), [])
