@@ -538,11 +538,11 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
   }
 
   .bottom-tray-row {
-    bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 0.5rem + 4px);
+    bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 0.5rem + 2px);
   }
 
   #bottom-tray.bottom-tray-shell {
-    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
   }
 }
 
