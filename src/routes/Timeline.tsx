@@ -808,8 +808,9 @@ export default function Timeline() {
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
-  const heroRevealDuration = 600
+  const heroFadeDuration = 600
   const heroRevealFallback = 1000
+  const heroLogoDuration = 600
 
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
@@ -878,6 +879,13 @@ export default function Timeline() {
     void loadSettings()
     void loadSyncState()
   }, [loadSettings, loadSyncState, loadTimeline])
+
+  useEffect(() => {
+    document.body.style.setProperty('--hero-fade-ms', `${heroFadeDuration}ms`)
+    return () => {
+      document.body.style.removeProperty('--hero-fade-ms')
+    }
+  }, [heroFadeDuration])
 
   useLayoutEffect(() => {
     if (hasNoNotes || isLogoAnimating) {
@@ -1035,7 +1043,7 @@ export default function Timeline() {
     clone.style.pointerEvents = 'none'
     clone.style.zIndex = '60'
     clone.style.transformOrigin = 'top left'
-    clone.style.transition = 'transform 600ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 500ms ease'
+    clone.style.transition = `transform ${heroLogoDuration}ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity ${heroFadeDuration}ms ease`
 
     document.body.appendChild(clone)
     setIsLogoAnimating(true)
@@ -1053,7 +1061,7 @@ export default function Timeline() {
       setIsLogoAnimating(false)
     }
 
-    const timeout = window.setTimeout(finish, 700)
+    const timeout = window.setTimeout(finish, heroLogoDuration + 100)
     clone.addEventListener(
       'transitionend',
       () => {
@@ -1584,7 +1592,7 @@ export default function Timeline() {
       setIsHeroRevealHold(false)
       window.setTimeout(() => {
         setIsHeroRevealActive(false)
-      }, heroRevealDuration)
+      }, heroFadeDuration)
     }
 
     const raf = window.requestAnimationFrame(() => {
@@ -1601,7 +1609,7 @@ export default function Timeline() {
       window.cancelAnimationFrame(raf)
       window.clearTimeout(fallback)
     }
-  }, [activeItems, heroRevealDuration, heroRevealFallback, isHeroRevealHold, todayId, tomorrowId])
+  }, [activeItems, heroFadeDuration, heroRevealFallback, isHeroRevealHold, todayId, tomorrowId])
 
   const dayOrder = useMemo(
     () =>
