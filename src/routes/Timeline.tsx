@@ -206,6 +206,7 @@ type DayEditorCardProps = {
   isToday: boolean
   isYesterday: boolean
   isTomorrow: boolean
+  heroReveal: boolean
   title: string
   humanDate: string
   datePart: string
@@ -235,6 +236,7 @@ const DayEditorCard = memo(({
   isToday,
   isYesterday,
   isTomorrow,
+  heroReveal,
   title,
   humanDate,
   datePart,
@@ -397,6 +399,8 @@ const DayEditorCard = memo(({
       onPointerLeave={handleHoverEnd}
       data-scroll-target={isToday ? 'today' : undefined}
       className={`scroll-anchor group rounded-[4px] border p-4 transition ${
+        heroReveal ? 'hero-reveal' : ''
+      } ${
         isFuture
           ? 'border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.03)] hover:border-slate-300/60'
           : 'border-slate-200/60 bg-white shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] hover:border-slate-300/60'
@@ -794,12 +798,18 @@ export default function Timeline() {
   const [dateErrors, setDateErrors] = useState<Record<string, string | null>>({})
   const [highlightedQuote, setHighlightedQuote] = useState<Citation | null>(null)
   const [isLogoAnimating, setIsLogoAnimating] = useState(false)
+  const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
+  const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
 
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
   const todayId = getTodayId()
+  const yesterdayId = addDays(todayId, -1)
+  const tomorrowId = addDays(todayId, 1)
+  const heroRevealDuration = 600
+  const heroRevealFallback = 1000
 
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
@@ -810,6 +820,7 @@ export default function Timeline() {
   const highlightTimeoutRef = useRef<number | null>(null)
   const addTodayRef = useRef<HTMLDivElement | null>(null)
   const heroLogoRef = useRef<HTMLImageElement | null>(null)
+  const heroRevealPending = useRef(false)
 
   const markdownExtension = useMemo(() => markdown({ base: markdownLanguage }), [])
   const editorTheme = useMemo(
@@ -888,11 +899,31 @@ export default function Timeline() {
     }
   }, [hasNoNotes, isLogoAnimating])
 
+  useLayoutEffect(() => {
+    if (hasNoNotes) return
+    if (!heroRevealPending.current) return
+
+    heroRevealPending.current = false
+    setIsHeroRevealActive(true)
+    setIsHeroRevealHold(true)
+  }, [hasNoNotes])
+
+  useLayoutEffect(() => {
+    if (!isHeroRevealHold) {
+      delete document.body.dataset.heroReveal
+      return
+    }
+
+    document.body.dataset.heroReveal = 'true'
+  }, [isHeroRevealHold])
+
+
   useEffect(() => {
     return () => {
       delete document.body.dataset.emptyState
       delete document.body.dataset.heroWallpaper
       delete document.body.dataset.heroUi
+      delete document.body.dataset.heroReveal
     }
   }, [])
 
@@ -1416,6 +1447,10 @@ export default function Timeline() {
   )
 
   const handleEmptyCta = useCallback(() => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!prefersReducedMotion) {
+      heroRevealPending.current = true
+    }
     runLogoTransition()
     void handleCreateDay(todayId)
   }, [handleCreateDay, runLogoTransition, todayId])
@@ -1426,8 +1461,6 @@ export default function Timeline() {
   // Standard Timeline Cards
   const timelineCards = useMemo<TimelineDayCard[]>(() => days.map((day) => ({ day })), [days])
 
-  const yesterdayId = addDays(todayId, -1)
-  const tomorrowId = addDays(todayId, 1)
   const maxWeekdayOffset = 14
   const hasToday = useMemo(() => timelineCards.some((card) => card.day.dayId === todayId), [timelineCards, todayId])
 
@@ -1533,6 +1566,42 @@ export default function Timeline() {
 
   // Active Items
   const activeItems = (mode === 'search' && searchText.trim() && searchResults.length > 0) ? searchCards : standardItems
+
+  useEffect(() => {
+    if (!isHeroRevealHold) return
+
+    const isReadyToReveal = () => {
+      const hasTodayCard = dayRefs.current.has(todayId)
+      const hasTomorrowItem = activeItems.some(
+        (item) => item.type === 'add-future' && item.dayId === tomorrowId,
+      )
+      const hasTomorrowButton =
+        hasTomorrowItem && Boolean(document.querySelector("[data-hero-tomorrow='true']"))
+      return hasTodayCard && hasTomorrowButton
+    }
+
+    const startFade = () => {
+      setIsHeroRevealHold(false)
+      window.setTimeout(() => {
+        setIsHeroRevealActive(false)
+      }, heroRevealDuration)
+    }
+
+    const raf = window.requestAnimationFrame(() => {
+      if (isReadyToReveal()) {
+        startFade()
+      }
+    })
+
+    const fallback = window.setTimeout(() => {
+      startFade()
+    }, heroRevealFallback)
+
+    return () => {
+      window.cancelAnimationFrame(raf)
+      window.clearTimeout(fallback)
+    }
+  }, [activeItems, heroRevealDuration, heroRevealFallback, isHeroRevealHold, todayId, tomorrowId])
 
   const dayOrder = useMemo(
     () =>
@@ -1707,8 +1776,15 @@ export default function Timeline() {
             }
 
             if (item.type === 'add-future') {
+              const isTomorrowButton = item.dayId === tomorrowId
               return (
-                <div key={`add-future-${item.dayId}`} className="flex justify-center">
+                <div
+                  key={`add-future-${item.dayId}`}
+                  data-hero-tomorrow={isTomorrowButton ? 'true' : undefined}
+                  className={`flex justify-center ${
+                    isHeroRevealActive && isTomorrowButton ? 'hero-reveal' : ''
+                  }`}
+                >
                   <button
                     className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
                     type="button"
@@ -1760,18 +1836,19 @@ export default function Timeline() {
             const quote = highlightedQuote?.day === day.dayId ? highlightedQuote.quote : null
 
             return (
-              <DayEditorCard
-                key={day.dayId}
-                day={day}
-                isFuture={isFuture}
-                isToday={isToday}
-                isYesterday={isYesterday}
-                isTomorrow={isTomorrow}
-                title={title}
-                humanDate={humanDate}
-                datePart={datePart}
-                weekdayPart={weekdayPart}
-                relativeLabel={relativeLabel}
+                <DayEditorCard
+                  key={day.dayId}
+                  day={day}
+                  isFuture={isFuture}
+                  isToday={isToday}
+                  isYesterday={isYesterday}
+                  isTomorrow={isTomorrow}
+                  heroReveal={isHeroRevealActive && isToday}
+                  title={title}
+                  humanDate={humanDate}
+                  datePart={datePart}
+                  weekdayPart={weekdayPart}
+                  relativeLabel={relativeLabel}
                 searchQuery={searchQuery}
                 quote={quote}
                 dateError={dateError}
