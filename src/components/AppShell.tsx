@@ -28,16 +28,6 @@ export default function AppShell() {
   const showTrayRow = isHome
   const syncLabel = syncOperation === 'push' ? 'Pushing...' : 'Pulling...'
 
-  const timelineButton = (
-    <button
-      className={`${trayIconButton} ${mode === 'timeline' ? 'bg-slate-50' : ''}`}
-      onClick={() => setMode('timeline')}
-      aria-label="Timeline"
-    >
-      <img src="/pencil-simple-line.svg" alt="" className="h-5 w-5" />
-    </button>
-  )
-
   const chatButton = (
     <button
       className={`${trayIconButton} ${mode === 'chat' ? 'bg-slate-50' : ''}`}
@@ -227,48 +217,42 @@ export default function AppShell() {
         if (isEditable) return
         event.preventDefault()
         if (isHome) {
-          if (mode === 'timeline') {
-            document.getElementById('timeline-input')?.focus()
+          const dispatchFocusToday = () => {
+            window.dispatchEvent(new CustomEvent('timeline-focus-today'))
+          }
+          if (mode !== 'chat') {
+            setMode('chat')
+            requestAnimationFrame(() => {
+              requestAnimationFrame(dispatchFocusToday)
+            })
             return
           }
-          if (mode === 'chat') {
-            document.getElementById('chat-input')?.focus()
-            return
-          }
-          if (mode === 'search') {
-            document.getElementById('search-input')?.focus()
-            return
-          }
-        }
-        if (location.pathname === '/settings') {
-          document.getElementById('settings-passcode')?.focus()
+          dispatchFocusToday()
         }
         return
       }
 
       if (isEditable) return
 
-      if (key === 'c' || key === 'a') {
+      if (key === 'a') {
         event.preventDefault()
-        if (isHome) {
-          setMode('chat')
+        if (!isHome) return
+        if (mode === 'chat') {
+          document.getElementById('chat-input')?.focus()
+          return
         }
+        setMode('chat')
         return
       }
 
-      if (key === 's' || key === 'f') {
+      if (key === 'f') {
         event.preventDefault()
-        if (isHome) {
-          setMode('search')
+        if (!isHome) return
+        if (mode === 'search') {
+          document.getElementById('search-input')?.focus()
+          return
         }
-        return
-      }
-
-      if (key === 'q') {
-        event.preventDefault()
-        if (isHome) {
-          setMode('timeline')
-        }
+        setMode('search')
         return
       }
 
@@ -276,12 +260,12 @@ export default function AppShell() {
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [isHome, location.pathname, mode, setMode])
+  }, [isHome, mode, setMode])
 
   useEffect(() => {
     if (!isHome) return
-    const inputId =
-      mode === 'chat' ? 'chat-input' : mode === 'search' ? 'search-input' : 'timeline-input'
+    if (mode === 'timeline') return
+    const inputId = mode === 'chat' ? 'chat-input' : 'search-input'
     requestAnimationFrame(() => {
       document.getElementById(inputId)?.focus()
     })
@@ -332,28 +316,17 @@ export default function AppShell() {
                       <div className="grid gap-1">
                         <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                           <span className="flex items-center gap-1">
-                            <kbd className="kbd">Q</kbd>
-                          </span>
-                          <span className="text-slate-400">-&gt;</span>
-                          <span>Quick add</span>
-                        </div>
-                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                          <span className="flex items-center gap-1">
                             <kbd className="kbd">A</kbd>
-                            <span className="text-slate-400">or</span>
-                            <kbd className="kbd">C</kbd>
                           </span>
                           <span className="text-slate-400">-&gt;</span>
-                          <span>Chat with AI</span>
+                          <span>Ask the AI</span>
                         </div>
                         <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                           <span className="flex items-center gap-1">
-                            <kbd className="kbd">S</kbd>
-                            <span className="text-slate-400">or</span>
                             <kbd className="kbd">F</kbd>
                           </span>
                           <span className="text-slate-400">-&gt;</span>
-                          <span>Search/Find</span>
+                          <span>Find</span>
                         </div>
                       </div>
                     </div>
@@ -367,14 +340,14 @@ export default function AppShell() {
                             <kbd className="kbd">T</kbd>
                           </span>
                           <span className="text-slate-400">-&gt;</span>
-                          <span>Scroll to Today</span>
+                          <span>Scroll to Today/Top</span>
                         </div>
                         <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                           <span className="flex items-center gap-1">
                             <kbd className="kbd">N</kbd>
                           </span>
                           <span className="text-slate-400">-&gt;</span>
-                          <span>New Future Day</span>
+                          <span>New Today/Tomorrow</span>
                         </div>
                       </div>
                     </div>
@@ -397,7 +370,7 @@ export default function AppShell() {
                             <kbd className="kbd">I</kbd>
                           </span>
                           <span className="text-slate-400">-&gt;</span>
-                          <span>Focus Input Box</span>
+                          <span>Focus Today editor</span>
                         </div>
                         <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                           <span className="flex items-center gap-1">
@@ -456,10 +429,7 @@ export default function AppShell() {
           <div className="bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 right-0 z-20 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
           <div className="bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 right-0 z-20 bg-white/30 backdrop-blur-md" />
 
-          <div className="bottom-tray-row hero-ui-fade-down fixed left-0 right-0 z-30 mx-auto flex w-[min(96%,620px)] items-center gap-2 px-2 sm:gap-3 sm:px-0">
-            {mode !== 'timeline' && <Fragment key="timeline-btn">{timelineButton}</Fragment>}
-            {mode === 'timeline' && <Fragment key="tray">{trayCenter}</Fragment>}
-
+          <div className="bottom-tray-row hero-ui-fade-down fixed left-0 right-0 z-30 mx-auto flex w-[min(96%,620px)] items-center justify-center gap-2 px-2 sm:gap-3 sm:px-0">
             {mode !== 'chat' && <Fragment key="chat-btn">{chatButton}</Fragment>}
             {mode === 'chat' && <Fragment key="tray">{trayCenter}</Fragment>}
 
