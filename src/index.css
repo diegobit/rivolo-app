@@ -520,8 +520,14 @@
   }
 }
 
+.bottom-tray-blur-tail {
+  bottom: calc(var(--keyboard-offset, 0px) - 4rem);
+  height: 4rem;
+}
+
 body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-row,
-body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur {
+body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur,
+body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-tail {
   display: none;
 }
 

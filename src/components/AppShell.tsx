@@ -454,6 +454,7 @@ export default function AppShell() {
       {showTrayRow && (
         <>
           <div className="bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 right-0 z-20 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
+          <div className="bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 right-0 z-20 bg-white/30 backdrop-blur-md" />
 
           <div className="bottom-tray-row hero-ui-fade-down fixed left-0 right-0 z-30 mx-auto flex w-[min(96%,620px)] items-center gap-2 px-2 sm:gap-3 sm:px-0">
             {mode !== 'timeline' && <Fragment key="timeline-btn">{timelineButton}</Fragment>}
