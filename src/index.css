@@ -252,8 +252,9 @@
   }
 
   .hero-ui-fade-up,
-  .hero-ui-fade-down {
-    transition: none;
+  .hero-ui-fade-down,
+  .hero-reveal {
+    transition: opacity 600ms ease;
   }
 
   body[data-hero-ui='true'] .hero-ui-fade-up,
@@ -261,6 +262,18 @@
     opacity: 0;
     pointer-events: none;
     visibility: hidden;
+  }
+
+  body[data-hero-reveal='true'] .hero-reveal {
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-ui-fade-up,
+    .hero-ui-fade-down,
+    .hero-reveal {
+      transition: none;
+    }
   }
 
   .hero-break {

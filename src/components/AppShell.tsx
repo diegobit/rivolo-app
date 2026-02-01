@@ -63,7 +63,7 @@ export default function AppShell() {
       id="bottom-tray"
       data-mode={mode}
       data-highlight-input={highlightInputMode}
-      className="bottom-tray-shell flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-2 shadow-[0_6px_18px_rgba(15,23,42,0.12)] transition duration-300 sm:p-3"
+      className="bottom-tray-shell hero-ui-fade-down flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-2 shadow-[0_6px_18px_rgba(15,23,42,0.12)] transition duration-300 sm:p-3"
     />
   )
 
