@@ -7,13 +7,13 @@ Keep behavior stable and follow existing conventions.
 - Vite + React 19 + TypeScript.
 - TailwindCSS utilities plus `src/index.css` for global styles.
 - PWA setup via `vite-plugin-pwa` in `vite.config.ts`.
-- Local storage uses SQLite in a web worker (`src/lib/sqliteWorker.ts`).
+- Local storage uses sql.js in the main thread, persisted to IndexedDB (`src/lib/db.ts`).
 - Sync providers live in `src/lib` and are surfaced via `src/store`.
 - Primary routes are in `src/routes`, wired in `src/App.tsx`.
 
 ## Commands
 - Install deps: `npm install`.
-- Dev server: `npm run dev` (Vite, port 5174, COOP/COEP headers).
+- Dev server: `npm run dev` (Vite, port 5174).
 - Build: `npm run build` (typecheck via `tsc -b`, then `vite build`).
 - Preview build: `npm run preview`.
 - Lint: `npm run lint` (ESLint flat config).
@@ -32,10 +32,9 @@ Keep behavior stable and follow existing conventions.
 - `src/App.tsx` for routing, `src/main.tsx` for bootstrap.
 
 ## Runtime notes
-- Vite dev server runs with COOP/COEP headers for SharedArrayBuffer usage.
 - PWA manifest lives in `vite.config.ts`.
 - The app expects to run fully client-side (no server code here).
-- SQLite worker is initialized on demand in `src/lib/db.ts`.
+- sql.js database is initialized on demand in `src/lib/db.ts`.
 
 ## Environment and secrets
 - Dropbox OAuth needs `VITE_DROPBOX_CLIENT_ID` in the Vite env.
@@ -125,6 +124,10 @@ Follow existing patterns; keep changes minimal and consistent.
 ## Notes for agents
 - Favor small, reviewable changes; avoid mixing unrelated edits.
 - Keep UI changes aligned with existing visual style.
+- Make sure app changes work well as a PWA on desktop and mobile (including iOS Safari).
+- Treat responsive behavior as a requirement: verify layout at narrow widths, preserve readable typography, and avoid overflow/clip.
+- Design for touch: ensure tap targets, spacing, and scroll/keyboard interactions feel correct on phones.
+- Account for mobile Safari/PWA quirks (safe areas, viewport height, back/forward gestures, standalone mode).
 - If you add tooling or conventions, update this file.
 - Prefer updating tests or lint rules only when needed for the change.
 - Do not remove user data or reset storage without explicit request.
@@ -136,8 +139,7 @@ Follow existing patterns; keep changes minimal and consistent.
 - Route shell: `src/components/AppShell.tsx`.
 - Timeline view: `src/routes/Timeline.tsx`.
 - Settings view: `src/routes/Settings.tsx`.
-- Database worker: `src/lib/sqliteWorker.ts`.
-- SQLite facade: `src/lib/db.ts`.
+- SQLite storage: `src/lib/db.ts`.
 - Sync API: `src/lib/sync.ts`.
 - Dropbox OAuth: `src/lib/dropbox.ts`.
 - LLM API: `src/lib/llm/index.ts`.
