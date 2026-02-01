@@ -117,12 +117,14 @@ export default function AppShell() {
     const updateKeyboardOffset = () => {
       if (!window.visualViewport) {
         root.style.setProperty('--keyboard-offset', '0px')
+        document.body.dataset.keyboardOpen = 'false'
         return
       }
 
       const viewport = window.visualViewport
       const offset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
       root.style.setProperty('--keyboard-offset', `${Math.round(offset)}px`)
+      document.body.dataset.keyboardOpen = offset > 0 ? 'true' : 'false'
     }
 
     updateKeyboardOffset()

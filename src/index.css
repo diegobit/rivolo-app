@@ -520,6 +520,11 @@
   }
 }
 
+body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-row,
+body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur {
+  display: none;
+}
+
 #bottom-tray.bottom-tray-shell:focus-within {
   border-color: #e2e8f0;
 }
