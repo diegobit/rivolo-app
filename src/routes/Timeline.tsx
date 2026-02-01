@@ -208,8 +208,6 @@ type ChatUiMessage = {
   }
 }
 
-type TrayMode = 'timeline' | 'chat' | 'search'
-
 type DayEditorCardProps = {
   day: Day
   isFuture: boolean
@@ -536,12 +534,13 @@ const DayEditorCard = memo(({
   )
 })
 
+type TrayInputMode = 'chat' | 'search'
+
 type TrayInputProps = {
-  mode: TrayMode
+  mode: TrayInputMode
   sending: boolean
   chatError: string | null
   noSearchResults: boolean
-  onTimelineSubmit: (value: string) => Promise<void>
   onChatSubmit: (value: string) => Promise<void>
   onSearchTextChange: (value: string) => void
 }
@@ -550,7 +549,7 @@ type TrayInputConfig = {
   placeholder: string
   icon: string
   id: string
-  enterKeyHint: 'send' | 'search' | 'done'
+  enterKeyHint: 'send' | 'search'
 }
 
 const TrayInput = memo(({
@@ -558,13 +557,12 @@ const TrayInput = memo(({
   sending,
   chatError,
   noSearchResults,
-  onTimelineSubmit,
   onChatSubmit,
   onSearchTextChange,
 }: TrayInputProps) => {
   const [draftText, setDraftText] = useState('')
   const debounceRef = useRef<number | null>(null)
-  const prevModeRef = useRef<TrayMode>(mode)
+  const prevModeRef = useRef<TrayInputMode>(mode)
 
   const inputConfig = useMemo<TrayInputConfig>(() => {
     switch (mode) {
@@ -575,19 +573,12 @@ const TrayInput = memo(({
           id: 'chat-input',
           enterKeyHint: 'send',
         }
-      case 'search':
+      default:
         return {
           placeholder: 'Search all days',
           icon: '/magnifying-glass.svg',
           id: 'search-input',
           enterKeyHint: 'search',
-        }
-      default:
-        return {
-          placeholder: 'What am I thinking about today?',
-          icon: '/pencil-simple-line.svg',
-          id: 'timeline-input',
-          enterKeyHint: 'done',
         }
     }
   }, [mode])
@@ -640,11 +631,6 @@ const TrayInput = memo(({
       await onChatSubmit(activeText)
       return
     }
-
-    if (mode === 'timeline') {
-      await onTimelineSubmit(activeText)
-      setDraftText('')
-    }
   }
 
   const handleClearSearch = () => {
@@ -670,7 +656,7 @@ const TrayInput = memo(({
         No results
       </p>
       <p
-        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,300px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
+        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,300px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 whitespace-pre-line leading-snug sm:whitespace-normal ${
           showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         aria-hidden={!showChatError}
@@ -704,17 +690,17 @@ const TrayInput = memo(({
             enterKeyHint={inputConfig.enterKeyHint}
           />
         </div>
-        {(mode === 'timeline' || mode === 'chat') && (
+        {mode === 'chat' && (
           <button
             className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
               activeText.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
             }`}
             type="submit"
             disabled={sending}
-            aria-label={mode === 'chat' ? 'Send' : 'Add'}
+            aria-label="Send"
           >
             <img
-              src={mode === 'chat' ? '/arrow-up.svg' : '/plus.svg'}
+              src="/arrow-up.svg"
               alt=""
               className="h-5 w-5"
               style={{ filter: 'brightness(0) invert(1)' }}
@@ -774,7 +760,7 @@ Quotes must be exact substrings from the cited day. If unsure, omit citations.`
 // --- Component ---
 
 export default function Timeline() {
-  const { days, loading, loadTimeline, loadDay, appendToToday, updateDayContent, moveDayDate, deleteDay } = useDaysStore()
+  const { days, loading, loadTimeline, loadDay, updateDayContent, moveDayDate, deleteDay } = useDaysStore()
   const {
     loadSettings,
     geminiApiKey,
@@ -1467,17 +1453,6 @@ export default function Timeline() {
     await handleAutoPush()
   }
 
-  const handleTimelineSubmit = useCallback(
-    async (draft: string) => {
-      const trimmed = draft.trim()
-      if (!trimmed) return
-
-      await appendToToday(draft)
-      await handleAutoPush()
-    },
-    [appendToToday, handleAutoPush],
-  )
-
   const handleEmptyCta = useCallback(() => {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (!prefersReducedMotion) {
@@ -1513,6 +1488,26 @@ export default function Timeline() {
     addTodayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [hasToday, revealDay, todayId])
 
+  const handleFocusToday = useCallback(async () => {
+    if (hasToday) {
+      const hasEditor = editorRefs.current.has(todayId)
+      if (!hasEditor) {
+        pendingFocusRef.current = { dayId: todayId, position: 'end' }
+      }
+      revealDay(todayId, 'end', 'start', false)
+      if (hasEditor) {
+        focusDayEditor(todayId, 'end', false)
+      }
+      return
+    }
+
+    await handleCreateDay(todayId, {
+      focusPosition: 'end',
+      scrollBlock: 'start',
+      focusScroll: false,
+    })
+  }, [focusDayEditor, handleCreateDay, hasToday, revealDay, todayId])
+
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
@@ -1522,7 +1517,8 @@ export default function Timeline() {
       if (isEditableElement(document.activeElement as HTMLElement | null)) return
       event.preventDefault()
       if (key === 'n') {
-        void handleCreateDay(futureDayId, {
+        const targetDayId = hasToday ? futureDayId : todayId
+        void handleCreateDay(targetDayId, {
           focusPosition: 'start',
           scrollBlock: 'start',
           focusScroll: false,
@@ -1534,7 +1530,15 @@ export default function Timeline() {
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [futureDayId, handleCreateDay, handleScrollToToday])
+  }, [futureDayId, handleCreateDay, handleScrollToToday, hasToday, todayId])
+
+  useEffect(() => {
+    const handleFocusEvent = () => {
+      void handleFocusToday()
+    }
+    window.addEventListener('timeline-focus-today', handleFocusEvent)
+    return () => window.removeEventListener('timeline-focus-today', handleFocusEvent)
+  }, [handleFocusToday])
 
   useEffect(() => {
     const handleScrollEvent = () => {
@@ -1543,6 +1547,55 @@ export default function Timeline() {
     window.addEventListener('timeline-scroll-today', handleScrollEvent)
     return () => window.removeEventListener('timeline-scroll-today', handleScrollEvent)
   }, [handleScrollToToday])
+
+  useEffect(() => {
+    const blurFocusedEditor = () => {
+      for (const view of editorRefs.current.values()) {
+        if (view.hasFocus) {
+          view.contentDOM.blur()
+        }
+      }
+      document.body.dataset.dayEditorFocus = 'false'
+    }
+
+    const getPoint = (event: Event) => {
+      if (event instanceof TouchEvent) {
+        const touch = event.changedTouches[0]
+        if (!touch) return null
+        return { x: touch.clientX, y: touch.clientY }
+      }
+      if (event instanceof MouseEvent) {
+        return { x: event.clientX, y: event.clientY }
+      }
+      return null
+    }
+
+    const isInsideAnyCard = (x: number, y: number) => {
+      for (const node of dayRefs.current.values()) {
+        const rect = node.getBoundingClientRect()
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+          return true
+        }
+      }
+      return false
+    }
+
+    const handleOutsidePointer = (event: Event) => {
+      const point = getPoint(event)
+      if (!point) return
+      if (isInsideAnyCard(point.x, point.y)) return
+      requestAnimationFrame(blurFocusedEditor)
+    }
+
+    document.addEventListener('pointerdown', handleOutsidePointer, { capture: true })
+    document.addEventListener('mousedown', handleOutsidePointer, { capture: true })
+    document.addEventListener('touchstart', handleOutsidePointer, { capture: true })
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointer, { capture: true })
+      document.removeEventListener('mousedown', handleOutsidePointer, { capture: true })
+      document.removeEventListener('touchstart', handleOutsidePointer, { capture: true })
+    }
+  }, [])
 
   const standardItems = useMemo<TimelineItem[]>(() => {
     // Case: No cards at all -> show only +Today
@@ -1658,21 +1711,21 @@ export default function Timeline() {
 
   // --- Render ---
 
-  const trayContent = (
-    <TrayInput
-      mode={mode}
-      sending={sending}
-      chatError={chatError}
-      noSearchResults={noSearchResults}
-      onTimelineSubmit={handleTimelineSubmit}
-      onChatSubmit={handleChatSend}
-      onSearchTextChange={handleSearchTextChange}
-    />
-  )
+  const trayContent =
+    mode === 'timeline' ? null : (
+      <TrayInput
+        mode={mode}
+        sending={sending}
+        chatError={chatError}
+        noSearchResults={noSearchResults}
+        onChatSubmit={handleChatSend}
+        onSearchTextChange={handleSearchTextChange}
+      />
+    )
 
   return (
     <div className={mode === 'chat' ? 'pb-[40vh]' : undefined}>
-      <BottomTrayPortal>{trayContent}</BottomTrayPortal>
+      {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
 
       {/* Chat Panel - Fixed Overlay */}
       {mode === 'chat' && (

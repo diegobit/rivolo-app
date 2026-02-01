@@ -8,6 +8,6 @@ type UIState = {
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  mode: 'timeline',
+  mode: 'chat',
   setMode: (mode) => set({ mode }),
 }))
