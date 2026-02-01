@@ -233,7 +233,7 @@
     opacity: 0.15;
   }
 
-  body[data-hero-wallpaper='true'][data-wallpaper='thoughts-light']::after {
+  body[data-hero-wallpaper='true']::after {
     opacity: 0.15;
   }
 

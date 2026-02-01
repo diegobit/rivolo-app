@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { isIOS } from '../lib/device'
 import { type BodyFont, type MonospaceFont, type TitleFont, isBodyFont, isMonospaceFont, isTitleFont } from '../lib/fonts'
 import { getJsonSetting, getSetting, setJsonSetting, setSetting } from '../lib/settingsRepository'
 
@@ -52,7 +53,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   allowWebSearch: true,
   aiLanguage: 'follow',
   loading: false,
-  wallpaper: 'thoughts-light',
+  wallpaper: isIOS() ? 'white' : 'thoughts-light',
   highlightInputMode: false,
   fontPreference: 'monospace',
   bodyFont: 'system',
@@ -80,7 +81,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const shouldPersistAllowWebSearch =
       storedAllowWebSearch === null || (storedAllowWebSearch !== 'true' && storedAllowWebSearch !== 'false')
     const aiLanguage = storedAiLanguage ?? 'follow'
-    const wallpaper = storedWallpaper ?? 'thoughts-light'
+    const defaultWallpaper = isIOS() ? 'white' : 'thoughts-light'
+    const wallpaper = storedWallpaper ?? defaultWallpaper
     const highlightInputMode = storedHighlightInputMode === 'true'
     const shouldPersistHighlightInputMode =
       storedHighlightInputMode === null ||
