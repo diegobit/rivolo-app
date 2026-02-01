@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { isIOS } from '../lib/device'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
 import {
   getMonospaceFontFamily,
@@ -306,9 +307,12 @@ export default function Settings() {
     fontPreference === 'monospace'
       ? getMonospaceFontFamily(monospaceFont)
       : getBodyFontFamily(bodyFont)
+  const isIosDevice = isIOS()
   const bodyPreviewFontSize =
     fontPreference === 'monospace'
-      ? getMonospaceFontSize(monospaceFont)
+      ? isIosDevice && monospaceFont === 'iawriter'
+        ? '1rem'
+        : getMonospaceFontSize(monospaceFont)
       : '1rem'
   const titlePreviewFontFamily = getTitleFontFamily(titleFont)
   const dropboxAccount = useMemo(() => {
