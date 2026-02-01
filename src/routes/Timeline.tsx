@@ -120,6 +120,15 @@ const todoPointerHandler = EditorView.domEventHandlers({
     view.focus()
     return true
   },
+  touchstart: (event, view) => {
+    const touch = event.touches.item(0)
+    if (!touch) return false
+    const pos = view.posAtCoords({ x: touch.clientX, y: touch.clientY })
+    if (pos == null) return false
+    if (!toggleTodoAtPos(view, pos)) return false
+    event.preventDefault()
+    return true
+  },
 })
 
 const todoKeymap = Prec.high(
@@ -444,7 +453,7 @@ const DayEditorCard = memo(({
           />
         </div>
         <div className="flex items-center gap-2">
-          <div ref={menuRef} className="relative sm:hidden touch-actions">
+          <div ref={menuRef} className="relative touch-actions">
             <button
               className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300"
               type="button"
