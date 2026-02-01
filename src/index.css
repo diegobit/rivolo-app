@@ -445,6 +445,18 @@
   }
 }
 
+@layer utilities {
+  @media (hover: none) and (pointer: coarse) {
+    .touch-actions {
+      display: block;
+    }
+
+    .touch-hide {
+      display: none;
+    }
+  }
+}
+
 .loader {
   width: 16px;
   height: 16px;
