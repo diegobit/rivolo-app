@@ -647,24 +647,24 @@ const TrayInput = memo(({
 
   return (
     <div className="relative">
-      <p
-        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,300px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 ${
-          showNoResults ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-        aria-hidden={!showNoResults}
-      >
-        No results
-      </p>
-      <p
-        className={`absolute -top-10 left-1/2 -z-10 w-[min(92vw,300px)] -translate-x-1/2 rounded-full border border-gray-300 bg-white px-6 pb-6 pt-1 text-center text-sm text-red-400 whitespace-pre-line leading-snug sm:whitespace-normal ${
-          showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-        aria-hidden={!showChatError}
-      >
-        {chatError}
-      </p>
       <form className="flex items-center gap-3" onSubmit={handleSubmit}>
         <div className="relative flex-1">
+          <p
+            className={`absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
+              showNoResults ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+            aria-hidden={!showNoResults}
+          >
+            No results
+          </p>
+          <p
+            className={`absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
+              showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+            aria-hidden={!showChatError}
+          >
+            {chatError}
+          </p>
           <span
             aria-hidden="true"
             className="tray-input-icon pointer-events-none absolute left-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 opacity-80 sm:block"
