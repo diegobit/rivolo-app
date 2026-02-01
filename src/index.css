@@ -446,11 +446,13 @@
 }
 
 @layer utilities {
-  @media (any-pointer: coarse) {
+  @media (hover: hover) and (pointer: fine) {
     .touch-actions {
-      display: block;
+      display: none;
     }
+  }
 
+  @media (hover: none) {
     .touch-hide {
       display: none;
     }
