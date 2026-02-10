@@ -4,8 +4,10 @@ import { BrowserRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.tsx'
+import { installDebugLogsToggle } from './lib/debugLogs'
 
 registerSW({ immediate: true })
+installDebugLogsToggle()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
