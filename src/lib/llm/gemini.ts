@@ -33,6 +33,15 @@ const extractText = (payload: unknown) => {
     .join('')
 }
 
+const supportsJsonResponseMimeType = (model: string) => {
+  const normalized = model.replace(/^models\//, '')
+  const match = normalized.match(/^gemini-(\d+)/i)
+  if (!match) return false
+
+  const major = Number.parseInt(match[1], 10)
+  return Number.isFinite(major) && major >= 3
+}
+
 const readStream = async (
   reader: ReadableStreamDefaultReader<Uint8Array>,
   onToken?: (chunk: string) => void,
@@ -114,6 +123,7 @@ export const chatWithGemini = async ({
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${apiKey}`
   const tools = allowWebSearch ? [{ googleSearch: {} }] : null
   const thinkingConfig = { thinkingBudget: 0, includeThoughts: false }
+  const canUseJsonResponseMimeType = supportsJsonResponseMimeType(model)
 
   const toRequestBody = (includeThinkingConfig: boolean) => {
     const body = {
@@ -121,7 +131,7 @@ export const chatWithGemini = async ({
       generationConfig: {
         temperature,
         maxOutputTokens: maxTokens,
-        ...(responseMimeType ? { responseMimeType } : {}),
+        ...(responseMimeType && canUseJsonResponseMimeType ? { responseMimeType } : {}),
         ...(includeThinkingConfig ? { thinkingConfig } : {}),
       },
     }
