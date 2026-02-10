@@ -174,6 +174,18 @@ const isEditableElement = (element: HTMLElement | null) =>
         element.isContentEditable),
   )
 
+const areStringSetsEqual = (a: Set<string>, b: Set<string>) => {
+  if (a.size !== b.size) return false
+
+  for (const value of a) {
+    if (!b.has(value)) {
+      return false
+    }
+  }
+
+  return true
+}
+
 // --- Types ---
 
 type TimelineDayCard = {
@@ -419,12 +431,17 @@ const DayEditorCard = memo(({
     input.click()
   }
 
+  const handleContainerRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      containerRef.current = node
+      registerDayRef(day.dayId, node)
+    },
+    [day.dayId, registerDayRef],
+  )
+
   return (
     <div
-      ref={(node) => {
-        containerRef.current = node
-        registerDayRef(day.dayId, node)
-      }}
+      ref={handleContainerRef}
       onPointerEnter={handleHoverStart}
       onPointerLeave={handleHoverEnd}
       data-scroll-target={isToday ? 'today' : undefined}
@@ -789,9 +806,11 @@ Quotes must be exact substrings from the cited day. If unsure, omit citations.`
 const OLDER_DAYS_OBSERVER_MARGIN = '350px 0px 550px 0px'
 const INITIAL_EDITOR_MOUNT_COUNT = 6
 const EDITOR_HYDRATE_OBSERVER_MARGIN = '70% 0px 90% 0px'
+const EDITOR_PIN_TTL_MS = 20_000
+const EDITOR_PIN_PRUNE_INTERVAL_MS = 4_000
 const LOG_SCOPE = 'TimelinePerf'
 
-type HydrationReason = 'observer' | 'interaction' | 'citation' | 'loadDay' | 'dateMove'
+type EditorPinReason = 'interaction' | 'citation' | 'loadDay' | 'dateMove' | 'edit'
 
 // --- Component ---
 
@@ -852,7 +871,7 @@ export default function Timeline() {
   const [isLogoAnimating, setIsLogoAnimating] = useState(false)
   const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
-  const [hydratedDayIds, setHydratedDayIds] = useState<Set<string>>(() => new Set())
+  const [mountedDayIds, setMountedDayIds] = useState<Set<string>>(() => new Set())
 
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
@@ -871,7 +890,11 @@ export default function Timeline() {
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
   const dayRefs = useRef(new Map<string, HTMLDivElement>())
-  const hydratedDayIdsRef = useRef(new Set<string>())
+  const mountedDayIdsRef = useRef(new Set<string>())
+  const nearViewportDayIdsRef = useRef(new Set<string>())
+  const pinnedDayExpiryRef = useRef(new Map<string, number>())
+  const dayOrderRef = useRef<string[]>([])
+  const maxMountedCountRef = useRef(0)
   const hydrationRequestedAtRef = useRef(new Map<string, number>())
   const dayHydrationObserverRef = useRef<IntersectionObserver | null>(null)
   const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
@@ -941,6 +964,8 @@ export default function Timeline() {
       initialEditorMountCount: INITIAL_EDITOR_MOUNT_COUNT,
       editorHydrateObserverMargin: EDITOR_HYDRATE_OBSERVER_MARGIN,
       olderDaysObserverMargin: OLDER_DAYS_OBSERVER_MARGIN,
+      editorPinTtlMs: EDITOR_PIN_TTL_MS,
+      editorPinPruneIntervalMs: EDITOR_PIN_PRUNE_INTERVAL_MS,
     })
   }, [])
 
@@ -959,35 +984,6 @@ export default function Timeline() {
 
     void run()
   }, [loadSettings, loadSyncState, loadTimeline])
-
-  useEffect(() => {
-    if (days.length === 0) {
-      if (!hydratedDayIdsRef.current.size) return
-
-      hydratedDayIdsRef.current.clear()
-      hydrationRequestedAtRef.current.clear()
-      setHydratedDayIds(new Set())
-      debugLog(LOG_SCOPE, 'editorHydrate:reset', { reason: 'noDays' })
-      return
-    }
-
-    const loadedDayIds = new Set(days.map((day) => day.dayId))
-    let changed = false
-    for (const dayId of hydratedDayIdsRef.current) {
-      if (loadedDayIds.has(dayId)) continue
-      hydratedDayIdsRef.current.delete(dayId)
-      hydrationRequestedAtRef.current.delete(dayId)
-      changed = true
-    }
-
-    if (!changed) return
-
-    setHydratedDayIds(new Set(hydratedDayIdsRef.current))
-    debugLog(LOG_SCOPE, 'editorHydrate:pruned', {
-      loadedCount: days.length,
-      hydratedCount: hydratedDayIdsRef.current.size,
-    })
-  }, [days])
 
   useEffect(() => {
     document.body.style.setProperty('--hero-fade-ms', `${heroFadeDuration}ms`)
@@ -1214,22 +1210,124 @@ export default function Timeline() {
     [],
   )
 
-  const markDayHydrated = useCallback((dayId: string, reason: HydrationReason) => {
-    if (hydratedDayIdsRef.current.has(dayId)) {
-      return false
+  const applyMountedDayIds = useCallback((next: Set<string>, reason: string) => {
+    const previous = mountedDayIdsRef.current
+    if (areStringSetsEqual(previous, next)) {
+      return
     }
 
-    hydratedDayIdsRef.current.add(dayId)
-    setHydratedDayIds(new Set(hydratedDayIdsRef.current))
+    let addedCount = 0
+    let removedCount = 0
+    for (const dayId of next) {
+      if (!previous.has(dayId)) {
+        addedCount += 1
+      }
+    }
+    for (const dayId of previous) {
+      if (!next.has(dayId)) {
+        removedCount += 1
+      }
+    }
 
-    debugLog(LOG_SCOPE, 'editorHydrate:mark', {
-      dayId,
+    mountedDayIdsRef.current = next
+    setMountedDayIds(next)
+    maxMountedCountRef.current = Math.max(maxMountedCountRef.current, next.size)
+
+    debugLog(LOG_SCOPE, 'editorMountWindow:update', {
       reason,
-      hydratedCount: hydratedDayIdsRef.current.size,
+      mountedCount: next.size,
+      addedCount,
+      removedCount,
+      nearViewportCount: nearViewportDayIdsRef.current.size,
+      pinnedCount: pinnedDayExpiryRef.current.size,
+      maxMountedCount: maxMountedCountRef.current,
     })
-
-    return true
   }, [])
+
+  const recomputeMountedEditors = useCallback(
+    (reason: string) => {
+      const dayOrder = dayOrderRef.current
+      if (!dayOrder.length) {
+        applyMountedDayIds(new Set(), reason)
+        return
+      }
+
+      if (mode === 'search') {
+        applyMountedDayIds(new Set(dayOrder), reason)
+        return
+      }
+
+      const dayOrderSet = new Set(dayOrder)
+      const now = getNowMs()
+      for (const [dayId, expiresAt] of pinnedDayExpiryRef.current) {
+        if (expiresAt > now) continue
+        pinnedDayExpiryRef.current.delete(dayId)
+      }
+
+      const next = new Set<string>()
+
+      if (!supportsIntersectionObserver) {
+        for (const dayId of dayOrder) {
+          next.add(dayId)
+        }
+        applyMountedDayIds(next, reason)
+        return
+      }
+
+      for (let index = 0; index < Math.min(INITIAL_EDITOR_MOUNT_COUNT, dayOrder.length); index += 1) {
+        next.add(dayOrder[index])
+      }
+
+      for (const dayId of nearViewportDayIdsRef.current) {
+        if (dayOrderSet.has(dayId)) {
+          next.add(dayId)
+        }
+      }
+
+      for (const dayId of pinnedDayExpiryRef.current.keys()) {
+        if (dayOrderSet.has(dayId)) {
+          next.add(dayId)
+        }
+      }
+
+      const pendingDayId = pendingFocusRef.current?.dayId
+      if (pendingDayId && dayOrderSet.has(pendingDayId)) {
+        next.add(pendingDayId)
+      }
+
+      for (const [dayId, view] of editorRefs.current) {
+        if (!view.hasFocus) continue
+        if (dayOrderSet.has(dayId)) {
+          next.add(dayId)
+        }
+      }
+
+      applyMountedDayIds(next, reason)
+    },
+    [applyMountedDayIds, mode, supportsIntersectionObserver],
+  )
+
+  const pinDayForEditorMount = useCallback(
+    (dayId: string, reason: EditorPinReason, recompute = true) => {
+      const now = getNowMs()
+      const nextExpiry = now + EDITOR_PIN_TTL_MS
+      const currentExpiry = pinnedDayExpiryRef.current.get(dayId) ?? 0
+      pinnedDayExpiryRef.current.set(dayId, nextExpiry)
+
+      if (nextExpiry - currentExpiry > 500) {
+        debugLog(LOG_SCOPE, 'editorMountWindow:pin', {
+          dayId,
+          reason,
+          ttlMs: EDITOR_PIN_TTL_MS,
+        })
+      }
+
+      if (recompute) {
+        recomputeMountedEditors(`pin:${reason}`)
+      }
+    },
+    [recomputeMountedEditors],
+  )
 
   const requestDayEditorMount = useCallback(
     (dayId: string, position: 'start' | 'end') => {
@@ -1239,7 +1337,8 @@ export default function Timeline() {
       })
 
       hydrationRequestedAtRef.current.set(dayId, getNowMs())
-      const hydratedNow = markDayHydrated(dayId, 'interaction')
+      const wasMounted = mountedDayIdsRef.current.has(dayId)
+      pinDayForEditorMount(dayId, 'interaction')
       pendingFocusRef.current = { dayId, position }
 
       requestAnimationFrame(() => {
@@ -1251,11 +1350,12 @@ export default function Timeline() {
         hydrateTimer.end('editorHydrate:request:raf', {
           dayId,
           focusedImmediately,
-          hydratedNow,
+          wasMounted,
+          mountedAfterRequest: mountedDayIdsRef.current.has(dayId),
         })
       })
     },
-    [focusDayEditor, markDayHydrated],
+    [focusDayEditor, pinDayForEditorMount],
   )
 
   const scrollToDay = useCallback((dayId: string) => {
@@ -1313,7 +1413,7 @@ export default function Timeline() {
     ) => {
       const { focusPosition = 'end', scrollBlock = 'center', focusScroll = true } = options ?? {}
       pendingFocusRef.current = { dayId, position: focusPosition }
-      markDayHydrated(dayId, 'loadDay')
+      pinDayForEditorMount(dayId, 'loadDay')
       const result = await loadDay(dayId)
       if (result.created) {
         createdDayIdsRef.current.add(dayId)
@@ -1326,7 +1426,7 @@ export default function Timeline() {
         pendingFocusRef.current = null
       }
     },
-    [loadDay, markDayHydrated, revealDay],
+    [loadDay, pinDayForEditorMount, revealDay],
   )
 
   const handleDeleteDay = useCallback(
@@ -1374,8 +1474,10 @@ export default function Timeline() {
         await deleteDay(dayId)
         await handleAutoPush()
       }
+
+      recomputeMountedEditors('editorBlur')
     },
-    [days, deleteDay, handleAutoPush],
+    [days, deleteDay, handleAutoPush, recomputeMountedEditors],
   )
 
   const handleDateCommit = useCallback(
@@ -1406,11 +1508,11 @@ export default function Timeline() {
         createdDayIdsRef.current.delete(dayId)
         createdDayIdsRef.current.add(nextDayId)
       }
-      markDayHydrated(nextDayId, 'dateMove')
+      pinDayForEditorMount(nextDayId, 'dateMove')
       await handleAutoPush()
       revealDay(nextDayId, 'end')
     },
-    [handleAutoPush, markDayHydrated, moveDayDate, revealDay, updateDayContent],
+    [handleAutoPush, moveDayDate, pinDayForEditorMount, revealDay, updateDayContent],
   )
 
   const handleEditorChange = useCallback(
@@ -1418,12 +1520,15 @@ export default function Timeline() {
       if (value.trim() && createdDayIdsRef.current.has(dayId)) {
         createdDayIdsRef.current.delete(dayId)
       }
+
+      pinDayForEditorMount(dayId, 'edit', false)
+
       setSearchResults((state) =>
         state.map((day) => (day.dayId === dayId ? { ...day, contentMd: value } : day)),
       )
       scheduleSave(dayId, value)
     },
-    [scheduleSave, setSearchResults],
+    [pinDayForEditorMount, scheduleSave, setSearchResults],
   )
 
 
@@ -1432,11 +1537,11 @@ export default function Timeline() {
       if (!days.some((day) => day.dayId === citation.day)) {
         await loadDay(citation.day)
       }
-      markDayHydrated(citation.day, 'citation')
+      pinDayForEditorMount(citation.day, 'citation')
       setHighlightedQuote(citation)
       scrollToDay(citation.day)
     },
-    [days, loadDay, markDayHydrated, scrollToDay],
+    [days, loadDay, pinDayForEditorMount, scrollToDay],
   )
 
   const registerEditor = useCallback(
@@ -1458,11 +1563,15 @@ export default function Timeline() {
           focusDayEditor(dayId, pending.position, false)
           pendingFocusRef.current = null
         }
+
+        recomputeMountedEditors('registerEditor')
         return
       }
+
       editorRefs.current.delete(dayId)
+      recomputeMountedEditors('unregisterEditor')
     },
-    [focusDayEditor],
+    [focusDayEditor, recomputeMountedEditors],
   )
 
   const registerDayRef = useCallback(
@@ -1485,6 +1594,7 @@ export default function Timeline() {
         dayHydrationObserverRef.current?.unobserve(previousNode)
       }
       dayRefs.current.delete(dayId)
+      nearViewportDayIdsRef.current.delete(dayId)
     },
     [isTimelineVisible],
   )
@@ -1496,12 +1606,27 @@ export default function Timeline() {
 
     const observer = new IntersectionObserver(
       (entries) => {
+        let changed = false
         for (const entry of entries) {
-          if (!entry.isIntersecting) continue
           if (!(entry.target instanceof HTMLElement)) continue
           const dayId = entry.target.dataset.dayId
           if (!dayId) continue
-          markDayHydrated(dayId, 'observer')
+
+          if (entry.isIntersecting) {
+            if (!nearViewportDayIdsRef.current.has(dayId)) {
+              nearViewportDayIdsRef.current.add(dayId)
+              changed = true
+            }
+            continue
+          }
+
+          if (nearViewportDayIdsRef.current.delete(dayId)) {
+            changed = true
+          }
+        }
+
+        if (changed) {
+          recomputeMountedEditors('nearViewportObserver')
         }
       },
       {
@@ -1512,15 +1637,17 @@ export default function Timeline() {
     )
 
     dayHydrationObserverRef.current = observer
+    const nearViewportDayIds = nearViewportDayIdsRef.current
     for (const node of dayRefs.current.values()) {
       observer.observe(node)
     }
 
     return () => {
       observer.disconnect()
+      nearViewportDayIds.clear()
       dayHydrationObserverRef.current = null
     }
-  }, [isTimelineVisible, markDayHydrated, supportsIntersectionObserver])
+  }, [isTimelineVisible, recomputeMountedEditors, supportsIntersectionObserver])
 
   const handleChatSend = useCallback(
     async (draft: string) => {
@@ -1966,6 +2093,65 @@ export default function Timeline() {
     return map
   }, [dayOrder])
 
+  useEffect(() => {
+    dayOrderRef.current = dayOrder
+    recomputeMountedEditors('dayOrderChanged')
+  }, [dayOrder, recomputeMountedEditors])
+
+  useEffect(() => {
+    if (!isTimelineVisible) return
+
+    const interval = window.setInterval(() => {
+      recomputeMountedEditors('pinTtlPrune')
+    }, EDITOR_PIN_PRUNE_INTERVAL_MS)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [isTimelineVisible, recomputeMountedEditors])
+
+  useEffect(() => {
+    const loadedDayIds = new Set(days.map((day) => day.dayId))
+    let changed = false
+
+    for (const dayId of nearViewportDayIdsRef.current) {
+      if (loadedDayIds.has(dayId)) continue
+      nearViewportDayIdsRef.current.delete(dayId)
+      changed = true
+    }
+
+    for (const dayId of mountedDayIdsRef.current) {
+      if (loadedDayIds.has(dayId)) continue
+      mountedDayIdsRef.current.delete(dayId)
+      changed = true
+    }
+
+    for (const dayId of pinnedDayExpiryRef.current.keys()) {
+      if (loadedDayIds.has(dayId)) continue
+      pinnedDayExpiryRef.current.delete(dayId)
+      changed = true
+    }
+
+    for (const dayId of hydrationRequestedAtRef.current.keys()) {
+      if (loadedDayIds.has(dayId)) continue
+      hydrationRequestedAtRef.current.delete(dayId)
+      changed = true
+    }
+
+    if (pendingFocusRef.current && !loadedDayIds.has(pendingFocusRef.current.dayId)) {
+      pendingFocusRef.current = null
+      changed = true
+    }
+
+    if (changed) {
+      debugLog(LOG_SCOPE, 'editorMountWindow:prune', {
+        loadedCount: days.length,
+      })
+    }
+
+    recomputeMountedEditors(changed ? 'daysPruned' : 'daysChanged')
+  }, [days, recomputeMountedEditors])
+
   const handleFocusDay = useCallback(
     (dayId: string, position: 'start' | 'end') => {
       if (focusDayEditor(dayId, position)) {
@@ -2196,8 +2382,7 @@ export default function Timeline() {
             const quote = highlightedQuote?.day === day.dayId ? highlightedQuote.quote : null
             const shouldMountEditor =
               mode === 'search' ||
-              dayIndex < INITIAL_EDITOR_MOUNT_COUNT ||
-              hydratedDayIds.has(day.dayId) ||
+              mountedDayIds.has(day.dayId) ||
               editorRefs.current.has(day.dayId)
 
             return (
