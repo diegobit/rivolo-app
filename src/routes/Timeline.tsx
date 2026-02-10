@@ -2562,10 +2562,6 @@ export default function Timeline() {
           <div className="fixed inset-0 z-20 sm:hidden">
             <div className="pointer-events-none absolute inset-0 bg-white/35 backdrop-blur-lg" />
             <div
-              className="pointer-events-none absolute left-0 right-0 top-0 z-10 bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md"
-              style={{ height: 'calc(env(safe-area-inset-top) + 4rem)' }}
-            />
-            <div
               className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto px-2"
               style={{
                 paddingTop: 'calc(env(safe-area-inset-top) + 4rem)',

@@ -32,6 +32,7 @@ export default function AppShell() {
   const showTrayRow = isHome
   const showMobileChatTogglePill =
     isNarrowViewport && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
+  const showMobileChatHeaderBlur = isHome && isNarrowViewport && mode === 'chat' && chatPanelOpen
   const syncLabel = syncOperation === 'push' ? 'Pushing...' : 'Pulling...'
 
   const chatButton = (
@@ -313,6 +314,13 @@ export default function AppShell() {
       <header
         className="relative left-0 right-0 z-30 mx-auto grid h-16 w-[min(96%,720px)] grid-cols-[1fr_auto_1fr] items-center sm:fixed"
       >
+        {showMobileChatHeaderBlur && (
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 sm:hidden bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md"
+            style={{ height: 'calc(env(safe-area-inset-top) + 4rem)' }}
+            aria-hidden="true"
+          />
+        )}
         <div className="flex items-center gap-2">
           {showBackButton && (
             <NavLink to="/" className={backButtonClass} aria-label="Back">
