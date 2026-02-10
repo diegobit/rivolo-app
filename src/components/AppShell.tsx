@@ -316,12 +316,12 @@ export default function AppShell() {
       >
         {showMobileChatHeaderBlur && (
           <div
-            className="pointer-events-none absolute inset-x-0 top-0 sm:hidden bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md"
+            className="pointer-events-none absolute inset-x-0 top-0 z-0 bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md sm:hidden"
             style={{ height: 'calc(env(safe-area-inset-top) + 4rem)' }}
             aria-hidden="true"
           />
         )}
-        <div className="flex items-center gap-2">
+        <div className="relative z-10 flex items-center gap-2">
           {showBackButton && (
             <NavLink to="/" className={backButtonClass} aria-label="Back">
               <img
@@ -423,10 +423,10 @@ export default function AppShell() {
             </div>
           )}
         </div>
-        <NavLink to="/" className="justify-self-center" aria-label="Home">
+        <NavLink to="/" className="relative z-10 justify-self-center" aria-label="Home">
           <img src="/logo.png" alt="Rivolo" className="app-logo h-10 w-auto" />
         </NavLink>
-        <div className="flex items-center justify-end gap-2">
+        <div className="relative z-10 flex items-center justify-end gap-2">
           {syncing && (
             <div
               className="flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-xs text-slate-400 shadow-sm"
