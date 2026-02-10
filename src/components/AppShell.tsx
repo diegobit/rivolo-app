@@ -16,16 +16,22 @@ export default function AppShell() {
   const location = useLocation()
   const { loadSettings, wallpaper, highlightInputMode } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus, syncing, syncOperation } = useSyncStore()
-  const { mode, setMode } = useUIStore()
+  const { mode, setMode, chatPanelOpen, setChatPanelOpen, chatMessageCount } = useUIStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
+  const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(max-width: 639px)').matches
+  })
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const lastAutoPullAt = useRef(0)
   const autoPullInFlight = useRef(false)
   const showBackButton = location.pathname === '/settings'
   const isHome = location.pathname === '/'
   const showTrayRow = isHome
+  const showMobileChatTogglePill =
+    isNarrowViewport && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
   const syncLabel = syncOperation === 'push' ? 'Pushing...' : 'Pulling...'
 
   const chatButton = (
@@ -61,6 +67,28 @@ export default function AppShell() {
     void loadSettings()
     void loadSyncState()
   }, [loadSettings, loadSyncState])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 639px)')
+
+    const updateViewport = () => {
+      setIsNarrowViewport(mediaQuery.matches)
+    }
+
+    updateViewport()
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updateViewport)
+      return () => {
+        mediaQuery.removeEventListener('change', updateViewport)
+      }
+    }
+
+    mediaQuery.addListener(updateViewport)
+    return () => {
+      mediaQuery.removeListener(updateViewport)
+    }
+  }, [])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -435,6 +463,33 @@ export default function AppShell() {
 
             {mode !== 'search' && <Fragment key="search-btn">{searchButton}</Fragment>}
             {mode === 'search' && <Fragment key="tray">{trayCenter}</Fragment>}
+
+            {showMobileChatTogglePill && (
+              <button
+                type="button"
+                className={`absolute top-[-3.1rem] inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 sm:hidden ${
+                  showScrollToToday ? 'right-[3.25rem]' : 'right-2'
+                }`}
+                aria-label={chatPanelOpen ? 'Hide chat' : 'Show chat'}
+                onClick={() => {
+                  if (chatPanelOpen) {
+                    setChatPanelOpen(false)
+                    document.getElementById('chat-input')?.blur()
+                    return
+                  }
+
+                  setChatPanelOpen(true)
+                }}
+              >
+                <img src="/chats-teardrop.svg" alt="" className="h-4 w-4 opacity-70" />
+                <span>{chatPanelOpen ? 'Hide chat' : 'Show chat'}</span>
+                <img
+                  src="/caret-left.svg"
+                  alt=""
+                  className={`h-3.5 w-3.5 opacity-60 ${chatPanelOpen ? '-rotate-90' : 'rotate-90'}`}
+                />
+              </button>
+            )}
 
             {showScrollToToday && (
               <button

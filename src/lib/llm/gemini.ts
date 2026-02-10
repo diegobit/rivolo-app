@@ -11,6 +11,7 @@ export type GeminiChatOptions = {
   allowWebSearch?: boolean
   temperature?: number
   maxTokens?: number
+  responseMimeType?: string
   stream?: boolean
   onToken?: (chunk: string) => void
 }
@@ -105,6 +106,7 @@ export const chatWithGemini = async ({
   allowWebSearch = true,
   temperature = 0.2,
   maxTokens = 2048,
+  responseMimeType,
   stream = false,
   onToken,
 }: GeminiChatOptions) => {
@@ -119,6 +121,7 @@ export const chatWithGemini = async ({
       generationConfig: {
         temperature,
         maxOutputTokens: maxTokens,
+        ...(responseMimeType ? { responseMimeType } : {}),
         ...(includeThinkingConfig ? { thinkingConfig } : {}),
       },
     }
