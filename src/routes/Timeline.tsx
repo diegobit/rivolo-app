@@ -221,6 +221,147 @@ type ChatUiMessage = {
   }
 }
 
+const normalizeCitationText = (value: string) =>
+  value
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const normalizeCitationMatchText = (value: string) =>
+  value
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .toLowerCase()
+
+const findQuoteOffset = (text: string, quote: string) => {
+  const trimmedQuote = quote.trim()
+  if (!trimmedQuote) return -1
+
+  const exactIndex = text.indexOf(trimmedQuote)
+  if (exactIndex >= 0) {
+    return exactIndex
+  }
+
+  const lowerIndex = text.toLowerCase().indexOf(trimmedQuote.toLowerCase())
+  if (lowerIndex >= 0) {
+    return lowerIndex
+  }
+
+  return normalizeCitationMatchText(text).indexOf(normalizeCitationMatchText(trimmedQuote))
+}
+
+const stripCodeFences = (value: string) => value.replace(/```json\s*/gi, '').replace(/```/g, '').trim()
+
+const extractFirstJsonObject = (value: string) => {
+  let start = -1
+  let depth = 0
+  let inString = false
+  let escaping = false
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]
+
+    if (inString) {
+      if (escaping) {
+        escaping = false
+        continue
+      }
+      if (char === '\\') {
+        escaping = true
+        continue
+      }
+      if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inString = true
+      continue
+    }
+
+    if (char === '{') {
+      if (depth === 0) {
+        start = index
+      }
+      depth += 1
+      continue
+    }
+
+    if (char === '}' && depth > 0) {
+      depth -= 1
+      if (depth === 0 && start !== -1) {
+        return value.slice(start, index + 1)
+      }
+    }
+  }
+
+  return null
+}
+
+const parseAssistantPayload = (responseText: string): AssistantPayload | null => {
+  const trimmed = responseText.trim()
+  const sanitized = stripCodeFences(trimmed)
+  const candidates = [trimmed, sanitized]
+  const extracted = extractFirstJsonObject(sanitized)
+
+  if (extracted) {
+    candidates.push(extracted)
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    try {
+      const parsed = JSON.parse(candidate) as {
+        answer?: unknown
+        citations?: unknown
+        insert_text?: unknown
+        insert_target_day?: unknown
+      }
+
+      if (typeof parsed.answer !== 'string') {
+        continue
+      }
+
+      const citations = Array.isArray(parsed.citations)
+        ? parsed.citations.flatMap((citation) => {
+            if (!citation || typeof citation !== 'object') {
+              return []
+            }
+
+            const typedCitation = citation as { day?: unknown; quote?: unknown }
+            if (typeof typedCitation.day !== 'string' || typeof typedCitation.quote !== 'string') {
+              return []
+            }
+
+            return [{ day: typedCitation.day, quote: typedCitation.quote }]
+          })
+        : undefined
+
+      const insertText =
+        typeof parsed.insert_text === 'string' || parsed.insert_text === null ? parsed.insert_text : null
+
+      const insertTargetDay =
+        typeof parsed.insert_target_day === 'string' || parsed.insert_target_day === null
+          ? parsed.insert_target_day
+          : null
+
+      return {
+        answer: parsed.answer,
+        citations,
+        insert_text: insertText,
+        insert_target_day: insertTargetDay,
+      }
+    } catch {
+      continue
+    }
+  }
+
+  return null
+}
+
 type DayEditorCardProps = {
   day: Day
   shouldMountEditor: boolean
@@ -840,7 +981,7 @@ export default function Timeline() {
     titleFont,
   } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
-  const { mode } = useUIStore()
+  const { mode, chatPanelOpen, setChatPanelOpen, setChatMessageCount } = useUIStore()
   const hasNoNotes = !loading && days.length === 0
 
   // Mode-specific Input State
@@ -862,6 +1003,10 @@ export default function Timeline() {
     messagesRef.current = messages
   }, [messages])
 
+  useEffect(() => {
+    setChatMessageCount(messages.length)
+  }, [messages.length, setChatMessageCount])
+
   // Search State
   const [searchResults, setSearchResults] = useState<Day[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -872,12 +1017,18 @@ export default function Timeline() {
   const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
   const [mountedDayIds, setMountedDayIds] = useState<Set<string>>(() => new Set())
+  const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(max-width: 639px)').matches
+  })
 
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
   const isTimelineVisible = mode !== 'search'
+  const showDesktopChatOverlay = mode === 'chat' && !isNarrowViewport
+  const showMobileChatOverlay = mode === 'chat' && isNarrowViewport && chatPanelOpen
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
@@ -968,6 +1119,65 @@ export default function Timeline() {
       editorPinPruneIntervalMs: EDITOR_PIN_PRUNE_INTERVAL_MS,
     })
   }, [])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 639px)')
+
+    const updateViewport = () => {
+      setIsNarrowViewport(mediaQuery.matches)
+    }
+
+    updateViewport()
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updateViewport)
+      return () => {
+        mediaQuery.removeEventListener('change', updateViewport)
+      }
+    }
+
+    mediaQuery.addListener(updateViewport)
+    return () => {
+      mediaQuery.removeListener(updateViewport)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!showMobileChatOverlay) return
+
+    const rootStyle = document.documentElement.style
+    const bodyStyle = document.body.style
+    const lockScrollY = window.scrollY
+    const previousRootOverflow = rootStyle.overflow
+    const previousBodyOverflow = bodyStyle.overflow
+    const previousBodyOverscroll = bodyStyle.overscrollBehavior
+    const previousBodyPosition = bodyStyle.position
+    const previousBodyTop = bodyStyle.top
+    const previousBodyLeft = bodyStyle.left
+    const previousBodyRight = bodyStyle.right
+    const previousBodyWidth = bodyStyle.width
+
+    rootStyle.overflow = 'hidden'
+    bodyStyle.overflow = 'hidden'
+    bodyStyle.overscrollBehavior = 'none'
+    bodyStyle.position = 'fixed'
+    bodyStyle.top = `-${lockScrollY}px`
+    bodyStyle.left = '0'
+    bodyStyle.right = '0'
+    bodyStyle.width = '100%'
+
+    return () => {
+      rootStyle.overflow = previousRootOverflow
+      bodyStyle.overflow = previousBodyOverflow
+      bodyStyle.overscrollBehavior = previousBodyOverscroll
+      bodyStyle.position = previousBodyPosition
+      bodyStyle.top = previousBodyTop
+      bodyStyle.left = previousBodyLeft
+      bodyStyle.right = previousBodyRight
+      bodyStyle.width = previousBodyWidth
+      window.scrollTo(0, lockScrollY)
+    }
+  }, [showMobileChatOverlay])
 
   useEffect(() => {
     const loadTimer = startDebugTimer(LOG_SCOPE, 'initialLoad')
@@ -1358,28 +1568,13 @@ export default function Timeline() {
     [focusDayEditor, pinDayForEditorMount],
   )
 
-  const scrollToDay = useCallback((dayId: string) => {
-    let attempts = 0
-    const run = () => {
-      const node = dayRefs.current.get(dayId)
-      if (node) {
-        node.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        return
-      }
-      if (attempts < 4) {
-        attempts += 1
-        requestAnimationFrame(run)
-      }
-    }
-    requestAnimationFrame(run)
-  }, [])
-
   const revealDay = useCallback(
     (
       dayId: string,
       focusPosition?: 'start' | 'end',
       scrollBlock: ScrollLogicalPosition = 'center',
       focusScroll = true,
+      scrollBehavior: ScrollBehavior = 'smooth',
     ) => {
       let attempts = 0
       const maxAttempts = 12
@@ -1387,7 +1582,7 @@ export default function Timeline() {
         const node = dayRefs.current.get(dayId)
         const view = editorRefs.current.get(dayId)
         if (node) {
-          node.scrollIntoView({ behavior: 'smooth', block: scrollBlock })
+          node.scrollIntoView({ behavior: scrollBehavior, block: scrollBlock })
         }
         if (focusPosition && view) {
           focusDayEditor(dayId, focusPosition, focusScroll)
@@ -1401,6 +1596,45 @@ export default function Timeline() {
     },
     [focusDayEditor],
   )
+
+  const scrollToCitationQuote = useCallback(async (citation: Citation) => {
+    const maxAttempts = 20
+    let attempts = 0
+
+    return await new Promise<boolean>((resolve) => {
+      const run = () => {
+        const view = editorRefs.current.get(citation.day)
+
+        if (!view) {
+          if (attempts >= maxAttempts) {
+            resolve(false)
+            return
+          }
+
+          attempts += 1
+          requestAnimationFrame(run)
+          return
+        }
+
+        const quoteOffset = findQuoteOffset(view.state.doc.toString(), citation.quote)
+        if (quoteOffset < 0) {
+          resolve(false)
+          return
+        }
+
+        view.dispatch({
+          effects: EditorView.scrollIntoView(quoteOffset, {
+            y: 'start',
+            yMargin: 12,
+          }),
+        })
+
+        resolve(true)
+      }
+
+      run()
+    })
+  }, [])
 
   const handleCreateDay = useCallback(
     async (
@@ -1534,14 +1768,45 @@ export default function Timeline() {
 
   const handleCitationClick = useCallback(
     async (citation: Citation) => {
-      if (!days.some((day) => day.dayId === citation.day)) {
+      const wasLoaded = days.some((day) => day.dayId === citation.day)
+      if (!wasLoaded) {
         await loadDay(citation.day)
       }
+
       pinDayForEditorMount(citation.day, 'citation')
       setHighlightedQuote(citation)
-      scrollToDay(citation.day)
+
+      if (isNarrowViewport) {
+        setChatPanelOpen(false)
+        document.getElementById('chat-input')?.blur()
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              resolve()
+            })
+          })
+        })
+      }
+
+      revealDay(citation.day, undefined, 'start', false, 'auto')
+      const jumpedToQuote = await scrollToCitationQuote(citation)
+
+      if (!jumpedToQuote && !wasLoaded) {
+        window.setTimeout(() => {
+          revealDay(citation.day, undefined, 'start', false, 'auto')
+          void scrollToCitationQuote(citation)
+        }, 220)
+      }
     },
-    [days, loadDay, pinDayForEditorMount, scrollToDay],
+    [
+      days,
+      isNarrowViewport,
+      loadDay,
+      pinDayForEditorMount,
+      revealDay,
+      scrollToCitationQuote,
+      setChatPanelOpen,
+    ],
   )
 
   const registerEditor = useCallback(
@@ -1653,6 +1918,11 @@ export default function Timeline() {
     async (draft: string) => {
       const trimmed = draft.trim()
       if (!trimmed) return
+
+      if (isNarrowViewport && !chatPanelOpen) {
+        setChatPanelOpen(true)
+      }
+
       setChatError(null)
 
       if (!geminiApiKey) {
@@ -1715,6 +1985,8 @@ export default function Timeline() {
           messages: llmMessages,
           allowThinking,
           allowWebSearch,
+          temperature: 0,
+          responseMimeType: 'application/json',
           stream: true,
           onToken: (chunk) => {
             setMessages((state) =>
@@ -1727,29 +1999,68 @@ export default function Timeline() {
           },
         })
 
-        const sanitized = responseText.replace(/```json\s*/gi, '').replace(/```/g, '').trim()
+        let finalResponseText = responseText
+        let payload = parseAssistantPayload(responseText)
+
+        const sanitized = stripCodeFences(responseText)
         console.info('[LLM Response]', { chars: responseText.length, sanitizedChars: sanitized.length })
 
-        let payload: AssistantPayload | null = null
-        try {
-          payload = JSON.parse(sanitized) as AssistantPayload
+        if (payload) {
           console.info('[LLM Parsed]', { hasCitations: Boolean(payload.citations?.length) })
-        } catch (parseError) {
-          console.error('[LLM Parse Error]', parseError)
-          payload = { answer: responseText }
+        } else {
+          console.error('[LLM Parse Error]', { preview: sanitized.slice(0, 200) })
+
+          try {
+            const { text: retryText } = await chat({
+              provider: 'gemini',
+              apiKey: geminiApiKey,
+              model: geminiModel,
+              messages: llmMessages,
+              allowThinking,
+              allowWebSearch,
+              temperature: 0,
+              responseMimeType: 'application/json',
+              stream: false,
+            })
+
+            finalResponseText = retryText
+            payload = parseAssistantPayload(retryText)
+
+            if (payload) {
+              console.info('[LLM Retry Parsed]', { hasCitations: Boolean(payload.citations?.length) })
+            } else {
+              console.error('[LLM Retry Parse Error]', { preview: stripCodeFences(retryText).slice(0, 200) })
+            }
+          } catch (retryError) {
+            console.error('[LLM Retry Error]', retryError)
+          }
         }
 
-        const citations = (payload.citations ?? []).filter((citation) => {
+        const citations = (payload?.citations ?? []).filter((citation) => {
           const content = contextMap.get(citation.day)
-          return content ? content.includes(citation.quote) : false
+          if (!content) return false
+
+          if (content.includes(citation.quote)) {
+            return true
+          }
+
+          const normalizedQuote = normalizeCitationText(citation.quote)
+          if (!normalizedQuote) {
+            return false
+          }
+
+          const normalizedContent = normalizeCitationText(content)
+          return normalizedContent.includes(normalizedQuote)
         })
+
+        const fallbackAnswer = stripCodeFences(finalResponseText || responseText)
 
         setMessages((state) =>
           state.map((message) =>
             message.id === assistantId
               ? {
                   ...message,
-                  content: payload?.answer ?? responseText,
+                  content: payload?.answer ?? (fallbackAnswer || responseText),
                   meta: {
                     citations,
                     insertText: payload?.insert_text ?? null,
@@ -1767,11 +2078,16 @@ export default function Timeline() {
     },
     [
       aiLanguage,
+      allowThinking,
+      allowWebSearch,
       buildContextDays,
+      chatPanelOpen,
       chat,
       formatContext,
       geminiApiKey,
       geminiModel,
+      isNarrowViewport,
+      setChatPanelOpen,
       setChatError,
       setMessages,
       setSending,
@@ -2172,6 +2488,8 @@ export default function Timeline() {
 
   // --- Render ---
 
+  const chatMessages = useMemo(() => [...messages].reverse(), [messages])
+
   const trayContent =
     mode === 'timeline' ? null : (
       <TrayInput
@@ -2185,24 +2503,24 @@ export default function Timeline() {
     )
 
   return (
-    <div className={mode === 'chat' ? 'pb-[40vh]' : undefined}>
+    <div className={showDesktopChatOverlay ? 'pb-[40vh]' : undefined}>
       {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
 
-      {/* Chat Panel - Fixed Overlay */}
-      {mode === 'chat' && (
+      {/* Desktop chat overlay */}
+      {showDesktopChatOverlay && (
         <div className="fixed bottom-24 left-0 right-0 z-20 mx-auto w-[min(96%,720px)] px-4">
           <div className={`pointer-events-none absolute -bottom-24 -inset-x-8 -top-4 -z-10 bg-white/30 backdrop-blur-md transition-opacity duration-500 [mask-image:linear-gradient(to_bottom,transparent,black_40%)] ${messages.length > 0 ? 'opacity-100' : 'opacity-0'}`} />
           <div className="flex max-h-[50vh] flex-col-reverse gap-3 overflow-y-auto p-6">
-            {[...messages].reverse().map((message) => (
-               <div
+            {chatMessages.map((message) => (
+              <div
                 key={message.id}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] space-y-2 rounded-2xl px-4 py-3 text-m shadow-[0_0_30px_-0_rgba(0,0,0,0.12)] ${
+                  className={`space-y-2 rounded-2xl px-4 py-3 text-m shadow-[0_0_30px_-0_rgba(0,0,0,0.12)] ${
                     message.role === 'user'
-                      ? 'bg-[#22B3FF] text-white'
-                      : 'bg-white text-slate-700'
+                      ? 'max-w-[85%] bg-[#22B3FF] text-white'
+                      : 'max-w-[94%] sm:max-w-[85%] bg-white text-slate-700'
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{message.content || '...'}</p>
@@ -2210,11 +2528,11 @@ export default function Timeline() {
                   {message.role === 'assistant' && message.meta?.citations?.length ? (
                     <div className="flex flex-wrap gap-2">
                       {message.meta.citations.map((citation, index) => (
-                          <button
-                            key={`${citation.day}-${index}`}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                            onClick={() => void handleCitationClick(citation)}
-                          >
+                        <button
+                          key={`${citation.day}-${index}`}
+                          className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                          onClick={() => void handleCitationClick(citation)}
+                        >
                           {citation.day} · “{citation.quote.slice(0, 32)}”
                         </button>
                       ))}
@@ -2222,10 +2540,10 @@ export default function Timeline() {
                   ) : null}
 
                   {message.role === 'assistant' && message.meta?.insertText ? (
-                      <button
-                        className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                        onClick={() => void handleChatInsert(message)}
-                      >
+                    <button
+                      className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                      onClick={() => void handleChatInsert(message)}
+                    >
                       {message.meta.insertTargetDay
                         ? `Insert into ${message.meta.insertTargetDay}`
                         : 'Insert summary'}
@@ -2236,6 +2554,68 @@ export default function Timeline() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Mobile chat overlay (Mode A) */}
+      {showMobileChatOverlay && (
+        <>
+          <div className="fixed inset-0 z-20 sm:hidden">
+            <div className="pointer-events-none absolute inset-0 bg-white/35 backdrop-blur-lg" />
+            <div
+              className="pointer-events-none absolute left-0 right-0 top-0 z-10 bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md"
+              style={{ height: 'calc(env(safe-area-inset-top) + 4rem)' }}
+            />
+            <div
+              className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto px-2"
+              style={{
+                paddingTop: 'calc(env(safe-area-inset-top) + 4rem)',
+                paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 5.75rem)',
+              }}
+            >
+              {chatMessages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`space-y-2 rounded-2xl px-4 py-3 text-m shadow-[0_0_30px_-0_rgba(0,0,0,0.12)] ${
+                      message.role === 'user'
+                        ? 'max-w-[85%] bg-[#22B3FF] text-white'
+                        : 'max-w-[94%] bg-white text-slate-700'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+
+                    {message.role === 'assistant' && message.meta?.citations?.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {message.meta.citations.map((citation, index) => (
+                          <button
+                            key={`${citation.day}-${index}`}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 shadow-sm transition"
+                            onClick={() => void handleCitationClick(citation)}
+                          >
+                            {citation.day} · “{citation.quote.slice(0, 32)}”
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {message.role === 'assistant' && message.meta?.insertText ? (
+                      <button
+                        className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition"
+                        onClick={() => void handleChatInsert(message)}
+                      >
+                        {message.meta.insertTargetDay
+                          ? `Insert into ${message.meta.insertTargetDay}`
+                          : 'Insert summary'}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Loading States */}

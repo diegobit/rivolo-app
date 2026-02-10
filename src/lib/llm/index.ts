@@ -15,6 +15,7 @@ export type ChatOptions = {
   allowWebSearch?: boolean
   temperature?: number
   maxTokens?: number
+  responseMimeType?: string
   stream?: boolean
   onToken?: (chunk: string) => void
 }
