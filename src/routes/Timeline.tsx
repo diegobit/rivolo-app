@@ -8,6 +8,7 @@ import { isIOS } from '../lib/device'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { editorHighlights } from '../lib/editorHighlights'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
+import { debugLog, getNowMs, startDebugTimer, toElapsedMs } from '../lib/debugLogs'
 import type { Day } from '../lib/dayRepository'
 import { searchDays, appendToDay } from '../lib/dayRepository'
 import { chat } from '../lib/llm'
@@ -210,6 +211,7 @@ type ChatUiMessage = {
 
 type DayEditorCardProps = {
   day: Day
+  shouldMountEditor: boolean
   isFuture: boolean
   isToday: boolean
   isYesterday: boolean
@@ -234,12 +236,14 @@ type DayEditorCardProps = {
   onDelete: (dayId: string) => void
   onDateChange: (dayId: string, nextDayId: string) => void
   onFocusDay: (dayId: string, position: 'start' | 'end') => void
+  onRequestEditorMount: (dayId: string, position: 'start' | 'end') => void
   registerEditor: (dayId: string, view: EditorView | null) => void
   registerDayRef: (dayId: string, node: HTMLDivElement | null) => void
 }
 
 const DayEditorCard = memo(({
   day,
+  shouldMountEditor,
   isFuture,
   isToday,
   isYesterday,
@@ -264,6 +268,7 @@ const DayEditorCard = memo(({
   onDelete,
   onDateChange,
   onFocusDay,
+  onRequestEditorMount,
   registerEditor,
   registerDayRef,
 }: DayEditorCardProps) => {
@@ -275,6 +280,17 @@ const DayEditorCard = memo(({
   const [showDesktopDelete, setShowDesktopDelete] = useState(false)
   const searchHighlight = useMemo(() => createHighlightPlugin(searchQuery), [searchQuery])
   const quoteHighlight = useMemo(() => (quote ? createHighlightPlugin(quote) : null), [quote])
+  const previewContent = useMemo(() => {
+    const trimmed = day.contentMd.trim()
+    if (!trimmed) {
+      return ' '
+    }
+
+    return trimmed
+      .split('\n')
+      .slice(0, 14)
+      .join('\n')
+  }, [day.contentMd])
 
   useEffect(() => {
     return () => {
@@ -518,17 +534,30 @@ const DayEditorCard = memo(({
         </div>
       )}
       <div className="mt-3 overflow-hidden rounded-xl">
-        <CodeMirror
-          value={day.contentMd}
-          extensions={editorExtensions}
-          onChange={(value) => onChange(day.dayId, value)}
-          onFocus={() => {
-            document.body.dataset.dayEditorFocus = 'true'
-          }}
-          onBlur={(event) => void onBlur(day.dayId, event.nativeEvent)}
-          onCreateEditor={(view) => registerEditor(day.dayId, view)}
-          basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLineGutter: false }}
-        />
+        {shouldMountEditor ? (
+          <CodeMirror
+            value={day.contentMd}
+            extensions={editorExtensions}
+            onChange={(value) => onChange(day.dayId, value)}
+            onFocus={() => {
+              document.body.dataset.dayEditorFocus = 'true'
+            }}
+            onBlur={(event) => void onBlur(day.dayId, event.nativeEvent)}
+            onCreateEditor={(view) => registerEditor(day.dayId, view)}
+            basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLineGutter: false }}
+          />
+        ) : (
+          <button
+            className="block min-h-[34px] w-full cursor-text rounded-xl border border-slate-100 bg-white px-2 py-1 text-left text-[0.98rem] leading-6 text-slate-700 transition hover:border-slate-200"
+            type="button"
+            aria-label={`Edit note for ${day.dayId}`}
+            onClick={() => onRequestEditorMount(day.dayId, 'end')}
+          >
+            <pre className="max-h-64 overflow-hidden whitespace-pre-wrap break-words font-inherit text-inherit">
+              {previewContent}
+            </pre>
+          </button>
+        )}
       </div>
     </div>
   )
@@ -757,10 +786,28 @@ Answer with strict JSON only. Return exactly this shape:
 }
 Quotes must be exact substrings from the cited day. If unsure, omit citations.`
 
+const OLDER_DAYS_OBSERVER_MARGIN = '350px 0px 550px 0px'
+const INITIAL_EDITOR_MOUNT_COUNT = 6
+const EDITOR_HYDRATE_OBSERVER_MARGIN = '70% 0px 90% 0px'
+const LOG_SCOPE = 'TimelinePerf'
+
+type HydrationReason = 'observer' | 'interaction' | 'citation' | 'loadDay' | 'dateMove'
+
 // --- Component ---
 
 export default function Timeline() {
-  const { days, loading, loadTimeline, loadDay, updateDayContent, moveDayDate, deleteDay } = useDaysStore()
+  const {
+    days,
+    loading,
+    loadingMore,
+    hasMorePast,
+    loadTimeline,
+    loadOlderDays,
+    loadDay,
+    updateDayContent,
+    moveDayDate,
+    deleteDay,
+  } = useDaysStore()
   const {
     loadSettings,
     geminiApiKey,
@@ -805,11 +852,13 @@ export default function Timeline() {
   const [isLogoAnimating, setIsLogoAnimating] = useState(false)
   const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
+  const [hydratedDayIds, setHydratedDayIds] = useState<Set<string>>(() => new Set())
 
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
+  const isTimelineVisible = mode !== 'search'
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
@@ -817,10 +866,15 @@ export default function Timeline() {
   const heroRevealFallback = 1000
   const heroLogoDuration = 600
   const isIosDevice = isIOS()
+  const supportsIntersectionObserver = typeof window !== 'undefined' && 'IntersectionObserver' in window
 
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
   const dayRefs = useRef(new Map<string, HTMLDivElement>())
+  const hydratedDayIdsRef = useRef(new Set<string>())
+  const hydrationRequestedAtRef = useRef(new Map<string, number>())
+  const dayHydrationObserverRef = useRef<IntersectionObserver | null>(null)
+  const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
   const saveTimeouts = useRef(new Map<string, number>())
   const createdDayIdsRef = useRef(new Set<string>())
   const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
@@ -883,10 +937,57 @@ export default function Timeline() {
   // --- Effects ---
 
   useEffect(() => {
-    void loadTimeline()
-    void loadSettings()
-    void loadSyncState()
+    debugLog(LOG_SCOPE, 'config', {
+      initialEditorMountCount: INITIAL_EDITOR_MOUNT_COUNT,
+      editorHydrateObserverMargin: EDITOR_HYDRATE_OBSERVER_MARGIN,
+      olderDaysObserverMargin: OLDER_DAYS_OBSERVER_MARGIN,
+    })
+  }, [])
+
+  useEffect(() => {
+    const loadTimer = startDebugTimer(LOG_SCOPE, 'initialLoad')
+
+    const run = async () => {
+      await Promise.all([loadTimeline(), loadSettings(), loadSyncState()])
+
+      const state = useDaysStore.getState()
+      loadTimer.end('initialLoad:done', {
+        loadedCount: state.days.length,
+        hasMorePast: state.hasMorePast,
+      })
+    }
+
+    void run()
   }, [loadSettings, loadSyncState, loadTimeline])
+
+  useEffect(() => {
+    if (days.length === 0) {
+      if (!hydratedDayIdsRef.current.size) return
+
+      hydratedDayIdsRef.current.clear()
+      hydrationRequestedAtRef.current.clear()
+      setHydratedDayIds(new Set())
+      debugLog(LOG_SCOPE, 'editorHydrate:reset', { reason: 'noDays' })
+      return
+    }
+
+    const loadedDayIds = new Set(days.map((day) => day.dayId))
+    let changed = false
+    for (const dayId of hydratedDayIdsRef.current) {
+      if (loadedDayIds.has(dayId)) continue
+      hydratedDayIdsRef.current.delete(dayId)
+      hydrationRequestedAtRef.current.delete(dayId)
+      changed = true
+    }
+
+    if (!changed) return
+
+    setHydratedDayIds(new Set(hydratedDayIdsRef.current))
+    debugLog(LOG_SCOPE, 'editorHydrate:pruned', {
+      loadedCount: days.length,
+      hydratedCount: hydratedDayIdsRef.current.size,
+    })
+  }, [days])
 
   useEffect(() => {
     document.body.style.setProperty('--hero-fade-ms', `${heroFadeDuration}ms`)
@@ -1103,13 +1204,59 @@ export default function Timeline() {
 
   const focusDayEditor = useCallback(
     (dayId: string, position: 'start' | 'end', shouldScroll = true) => {
-    const view = editorRefs.current.get(dayId)
-    if (!view) return false
-    const target = position === 'end' ? view.state.doc.length : 0
-    view.dispatch({ selection: EditorSelection.single(target), scrollIntoView: shouldScroll })
-    view.focus()
+      const view = editorRefs.current.get(dayId)
+      if (!view) return false
+      const target = position === 'end' ? view.state.doc.length : 0
+      view.dispatch({ selection: EditorSelection.single(target), scrollIntoView: shouldScroll })
+      view.focus()
+      return true
+    },
+    [],
+  )
+
+  const markDayHydrated = useCallback((dayId: string, reason: HydrationReason) => {
+    if (hydratedDayIdsRef.current.has(dayId)) {
+      return false
+    }
+
+    hydratedDayIdsRef.current.add(dayId)
+    setHydratedDayIds(new Set(hydratedDayIdsRef.current))
+
+    debugLog(LOG_SCOPE, 'editorHydrate:mark', {
+      dayId,
+      reason,
+      hydratedCount: hydratedDayIdsRef.current.size,
+    })
+
     return true
   }, [])
+
+  const requestDayEditorMount = useCallback(
+    (dayId: string, position: 'start' | 'end') => {
+      const hydrateTimer = startDebugTimer(LOG_SCOPE, 'editorHydrate:request', {
+        dayId,
+        position,
+      })
+
+      hydrationRequestedAtRef.current.set(dayId, getNowMs())
+      const hydratedNow = markDayHydrated(dayId, 'interaction')
+      pendingFocusRef.current = { dayId, position }
+
+      requestAnimationFrame(() => {
+        const focusedImmediately = focusDayEditor(dayId, position, false)
+        if (focusedImmediately) {
+          pendingFocusRef.current = null
+        }
+
+        hydrateTimer.end('editorHydrate:request:raf', {
+          dayId,
+          focusedImmediately,
+          hydratedNow,
+        })
+      })
+    },
+    [focusDayEditor, markDayHydrated],
+  )
 
   const scrollToDay = useCallback((dayId: string) => {
     let attempts = 0
@@ -1166,6 +1313,7 @@ export default function Timeline() {
     ) => {
       const { focusPosition = 'end', scrollBlock = 'center', focusScroll = true } = options ?? {}
       pendingFocusRef.current = { dayId, position: focusPosition }
+      markDayHydrated(dayId, 'loadDay')
       const result = await loadDay(dayId)
       if (result.created) {
         createdDayIdsRef.current.add(dayId)
@@ -1178,7 +1326,7 @@ export default function Timeline() {
         pendingFocusRef.current = null
       }
     },
-    [loadDay, revealDay],
+    [loadDay, markDayHydrated, revealDay],
   )
 
   const handleDeleteDay = useCallback(
@@ -1258,10 +1406,11 @@ export default function Timeline() {
         createdDayIdsRef.current.delete(dayId)
         createdDayIdsRef.current.add(nextDayId)
       }
+      markDayHydrated(nextDayId, 'dateMove')
       await handleAutoPush()
       revealDay(nextDayId, 'end')
     },
-    [handleAutoPush, moveDayDate, revealDay, updateDayContent],
+    [handleAutoPush, markDayHydrated, moveDayDate, revealDay, updateDayContent],
   )
 
   const handleEditorChange = useCallback(
@@ -1283,16 +1432,27 @@ export default function Timeline() {
       if (!days.some((day) => day.dayId === citation.day)) {
         await loadDay(citation.day)
       }
+      markDayHydrated(citation.day, 'citation')
       setHighlightedQuote(citation)
       scrollToDay(citation.day)
     },
-    [days, loadDay, scrollToDay],
+    [days, loadDay, markDayHydrated, scrollToDay],
   )
 
   const registerEditor = useCallback(
     (dayId: string, view: EditorView | null) => {
       if (view) {
         editorRefs.current.set(dayId, view)
+
+        const requestedAt = hydrationRequestedAtRef.current.get(dayId)
+        if (requestedAt != null) {
+          hydrationRequestedAtRef.current.delete(dayId)
+          debugLog(LOG_SCOPE, 'editorHydrate:mounted', {
+            dayId,
+            elapsedMs: toElapsedMs(requestedAt),
+          })
+        }
+
         const pending = pendingFocusRef.current
         if (pending && pending.dayId === dayId) {
           focusDayEditor(dayId, pending.position, false)
@@ -1305,13 +1465,62 @@ export default function Timeline() {
     [focusDayEditor],
   )
 
-  const registerDayRef = useCallback((dayId: string, node: HTMLDivElement | null) => {
-    if (node) {
-      dayRefs.current.set(dayId, node)
+  const registerDayRef = useCallback(
+    (dayId: string, node: HTMLDivElement | null) => {
+      const previousNode = dayRefs.current.get(dayId)
+      if (previousNode && previousNode !== node) {
+        dayHydrationObserverRef.current?.unobserve(previousNode)
+      }
+
+      if (node) {
+        node.dataset.dayId = dayId
+        dayRefs.current.set(dayId, node)
+        if (isTimelineVisible) {
+          dayHydrationObserverRef.current?.observe(node)
+        }
+        return
+      }
+
+      if (previousNode) {
+        dayHydrationObserverRef.current?.unobserve(previousNode)
+      }
+      dayRefs.current.delete(dayId)
+    },
+    [isTimelineVisible],
+  )
+
+  useEffect(() => {
+    if (!supportsIntersectionObserver || !isTimelineVisible) {
       return
     }
-    dayRefs.current.delete(dayId)
-  }, [])
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue
+          if (!(entry.target instanceof HTMLElement)) continue
+          const dayId = entry.target.dataset.dayId
+          if (!dayId) continue
+          markDayHydrated(dayId, 'observer')
+        }
+      },
+      {
+        root: null,
+        rootMargin: EDITOR_HYDRATE_OBSERVER_MARGIN,
+        threshold: 0,
+      },
+    )
+
+    dayHydrationObserverRef.current = observer
+    for (const node of dayRefs.current.values()) {
+      observer.observe(node)
+    }
+
+    return () => {
+      observer.disconnect()
+      dayHydrationObserverRef.current = null
+    }
+  }, [isTimelineVisible, markDayHydrated, supportsIntersectionObserver])
 
   const handleChatSend = useCallback(
     async (draft: string) => {
@@ -1492,7 +1701,7 @@ export default function Timeline() {
     if (hasToday) {
       const hasEditor = editorRefs.current.has(todayId)
       if (!hasEditor) {
-        pendingFocusRef.current = { dayId: todayId, position: 'end' }
+        requestDayEditorMount(todayId, 'end')
       }
       revealDay(todayId, 'end', 'start', false)
       if (hasEditor) {
@@ -1506,7 +1715,7 @@ export default function Timeline() {
       scrollBlock: 'start',
       focusScroll: false,
     })
-  }, [focusDayEditor, handleCreateDay, hasToday, revealDay, todayId])
+  }, [focusDayEditor, handleCreateDay, hasToday, requestDayEditorMount, revealDay, todayId])
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
@@ -1596,6 +1805,62 @@ export default function Timeline() {
       document.removeEventListener('touchstart', handleOutsidePointer, { capture: true })
     }
   }, [])
+
+  const handleLoadOlderDays = useCallback(
+    (source: 'observer' | 'button') => {
+      const before = useDaysStore.getState()
+      const loadMoreTimer = startDebugTimer(LOG_SCOPE, 'olderDays:trigger', {
+        source,
+        loadedCountBefore: before.days.length,
+        hasMorePastBefore: before.hasMorePast,
+      })
+
+      void loadOlderDays().then(() => {
+        const after = useDaysStore.getState()
+        loadMoreTimer.end('olderDays:done', {
+          source,
+          loadedCountAfter: after.days.length,
+          hasMorePastAfter: after.hasMorePast,
+          loadingMoreAfter: after.loadingMore,
+        })
+      })
+    },
+    [loadOlderDays],
+  )
+
+  useEffect(() => {
+    if (!isTimelineVisible) return
+    if (!supportsIntersectionObserver || !hasMorePast) return
+
+    const sentinelNode = olderDaysSentinelRef.current
+    if (!sentinelNode) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        if (loading || loadingMore) return
+
+        debugLog(LOG_SCOPE, 'olderDays:observerIntersection', {
+          loadedCount: days.length,
+          loading,
+          loadingMore,
+          hasMorePast,
+        })
+
+        handleLoadOlderDays('observer')
+      },
+      {
+        root: null,
+        rootMargin: OLDER_DAYS_OBSERVER_MARGIN,
+        threshold: 0,
+      },
+    )
+
+    observer.observe(sentinelNode)
+    return () => {
+      observer.disconnect()
+    }
+  }, [days.length, handleLoadOlderDays, hasMorePast, isTimelineVisible, loading, loadingMore, supportsIntersectionObserver])
 
   const standardItems = useMemo<TimelineItem[]>(() => {
     // Case: No cards at all -> show only +Today
@@ -1700,6 +1965,16 @@ export default function Timeline() {
     dayOrder.forEach((dayId, index) => map.set(dayId, index))
     return map
   }, [dayOrder])
+
+  const handleFocusDay = useCallback(
+    (dayId: string, position: 'start' | 'end') => {
+      if (focusDayEditor(dayId, position)) {
+        return
+      }
+      requestDayEditorMount(dayId, position)
+    },
+    [focusDayEditor, requestDayEditorMount],
+  )
 
   // No Results State
   const noSearchResults =
@@ -1919,21 +2194,27 @@ export default function Timeline() {
             const nextDayId = dayIndex >= 0 && dayIndex < dayOrder.length - 1 ? dayOrder[dayIndex + 1] : null
             const dateError = dateErrors[day.dayId] ?? null
             const quote = highlightedQuote?.day === day.dayId ? highlightedQuote.quote : null
+            const shouldMountEditor =
+              mode === 'search' ||
+              dayIndex < INITIAL_EDITOR_MOUNT_COUNT ||
+              hydratedDayIds.has(day.dayId) ||
+              editorRefs.current.has(day.dayId)
 
             return (
-                <DayEditorCard
-                  key={day.dayId}
-                  day={day}
-                  isFuture={isFuture}
-                  isToday={isToday}
-                  isYesterday={isYesterday}
-                  isTomorrow={isTomorrow}
-                  heroReveal={isHeroRevealActive && isToday}
-                  title={title}
-                  humanDate={humanDate}
-                  datePart={datePart}
-                  weekdayPart={weekdayPart}
-                  relativeLabel={relativeLabel}
+              <DayEditorCard
+                key={day.dayId}
+                day={day}
+                shouldMountEditor={shouldMountEditor}
+                isFuture={isFuture}
+                isToday={isToday}
+                isYesterday={isYesterday}
+                isTomorrow={isTomorrow}
+                heroReveal={isHeroRevealActive && isToday}
+                title={title}
+                humanDate={humanDate}
+                datePart={datePart}
+                weekdayPart={weekdayPart}
+                relativeLabel={relativeLabel}
                 searchQuery={searchQuery}
                 quote={quote}
                 dateError={dateError}
@@ -1947,12 +2228,43 @@ export default function Timeline() {
                 onBlur={handleEditorBlur}
                 onDelete={handleDeleteDay}
                 onDateChange={handleDateCommit}
-                onFocusDay={focusDayEditor}
+                onFocusDay={handleFocusDay}
+                onRequestEditorMount={requestDayEditorMount}
                 registerEditor={registerEditor}
                 registerDayRef={registerDayRef}
               />
             )
           })}
+        </div>
+      )}
+
+      {!loading && !hasNoNotes && isTimelineVisible && days.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {hasMorePast && <div ref={olderDaysSentinelRef} className="h-px w-full" aria-hidden="true" />}
+
+          {loadingMore && (
+            <p className="text-center text-xs text-slate-400">
+              Loading older notes...
+            </p>
+          )}
+
+          {!supportsIntersectionObserver && hasMorePast && !loadingMore && (
+            <div className="flex justify-center">
+              <button
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700"
+                type="button"
+                onClick={() => handleLoadOlderDays('button')}
+              >
+                Load older notes
+              </button>
+            </div>
+          )}
+
+          {!hasMorePast && !loadingMore && (
+            <p className="text-center text-xs text-slate-400">
+              All notes loaded
+            </p>
+          )}
         </div>
       )}
     </div>

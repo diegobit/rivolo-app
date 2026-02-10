@@ -34,6 +34,47 @@ export const listDays = async (limit = 60) => {
   return rows.map(mapRow)
 }
 
+export const listDaysSince = async (cutoffDayId: string) => {
+  const rows = await queryAll<DayRow>(
+    `
+      SELECT day_id, human_title, content_md, created_at, updated_at
+      FROM days
+      WHERE day_id >= ?
+      ORDER BY day_id DESC
+    `,
+    [cutoffDayId],
+  )
+  return rows.map(mapRow)
+}
+
+export const listDaysBefore = async (beforeDayId: string, limit: number) => {
+  const rows = await queryAll<DayRow>(
+    `
+      SELECT day_id, human_title, content_md, created_at, updated_at
+      FROM days
+      WHERE day_id < ?
+      ORDER BY day_id DESC
+      LIMIT ?
+    `,
+    [beforeDayId, limit],
+  )
+  return rows.map(mapRow)
+}
+
+export const hasDaysBefore = async (beforeDayId: string) => {
+  const row = await queryOne<{ day_id: string }>(
+    `
+      SELECT day_id
+      FROM days
+      WHERE day_id < ?
+      ORDER BY day_id DESC
+      LIMIT 1
+    `,
+    [beforeDayId],
+  )
+  return Boolean(row)
+}
+
 export const getDay = async (dayId: string) => {
   const row = await queryOne<DayRow>(
     'SELECT day_id, human_title, content_md, created_at, updated_at FROM days WHERE day_id = ? LIMIT 1',
