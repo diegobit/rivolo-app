@@ -2821,11 +2821,6 @@ export default function Timeline() {
             </div>
           )}
 
-          {!hasMorePast && !loadingMore && (
-            <p className="text-center text-xs text-slate-400">
-              All notes loaded
-            </p>
-          )}
         </div>
       )}
     </div>
