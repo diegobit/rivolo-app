@@ -33,7 +33,8 @@ export default function AppShell() {
   const showMobileChatTogglePill =
     isNarrowViewport && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
   const showMobileChatHeaderBlur = isHome && isNarrowViewport && mode === 'chat' && chatPanelOpen
-  const syncLabel = syncOperation === 'push' ? 'Pushing...' : 'Pulling...'
+  const syncDirection = syncOperation === 'push' ? 'up' : 'down'
+  const syncLabel = 'Sync...'
 
   const chatButton = (
     <button
@@ -429,12 +430,17 @@ export default function AppShell() {
         <div className="relative z-10 flex items-center justify-end gap-2">
           {syncing && (
             <div
-              className="flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-xs text-slate-400 shadow-sm"
+              className="flex min-w-[4.25rem] items-center justify-center gap-1.5 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-xs text-slate-500 shadow-sm"
               role="status"
               aria-live="polite"
             >
+              <img
+                src="/arrow-up.svg"
+                alt=""
+                aria-hidden="true"
+                className={`h-3.5 w-3.5 ${syncDirection === 'down' ? 'rotate-180' : ''}`}
+              />
               <span className="whitespace-nowrap">{syncLabel}</span>
-              <span className="loader text-slate-300" aria-hidden="true" />
             </div>
           )}
           <NavLink
