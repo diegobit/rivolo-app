@@ -2232,20 +2232,41 @@ export default function Timeline() {
       return false
     }
 
+    const isInteractiveTarget = (event: Event) => {
+      const target = event.target
+      if (!(target instanceof Element)) {
+        return false
+      }
+
+      return Boolean(
+        target.closest(
+          'button, a[href], input, textarea, select, summary, label, [role="button"], [contenteditable="true"]',
+        ),
+      )
+    }
+
     const handleOutsidePointer = (event: Event) => {
       const point = getPoint(event)
       if (!point) return
       if (isInsideAnyCard(point.x, point.y)) return
+      if (isInteractiveTarget(event)) return
       requestAnimationFrame(blurFocusedEditor)
     }
 
-    document.addEventListener('pointerdown', handleOutsidePointer, { capture: true })
-    document.addEventListener('mousedown', handleOutsidePointer, { capture: true })
-    document.addEventListener('touchstart', handleOutsidePointer, { capture: true })
+    if ('PointerEvent' in window) {
+      document.addEventListener('pointerdown', handleOutsidePointer, { capture: true })
+    } else {
+      document.addEventListener('mousedown', handleOutsidePointer, { capture: true })
+      document.addEventListener('touchstart', handleOutsidePointer, { capture: true })
+    }
+
     return () => {
-      document.removeEventListener('pointerdown', handleOutsidePointer, { capture: true })
-      document.removeEventListener('mousedown', handleOutsidePointer, { capture: true })
-      document.removeEventListener('touchstart', handleOutsidePointer, { capture: true })
+      if ('PointerEvent' in window) {
+        document.removeEventListener('pointerdown', handleOutsidePointer, { capture: true })
+      } else {
+        document.removeEventListener('mousedown', handleOutsidePointer, { capture: true })
+        document.removeEventListener('touchstart', handleOutsidePointer, { capture: true })
+      }
     }
   }, [])
 
