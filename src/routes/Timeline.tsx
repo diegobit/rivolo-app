@@ -368,6 +368,15 @@ const renderAssistantMarkdown = (value: string) => {
   return htmlLines.join('')
 }
 
+const getCitationScrollTopMargin = () => {
+  if (typeof window === 'undefined') return 12
+  if (window.matchMedia('(max-width: 639px)').matches) return 12
+
+  const header = document.querySelector<HTMLElement>('header.app-shell-fixed-right-aware')
+  const headerHeight = header?.getBoundingClientRect().height ?? 64
+  return Math.round(headerHeight + 16)
+}
+
 const extractFirstJsonObject = (value: string) => {
   let start = -1
   let depth = 0
@@ -1747,10 +1756,12 @@ export default function Timeline() {
           return
         }
 
+        const topMargin = getCitationScrollTopMargin()
+
         view.dispatch({
           effects: EditorView.scrollIntoView(quoteOffset, {
             y: 'start',
-            yMargin: 12,
+            yMargin: topMargin,
           }),
         })
 
