@@ -2942,16 +2942,23 @@ export default function Timeline() {
               {chatMessages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex px-1 ${message.role === 'user' ? 'justify-end' : 'justify-center'}`}
                 >
                   <div
-                    className={`space-y-2 rounded-2xl px-4 py-3 text-m shadow-[0_0_30px_-0_rgba(0,0,0,0.12)] ${
+                    className={`space-y-2 text-m ${
                       message.role === 'user'
-                        ? 'max-w-[85%] bg-[#22B3FF] text-white'
-                        : 'max-w-[94%] bg-white text-slate-700'
+                        ? 'max-w-[85%] rounded-2xl bg-[#22B3FF] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
+                        : 'w-full max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+                    {message.role === 'assistant' ? (
+                      <div
+                        className="assistant-markdown"
+                        dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '...') }}
+                      />
+                    ) : (
+                      <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+                    )}
 
                     {message.role === 'assistant' && message.meta?.citations?.length ? (
                       <div className="flex flex-col gap-2">
