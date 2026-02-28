@@ -1385,6 +1385,7 @@ export default function Timeline() {
 
     const rootStyle = document.documentElement.style
     const bodyStyle = document.body.style
+    const lockScrollY = window.scrollY
     const previousRootOverflow = rootStyle.overflow
     const previousRootOverscroll = rootStyle.overscrollBehavior
     const previousBodyOverflow = bodyStyle.overflow
@@ -1410,6 +1411,9 @@ export default function Timeline() {
       bodyStyle.overflow = previousBodyOverflow
       bodyStyle.overscrollBehavior = previousBodyOverscroll
       document.removeEventListener('touchmove', handleTouchMove)
+      requestAnimationFrame(() => {
+        window.scrollTo(0, lockScrollY)
+      })
     }
   }, [showMobileChatOverlay])
 
