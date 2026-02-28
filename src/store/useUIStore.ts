@@ -15,17 +15,17 @@ type UIState = {
 
 const getDefaultChatPanelOpen = () => {
   if (typeof window === 'undefined') return true
-  return !window.matchMedia('(max-width: 639px)').matches
+  return !window.matchMedia('(max-width: 767px)').matches
 }
 
 const getDefaultDesktopChatPanelOpen = () => {
   if (typeof window === 'undefined') return true
-  return !window.matchMedia('(max-width: 639px)').matches
+  return !window.matchMedia('(max-width: 767px)').matches
 }
 
 const isNarrowViewport = () => {
   if (typeof window === 'undefined') return false
-  return window.matchMedia('(max-width: 639px)').matches
+  return window.matchMedia('(max-width: 767px)').matches
 }
 
 export const useUIStore = create<UIState>((set) => ({
