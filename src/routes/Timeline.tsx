@@ -2585,14 +2585,19 @@ export default function Timeline() {
     }
 
     const getPoint = (event: Event) => {
-      if (event instanceof TouchEvent) {
-        const touch = event.changedTouches[0]
-        if (!touch) return null
+      const touchEvent = event as Event & {
+        changedTouches?: ArrayLike<{ clientX: number; clientY: number }>
+      }
+      const touch = touchEvent.changedTouches?.[0]
+      if (touch) {
         return { x: touch.clientX, y: touch.clientY }
       }
-      if (event instanceof MouseEvent) {
-        return { x: event.clientX, y: event.clientY }
+
+      const pointerEvent = event as Event & { clientX?: number; clientY?: number }
+      if (typeof pointerEvent.clientX === 'number' && typeof pointerEvent.clientY === 'number') {
+        return { x: pointerEvent.clientX, y: pointerEvent.clientY }
       }
+
       return null
     }
 
