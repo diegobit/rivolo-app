@@ -1287,6 +1287,7 @@ export default function Timeline() {
   const hydrationRequestedAtRef = useRef(new Map<string, number>())
   const dayHydrationObserverRef = useRef<IntersectionObserver | null>(null)
   const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
+  const mobileChatScrollRef = useRef<HTMLDivElement | null>(null)
   const saveTimeouts = useRef(new Map<string, number>())
   const createdDayIdsRef = useRef(new Set<string>())
   const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
@@ -1384,35 +1385,31 @@ export default function Timeline() {
 
     const rootStyle = document.documentElement.style
     const bodyStyle = document.body.style
-    const lockScrollY = window.scrollY
     const previousRootOverflow = rootStyle.overflow
+    const previousRootOverscroll = rootStyle.overscrollBehavior
     const previousBodyOverflow = bodyStyle.overflow
     const previousBodyOverscroll = bodyStyle.overscrollBehavior
-    const previousBodyPosition = bodyStyle.position
-    const previousBodyTop = bodyStyle.top
-    const previousBodyLeft = bodyStyle.left
-    const previousBodyRight = bodyStyle.right
-    const previousBodyWidth = bodyStyle.width
 
     rootStyle.overflow = 'hidden'
+    rootStyle.overscrollBehavior = 'none'
     bodyStyle.overflow = 'hidden'
     bodyStyle.overscrollBehavior = 'none'
-    bodyStyle.position = 'fixed'
-    bodyStyle.top = `-${lockScrollY}px`
-    bodyStyle.left = '0'
-    bodyStyle.right = '0'
-    bodyStyle.width = '100%'
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (mobileChatScrollRef.current?.contains(target)) return
+      event.preventDefault()
+    }
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: false })
 
     return () => {
       rootStyle.overflow = previousRootOverflow
+      rootStyle.overscrollBehavior = previousRootOverscroll
       bodyStyle.overflow = previousBodyOverflow
       bodyStyle.overscrollBehavior = previousBodyOverscroll
-      bodyStyle.position = previousBodyPosition
-      bodyStyle.top = previousBodyTop
-      bodyStyle.left = previousBodyLeft
-      bodyStyle.right = previousBodyRight
-      bodyStyle.width = previousBodyWidth
-      window.scrollTo(0, lockScrollY)
+      document.removeEventListener('touchmove', handleTouchMove)
     }
   }, [showMobileChatOverlay])
 
@@ -3163,9 +3160,14 @@ export default function Timeline() {
       {showMobileChatOverlay && (
         <>
           <div className="fixed inset-0 z-20 sm:hidden">
-            <div className="pointer-events-none absolute inset-0 bg-white/50 backdrop-blur-lg" />
             <div
-              className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto px-2"
+              className={`pointer-events-none absolute inset-0 ${
+                isIosDevice ? 'bg-white/50' : 'bg-white/50 backdrop-blur-lg'
+              }`}
+            />
+            <div
+              ref={mobileChatScrollRef}
+              className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
               style={{
                 paddingTop: 'calc(env(safe-area-inset-top) + 4rem)',
                 paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 5.75rem)',
