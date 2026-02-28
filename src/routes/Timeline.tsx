@@ -2882,14 +2882,15 @@ export default function Timeline() {
                     )}
 
                     {message.role === 'assistant' && message.meta?.citations?.length ? (
-                      <div className="flex flex-wrap justify-start gap-2">
+                      <div className="flex flex-col gap-2">
                         {message.meta.citations.map((citation, index) => (
                           <button
                             key={`${citation.day}-${index}`}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-left text-xs leading-relaxed text-slate-600 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
                             onClick={() => void handleCitationClick(citation)}
                           >
-                            {citation.day} · “{citation.quote.slice(0, 32)}”
+                            <span className="block font-semibold text-slate-500">{citation.day}</span>
+                            <span className="block truncate">"{citation.quote}"</span>
                           </button>
                         ))}
                       </div>
@@ -2942,14 +2943,15 @@ export default function Timeline() {
                     <p className="whitespace-pre-wrap">{message.content || '...'}</p>
 
                     {message.role === 'assistant' && message.meta?.citations?.length ? (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-col gap-2">
                         {message.meta.citations.map((citation, index) => (
                           <button
                             key={`${citation.day}-${index}`}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 shadow-sm transition"
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-left text-xs leading-relaxed text-slate-600 shadow-sm transition"
                             onClick={() => void handleCitationClick(citation)}
                           >
-                            {citation.day} · “{citation.quote.slice(0, 32)}”
+                            <span className="block font-semibold text-slate-500">{citation.day}</span>
+                            <span className="block truncate">"{citation.quote}"</span>
                           </button>
                         ))}
                       </div>
