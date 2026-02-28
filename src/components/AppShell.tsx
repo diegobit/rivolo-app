@@ -6,11 +6,11 @@ import { useSyncStore } from '../store/useSyncStore'
 import { useUIStore } from '../store/useUIStore'
 
 const topIconButton =
-  'flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300'
+  'flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:h-9 sm:w-9'
 const trayIconButton =
-  'flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:h-10 sm:w-10'
+  'flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:h-10 sm:w-10'
 const backButtonClass =
-  'flex h-8 w-8 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90'
+  'flex h-11 w-11 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90 sm:h-9 sm:w-9'
 
 export default function AppShell() {
   const location = useLocation()
