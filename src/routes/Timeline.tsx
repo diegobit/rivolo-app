@@ -238,6 +238,136 @@ const findQuoteOffset = (text: string, quote: string) => {
 
 const stripCodeFences = (value: string) => value.replace(/```json\s*/gi, '').replace(/```/g, '').trim()
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const renderInlineMarkdown = (value: string) => {
+  const codeTokens: string[] = []
+  const withCodeTokens = value.replace(/`([^`\n]+)`/g, (_match, code) => {
+    const token = `@@INLINE_CODE_${codeTokens.length}@@`
+    codeTokens.push(`<code>${escapeHtml(code)}</code>`)
+    return token
+  })
+
+  const escaped = escapeHtml(withCodeTokens)
+
+  const withLinks = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label, url) => {
+    const safeUrl = url.replace(/&quot;/g, '')
+    return `<a href="${safeUrl}" target="_blank" rel="noreferrer">${label}</a>`
+  })
+
+  const withFormatting = withLinks
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+    .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
+
+  return withFormatting.replace(/@@INLINE_CODE_(\d+)@@/g, (_match, indexText) => {
+    const index = Number(indexText)
+    return codeTokens[index] ?? ''
+  })
+}
+
+const renderAssistantMarkdown = (value: string) => {
+  const lines = value.split('\n')
+  const htmlLines: string[] = []
+  const codeLines: string[] = []
+  let inCodeBlock = false
+  let listType: 'ul' | 'ol' | null = null
+
+  const closeList = () => {
+    if (!listType) return
+    htmlLines.push(`</${listType}>`)
+    listType = null
+  }
+
+  const openList = (nextType: 'ul' | 'ol') => {
+    if (listType === nextType) return
+    closeList()
+    htmlLines.push(`<${nextType}>`)
+    listType = nextType
+  }
+
+  const flushCodeBlock = () => {
+    if (!codeLines.length) {
+      htmlLines.push('<pre><code></code></pre>')
+      return
+    }
+    htmlLines.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`)
+    codeLines.length = 0
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    if (trimmed.startsWith('```')) {
+      closeList()
+      if (inCodeBlock) {
+        flushCodeBlock()
+        inCodeBlock = false
+      } else {
+        inCodeBlock = true
+        codeLines.length = 0
+      }
+      continue
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line)
+      continue
+    }
+
+    if (!trimmed) {
+      closeList()
+      continue
+    }
+
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/)
+    if (headingMatch) {
+      closeList()
+      const level = headingMatch[1].length
+      htmlLines.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`)
+      continue
+    }
+
+    const unorderedListMatch = line.match(/^\s*[-*]\s+(.+)$/)
+    if (unorderedListMatch) {
+      openList('ul')
+      htmlLines.push(`<li>${renderInlineMarkdown(unorderedListMatch[1])}</li>`)
+      continue
+    }
+
+    const orderedListMatch = line.match(/^\s*\d+\.\s+(.+)$/)
+    if (orderedListMatch) {
+      openList('ol')
+      htmlLines.push(`<li>${renderInlineMarkdown(orderedListMatch[1])}</li>`)
+      continue
+    }
+
+    const quoteMatch = line.match(/^>\s?(.*)$/)
+    if (quoteMatch) {
+      closeList()
+      htmlLines.push(`<blockquote>${renderInlineMarkdown(quoteMatch[1])}</blockquote>`)
+      continue
+    }
+
+    closeList()
+    htmlLines.push(`<p>${renderInlineMarkdown(line)}</p>`)
+  }
+
+  closeList()
+
+  if (inCodeBlock) {
+    flushCodeBlock()
+  }
+
+  return htmlLines.join('')
+}
+
 const extractFirstJsonObject = (value: string) => {
   let start = -1
   let depth = 0
@@ -2742,7 +2872,14 @@ export default function Timeline() {
                         : 'w-full max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+                    {message.role === 'assistant' ? (
+                      <div
+                        className="assistant-markdown"
+                        dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '...') }}
+                      />
+                    ) : (
+                      <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+                    )}
 
                     {message.role === 'assistant' && message.meta?.citations?.length ? (
                       <div className="flex flex-wrap justify-start gap-2">

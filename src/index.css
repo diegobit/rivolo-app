@@ -428,6 +428,94 @@
     color: #be123c;
   }
 
+  .assistant-markdown {
+    color: #334155;
+    line-height: 1.6;
+    word-break: break-word;
+  }
+
+  .assistant-markdown > * + * {
+    margin-top: 0.5rem;
+  }
+
+  .assistant-markdown h1,
+  .assistant-markdown h2,
+  .assistant-markdown h3 {
+    color: #0f172a;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .assistant-markdown h1 {
+    font-size: 1.1rem;
+  }
+
+  .assistant-markdown h2 {
+    font-size: 1.02rem;
+  }
+
+  .assistant-markdown h3 {
+    font-size: 0.95rem;
+  }
+
+  .assistant-markdown p,
+  .assistant-markdown blockquote {
+    white-space: pre-wrap;
+  }
+
+  .assistant-markdown ul,
+  .assistant-markdown ol {
+    margin: 0;
+    padding-left: 1.15rem;
+  }
+
+  .assistant-markdown ul {
+    list-style: disc;
+  }
+
+  .assistant-markdown ol {
+    list-style: decimal;
+  }
+
+  .assistant-markdown li + li {
+    margin-top: 0.2rem;
+  }
+
+  .assistant-markdown blockquote {
+    border-left: 3px solid #cbd5e1;
+    padding-left: 0.65rem;
+    color: #475569;
+  }
+
+  .assistant-markdown code {
+    border-radius: 0.4rem;
+    background: #f1f5f9;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.86em;
+  }
+
+  .assistant-markdown pre {
+    overflow-x: auto;
+    border-radius: 0.75rem;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 0.7rem 0.8rem;
+    white-space: pre;
+  }
+
+  .assistant-markdown pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+
+  .assistant-markdown a {
+    color: #0369a1;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+
   .app-shell-fixed-right-aware {
     right: 0;
   }
