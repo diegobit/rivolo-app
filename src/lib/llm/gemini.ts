@@ -51,6 +51,38 @@ const readStream = async (
   let text = ''
   let sawSse = false
 
+  const handleSseFrame = (frame: string) => {
+    if (!frame.trim()) {
+      return
+    }
+
+    const payloadLines = frame
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.replace(/^data:\s*/, ''))
+
+    if (!payloadLines.length) {
+      return
+    }
+
+    const payload = payloadLines.join('\n').trim()
+    if (!payload || payload === '[DONE]') {
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(payload)
+      const chunk = extractText(parsed)
+      if (chunk) {
+        text += chunk
+        onToken?.(chunk)
+      }
+    } catch {
+      // Ignore malformed SSE frames and continue streaming.
+    }
+  }
+
   while (true) {
     const { value, done } = await reader.read()
     if (done) break
@@ -65,31 +97,20 @@ const readStream = async (
       continue
     }
 
-    const parts = buffer.split('\n\n')
-    buffer = parts.pop() ?? ''
-
-    for (const part of parts) {
-      const line = part
-        .split('\n')
-        .map((row) => row.trim())
-        .find((row) => row.startsWith('data:'))
-
-      if (!line) continue
-
-      const payload = line.replace(/^data:\s*/, '')
-      if (payload === '[DONE]') continue
-
-      try {
-        const parsed = JSON.parse(payload)
-        const chunk = extractText(parsed)
-        if (chunk) {
-          text += chunk
-          onToken?.(chunk)
-        }
-      } catch {
-        continue
+    while (true) {
+      const boundaryMatch = buffer.match(/\r?\n\r?\n/)
+      if (!boundaryMatch || boundaryMatch.index == null) {
+        break
       }
+
+      const frame = buffer.slice(0, boundaryMatch.index)
+      buffer = buffer.slice(boundaryMatch.index + boundaryMatch[0].length)
+      handleSseFrame(frame)
     }
+  }
+
+  if (sawSse && buffer.trim()) {
+    handleSseFrame(buffer)
   }
 
   if (!sawSse && buffer.trim()) {
@@ -120,7 +141,8 @@ export const chatWithGemini = async ({
   onToken,
 }: GeminiChatOptions) => {
   const endpoint = stream ? 'streamGenerateContent' : 'generateContent'
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${apiKey}`
+  const streamQuery = stream ? '&alt=sse' : ''
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${apiKey}${streamQuery}`
   const tools = allowWebSearch ? [{ googleSearch: {} }] : null
   const thinkingConfig = { thinkingBudget: 0, includeThoughts: false }
   const canUseJsonResponseMimeType = supportsJsonResponseMimeType(model)

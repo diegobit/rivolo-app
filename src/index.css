@@ -516,6 +516,87 @@
     text-underline-offset: 2px;
   }
 
+  .assistant-cite-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0.26rem;
+    border-radius: 9999px;
+    border: 1px solid #b6e8ff;
+    background: #eefaff;
+    color: #1a95c8;
+    font-size: 0.72em;
+    font-weight: 700;
+    line-height: 1.15;
+    padding: 0.14rem 0.42rem;
+    vertical-align: baseline;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .assistant-cite-inline:hover,
+  .assistant-cite-inline:focus-visible {
+    border-color: #8fd8ff;
+    background: #e0f5ff;
+    color: #137eab;
+    outline: none;
+  }
+
+  .assistant-stream-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+    min-height: 0.9rem;
+    color: #475569;
+  }
+
+  .assistant-stream-indicator > span {
+    width: 0.34rem;
+    height: 0.34rem;
+    border-radius: 9999px;
+    background: currentColor;
+    opacity: 0.28;
+    animation: assistant-stream-pulse 1s ease-in-out infinite;
+  }
+
+  .assistant-stream-indicator > span:nth-child(2) {
+    animation-delay: 140ms;
+  }
+
+  .assistant-stream-indicator > span:nth-child(3) {
+    animation-delay: 280ms;
+  }
+
+  @keyframes assistant-stream-pulse {
+    0%,
+    80%,
+    100% {
+      opacity: 0.28;
+      transform: translateY(0);
+    }
+    40% {
+      opacity: 0.85;
+      transform: translateY(-1px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .assistant-cite-inline,
+    .assistant-cite-inline:hover,
+    .assistant-cite-inline:focus-visible {
+      transition: none;
+    }
+
+    .assistant-stream-indicator > span {
+      animation: none;
+      opacity: 0.55;
+    }
+  }
+
   .app-shell-fixed-right-aware {
     right: 0;
   }
