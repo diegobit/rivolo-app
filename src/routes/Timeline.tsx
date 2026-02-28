@@ -2890,7 +2890,7 @@ export default function Timeline() {
                             onClick={() => void handleCitationClick(citation)}
                           >
                             <span className="block font-semibold text-slate-500">{citation.day}</span>
-                            <span className="block truncate">"{citation.quote}"</span>
+                            <span className="block truncate">{citation.quote}</span>
                           </button>
                         ))}
                       </div>
@@ -2951,7 +2951,7 @@ export default function Timeline() {
                             onClick={() => void handleCitationClick(citation)}
                           >
                             <span className="block font-semibold text-slate-500">{citation.day}</span>
-                            <span className="block truncate">"{citation.quote}"</span>
+                            <span className="block truncate">{citation.quote}</span>
                           </button>
                         ))}
                       </div>
