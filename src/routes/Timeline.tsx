@@ -3161,9 +3161,11 @@ export default function Timeline() {
         <>
           <div className="fixed inset-0 z-20 sm:hidden">
             <div
-              className={`pointer-events-none absolute inset-0 ${
-                isIosDevice ? 'bg-white/50' : 'bg-white/50 backdrop-blur-lg'
-              }`}
+              className="pointer-events-none absolute inset-0 bg-white/50 backdrop-blur-lg"
+              style={{
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+              }}
             />
             <div
               ref={mobileChatScrollRef}
