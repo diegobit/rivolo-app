@@ -494,9 +494,7 @@ export default function AppShell() {
             {showMobileChatTogglePill && (
               <button
                 type="button"
-                className={`absolute top-[-3.1rem] inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 text-slate-700 shadow-sm transition hover:border-slate-300 sm:hidden ${
-                  chatPanelOpen ? 'bg-slate-50' : 'bg-white'
-                } right-2`}
+                className="absolute right-2 top-[-3.1rem] inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 sm:hidden"
                 aria-label={chatPanelOpen ? 'Hide chat' : 'Show chat'}
                 onClick={() => {
                   if (chatPanelOpen) {
