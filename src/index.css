@@ -522,7 +522,7 @@
 
   @media (min-width: 640px) {
     .app-shell-root {
-      --desktop-chat-sidebar-width: clamp(330px, 35vw, 485px);
+      --desktop-chat-sidebar-width: clamp(300px, 45vw, 600px);
       --desktop-chat-shift: 0px;
       padding-right: var(--desktop-chat-shift);
       transition: padding-right 260ms cubic-bezier(0.22, 1, 0.36, 1);
