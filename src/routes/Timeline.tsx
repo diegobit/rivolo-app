@@ -981,7 +981,14 @@ export default function Timeline() {
     titleFont,
   } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
-  const { mode, chatPanelOpen, setChatPanelOpen, setChatMessageCount } = useUIStore()
+  const {
+    mode,
+    chatPanelOpen,
+    setChatPanelOpen,
+    desktopChatPanelOpen,
+    setDesktopChatPanelOpen,
+    setChatMessageCount,
+  } = useUIStore()
   const hasNoNotes = !loading && days.length === 0
 
   // Mode-specific Input State
@@ -1027,7 +1034,9 @@ export default function Timeline() {
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
   const isTimelineVisible = mode !== 'search'
-  const showDesktopChatOverlay = mode === 'chat' && !isNarrowViewport
+  const hasChatMessages = messages.length > 0
+  const showDesktopChatMode = mode === 'chat' && !isNarrowViewport && hasChatMessages
+  const showDesktopChatPanel = showDesktopChatMode && desktopChatPanelOpen
   const showMobileChatOverlay = mode === 'chat' && isNarrowViewport && chatPanelOpen
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
@@ -1923,6 +1932,10 @@ export default function Timeline() {
         setChatPanelOpen(true)
       }
 
+      if (!isNarrowViewport && !desktopChatPanelOpen) {
+        setDesktopChatPanelOpen(true)
+      }
+
       setChatError(null)
 
       if (!geminiApiKey) {
@@ -2083,10 +2096,12 @@ export default function Timeline() {
       buildContextDays,
       chatPanelOpen,
       chat,
+      desktopChatPanelOpen,
       formatContext,
       geminiApiKey,
       geminiModel,
       isNarrowViewport,
+      setDesktopChatPanelOpen,
       setChatPanelOpen,
       setChatError,
       setMessages,
@@ -2523,123 +2538,13 @@ export default function Timeline() {
       />
     )
 
-  return (
-    <div className={showDesktopChatOverlay ? 'pb-[40vh]' : undefined}>
-      {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
-
-      {/* Desktop chat overlay */}
-      {showDesktopChatOverlay && (
-        <div className="fixed bottom-24 left-0 right-0 z-20 mx-auto w-[min(96%,720px)] px-4">
-          <div className={`pointer-events-none absolute -bottom-24 -inset-x-8 -top-4 -z-10 bg-white/30 backdrop-blur-md transition-opacity duration-500 [mask-image:linear-gradient(to_bottom,transparent,black_40%)] ${messages.length > 0 ? 'opacity-100' : 'opacity-0'}`} />
-          <div className="flex max-h-[50vh] flex-col-reverse gap-3 overflow-y-auto p-6">
-            {chatMessages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`space-y-2 rounded-2xl px-4 py-3 text-m shadow-[0_0_30px_-0_rgba(0,0,0,0.12)] ${
-                    message.role === 'user'
-                      ? 'max-w-[85%] bg-[#22B3FF] text-white'
-                      : 'max-w-[94%] sm:max-w-[85%] bg-white text-slate-700'
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap">{message.content || '...'}</p>
-
-                  {message.role === 'assistant' && message.meta?.citations?.length ? (
-                    <div className="flex flex-wrap gap-2">
-                      {message.meta.citations.map((citation, index) => (
-                        <button
-                          key={`${citation.day}-${index}`}
-                          className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                          onClick={() => void handleCitationClick(citation)}
-                        >
-                          {citation.day} · “{citation.quote.slice(0, 32)}”
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {message.role === 'assistant' && message.meta?.insertText ? (
-                    <button
-                      className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                      onClick={() => void handleChatInsert(message)}
-                    >
-                      {message.meta.insertTargetDay
-                        ? `Insert into ${message.meta.insertTargetDay}`
-                        : 'Insert summary'}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Mobile chat overlay (Mode A) */}
-      {showMobileChatOverlay && (
-        <>
-          <div className="fixed inset-0 z-20 sm:hidden">
-            <div className="pointer-events-none absolute inset-0 bg-white/35 backdrop-blur-lg" />
-            <div
-              className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto px-2"
-              style={{
-                paddingTop: 'calc(env(safe-area-inset-top) + 4rem)',
-                paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 5.75rem)',
-              }}
-            >
-              {chatMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`space-y-2 rounded-2xl px-4 py-3 text-m shadow-[0_0_30px_-0_rgba(0,0,0,0.12)] ${
-                      message.role === 'user'
-                        ? 'max-w-[85%] bg-[#22B3FF] text-white'
-                        : 'max-w-[94%] bg-white text-slate-700'
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{message.content || '...'}</p>
-
-                    {message.role === 'assistant' && message.meta?.citations?.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {message.meta.citations.map((citation, index) => (
-                          <button
-                            key={`${citation.day}-${index}`}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 shadow-sm transition"
-                            onClick={() => void handleCitationClick(citation)}
-                          >
-                            {citation.day} · “{citation.quote.slice(0, 32)}”
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {message.role === 'assistant' && message.meta?.insertText ? (
-                      <button
-                        className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition"
-                        onClick={() => void handleChatInsert(message)}
-                      >
-                        {message.meta.insertTargetDay
-                          ? `Insert into ${message.meta.insertTargetDay}`
-                          : 'Insert summary'}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-
+  const timelineContent = (
+    <>
       {/* Loading States */}
       {loading && (
-         <section className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-sm text-slate-500">
-           Loading days...
-          </section>
+        <section className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-sm text-slate-500">
+          Loading days...
+        </section>
       )}
 
       {hasNoNotes && (
@@ -2668,16 +2573,10 @@ export default function Timeline() {
               <br className="hero-break" />
               when you ask for it.
             </p>
-            <p className="text-2xl text-slate-600">
-              Stop organizing. Start writing.
-            </p>
+            <p className="text-2xl text-slate-600">Stop organizing. Start writing.</p>
           </div>
           <div className="flex flex-col items-center gap-4">
-            <button
-              className={`${buttonPrimary} px-6 py-3 text-base`}
-              type="button"
-              onClick={handleEmptyCta}
-            >
+            <button className={`${buttonPrimary} px-6 py-3 text-base`} type="button" onClick={handleEmptyCta}>
               Start Today
             </button>
             <p></p>
@@ -2748,12 +2647,7 @@ export default function Timeline() {
             }
 
             if (item.type === 'divider') {
-               return (
-                <div
-                  key={`divider-${index}`}
-                  className="my-3 border-t border-dashed border-slate-200/80"
-                />
-              )
+              return <div key={`divider-${index}`} className="my-3 border-t border-dashed border-slate-200/80" />
             }
 
             const { day } = item.card
@@ -2778,9 +2672,7 @@ export default function Timeline() {
             const dateError = dateErrors[day.dayId] ?? null
             const quote = highlightedQuote?.day === day.dayId ? highlightedQuote.quote : null
             const shouldMountEditor =
-              mode === 'search' ||
-              mountedDayIds.has(day.dayId) ||
-              editorRefs.current.has(day.dayId)
+              mode === 'search' || mountedDayIds.has(day.dayId) || editorRefs.current.has(day.dayId)
 
             return (
               <DayEditorCard
@@ -2824,11 +2716,7 @@ export default function Timeline() {
         <div className="mt-4 space-y-2">
           {hasMorePast && <div ref={olderDaysSentinelRef} className="h-px w-full" aria-hidden="true" />}
 
-          {loadingMore && (
-            <p className="text-center text-xs text-slate-400">
-              Loading older notes...
-            </p>
-          )}
+          {loadingMore && <p className="text-center text-xs text-slate-400">Loading older notes...</p>}
 
           {!supportsIntersectionObserver && hasMorePast && !loadingMore && (
             <div className="flex justify-center">
@@ -2841,8 +2729,125 @@ export default function Timeline() {
               </button>
             </div>
           )}
-
         </div>
+      )}
+    </>
+  )
+
+  return (
+    <div>
+      {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
+
+      {showDesktopChatMode ? (
+        <div className={`timeline-chat-layout ${showDesktopChatPanel ? 'is-chat-open' : 'is-chat-closed'}`}>
+          <div className="timeline-chat-main">{timelineContent}</div>
+
+          <aside className="timeline-chat-sidebar" aria-hidden={!showDesktopChatPanel}>
+            <div className="timeline-chat-sidebar-inner">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-center'}`}
+                >
+                  <div
+                    className={`space-y-2 text-m ${
+                      message.role === 'user'
+                        ? 'max-w-[85%] rounded-2xl bg-[#22B3FF] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
+                        : 'w-full max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+
+                    {message.role === 'assistant' && message.meta?.citations?.length ? (
+                      <div className="flex flex-wrap justify-start gap-2">
+                        {message.meta.citations.map((citation, index) => (
+                          <button
+                            key={`${citation.day}-${index}`}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                            onClick={() => void handleCitationClick(citation)}
+                          >
+                            {citation.day} · “{citation.quote.slice(0, 32)}”
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {message.role === 'assistant' && message.meta?.insertText ? (
+                      <button
+                        className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                        onClick={() => void handleChatInsert(message)}
+                      >
+                        {message.meta.insertTargetDay
+                          ? `Insert into ${message.meta.insertTargetDay}`
+                          : 'Insert summary'}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      ) : (
+        timelineContent
+      )}
+
+      {/* Mobile chat overlay (Mode A) */}
+      {showMobileChatOverlay && (
+        <>
+          <div className="fixed inset-0 z-20 sm:hidden">
+            <div className="pointer-events-none absolute inset-0 bg-white/35 backdrop-blur-lg" />
+            <div
+              className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto px-2"
+              style={{
+                paddingTop: 'calc(env(safe-area-inset-top) + 4rem)',
+                paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 5.75rem)',
+              }}
+            >
+              {chatMessages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`space-y-2 rounded-2xl px-4 py-3 text-m shadow-[0_0_30px_-0_rgba(0,0,0,0.12)] ${
+                      message.role === 'user'
+                        ? 'max-w-[85%] bg-[#22B3FF] text-white'
+                        : 'max-w-[94%] bg-white text-slate-700'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+
+                    {message.role === 'assistant' && message.meta?.citations?.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {message.meta.citations.map((citation, index) => (
+                          <button
+                            key={`${citation.day}-${index}`}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 shadow-sm transition"
+                            onClick={() => void handleCitationClick(citation)}
+                          >
+                            {citation.day} · “{citation.quote.slice(0, 32)}”
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {message.role === 'assistant' && message.meta?.insertText ? (
+                      <button
+                        className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition"
+                        onClick={() => void handleChatInsert(message)}
+                      >
+                        {message.meta.insertTargetDay
+                          ? `Insert into ${message.meta.insertTargetDay}`
+                          : 'Insert summary'}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

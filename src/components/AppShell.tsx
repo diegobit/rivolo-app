@@ -16,7 +16,15 @@ export default function AppShell() {
   const location = useLocation()
   const { loadSettings, wallpaper, highlightInputMode } = useSettingsStore()
   const { loadState: loadSyncState, status: syncStatus, syncing, syncOperation } = useSyncStore()
-  const { mode, setMode, chatPanelOpen, setChatPanelOpen, chatMessageCount } = useUIStore()
+  const {
+    mode,
+    setMode,
+    chatPanelOpen,
+    setChatPanelOpen,
+    desktopChatPanelOpen,
+    setDesktopChatPanelOpen,
+    chatMessageCount,
+  } = useUIStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
@@ -29,9 +37,12 @@ export default function AppShell() {
   const autoPullInFlight = useRef(false)
   const showBackButton = location.pathname === '/settings'
   const isHome = location.pathname === '/'
+  const isDesktopChatModeWithMessages = isHome && mode === 'chat' && !isNarrowViewport && chatMessageCount > 0
+  const isDesktopChatSidebarOpen = isDesktopChatModeWithMessages && desktopChatPanelOpen
   const showTrayRow = isHome
   const showMobileChatTogglePill =
     isNarrowViewport && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
+  const showDesktopChatEdgeHandle = !isNarrowViewport && isDesktopChatModeWithMessages
   const showMobileChatHeaderBlur = isHome && isNarrowViewport && mode === 'chat' && chatPanelOpen
   const syncDirection = syncOperation === 'push' ? 'up' : 'down'
 
@@ -302,17 +313,20 @@ export default function AppShell() {
 
 
   return (
-    <div className="min-h-full text-slate-900">
+    <div
+      className="app-shell-root min-h-full text-slate-900"
+      data-desktop-chat-sidebar-open={isDesktopChatSidebarOpen ? 'true' : 'false'}
+    >
       {/* Fixed header with blur */}
       <div
-        className={`pointer-events-none hidden left-0 right-0 z-20 h-16 transition-all sm:fixed sm:block ${
+        className={`app-shell-fixed-right-aware pointer-events-none hidden left-0 z-20 h-16 transition-all sm:fixed sm:block ${
           isScrolled
             ? 'bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md'
             : ''
         }`}
       />
       <header
-        className="relative left-0 right-0 z-30 mx-auto grid h-16 w-[min(96%,720px)] grid-cols-[1fr_auto_1fr] items-center sm:fixed"
+        className="app-shell-fixed-right-aware relative left-0 z-30 mx-auto grid h-16 w-[min(96%,720px)] grid-cols-[1fr_auto_1fr] items-center sm:fixed"
       >
         {showMobileChatHeaderBlur && (
           <div
@@ -467,10 +481,10 @@ export default function AppShell() {
 
       {showTrayRow && (
         <>
-          <div className="bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 right-0 z-20 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
-          <div className="bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 right-0 z-20 bg-white/30 backdrop-blur-md" />
+          <div className="app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
+          <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md" />
 
-          <div className="bottom-tray-row hero-ui-fade-down fixed left-0 right-0 z-30 mx-auto flex w-[min(96%,620px)] items-center justify-center gap-2 px-2 sm:gap-3 sm:px-0">
+          <div className="app-shell-fixed-right-aware bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex w-[min(96%,620px)] items-center justify-center gap-2 px-2 sm:gap-3 sm:px-0">
             {mode !== 'chat' && <Fragment key="chat-btn">{chatButton}</Fragment>}
             {mode === 'chat' && <Fragment key="tray">{trayCenter}</Fragment>}
 
@@ -517,6 +531,23 @@ export default function AppShell() {
               </button>
             )}
           </div>
+
+          {showDesktopChatEdgeHandle && (
+            <button
+              type="button"
+              className="timeline-chat-edge-handle fixed top-1/2 z-30 hidden h-16 w-8 -translate-y-1/2 items-center justify-center rounded-l-full border border-r-0 border-slate-200 bg-white text-slate-600 shadow-[-10px_0_22px_-20px_rgba(15,23,42,0.3)] hover:border-slate-300 sm:inline-flex"
+              aria-label={desktopChatPanelOpen ? 'Hide chat' : 'Show chat'}
+              onClick={() => setDesktopChatPanelOpen(!desktopChatPanelOpen)}
+            >
+              <span className="-translate-x-[1px]">
+                <img
+                  src="/caret-left.svg"
+                  alt=""
+                  className={`h-5 w-5 opacity-70 transition-transform translate-x-[2px] duration-200 ${desktopChatPanelOpen ? 'rotate-180' : ''}`}
+                />
+              </span>
+            </button>
+          )}
         </>
       )}
     </div>
