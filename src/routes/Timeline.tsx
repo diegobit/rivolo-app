@@ -13,6 +13,13 @@ import type { Day } from '../lib/dayRepository'
 import { searchDays, appendToDay } from '../lib/dayRepository'
 import { chat } from '../lib/llm'
 import type { ChatMessage as LlmMessage } from '../lib/llm'
+import {
+  CITATION_MARKER_REGEX,
+  createStreamTagParser,
+  parseTaggedAssistantResponse,
+  toCitationMarker,
+  type StreamTagPiece,
+} from '../lib/llm/streamTagParser'
 import { buildContextDays, formatContext } from '../lib/llmContext'
 import { buttonPrimary } from '../lib/ui'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -201,9 +208,9 @@ type TimelineItem =
 
 type AssistantPayload = {
   answer: string
-  citations?: Citation[]
-  insert_text?: string | null
-  insert_target_day?: string | null
+  citations: Citation[]
+  insertText: string | null
+  insertTargetDay: string | null
 }
 
 const normalizeCitationText = (value: string) =>
@@ -238,6 +245,60 @@ const findQuoteOffset = (text: string, quote: string) => {
 
 const stripCodeFences = (value: string) => value.replace(/```json\s*/gi, '').replace(/```/g, '').trim()
 
+const hasAssistantPayloadContent = (payload: AssistantPayload | null) =>
+  Boolean(payload && (payload.answer.trim() || payload.citations.length || payload.insertText))
+
+const withLegacyCitationMarkers = (answer: string, citations: Citation[]) => {
+  if (!citations.length || /@@CITATION_\d+@@/.test(answer)) {
+    return answer
+  }
+
+  const markers = citations.map((_, index) => toCitationMarker(index)).join(' ')
+  return `${answer.trim()} ${markers}`.trim()
+}
+
+const getCitationIndexFromTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return null
+  }
+
+  const citationNode = target.closest<HTMLElement>('[data-citation-index]')
+  if (!citationNode) {
+    return null
+  }
+
+  const indexValue = citationNode.dataset.citationIndex
+  if (!indexValue) {
+    return null
+  }
+
+  const index = Number.parseInt(indexValue, 10)
+  if (!Number.isInteger(index) || index < 0) {
+    return null
+  }
+
+  return index
+}
+
+const citationChipDateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+})
+
+const toCitationChipLabel = (dayId: string) => {
+  try {
+    return citationChipDateFormatter.format(parseDayId(dayId))
+  } catch {
+    return dayId
+  }
+}
+
+const toCitationTooltip = (citation: Citation) => {
+  const compactQuote = citation.quote.replace(/\s+/g, ' ').trim()
+  const preview = compactQuote.length > 120 ? `${compactQuote.slice(0, 120).trimEnd()}...` : compactQuote
+  return preview ? `${citation.day}\n${preview}` : citation.day
+}
+
 const escapeHtml = (value: string) =>
   value
     .replace(/&/g, '&amp;')
@@ -246,7 +307,7 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
-const renderInlineMarkdown = (value: string) => {
+const renderInlineMarkdown = (value: string, citations: Citation[]) => {
   const codeTokens: string[] = []
   const withCodeTokens = value.replace(/`([^`\n]+)`/g, (_match, code) => {
     const token = `@@INLINE_CODE_${codeTokens.length}@@`
@@ -266,13 +327,31 @@ const renderInlineMarkdown = (value: string) => {
     .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
     .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
 
-  return withFormatting.replace(/@@INLINE_CODE_(\d+)@@/g, (_match, indexText) => {
+  const withCitations = withFormatting.replace(CITATION_MARKER_REGEX, (_match, indexText) => {
+    const index = Number.parseInt(indexText, 10)
+    if (!Number.isInteger(index) || index < 0) {
+      return ''
+    }
+
+    const citation = citations[index]
+    if (!citation) {
+      return ''
+    }
+
+    const label = escapeHtml(toCitationChipLabel(citation.day))
+    const tooltip = escapeHtml(toCitationTooltip(citation)).replace(/\n/g, '&#10;')
+    const ariaLabel = escapeHtml(`Open citation from ${citation.day}`)
+
+    return `<span class="assistant-cite-inline" data-citation-index="${index}" role="button" tabindex="0" title="${tooltip}" aria-label="${ariaLabel}">${label}</span>`
+  })
+
+  return withCitations.replace(/@@INLINE_CODE_(\d+)@@/g, (_match, indexText) => {
     const index = Number(indexText)
     return codeTokens[index] ?? ''
   })
 }
 
-const renderAssistantMarkdown = (value: string) => {
+const renderAssistantMarkdown = (value: string, citations: Citation[]) => {
   const lines = value.split('\n')
   const htmlLines: string[] = []
   const codeLines: string[] = []
@@ -330,33 +409,33 @@ const renderAssistantMarkdown = (value: string) => {
     if (headingMatch) {
       closeList()
       const level = headingMatch[1].length
-      htmlLines.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`)
+      htmlLines.push(`<h${level}>${renderInlineMarkdown(headingMatch[2], citations)}</h${level}>`)
       continue
     }
 
     const unorderedListMatch = line.match(/^\s*[-*]\s+(.+)$/)
     if (unorderedListMatch) {
       openList('ul')
-      htmlLines.push(`<li>${renderInlineMarkdown(unorderedListMatch[1])}</li>`)
+      htmlLines.push(`<li>${renderInlineMarkdown(unorderedListMatch[1], citations)}</li>`)
       continue
     }
 
     const orderedListMatch = line.match(/^\s*\d+\.\s+(.+)$/)
     if (orderedListMatch) {
       openList('ol')
-      htmlLines.push(`<li>${renderInlineMarkdown(orderedListMatch[1])}</li>`)
+      htmlLines.push(`<li>${renderInlineMarkdown(orderedListMatch[1], citations)}</li>`)
       continue
     }
 
     const quoteMatch = line.match(/^>\s?(.*)$/)
     if (quoteMatch) {
       closeList()
-      htmlLines.push(`<blockquote>${renderInlineMarkdown(quoteMatch[1])}</blockquote>`)
+      htmlLines.push(`<blockquote>${renderInlineMarkdown(quoteMatch[1], citations)}</blockquote>`)
       continue
     }
 
     closeList()
-    htmlLines.push(`<p>${renderInlineMarkdown(line)}</p>`)
+    htmlLines.push(`<p>${renderInlineMarkdown(line, citations)}</p>`)
   }
 
   closeList()
@@ -425,7 +504,7 @@ const extractFirstJsonObject = (value: string) => {
   return null
 }
 
-const parseAssistantPayload = (responseText: string): AssistantPayload | null => {
+const parseLegacyAssistantPayload = (responseText: string): AssistantPayload | null => {
   const trimmed = responseText.trim()
   const sanitized = stripCodeFences(trimmed)
   const candidates = [trimmed, sanitized]
@@ -473,10 +552,10 @@ const parseAssistantPayload = (responseText: string): AssistantPayload | null =>
           : null
 
       return {
-        answer: parsed.answer,
-        citations,
-        insert_text: insertText,
-        insert_target_day: insertTargetDay,
+        answer: withLegacyCitationMarkers(parsed.answer, citations ?? []),
+        citations: citations ?? [],
+        insertText,
+        insertTargetDay,
       }
     } catch {
       continue
@@ -484,6 +563,25 @@ const parseAssistantPayload = (responseText: string): AssistantPayload | null =>
   }
 
   return null
+}
+
+const parseAssistantPayload = (responseText: string): AssistantPayload | null => {
+  const legacyPayload = parseLegacyAssistantPayload(responseText)
+  if (legacyPayload) {
+    return legacyPayload
+  }
+
+  const tagged = parseTaggedAssistantResponse(responseText)
+  if (!tagged.answer && !tagged.citations.length && !tagged.insertText) {
+    return null
+  }
+
+  return {
+    answer: tagged.answer,
+    citations: tagged.citations,
+    insertText: tagged.insertText,
+    insertTargetDay: tagged.insertTargetDay,
+  }
 }
 
 type DayEditorCardProps = {
@@ -1059,14 +1157,20 @@ const SYSTEM_PROMPT = `You are the Daily Notes Analyst, an expert in parsing, re
 - If a requested date has no entry, explicitly state that no notes were found for that day.
 
 ### Response Format
-Answer with strict JSON only. Return exactly this shape:
-{
-  "answer": "string",
-  "citations": [{ "day": "YYYY-MM-DD", "quote": "exact substring" }],
-  "insert_text": "string|null",
-  "insert_target_day": "YYYY-MM-DD|null"
-}
-Quotes must be exact substrings from the cited day. If unsure, omit citations.`
+Reply in plain Markdown text.
+
+When citing notes, include self-closing reference tags anywhere in the response:
+<ref day="YYYY-MM-DD" quote="exact substring"/>
+
+When the user asks to append content into notes, optionally include one self-closing insert tag:
+<insert text="text to append" target_day="YYYY-MM-DD"/>
+
+Rules:
+- Only use these tags: <ref .../> and <insert .../>.
+- Keep tags self-closing; do not use closing tags or nesting.
+- Keep normal prose outside tags.
+- Escape literal < and > in prose as &lt; and &gt;.
+- Quotes in attributes must be exact substrings from the cited day. If unsure, omit the citation tag.`
 
 const OLDER_DAYS_OBSERVER_MARGIN = '350px 0px 550px 0px'
 const INITIAL_EDITOR_MOUNT_COUNT = 6
@@ -1931,6 +2035,48 @@ export default function Timeline() {
     ],
   )
 
+  const activateInlineCitation = useCallback(
+    (message: ChatUiMessage, index: number) => {
+      const citation = message.meta?.citations[index]
+      if (!citation) {
+        return
+      }
+
+      void handleCitationClick(citation)
+    },
+    [handleCitationClick],
+  )
+
+  const handleAssistantMarkdownClick = useCallback(
+    (message: ChatUiMessage, event: React.MouseEvent<HTMLElement>) => {
+      const index = getCitationIndexFromTarget(event.target)
+      if (index === null) {
+        return
+      }
+
+      event.preventDefault()
+      activateInlineCitation(message, index)
+    },
+    [activateInlineCitation],
+  )
+
+  const handleAssistantMarkdownKeyDown = useCallback(
+    (message: ChatUiMessage, event: React.KeyboardEvent<HTMLElement>) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return
+      }
+
+      const index = getCitationIndexFromTarget(event.target)
+      if (index === null) {
+        return
+      }
+
+      event.preventDefault()
+      activateInlineCitation(message, index)
+    },
+    [activateInlineCitation],
+  )
+
   const registerEditor = useCallback(
     (dayId: string, view: EditorView | null) => {
       if (view) {
@@ -2067,7 +2213,7 @@ export default function Timeline() {
         id: assistantId,
         role: 'assistant',
         content: '',
-        meta: { citations: [] },
+        meta: { citations: [], isStreaming: true },
       }
 
       setMessages((state) => [...state, userMessage, assistantMessage])
@@ -2104,6 +2250,76 @@ export default function Timeline() {
           userChars: trimmed.length,
         })
 
+        const streamTagParser = createStreamTagParser()
+        const streamedCitations: Citation[] = []
+        const streamedCitationIndexes = new Map<string, number>()
+        let streamedInsertText: string | null = null
+        let streamedInsertTargetDay: string | null = null
+        let streamedAnswer = ''
+
+        const applyStreamTagPieces = (pieces: StreamTagPiece[]) => {
+          if (!pieces.length) {
+            return
+          }
+
+          let textDelta = ''
+          let metaChanged = false
+
+          for (const piece of pieces) {
+            if (piece.type === 'text') {
+              textDelta += piece.value
+              continue
+            }
+
+            if (piece.type === 'ref') {
+              const key = `${piece.day}\u0000${piece.quote}`
+              let citationIndex = streamedCitationIndexes.get(key)
+              if (citationIndex === undefined) {
+                citationIndex = streamedCitations.length
+                streamedCitationIndexes.set(key, citationIndex)
+                streamedCitations.push({ day: piece.day, quote: piece.quote })
+                metaChanged = true
+              }
+
+              textDelta += toCitationMarker(citationIndex)
+              continue
+            }
+
+            const changedInsert =
+              streamedInsertText !== piece.text || streamedInsertTargetDay !== piece.targetDay
+            streamedInsertText = piece.text
+            streamedInsertTargetDay = piece.targetDay
+            if (changedInsert) {
+              metaChanged = true
+            }
+          }
+
+          if (textDelta) {
+            streamedAnswer += textDelta
+          }
+
+          if (!textDelta && !metaChanged) {
+            return
+          }
+
+          setMessages((state) =>
+            state.map((message) =>
+              message.id === assistantId
+                ? {
+                  ...message,
+                  content: textDelta ? `${message.content}${textDelta}` : message.content,
+                  meta: {
+                    citations: [...streamedCitations],
+                    insertText: streamedInsertText,
+                    insertTargetDay: streamedInsertTargetDay,
+                    isStreaming: true,
+                  },
+                }
+                : message,
+            ),
+          )
+        }
+
         const { text: responseText } = await chat({
           provider: 'gemini',
           apiKey: geminiApiKey,
@@ -2112,27 +2328,41 @@ export default function Timeline() {
           allowThinking,
           allowWebSearch,
           temperature: 0,
-          responseMimeType: 'application/json',
           stream: true,
           onToken: (chunk) => {
-            setMessages((state) =>
-              state.map((message) =>
-                message.id === assistantId
-                  ? { ...message, content: `${message.content}${chunk}` }
-                  : message,
-              ),
-            )
+            const parsedChunk = streamTagParser.push(chunk)
+            applyStreamTagPieces(parsedChunk.pieces)
           },
         })
 
+        const finalStreamChunk = streamTagParser.flush()
+        applyStreamTagPieces(finalStreamChunk.pieces)
+
         let finalResponseText = responseText
-        let payload = parseAssistantPayload(responseText)
+        let payload: AssistantPayload | null = null
+
+        if (streamedAnswer.trim() || streamedCitations.length || streamedInsertText) {
+          payload = {
+            answer: streamedAnswer.trim(),
+            citations: streamedCitations,
+            insertText: streamedInsertText,
+            insertTargetDay: streamedInsertTargetDay,
+          }
+        }
+
+        if (!payload) {
+          payload = parseAssistantPayload(responseText)
+        }
 
         const sanitized = stripCodeFences(responseText)
-        console.info('[LLM Response]', { chars: responseText.length, sanitizedChars: sanitized.length })
+        console.info('[LLM Response]', {
+          chars: responseText.length,
+          sanitizedChars: sanitized.length,
+          streamedChars: streamedAnswer.length,
+        })
 
-        if (payload) {
-          console.info('[LLM Parsed]', { hasCitations: Boolean(payload.citations?.length) })
+        if (hasAssistantPayloadContent(payload)) {
+          console.info('[LLM Parsed]', { hasCitations: Boolean(payload?.citations.length) })
         } else {
           console.error('[LLM Parse Error]', { preview: sanitized.slice(0, 200) })
 
@@ -2145,15 +2375,14 @@ export default function Timeline() {
               allowThinking,
               allowWebSearch,
               temperature: 0,
-              responseMimeType: 'application/json',
               stream: false,
             })
 
             finalResponseText = retryText
             payload = parseAssistantPayload(retryText)
 
-            if (payload) {
-              console.info('[LLM Retry Parsed]', { hasCitations: Boolean(payload.citations?.length) })
+            if (hasAssistantPayloadContent(payload)) {
+              console.info('[LLM Retry Parsed]', { hasCitations: Boolean(payload?.citations.length) })
             } else {
               console.error('[LLM Retry Parse Error]', { preview: stripCodeFences(retryText).slice(0, 200) })
             }
@@ -2179,24 +2408,41 @@ export default function Timeline() {
           return normalizedContent.includes(normalizedQuote)
         })
 
-        const fallbackAnswer = stripCodeFences(finalResponseText || responseText)
+        const parsedFallback = parseAssistantPayload(finalResponseText || responseText)
+        const fallbackAnswer = parsedFallback?.answer ?? stripCodeFences(finalResponseText || responseText)
 
         setMessages((state) =>
           state.map((message) =>
             message.id === assistantId
               ? {
-                  ...message,
-                  content: payload?.answer ?? (fallbackAnswer || responseText),
-                  meta: {
-                    citations,
-                    insertText: payload?.insert_text ?? null,
-                    insertTargetDay: payload?.insert_target_day ?? null,
-                  },
-                }
+                ...message,
+                content: payload?.answer || fallbackAnswer || responseText,
+                meta: {
+                  citations,
+                  insertText: payload?.insertText ?? null,
+                  insertTargetDay: payload?.insertTargetDay ?? null,
+                  isStreaming: false,
+                },
+              }
               : message,
           ),
         )
       } catch (err) {
+        setMessages((state) =>
+          state.map((message) =>
+            message.id === assistantId
+              ? {
+                ...message,
+                meta: {
+                  citations: message.meta?.citations ?? [],
+                  insertText: message.meta?.insertText ?? null,
+                  insertTargetDay: message.meta?.insertTargetDay ?? null,
+                  isStreaming: false,
+                },
+              }
+              : message,
+          ),
+        )
         setChatError(err instanceof Error ? err.message : 'LLM request failed.')
       } finally {
         setSending(false)
@@ -2872,28 +3118,23 @@ export default function Timeline() {
                     {message.role === 'assistant' ? (
                       <div
                         className="assistant-markdown"
-                        dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '...') }}
+                        onClick={(event) => handleAssistantMarkdownClick(message, event)}
+                        onKeyDown={(event) => handleAssistantMarkdownKeyDown(message, event)}
+                        dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '', message.meta?.citations ?? []) }}
                       />
                     ) : (
                       <p className="whitespace-pre-wrap">{message.content || '...'}</p>
                     )}
 
-                    {message.role === 'assistant' && message.meta?.citations?.length ? (
-                      <div className="flex flex-col gap-2">
-                        {message.meta.citations.map((citation, index) => (
-                          <button
-                            key={`${citation.day}-${index}`}
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-left text-xs leading-relaxed text-slate-600 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                            onClick={() => void handleCitationClick(citation)}
-                          >
-                            <span className="block font-semibold text-slate-500">{citation.day}</span>
-                            <span className="block truncate">{citation.quote}</span>
-                          </button>
-                        ))}
+                    {message.role === 'assistant' && message.meta?.isStreaming ? (
+                      <div className="assistant-stream-indicator" aria-label="Assistant is streaming" aria-live="polite">
+                        <span aria-hidden="true" />
+                        <span aria-hidden="true" />
+                        <span aria-hidden="true" />
                       </div>
                     ) : null}
 
-                    {message.role === 'assistant' && message.meta?.insertText ? (
+                    {message.role === 'assistant' && message.meta?.insertText && !message.meta?.isStreaming ? (
                       <button
                         className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
                         onClick={() => void handleChatInsert(message)}
@@ -2940,28 +3181,23 @@ export default function Timeline() {
                     {message.role === 'assistant' ? (
                       <div
                         className="assistant-markdown"
-                        dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '...') }}
+                        onClick={(event) => handleAssistantMarkdownClick(message, event)}
+                        onKeyDown={(event) => handleAssistantMarkdownKeyDown(message, event)}
+                        dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '', message.meta?.citations ?? []) }}
                       />
                     ) : (
                       <p className="whitespace-pre-wrap">{message.content || '...'}</p>
                     )}
 
-                    {message.role === 'assistant' && message.meta?.citations?.length ? (
-                      <div className="flex flex-col gap-2">
-                        {message.meta.citations.map((citation, index) => (
-                          <button
-                            key={`${citation.day}-${index}`}
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-left text-xs leading-relaxed text-slate-600 shadow-sm transition"
-                            onClick={() => void handleCitationClick(citation)}
-                          >
-                            <span className="block font-semibold text-slate-500">{citation.day}</span>
-                            <span className="block truncate">{citation.quote}</span>
-                          </button>
-                        ))}
+                    {message.role === 'assistant' && message.meta?.isStreaming ? (
+                      <div className="assistant-stream-indicator" aria-label="Assistant is streaming" aria-live="polite">
+                        <span aria-hidden="true" />
+                        <span aria-hidden="true" />
+                        <span aria-hidden="true" />
                       </div>
                     ) : null}
 
-                    {message.role === 'assistant' && message.meta?.insertText ? (
+                    {message.role === 'assistant' && message.meta?.insertText && !message.meta?.isStreaming ? (
                       <button
                         className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition"
                         onClick={() => void handleChatInsert(message)}

@@ -13,6 +13,7 @@ export type ChatUiMessage = {
     citations: ChatCitation[]
     insertText?: string | null
     insertTargetDay?: string | null
+    isStreaming?: boolean
   }
 }
 
