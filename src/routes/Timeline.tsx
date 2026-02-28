@@ -1186,7 +1186,6 @@ export default function Timeline() {
   const saveTimeouts = useRef(new Map<string, number>())
   const createdDayIdsRef = useRef(new Set<string>())
   const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
-  const highlightTimeoutRef = useRef<number | null>(null)
   const addTodayRef = useRef<HTMLDivElement | null>(null)
   const heroLogoRef = useRef<HTMLImageElement | null>(null)
   const heroRevealPending = useRef(false)
@@ -1443,23 +1442,6 @@ export default function Timeline() {
       }
     }
   }, [])
-
-
-  useEffect(() => {
-    if (!highlightedQuote) return
-    if (highlightTimeoutRef.current) {
-      window.clearTimeout(highlightTimeoutRef.current)
-    }
-    highlightTimeoutRef.current = window.setTimeout(() => {
-      setHighlightedQuote(null)
-    }, 2800)
-
-    return () => {
-      if (highlightTimeoutRef.current) {
-        window.clearTimeout(highlightTimeoutRef.current)
-      }
-    }
-  }, [highlightedQuote])
 
   // --- Handlers ---
 
@@ -1891,6 +1873,10 @@ export default function Timeline() {
         createdDayIdsRef.current.delete(dayId)
       }
 
+      if (highlightedQuote) {
+        setHighlightedQuote(null)
+      }
+
       pinDayForEditorMount(dayId, 'edit', false)
 
       setSearchResults((state) =>
@@ -1898,7 +1884,7 @@ export default function Timeline() {
       )
       scheduleSave(dayId, value)
     },
-    [pinDayForEditorMount, scheduleSave, setSearchResults],
+    [highlightedQuote, pinDayForEditorMount, scheduleSave, setSearchResults],
   )
 
 
