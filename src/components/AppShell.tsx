@@ -494,9 +494,9 @@ export default function AppShell() {
             {showMobileChatTogglePill && (
               <button
                 type="button"
-                className={`absolute top-[-3.1rem] inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 sm:hidden ${
-                  showScrollToToday ? 'right-[3.25rem]' : 'right-2'
-                }`}
+                className={`absolute top-[-3.1rem] inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 text-slate-700 shadow-sm transition hover:border-slate-300 sm:hidden ${
+                  chatPanelOpen ? 'bg-slate-50' : 'bg-white'
+                } right-2`}
                 aria-label={chatPanelOpen ? 'Hide chat' : 'Show chat'}
                 onClick={() => {
                   if (chatPanelOpen) {
@@ -508,20 +508,24 @@ export default function AppShell() {
                   setChatPanelOpen(true)
                 }}
               >
-                <img src="/chats-teardrop.svg" alt="" className="h-4 w-4 opacity-70" />
-                <span>{chatPanelOpen ? 'Hide chat' : 'Show chat'}</span>
-                <img
-                  src="/caret-left.svg"
-                  alt=""
-                  className={`h-3.5 w-3.5 opacity-60 ${chatPanelOpen ? '-rotate-90' : 'rotate-90'}`}
-                />
+                {chatPanelOpen ? (
+                  <img
+                    src="/caret-left.svg"
+                    alt=""
+                    className="h-5 w-5 -rotate-90 opacity-70 transition-transform duration-200"
+                  />
+                ) : (
+                  <img src="/chats-teardrop.svg" alt="" className="h-5 w-5 opacity-75 transition-opacity duration-200" />
+                )}
               </button>
             )}
 
             {showScrollToToday && (
               <button
                 type="button"
-                className="absolute right-2 top-[-3.1rem] flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:right-0 sm:h-10 sm:w-10"
+                className={`absolute top-[-3.1rem] flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:right-0 sm:h-10 sm:w-10 ${
+                  showMobileChatTogglePill ? 'right-[3.75rem]' : 'right-2'
+                }`}
                 aria-label="Scroll to Today"
                 onClick={() => {
                   window.dispatchEvent(new CustomEvent('timeline-scroll-today'))
