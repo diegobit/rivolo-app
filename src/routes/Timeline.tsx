@@ -19,6 +19,7 @@ import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useDaysStore } from '../store/useDaysStore'
 import { useUIStore } from '../store/useUIStore'
+import { useChatStore, type ChatCitation as Citation, type ChatUiMessage } from '../store/useChatStore'
 import { pushToSyncAndRefresh } from '../store/syncActions'
 
 // --- Helpers ---
@@ -198,27 +199,11 @@ type TimelineItem =
   | { type: 'add-future'; dayId: string }
   | { type: 'divider' }
 
-type Citation = {
-  day: string
-  quote: string
-}
-
 type AssistantPayload = {
   answer: string
   citations?: Citation[]
   insert_text?: string | null
   insert_target_day?: string | null
-}
-
-type ChatUiMessage = {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  meta?: {
-    citations: Citation[]
-    insertText?: string | null
-    insertTargetDay?: string | null
-  }
 }
 
 const normalizeCitationText = (value: string) =>
@@ -989,6 +974,8 @@ export default function Timeline() {
     setDesktopChatPanelOpen,
     setChatMessageCount,
   } = useUIStore()
+  const messages = useChatStore((state) => state.messages)
+  const setMessages = useChatStore((state) => state.setMessages)
   const hasNoNotes = !loading && days.length === 0
 
   // Mode-specific Input State
@@ -1001,7 +988,6 @@ export default function Timeline() {
   )
 
   // Chat State
-  const [messages, setMessages] = useState<ChatUiMessage[]>([])
   const [sending, setSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const messagesRef = useRef<ChatUiMessage[]>([])
