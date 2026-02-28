@@ -30,7 +30,7 @@ export default function AppShell() {
   const [showScrollToToday, setShowScrollToToday] = useState(false)
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
     if (typeof window === 'undefined') return false
-    return window.matchMedia('(max-width: 639px)').matches
+    return window.matchMedia('(max-width: 767px)').matches
   })
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const lastAutoPullAt = useRef(0)
@@ -81,7 +81,7 @@ export default function AppShell() {
   }, [loadSettings, loadSyncState])
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 639px)')
+    const mediaQuery = window.matchMedia('(max-width: 767px)')
 
     const updateViewport = () => {
       setIsNarrowViewport(mediaQuery.matches)
@@ -326,7 +326,7 @@ export default function AppShell() {
         }`}
       />
       <header
-        className="app-shell-fixed-right-aware relative left-0 z-30 mx-auto grid h-16 w-[min(96%,720px)] grid-cols-[1fr_auto_1fr] items-center sm:fixed"
+        className="app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto grid h-16 grid-cols-[1fr_auto_1fr] items-center sm:fixed"
       >
         {showMobileChatHeaderBlur && (
           <div
@@ -484,7 +484,7 @@ export default function AppShell() {
           <div className="app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
           <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md" />
 
-          <div className="app-shell-fixed-right-aware bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex w-[min(96%,620px)] items-center justify-center gap-2 px-2 sm:gap-3 sm:px-0">
+          <div className="app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex items-center justify-center gap-2 px-2 sm:gap-3 sm:px-0">
             {mode !== 'chat' && <Fragment key="chat-btn">{chatButton}</Fragment>}
             {mode === 'chat' && <Fragment key="tray">{trayCenter}</Fragment>}
 

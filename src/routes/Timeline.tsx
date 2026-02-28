@@ -449,7 +449,7 @@ const renderAssistantMarkdown = (value: string, citations: Citation[]) => {
 
 const getCitationScrollTopMargin = () => {
   if (typeof window === 'undefined') return 12
-  if (window.matchMedia('(max-width: 639px)').matches) return 12
+  if (window.matchMedia('(max-width: 767px)').matches) return 12
 
   const header = document.querySelector<HTMLElement>('header.app-shell-fixed-right-aware')
   const headerHeight = header?.getBoundingClientRect().height ?? 64
@@ -1255,7 +1255,7 @@ export default function Timeline() {
   const [mountedDayIds, setMountedDayIds] = useState<Set<string>>(() => new Set())
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
     if (typeof window === 'undefined') return false
-    return window.matchMedia('(max-width: 639px)').matches
+    return window.matchMedia('(max-width: 767px)').matches
   })
 
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
@@ -1358,7 +1358,7 @@ export default function Timeline() {
   }, [])
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 639px)')
+    const mediaQuery = window.matchMedia('(max-width: 767px)')
 
     const updateViewport = () => {
       setIsNarrowViewport(mediaQuery.matches)
