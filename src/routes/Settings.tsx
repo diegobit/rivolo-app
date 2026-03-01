@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import AppearanceSection from '../components/settings/AppearanceSection'
+import DropboxSyncSection from '../components/settings/DropboxSyncSection'
+import ImportExportSection from '../components/settings/ImportExportSection'
+import LlmSection from '../components/settings/LlmSection'
 import { isIOS } from '../lib/device'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
+import { buildPreviewHtml } from '../lib/previewMarkdown'
 import {
   getMonospaceFontFamily,
   getMonospaceFontSize,
@@ -10,21 +15,10 @@ import {
   type BodyFont,
   type MonospaceFont,
   type TitleFont,
-  bodyFontOptions,
-  monospaceFontOptions,
-  titleFontOptions,
 } from '../lib/fonts'
 import { shareOrDownload } from '../lib/share'
-import { DEFAULT_DROPBOX_PATH, startDropboxAuth } from '../lib/dropbox'
-import { disconnectActiveProvider } from '../lib/sync'
-import {
-  buttonDanger,
-  buttonPill,
-  buttonPillActive,
-  buttonPrimary,
-  buttonSecondary,
-} from '../lib/ui'
-import { pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../store/syncActions'
+import { DEFAULT_DROPBOX_PATH } from '../lib/dropbox'
+import { useDropboxSyncActions } from './settings/useDropboxSyncActions'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -64,93 +58,6 @@ def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
 0123456789 ~ !  @  #  $  %  ^  &  *  (  )  _  +  - =
 12*34=56 $\{var\} (a && b) == True
 `
-
-type HighlightCore = typeof import('highlight.js/lib/core')['default']
-
-const escapeHtml = (value: string) =>
-  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
-const applyInlineHighlight = (value: string) =>
-  value
-    .replace(/\*\*([^*]+)\*\*/g, '<span class="hljs-strong">$1</span>')
-    .replace(/\*([^*]+)\*/g, '<span class="hljs-emphasis">$1</span>')
-    .replace(/`([^`]+)`/g, '<span class="hljs-attr">$1</span>')
-    .replace(/(^|[^A-Za-z0-9_])(#[-A-Za-z0-9_/-]+)/g, '$1<span class="hljs-hashtag">$2</span>')
-    .replace(/(^|[^A-Za-z0-9_])(@[-A-Za-z0-9_/-]+)/g, '$1<span class="hljs-mention">$2</span>')
-
-const buildPreviewHtml = (text: string, hljs: HighlightCore) => {
-  const lines = text.split('\n')
-  const htmlLines: string[] = []
-  let inFence = false
-  let fenceLang = ''
-  let fenceLines: string[] = []
-
-  const flushFence = () => {
-    const code = fenceLines.join('\n')
-    if (!code) return
-    try {
-      htmlLines.push(hljs.highlight(code, { language: fenceLang || 'python', ignoreIllegals: true }).value)
-    } catch (error) {
-      htmlLines.push(escapeHtml(code))
-    }
-  }
-
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (trimmed.startsWith('```')) {
-      if (inFence) {
-        flushFence()
-        htmlLines.push('<span class="hljs-meta">```</span>')
-        inFence = false
-        fenceLang = ''
-        fenceLines = []
-      } else {
-        inFence = true
-        fenceLang = trimmed.slice(3).trim()
-        htmlLines.push('<span class="hljs-meta">```' + escapeHtml(fenceLang) + '</span>')
-      }
-      continue
-    }
-
-    if (inFence) {
-      fenceLines.push(line)
-      continue
-    }
-
-    const headingMatch = line.match(/^(\s*)(#{1,3})\s+(.*)$/)
-    if (headingMatch) {
-      const [, indent, hashes, content] = headingMatch
-      const highlighted = applyInlineHighlight(escapeHtml(`${hashes} ${content}`))
-      htmlLines.push(`${escapeHtml(indent)}<span class="hljs-section">${highlighted}</span>`)
-      continue
-    }
-
-    const bulletMatch = line.match(/^(\s*)-\s+(.*)$/)
-    if (bulletMatch) {
-      const [, indent, content] = bulletMatch
-      const todoMatch = content.match(/^\[([ xX])\]\s+(.*)$/)
-      if (todoMatch) {
-        const marker = todoMatch[1]
-        const highlighted = applyInlineHighlight(escapeHtml(todoMatch[2]))
-        htmlLines.push(
-          `${escapeHtml(indent)}<span class="hljs-todo-marker">- [${escapeHtml(marker)}]</span> ${highlighted}`,
-        )
-      } else {
-        const highlighted = applyInlineHighlight(escapeHtml(content))
-        htmlLines.push(`${escapeHtml(indent)}<span class="hljs-bullet">-</span> ${highlighted}`)
-      }
-      continue
-    }
-
-    htmlLines.push(applyInlineHighlight(escapeHtml(line)))
-  }
-
-  if (inFence) {
-    flushFence()
-  }
-
-  return htmlLines.join('\n')
-}
 
 export default function Settings() {
   const navigate = useNavigate()
@@ -333,11 +240,6 @@ export default function Settings() {
     [dropboxAccount, dropboxConnected, lastRemoteRev, lastSyncAt, localDirty],
   )
 
-  const llmStatus = geminiApiKey ? 'Ready' : 'No key'
-  const llmStatusClass = geminiApiKey
-    ? 'bg-green-200 text-green-800'
-    : 'bg-rose-100 text-rose-700'
-
   const handleSaveKey = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setStatus(null)
@@ -370,466 +272,97 @@ export default function Settings() {
     await shareOrDownload(filename, content)
   }
 
-  const handleConnectDropbox = async () => {
-    setDropboxStatus(null)
-
-    if (!online) {
-      setDropboxStatus('Connect to the internet to link Dropbox.')
-      return
-    }
-
-    try {
-      await startDropboxAuth()
-    } catch (error) {
-      setDropboxStatus(error instanceof Error ? error.message : 'Dropbox connect failed.')
-    }
-  }
-
-  const handleDisconnectDropbox = async () => {
-    setDropboxStatus(null)
-
-    try {
-      await disconnectActiveProvider()
-      await loadDropboxState()
-      await loadSyncState()
-      setDropboxStatus('Dropbox disconnected.')
-    } catch (error) {
-      setDropboxStatus(error instanceof Error ? error.message : 'Dropbox disconnect failed.')
-    }
-  }
-
-  const handlePull = async () => {
-    setDropboxStatus(null)
-
-    if (!dropboxConnected) {
-      setDropboxStatus('Connect Dropbox first.')
-      return
-    }
-
-    setSyncBusy(true)
-    try {
-      const result = await pullFromSyncAndRefresh()
-      await loadDropboxState()
-      setDropboxStatus(
-        result.status === 'noop' ? 'No changes on Dropbox.' : 'Pulled and imported.',
-      )
-    } catch (error) {
-      console.warn('[Dropbox] pull:failed', { error })
-      setDropboxStatus(error instanceof Error ? error.message : 'Dropbox pull failed.')
-    } finally {
-      setSyncBusy(false)
-    }
-  }
-
-  const handlePush = async (force = false) => {
-    setDropboxStatus(null)
-
-    if (!dropboxConnected) {
-      setDropboxStatus('Connect Dropbox first.')
-      return
-    }
-
-    setSyncBusy(true)
-    try {
-      const result = await pushToSyncAndRefresh(force)
-      await loadDropboxState()
-      if (result.status === 'clean') {
-        setDropboxStatus('No local changes to push.')
-      } else if (result.status === 'blocked') {
-        setDropboxStatus('Remote changed. Pull first or force overwrite.')
-      } else {
-        setDropboxStatus('Uploaded to Dropbox.')
-      }
-    } catch (error) {
-      setDropboxStatus(error instanceof Error ? error.message : 'Dropbox push failed.')
-    } finally {
-      setSyncBusy(false)
-    }
-  }
+  const { handleConnectDropbox, handleDisconnectDropbox, handlePull, handlePush } =
+    useDropboxSyncActions({
+      online,
+      dropboxConnected,
+      setDropboxStatus,
+      setSyncBusy,
+      loadDropboxState,
+      loadSyncState,
+    })
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-600">LLM Access</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Add a Gemini API key to enable the Ask Anything assistant.
-            </p>
-          </div>
-          <span
-            className={`rounded-full px-2 py-1 text-xs font-semibold whitespace-nowrap ${llmStatusClass}`}
-          >
-            {llmStatus}
-          </span>
-        </div>
+      <LlmSection
+        geminiApiKey={geminiApiKey}
+        geminiModel={geminiModel}
+        aiLanguage={aiLanguage}
+        allowThinking={allowThinking}
+        allowWebSearch={allowWebSearch}
+        apiKey={apiKey}
+        status={status}
+        onSaveKey={handleSaveKey}
+        onApiKeyChange={setApiKey}
+        onGeminiModelChange={(value) => {
+          void updateGeminiModel(value)
+        }}
+        onFollowLanguage={() => {
+          void updateAiLanguage('follow')
+        }}
+        onAiLanguageChange={(value) => {
+          const nextValue = value.trim()
+          void updateAiLanguage(nextValue || 'follow')
+        }}
+        onAllowThinkingChange={(enabled) => {
+          void updateAllowThinking(enabled)
+        }}
+        onAllowWebSearchChange={(enabled) => {
+          void updateAllowWebSearch(enabled)
+        }}
+      />
 
-        <form className="mt-4" onSubmit={handleSaveKey}>
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              autoComplete="off"
-              type="Text"
-              inputMode="text"
-              className="min-w-[220px] flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-              placeholder="Gemini API key"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-            />
-            <button
-              className={
-                apiKey.trim()
-                  ? `${buttonPrimary} text-black`
-                  : 'rounded-xl bg-slate-300 px-4 py-2 text-sm font-semibold text-white shadow-sm'
-              }
-              type="submit"
-              disabled={!apiKey.trim()}
-            >
-              {geminiApiKey ? 'Replace Gemini Key' : 'Save Gemini Key'}
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-5 space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Model</span>
-          <input
-            autoComplete="off"
-            type="Text"
-            inputMode="text"
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-            placeholder="gemini-2.5-flash"
-            value={geminiModel}
-            onChange={(event) => void updateGeminiModel(event.target.value)}
-          />
-        </div>
-
-        <div className="mt-5 space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reply Language</span>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              className={aiLanguage === 'follow' ? buttonPillActive : buttonPill}
-              type="button"
-              onClick={() => void updateAiLanguage('follow')}
-            >
-              Follow User
-            </button>
-            <input
-              autoComplete="off"
-              type="Text"
-              inputMode="text"
-              className="min-w-[220px] flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-              placeholder="or type: Italian, English..."
-              value={aiLanguage === 'follow' ? '' : aiLanguage}
-              onChange={(event) => {
-                const value = event.target.value.trim()
-                void updateAiLanguage(value || 'follow')
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="mt-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Allow thinking for supported models
-          </h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              className={allowThinking ? buttonPillActive : buttonPill}
-              type="button"
-              onClick={() => void updateAllowThinking(true)}
-            >
-              YES
-            </button>
-            <button
-              className={!allowThinking ? buttonPillActive : buttonPill}
-              type="button"
-              onClick={() => void updateAllowThinking(false)}
-            >
-              NO
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Allow web search for supported models
-          </h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              className={allowWebSearch ? buttonPillActive : buttonPill}
-              type="button"
-              onClick={() => void updateAllowWebSearch(true)}
-            >
-              YES
-            </button>
-            <button
-              className={!allowWebSearch ? buttonPillActive : buttonPill}
-              type="button"
-              onClick={() => void updateAllowWebSearch(false)}
-            >
-              NO
-            </button>
-          </div>
-        </div>
-
-        {status && <p className="mt-3 text-xs text-slate-500">{status}</p>}
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-600">Appearance</h2>
-          <div className="mt-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Wallpaper</h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                className={wallpaper === 'white' ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateWallpaper('white')}
-              >
-                White
-              </button>
-              <button
-                className={wallpaper === 'thoughts-light' ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateWallpaper('thoughts-light')}
-              >
-                Thoughts Light
-              </button>
-              <button
-                className={wallpaper === 'thoughts-medium' ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateWallpaper('thoughts-medium')}
-              >
-                Thoughts Medium
-              </button>
-              <button
-                className={wallpaper === 'thoughts-high' ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateWallpaper('thoughts-high')}
-              >
-                Thoughts High
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Highlight Input Mode
-            </h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                className={highlightInputMode ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateHighlightInputMode(true)}
-              >
-                YES
-              </button>
-              <button
-                className={!highlightInputMode ? buttonPillActive : buttonPill}
-                type="button"
-                onClick={() => void updateHighlightInputMode(false)}
-              >
-                NO
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Title Font</h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {titleFontOptions.map((option) => (
-                <button
-                  key={option.id}
-                  className={titleFont === option.id ? buttonPillActive : buttonPill}
-                  type="button"
-                  onClick={() => handleTitleFont(option.id)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Body Font</h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {bodyFontOptions.map((option) => (
-                <button
-                  key={option.id}
-                  className={
-                    fontPreference === 'proportional' && bodyFont === option.id
-                      ? buttonPillActive
-                      : buttonPill
-                  }
-                  type="button"
-                  onClick={() => handleBodyFont(option.id)}
-                >
-                  {option.label}
-                </button>
-              ))}
-              {monospaceFontOptions.map((option) => (
-                <button
-                  key={option.id}
-                  className={
-                    fontPreference === 'monospace' && monospaceFont === option.id
-                      ? buttonPillActive
-                      : buttonPill
-                  }
-                  type="button"
-                  onClick={() => handleMonospaceFont(option.id)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <details
-              className="mt-4 rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-3"
-              onToggle={handleFontPreviewToggle}
-            >
-              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Font Preview
-              </summary>
-              {showFontPreview && (
-                <div className="mt-3 space-y-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
-                  <div
-                    className="flex flex-wrap items-baseline gap-2 text-3xl text-slate-900"
-                    style={{ fontFamily: titlePreviewFontFamily }}
-                  >
-                    <span className="font-bold">Today</span>
-                    <span className="font-normal text-slate-500">24, Saturday</span>
-                  </div>
-                  <pre
-                    className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm font-normal text-slate-900"
-                    style={{ fontFamily: bodyPreviewFontFamily, fontSize: bodyPreviewFontSize }}
-                  >
-                    <code
-                      className="hljs language-markdown"
-                      style={{ fontFamily: bodyPreviewFontFamily, fontSize: bodyPreviewFontSize }}
-                      dangerouslySetInnerHTML={{ __html: previewHtml ?? escapeHtml(previewText) }}
-                    />
-                  </pre>
-                </div>
-              )}
-            </details>
-          </div>
-
-      </section>
+      <AppearanceSection
+        wallpaper={wallpaper}
+        highlightInputMode={highlightInputMode}
+        fontPreference={fontPreference}
+        bodyFont={bodyFont}
+        monospaceFont={monospaceFont}
+        titleFont={titleFont}
+        showFontPreview={showFontPreview}
+        previewHtml={previewHtml}
+        previewText={previewText}
+        titlePreviewFontFamily={titlePreviewFontFamily}
+        bodyPreviewFontFamily={bodyPreviewFontFamily}
+        bodyPreviewFontSize={bodyPreviewFontSize}
+        onWallpaperChange={(value) => {
+          void updateWallpaper(value)
+        }}
+        onHighlightInputModeChange={(enabled) => {
+          void updateHighlightInputMode(enabled)
+        }}
+        onTitleFontChange={handleTitleFont}
+        onBodyFontChange={handleBodyFont}
+        onMonospaceFontChange={handleMonospaceFont}
+        onFontPreviewToggle={handleFontPreviewToggle}
+      />
 
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-600">Dropbox Sync</h2>
-          <span
-            className={`rounded-full px-2 py-1 text-xs font-semibold ${
-              dropboxSummary.connected
-                ? 'bg-green-200 text-green-800'
-                : 'bg-slate-100 text-slate-500'
-            }`}
-          >
-            {dropboxSummary.connected ? 'Connected' : 'Not connected'}
-          </span>
+      <DropboxSyncSection
+        dropboxSummary={dropboxSummary}
+        filePath={filePath}
+        online={online}
+        dropboxPath={dropboxPath}
+        isDropboxPathDirty={isDropboxPathDirty}
+        syncBusy={syncBusy}
+        dropboxStatus={dropboxStatus}
+        placeholderPath={DEFAULT_DROPBOX_PATH}
+        onConnectDropbox={handleConnectDropbox}
+        onDisconnectDropbox={handleDisconnectDropbox}
+        onDropboxPathChange={setDropboxPath}
+        onSavePath={() => {
+          void updateFilePath(dropboxPath.trim())
+        }}
+        onPull={handlePull}
+        onPush={handlePush}
+      />
 
-        </div>
-
-        <div className="mt-3 grid gap-2 text-xs text-slate-500">
-          <div>File: {filePath || '—'}</div>
-          <div>Account: {dropboxSummary.account}</div>
-          <div>Last sync: {dropboxSummary.lastSync}</div>
-          <div>Remote rev: {dropboxSummary.rev}</div>
-          <div>Local dirty: {dropboxSummary.dirty ? 'Yes' : 'No'}</div>
-          <div>Network: {online ? 'Online' : 'Offline'}</div>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {dropboxSummary.connected ? (
-              <button className={buttonDanger} type="button" onClick={handleDisconnectDropbox}>
-                Disconnect Dropbox
-              </button>
-            ) : (
-              <button
-                className={buttonPrimary}
-                type="button"
-                onClick={handleConnectDropbox}
-                disabled={!online}
-              >
-                Connect Dropbox
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              autoComplete="off"
-              type="Text"
-              inputMode="text"
-              className="min-w-[220px] flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-              placeholder={DEFAULT_DROPBOX_PATH}
-              value={dropboxPath}
-              onChange={(event) => setDropboxPath(event.target.value)}
-            />
-            <button
-              className={
-                isDropboxPathDirty
-                  ? buttonPrimary
-                  : 'rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-500'
-              }
-              type="button"
-              disabled={!isDropboxPathDirty}
-              onClick={() => void updateFilePath(dropboxPath.trim())}
-            >
-              Save Path
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <button
-              className={buttonPrimary}
-              type="button"
-              onClick={handlePull}
-              disabled={syncBusy || !online || !dropboxSummary.connected}
-            >
-              Pull from Dropbox
-            </button>
-            <button
-              className={buttonPrimary}
-              type="button"
-              onClick={() => handlePush(false)}
-              disabled={syncBusy || !online || !dropboxSummary.connected}
-            >
-              Push to Dropbox
-            </button>
-            <button
-              className={buttonDanger}
-              type="button"
-              onClick={() => handlePush(true)}
-              disabled={syncBusy || !online || !dropboxSummary.connected}
-            >
-              Force overwrite
-            </button>
-          </div>
-          {dropboxStatus && <p className="text-xs text-slate-500">{dropboxStatus}</p>}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-600">Import / Export</h2>
-        <div className="mt-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Import</h3>
-          <div className="mt-3 flex flex-wrap gap-3">
-            <label className={buttonSecondary}>
-              <input type="file" accept=".md,text/markdown,text/plain" onChange={handleImport} />
-            </label>
-          </div>
-          {importStatus && <p className="mt-3 text-xs text-slate-500">{importStatus}</p>}
-        </div>
-        <div className="mt-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Export</h3>
-          <div className="mt-3 flex flex-wrap gap-3">
-            <button className={buttonPrimary} type="button" onClick={handleExport}>
-              Export {savedDropboxPath}
-            </button>
-          </div>
-        </div>
-      </section>
+      <ImportExportSection
+        savedDropboxPath={savedDropboxPath}
+        importStatus={importStatus}
+        onImport={handleImport}
+        onExport={handleExport}
+      />
     </div>
   )
 }
