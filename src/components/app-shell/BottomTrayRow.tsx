@@ -52,7 +52,7 @@ export default function BottomTrayRow({
               <img
                 src="/caret-left.svg"
                 alt=""
-                className="h-5 w-5 -rotate-90 opacity-70 transition-transform duration-200"
+                className="h-5 w-5 -rotate-90 opacity-70"
               />
             ) : (
               <img src="/chats-teardrop.svg" alt="" className="h-5 w-5 opacity-75 transition-opacity duration-200" />
