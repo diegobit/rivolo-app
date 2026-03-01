@@ -1,6 +1,11 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { pullFromSyncAndRefresh } from '../store/syncActions'
+import BottomTrayRow from './app-shell/BottomTrayRow'
+import ShortcutsPopover from './app-shell/ShortcutsPopover'
+import { TIMELINE_FOCUS_TODAY_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
+import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
+import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
+import { useAutoPullSync } from './app-shell/useAutoPullSync'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useUIStore } from '../store/useUIStore'
@@ -28,22 +33,18 @@ export default function AppShell() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
-  const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return window.matchMedia('(max-width: 767px)').matches
-  })
+  const isNarrowViewportMode = useIsNarrowViewport()
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
-  const lastAutoPullAt = useRef(0)
-  const autoPullInFlight = useRef(false)
   const showBackButton = location.pathname === '/settings'
   const isHome = location.pathname === '/'
-  const isDesktopChatModeWithMessages = isHome && mode === 'chat' && !isNarrowViewport && chatMessageCount > 0
+  const isDesktopChatModeWithMessages =
+    isHome && mode === 'chat' && !isNarrowViewportMode && chatMessageCount > 0
   const isDesktopChatSidebarOpen = isDesktopChatModeWithMessages && desktopChatPanelOpen
   const showTrayRow = isHome
   const showMobileChatTogglePill =
-    isNarrowViewport && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
-  const showDesktopChatEdgeHandle = !isNarrowViewport && isDesktopChatModeWithMessages
-  const showMobileChatHeaderBlur = isHome && isNarrowViewport && mode === 'chat' && chatPanelOpen
+    isNarrowViewportMode && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
+  const showDesktopChatEdgeHandle = !isNarrowViewportMode && isDesktopChatModeWithMessages
+  const showMobileChatHeaderBlur = isHome && isNarrowViewportMode && mode === 'chat' && chatPanelOpen
   const syncDirection = syncOperation === 'push' ? 'up' : 'down'
 
   const chatButton = (
@@ -79,28 +80,6 @@ export default function AppShell() {
     void loadSettings()
     void loadSyncState()
   }, [loadSettings, loadSyncState])
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 767px)')
-
-    const updateViewport = () => {
-      setIsNarrowViewport(mediaQuery.matches)
-    }
-
-    updateViewport()
-
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', updateViewport)
-      return () => {
-        mediaQuery.removeEventListener('change', updateViewport)
-      }
-    }
-
-    mediaQuery.addListener(updateViewport)
-    return () => {
-      mediaQuery.removeListener(updateViewport)
-    }
-  }, [])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -141,85 +120,8 @@ export default function AppShell() {
     document.body.dataset.wallpaper = wallpaper
   }, [wallpaper])
 
-  useEffect(() => {
-    const root = document.documentElement
-
-    const updateKeyboardOffset = () => {
-      if (!window.visualViewport) {
-        root.style.setProperty('--keyboard-offset', '0px')
-        document.body.dataset.keyboardOpen = 'false'
-        return
-      }
-
-      const viewport = window.visualViewport
-      const offset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
-      root.style.setProperty('--keyboard-offset', `${Math.round(offset)}px`)
-      document.body.dataset.keyboardOpen = offset > 0 ? 'true' : 'false'
-    }
-
-    updateKeyboardOffset()
-
-    if (!window.visualViewport) return
-
-    window.visualViewport.addEventListener('resize', updateKeyboardOffset)
-    window.visualViewport.addEventListener('scroll', updateKeyboardOffset)
-    window.addEventListener('resize', updateKeyboardOffset)
-    window.addEventListener('orientationchange', updateKeyboardOffset)
-
-    return () => {
-      window.visualViewport?.removeEventListener('resize', updateKeyboardOffset)
-      window.visualViewport?.removeEventListener('scroll', updateKeyboardOffset)
-      window.removeEventListener('resize', updateKeyboardOffset)
-      window.removeEventListener('orientationchange', updateKeyboardOffset)
-    }
-  }, [])
-
-  const maybeAutoPull = useCallback(
-    (reason: 'start' | 'reconnect' | 'visibility') => {
-      if (!navigator.onLine) return
-      if (!syncStatus.connected || !syncStatus.filePath) return
-      if (autoPullInFlight.current) return
-
-      const now = Date.now()
-      if (now - lastAutoPullAt.current < 2 * 60 * 1000) return
-
-      autoPullInFlight.current = true
-      lastAutoPullAt.current = now
-      console.info('[Sync] auto-pull:trigger', { reason })
-      void pullFromSyncAndRefresh()
-        .catch(() => {
-          // Auto-pull failures are handled by manual sync.
-        })
-        .finally(() => {
-          autoPullInFlight.current = false
-        })
-    },
-    [syncStatus.connected, syncStatus.filePath],
-  )
-
-  useEffect(() => {
-    console.info('[Sync] auto-pull:event', { reason: 'start' })
-    maybeAutoPull('start')
-  }, [maybeAutoPull])
-
-  useEffect(() => {
-    const handleOnline = () => {
-      console.info('[Sync] auto-pull:event', { reason: 'reconnect' })
-      maybeAutoPull('reconnect')
-    }
-    const handleVisibility = () => {
-      if (document.visibilityState !== 'visible') return
-      console.info('[Sync] auto-pull:event', { reason: 'visibility' })
-      maybeAutoPull('visibility')
-    }
-
-    window.addEventListener('online', handleOnline)
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
-  }, [maybeAutoPull])
+  useKeyboardOffsetCssVar()
+  useAutoPullSync(syncStatus)
 
   useEffect(() => {
     if (!showShortcuts) return
@@ -258,7 +160,7 @@ export default function AppShell() {
         event.preventDefault()
         if (isHome) {
           const dispatchFocusToday = () => {
-            window.dispatchEvent(new CustomEvent('timeline-focus-today'))
+            window.dispatchEvent(new CustomEvent(TIMELINE_FOCUS_TODAY_EVENT))
           }
           if (mode !== 'chat') {
             setMode('chat')
@@ -347,94 +249,12 @@ export default function AppShell() {
             </NavLink>
           )}
           {isHome && (
-            <div ref={shortcutsRef} className="hero-ui-fade-up relative">
-              <button
-                className={topIconButton}
-                type="button"
-                aria-label="Shortcuts"
-                onClick={() => setShowShortcuts((prev) => !prev)}
-              >
-                <img src="/question-mark.svg" alt="" className="h-5 w-5" />
-              </button>
-              {showShortcuts && (
-                <div className="absolute left-0 z-20 mt-2 w-max rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 shadow-lg">
-                  <div className="grid gap-4">
-                    <div className="space-y-2">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                        Input Modes:
-                      </div>
-                      <div className="grid gap-1">
-                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                          <span className="flex items-center gap-1">
-                            <kbd className="kbd">A</kbd>
-                          </span>
-                          <span className="text-slate-400">-&gt;</span>
-                          <span>Ask the AI</span>
-                        </div>
-                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                          <span className="flex items-center gap-1">
-                            <kbd className="kbd">F</kbd>
-                          </span>
-                          <span className="text-slate-400">-&gt;</span>
-                          <span>Find</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                        Others:
-                      </div>
-                      <div className="grid gap-1">
-                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                          <span className="flex items-center gap-1">
-                            <kbd className="kbd">T</kbd>
-                          </span>
-                          <span className="text-slate-400">-&gt;</span>
-                          <span>Scroll to Today/Top</span>
-                        </div>
-                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                          <span className="flex items-center gap-1">
-                            <kbd className="kbd">N</kbd>
-                          </span>
-                          <span className="text-slate-400">-&gt;</span>
-                          <span>New Today/Tomorrow</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                        Editing:
-                      </div>
-                      <div className="grid gap-1">
-                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                          <span className="flex items-center gap-1">
-                            <kbd className="kbd">Cmd/Ctrl</kbd>
-                            <span className="text-slate-400">+</span>
-                            <kbd className="kbd">Enter</kbd>
-                          </span>
-                          <span className="text-slate-400">-&gt;</span>
-                          <span>Toggle todo</span>
-                        </div>
-                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                          <span className="flex items-center gap-1">
-                            <kbd className="kbd">I</kbd>
-                          </span>
-                          <span className="text-slate-400">-&gt;</span>
-                          <span>Focus Today editor</span>
-                        </div>
-                        <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                          <span className="flex items-center gap-1">
-                            <kbd className="kbd">Esc</kbd>
-                          </span>
-                          <span className="text-slate-400">-&gt;</span>
-                          <span>Exit focus or back to Homepage</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ShortcutsPopover
+              shortcutsRef={shortcutsRef}
+              showShortcuts={showShortcuts}
+              onToggle={() => setShowShortcuts((prev) => !prev)}
+              buttonClassName={topIconButton}
+            />
           )}
         </div>
         <NavLink to="/" className="relative z-10 justify-self-center" aria-label="Home">
@@ -480,77 +300,30 @@ export default function AppShell() {
       </main>
 
       {showTrayRow && (
-        <>
-          <div className="app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
-          <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md" />
+        <BottomTrayRow
+          mode={mode}
+          chatButton={chatButton}
+          searchButton={searchButton}
+          trayCenter={trayCenter}
+          showMobileChatTogglePill={showMobileChatTogglePill}
+          chatPanelOpen={chatPanelOpen}
+          onToggleChatPanel={() => {
+            if (chatPanelOpen) {
+              setChatPanelOpen(false)
+              document.getElementById('chat-input')?.blur()
+              return
+            }
 
-          <div className="app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex items-center justify-center gap-2 px-2 sm:gap-3 sm:px-0">
-            {mode !== 'chat' && <Fragment key="chat-btn">{chatButton}</Fragment>}
-            {mode === 'chat' && <Fragment key="tray">{trayCenter}</Fragment>}
-
-            {mode !== 'search' && <Fragment key="search-btn">{searchButton}</Fragment>}
-            {mode === 'search' && <Fragment key="tray">{trayCenter}</Fragment>}
-
-            {showMobileChatTogglePill && (
-              <button
-                type="button"
-                className="absolute right-2 top-[-3.1rem] inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 sm:hidden"
-                aria-label={chatPanelOpen ? 'Hide chat' : 'Show chat'}
-                onClick={() => {
-                  if (chatPanelOpen) {
-                    setChatPanelOpen(false)
-                    document.getElementById('chat-input')?.blur()
-                    return
-                  }
-
-                  setChatPanelOpen(true)
-                }}
-              >
-                {chatPanelOpen ? (
-                  <img
-                    src="/caret-left.svg"
-                    alt=""
-                    className="h-5 w-5 -rotate-90 opacity-70 transition-transform duration-200"
-                  />
-                ) : (
-                  <img src="/chats-teardrop.svg" alt="" className="h-5 w-5 opacity-75 transition-opacity duration-200" />
-                )}
-              </button>
-            )}
-
-            {showScrollToToday && (
-              <button
-                type="button"
-                className={`absolute top-[-3.1rem] flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:right-0 sm:h-10 sm:w-10 ${
-                  showMobileChatTogglePill ? 'right-[3.75rem]' : 'right-2'
-                }`}
-                aria-label="Scroll to Today"
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('timeline-scroll-today'))
-                }}
-              >
-                <img src="/arrow-line-up.svg" alt="" className="h-5 w-5" />
-              </button>
-            )}
-          </div>
-
-          {showDesktopChatEdgeHandle && (
-            <button
-              type="button"
-              className="timeline-chat-edge-handle fixed top-1/2 z-30 hidden h-16 w-8 -translate-y-1/2 items-center justify-center rounded-l-full border border-r-0 border-slate-200 bg-white text-slate-600 shadow-[-10px_0_22px_-20px_rgba(15,23,42,0.3)] hover:border-slate-300 sm:inline-flex"
-              aria-label={desktopChatPanelOpen ? 'Hide chat' : 'Show chat'}
-              onClick={() => setDesktopChatPanelOpen(!desktopChatPanelOpen)}
-            >
-              <span className="-translate-x-[1px]">
-                <img
-                  src="/caret-left.svg"
-                  alt=""
-                  className={`h-5 w-5 opacity-70 transition-transform translate-x-[2px] duration-200 ${desktopChatPanelOpen ? 'rotate-180' : ''}`}
-                />
-              </span>
-            </button>
-          )}
-        </>
+            setChatPanelOpen(true)
+          }}
+          showScrollToToday={showScrollToToday}
+          showDesktopChatEdgeHandle={showDesktopChatEdgeHandle}
+          desktopChatPanelOpen={desktopChatPanelOpen}
+          onToggleDesktopChatPanel={() => setDesktopChatPanelOpen(!desktopChatPanelOpen)}
+          onScrollToToday={() => {
+            window.dispatchEvent(new CustomEvent(TIMELINE_SCROLL_TODAY_EVENT))
+          }}
+        />
       )}
     </div>
   )
