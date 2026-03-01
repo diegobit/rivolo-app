@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { isNarrowViewport } from '../lib/viewport'
 
 type Mode = 'timeline' | 'chat' | 'search'
 
@@ -13,25 +14,15 @@ type UIState = {
   setChatMessageCount: (count: number) => void
 }
 
-const getDefaultChatPanelOpen = () => {
+const getDefaultChatPanelsOpen = () => {
   if (typeof window === 'undefined') return true
-  return !window.matchMedia('(max-width: 767px)').matches
-}
-
-const getDefaultDesktopChatPanelOpen = () => {
-  if (typeof window === 'undefined') return true
-  return !window.matchMedia('(max-width: 767px)').matches
-}
-
-const isNarrowViewport = () => {
-  if (typeof window === 'undefined') return false
-  return window.matchMedia('(max-width: 767px)').matches
+  return !isNarrowViewport()
 }
 
 export const useUIStore = create<UIState>((set) => ({
   mode: 'chat',
-  chatPanelOpen: getDefaultChatPanelOpen(),
-  desktopChatPanelOpen: getDefaultDesktopChatPanelOpen(),
+  chatPanelOpen: getDefaultChatPanelsOpen(),
+  desktopChatPanelOpen: getDefaultChatPanelsOpen(),
   chatMessageCount: 0,
   setMode: (mode) =>
     set((state) => ({

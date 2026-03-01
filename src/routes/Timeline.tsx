@@ -1,177 +1,30 @@
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import CodeMirror from '@uiw/react-codemirror'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { Decoration, EditorView, ViewPlugin, ViewUpdate, keymap, type DecorationSet } from '@codemirror/view'
-import { EditorSelection, Prec, RangeSetBuilder, type Extension, type Line } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
+import { EditorSelection } from '@codemirror/state'
 import BottomTrayPortal from '../components/BottomTrayPortal'
+import DayEditorCard from '../components/timeline/DayEditorCard'
+import EmptyStateHero from '../components/timeline/EmptyStateHero'
+import ChatMessageList from '../components/timeline/ChatMessageList'
 import { isIOS } from '../lib/device'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
-import { editorHighlights } from '../lib/editorHighlights'
+import { getNarrowViewportMediaQuery, isNarrowViewport } from '../lib/viewport'
+import { TIMELINE_FOCUS_TODAY_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
-import { debugLog, getNowMs, startDebugTimer, toElapsedMs } from '../lib/debugLogs'
+import { debugLog, startDebugTimer } from '../lib/debugLogs'
 import type { Day } from '../lib/dayRepository'
-import { searchDays, appendToDay } from '../lib/dayRepository'
-import { chat } from '../lib/llm'
-import type { ChatMessage as LlmMessage } from '../lib/llm'
-import {
-  CITATION_MARKER_REGEX,
-  createStreamTagParser,
-  parseTaggedAssistantResponse,
-  toCitationMarker,
-  type StreamTagPiece,
-} from '../lib/llm/streamTagParser'
-import { buildContextDays, formatContext } from '../lib/llmContext'
+import { searchDays } from '../lib/dayRepository'
 import { buttonPrimary } from '../lib/ui'
+import { useCitationNavigation } from './timeline/useCitationNavigation'
+import { useEditorMountWindow } from './timeline/useEditorMountWindow'
+import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
+import { useTimelineChat } from './timeline/useTimelineChat'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useDaysStore } from '../store/useDaysStore'
 import { useUIStore } from '../store/useUIStore'
-import { useChatStore, type ChatCitation as Citation, type ChatUiMessage } from '../store/useChatStore'
+import { useChatStore, type ChatCitation as Citation } from '../store/useChatStore'
 import { pushToSyncAndRefresh } from '../store/syncActions'
-
-// --- Helpers ---
-
-const buildHighlightDecorations = (text: string, query: string) => {
-  const trimmed = query.trim()
-  const builder = new RangeSetBuilder<Decoration>()
-  if (!trimmed) {
-    return builder.finish()
-  }
-
-  const lowerText = text.toLowerCase()
-  const lowerQuery = trimmed.toLowerCase()
-  let matchIndex = lowerText.indexOf(lowerQuery)
-
-  while (matchIndex !== -1) {
-    builder.add(matchIndex, matchIndex + trimmed.length, Decoration.mark({ class: 'cm-highlight' }))
-    matchIndex = lowerText.indexOf(lowerQuery, matchIndex + trimmed.length)
-  }
-
-  return builder.finish()
-}
-
-const TODO_MARKER_REGEX = /^(\s*-\s+\[)([ xX])(\])/
-
-const getTodoMarker = (line: Line) => {
-  const match = line.text.match(TODO_MARKER_REGEX)
-  if (!match) return null
-  const markerStartOffset = match.index ?? 0
-  const markerFrom = line.from + markerStartOffset
-  const markerTo = markerFrom + match[0].length
-  const bracketFrom = line.from + match[1].length - 1
-  const bracketTo = markerTo
-  const toggleFrom = line.from + match[1].length
-  return {
-    markerFrom,
-    markerTo,
-    bracketFrom,
-    bracketTo,
-    toggleFrom,
-    toggleTo: toggleFrom + 1,
-    value: match[2],
-  }
-}
-
-const getToggleValue = (value: string) => (value.toLowerCase() === 'x' ? ' ' : 'x')
-
-const toggleTodoAtPos = (view: EditorView, pos: number) => {
-  const line = view.state.doc.lineAt(pos)
-  const marker = getTodoMarker(line)
-  if (!marker) return false
-  if (pos < marker.bracketFrom || pos >= marker.bracketTo) return false
-  view.dispatch({
-    changes: {
-      from: marker.toggleFrom,
-      to: marker.toggleTo,
-      insert: getToggleValue(marker.value),
-    },
-  })
-  return true
-}
-
-const toggleTodosInSelection = (view: EditorView) => {
-  const changes: Array<{ from: number; to: number; insert: string }> = []
-  const seen = new Set<number>()
-  for (const range of view.state.selection.ranges) {
-    const startLine = view.state.doc.lineAt(range.from)
-    const endLine = view.state.doc.lineAt(range.to)
-    for (let number = startLine.number; number <= endLine.number; number += 1) {
-      const line = view.state.doc.line(number)
-      const marker = getTodoMarker(line)
-      if (!marker) continue
-      const isCursor = range.from === range.to
-      if (!isCursor) {
-        const lineIntersects = range.from < line.to && range.to > line.from
-        if (!lineIntersects) continue
-      }
-      if (seen.has(marker.toggleFrom)) continue
-      seen.add(marker.toggleFrom)
-      changes.push({
-        from: marker.toggleFrom,
-        to: marker.toggleTo,
-        insert: getToggleValue(marker.value),
-      })
-    }
-  }
-
-  if (!changes.length) return false
-  changes.sort((a, b) => a.from - b.from)
-  view.dispatch({ changes })
-  return true
-}
-
-const todoPointerHandler = EditorView.domEventHandlers({
-  mousedown: (event, view) => {
-    if (event.button !== 0) return false
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
-    if (pos == null) return false
-    if (!toggleTodoAtPos(view, pos)) return false
-    view.focus()
-    return true
-  },
-  touchstart: (event, view) => {
-    const touch = event.touches.item(0)
-    if (!touch) return false
-    const pos = view.posAtCoords({ x: touch.clientX, y: touch.clientY })
-    if (pos == null) return false
-    if (!toggleTodoAtPos(view, pos)) return false
-    event.preventDefault()
-    return true
-  },
-})
-
-const todoKeymap = Prec.high(
-  keymap.of([
-    {
-      key: 'Mod-Enter',
-      run: (view) => toggleTodosInSelection(view),
-    },
-  ]),
-)
-
-const createHighlightPlugin = (query: string) => {
-  const trimmed = query.trim()
-  if (!trimmed) return null
-
-  return ViewPlugin.fromClass(
-    class {
-      decorations: DecorationSet
-
-      constructor(view: EditorView) {
-        this.decorations = buildHighlightDecorations(view.state.doc.toString(), trimmed)
-      }
-
-      update(update: ViewUpdate) {
-        if (update.docChanged) {
-          this.decorations = buildHighlightDecorations(update.state.doc.toString(), trimmed)
-        }
-      }
-    },
-    {
-      decorations: (value) => value.decorations,
-    },
-  )
-}
 
 const isEditableElement = (element: HTMLElement | null) =>
   Boolean(
@@ -182,766 +35,10 @@ const isEditableElement = (element: HTMLElement | null) =>
         element.isContentEditable),
   )
 
-const areStringSetsEqual = (a: Set<string>, b: Set<string>) => {
-  if (a.size !== b.size) return false
-
-  for (const value of a) {
-    if (!b.has(value)) {
-      return false
-    }
-  }
-
-  return true
-}
-
-// --- Types ---
-
-type TimelineDayCard = {
-  day: Day
-}
-
 type TimelineItem =
-  | { type: 'day'; card: TimelineDayCard }
+  | { type: 'day'; day: Day }
   | { type: 'add-today'; dayId: string }
   | { type: 'add-future'; dayId: string }
-  | { type: 'divider' }
-
-type AssistantPayload = {
-  answer: string
-  citations: Citation[]
-  insertText: string | null
-  insertTargetDay: string | null
-}
-
-const normalizeCitationText = (value: string) =>
-  value
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim()
-
-const normalizeCitationMatchText = (value: string) =>
-  value
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .toLowerCase()
-
-const findQuoteOffset = (text: string, quote: string) => {
-  const trimmedQuote = quote.trim()
-  if (!trimmedQuote) return -1
-
-  const exactIndex = text.indexOf(trimmedQuote)
-  if (exactIndex >= 0) {
-    return exactIndex
-  }
-
-  const lowerIndex = text.toLowerCase().indexOf(trimmedQuote.toLowerCase())
-  if (lowerIndex >= 0) {
-    return lowerIndex
-  }
-
-  return normalizeCitationMatchText(text).indexOf(normalizeCitationMatchText(trimmedQuote))
-}
-
-const stripCodeFences = (value: string) => value.replace(/```json\s*/gi, '').replace(/```/g, '').trim()
-
-const hasAssistantPayloadContent = (payload: AssistantPayload | null) =>
-  Boolean(payload && (payload.answer.trim() || payload.citations.length || payload.insertText))
-
-const withLegacyCitationMarkers = (answer: string, citations: Citation[]) => {
-  if (!citations.length || /@@CITATION_\d+@@/.test(answer)) {
-    return answer
-  }
-
-  const markers = citations.map((_, index) => toCitationMarker(index)).join(' ')
-  return `${answer.trim()} ${markers}`.trim()
-}
-
-const getCitationIndexFromTarget = (target: EventTarget | null) => {
-  if (!(target instanceof HTMLElement)) {
-    return null
-  }
-
-  const citationNode = target.closest<HTMLElement>('[data-citation-index]')
-  if (!citationNode) {
-    return null
-  }
-
-  const indexValue = citationNode.dataset.citationIndex
-  if (!indexValue) {
-    return null
-  }
-
-  const index = Number.parseInt(indexValue, 10)
-  if (!Number.isInteger(index) || index < 0) {
-    return null
-  }
-
-  return index
-}
-
-const citationChipDateFormatter = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-})
-
-const toCitationChipLabel = (dayId: string) => {
-  try {
-    return citationChipDateFormatter.format(parseDayId(dayId))
-  } catch {
-    return dayId
-  }
-}
-
-const toCitationTooltip = (citation: Citation) => {
-  const compactQuote = citation.quote.replace(/\s+/g, ' ').trim()
-  const preview = compactQuote.length > 120 ? `${compactQuote.slice(0, 120).trimEnd()}...` : compactQuote
-  return preview ? `${citation.day}\n${preview}` : citation.day
-}
-
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-
-const renderInlineMarkdown = (value: string, citations: Citation[]) => {
-  const codeTokens: string[] = []
-  const withCodeTokens = value.replace(/`([^`\n]+)`/g, (_match, code) => {
-    const token = `@@INLINE_CODE_${codeTokens.length}@@`
-    codeTokens.push(`<code>${escapeHtml(code)}</code>`)
-    return token
-  })
-
-  const escaped = escapeHtml(withCodeTokens)
-
-  const withLinks = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label, url) => {
-    const safeUrl = url.replace(/&quot;/g, '')
-    return `<a href="${safeUrl}" target="_blank" rel="noreferrer">${label}</a>`
-  })
-
-  const withFormatting = withLinks
-    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
-    .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
-
-  const withCitations = withFormatting.replace(CITATION_MARKER_REGEX, (_match, indexText) => {
-    const index = Number.parseInt(indexText, 10)
-    if (!Number.isInteger(index) || index < 0) {
-      return ''
-    }
-
-    const citation = citations[index]
-    if (!citation) {
-      return ''
-    }
-
-    const label = escapeHtml(toCitationChipLabel(citation.day))
-    const tooltip = escapeHtml(toCitationTooltip(citation)).replace(/\n/g, '&#10;')
-    const ariaLabel = escapeHtml(`Open citation from ${citation.day}`)
-
-    return `<span class="assistant-cite-inline" data-citation-index="${index}" role="button" tabindex="0" title="${tooltip}" aria-label="${ariaLabel}">${label}</span>`
-  })
-
-  return withCitations.replace(/@@INLINE_CODE_(\d+)@@/g, (_match, indexText) => {
-    const index = Number(indexText)
-    return codeTokens[index] ?? ''
-  })
-}
-
-const renderAssistantMarkdown = (value: string, citations: Citation[]) => {
-  const lines = value.split('\n')
-  const htmlLines: string[] = []
-  const codeLines: string[] = []
-  let inCodeBlock = false
-  let listType: 'ul' | 'ol' | null = null
-
-  const closeList = () => {
-    if (!listType) return
-    htmlLines.push(`</${listType}>`)
-    listType = null
-  }
-
-  const openList = (nextType: 'ul' | 'ol') => {
-    if (listType === nextType) return
-    closeList()
-    htmlLines.push(`<${nextType}>`)
-    listType = nextType
-  }
-
-  const flushCodeBlock = () => {
-    if (!codeLines.length) {
-      htmlLines.push('<pre><code></code></pre>')
-      return
-    }
-    htmlLines.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`)
-    codeLines.length = 0
-  }
-
-  for (const line of lines) {
-    const trimmed = line.trim()
-
-    if (trimmed.startsWith('```')) {
-      closeList()
-      if (inCodeBlock) {
-        flushCodeBlock()
-        inCodeBlock = false
-      } else {
-        inCodeBlock = true
-        codeLines.length = 0
-      }
-      continue
-    }
-
-    if (inCodeBlock) {
-      codeLines.push(line)
-      continue
-    }
-
-    if (!trimmed) {
-      closeList()
-      continue
-    }
-
-    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/)
-    if (headingMatch) {
-      closeList()
-      const level = headingMatch[1].length
-      htmlLines.push(`<h${level}>${renderInlineMarkdown(headingMatch[2], citations)}</h${level}>`)
-      continue
-    }
-
-    const unorderedListMatch = line.match(/^\s*[-*]\s+(.+)$/)
-    if (unorderedListMatch) {
-      openList('ul')
-      htmlLines.push(`<li>${renderInlineMarkdown(unorderedListMatch[1], citations)}</li>`)
-      continue
-    }
-
-    const orderedListMatch = line.match(/^\s*\d+\.\s+(.+)$/)
-    if (orderedListMatch) {
-      openList('ol')
-      htmlLines.push(`<li>${renderInlineMarkdown(orderedListMatch[1], citations)}</li>`)
-      continue
-    }
-
-    const quoteMatch = line.match(/^>\s?(.*)$/)
-    if (quoteMatch) {
-      closeList()
-      htmlLines.push(`<blockquote>${renderInlineMarkdown(quoteMatch[1], citations)}</blockquote>`)
-      continue
-    }
-
-    closeList()
-    htmlLines.push(`<p>${renderInlineMarkdown(line, citations)}</p>`)
-  }
-
-  closeList()
-
-  if (inCodeBlock) {
-    flushCodeBlock()
-  }
-
-  return htmlLines.join('')
-}
-
-const getCitationScrollTopMargin = () => {
-  if (typeof window === 'undefined') return 12
-  if (window.matchMedia('(max-width: 767px)').matches) return 12
-
-  const header = document.querySelector<HTMLElement>('header.app-shell-fixed-right-aware')
-  const headerHeight = header?.getBoundingClientRect().height ?? 64
-  return Math.round(headerHeight + 16)
-}
-
-const extractFirstJsonObject = (value: string) => {
-  let start = -1
-  let depth = 0
-  let inString = false
-  let escaping = false
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index]
-
-    if (inString) {
-      if (escaping) {
-        escaping = false
-        continue
-      }
-      if (char === '\\') {
-        escaping = true
-        continue
-      }
-      if (char === '"') {
-        inString = false
-      }
-      continue
-    }
-
-    if (char === '"') {
-      inString = true
-      continue
-    }
-
-    if (char === '{') {
-      if (depth === 0) {
-        start = index
-      }
-      depth += 1
-      continue
-    }
-
-    if (char === '}' && depth > 0) {
-      depth -= 1
-      if (depth === 0 && start !== -1) {
-        return value.slice(start, index + 1)
-      }
-    }
-  }
-
-  return null
-}
-
-const parseLegacyAssistantPayload = (responseText: string): AssistantPayload | null => {
-  const trimmed = responseText.trim()
-  const sanitized = stripCodeFences(trimmed)
-  const candidates = [trimmed, sanitized]
-  const extracted = extractFirstJsonObject(sanitized)
-
-  if (extracted) {
-    candidates.push(extracted)
-  }
-
-  for (const candidate of candidates) {
-    if (!candidate) continue
-    try {
-      const parsed = JSON.parse(candidate) as {
-        answer?: unknown
-        citations?: unknown
-        insert_text?: unknown
-        insert_target_day?: unknown
-      }
-
-      if (typeof parsed.answer !== 'string') {
-        continue
-      }
-
-      const citations = Array.isArray(parsed.citations)
-        ? parsed.citations.flatMap((citation) => {
-            if (!citation || typeof citation !== 'object') {
-              return []
-            }
-
-            const typedCitation = citation as { day?: unknown; quote?: unknown }
-            if (typeof typedCitation.day !== 'string' || typeof typedCitation.quote !== 'string') {
-              return []
-            }
-
-            return [{ day: typedCitation.day, quote: typedCitation.quote }]
-          })
-        : undefined
-
-      const insertText =
-        typeof parsed.insert_text === 'string' || parsed.insert_text === null ? parsed.insert_text : null
-
-      const insertTargetDay =
-        typeof parsed.insert_target_day === 'string' || parsed.insert_target_day === null
-          ? parsed.insert_target_day
-          : null
-
-      return {
-        answer: withLegacyCitationMarkers(parsed.answer, citations ?? []),
-        citations: citations ?? [],
-        insertText,
-        insertTargetDay,
-      }
-    } catch {
-      continue
-    }
-  }
-
-  return null
-}
-
-const parseAssistantPayload = (responseText: string): AssistantPayload | null => {
-  const legacyPayload = parseLegacyAssistantPayload(responseText)
-  if (legacyPayload) {
-    return legacyPayload
-  }
-
-  const tagged = parseTaggedAssistantResponse(responseText)
-  if (!tagged.answer && !tagged.citations.length && !tagged.insertText) {
-    return null
-  }
-
-  return {
-    answer: tagged.answer,
-    citations: tagged.citations,
-    insertText: tagged.insertText,
-    insertTargetDay: tagged.insertTargetDay,
-  }
-}
-
-type DayEditorCardProps = {
-  day: Day
-  shouldMountEditor: boolean
-  isFuture: boolean
-  isToday: boolean
-  isYesterday: boolean
-  isTomorrow: boolean
-  heroReveal: boolean
-  title: string
-  humanDate: string
-  datePart: string
-  weekdayPart: string | undefined
-  relativeLabel: string | null
-  searchQuery: string
-  quote: string | null
-  dateError: string | null
-  markdownExtension: Extension
-  editorTheme: Extension
-  clearActiveLine: Extension
-  titleFontFamily: string
-  previousDayId: string | null
-  nextDayId: string | null
-  onChange: (dayId: string, value: string) => void
-  onBlur: (dayId: string, event?: FocusEvent) => void
-  onDelete: (dayId: string) => void
-  onDateChange: (dayId: string, nextDayId: string) => void
-  onFocusDay: (dayId: string, position: 'start' | 'end') => void
-  onRequestEditorMount: (dayId: string, position: 'start' | 'end') => void
-  registerEditor: (dayId: string, view: EditorView | null) => void
-  registerDayRef: (dayId: string, node: HTMLDivElement | null) => void
-}
-
-const DayEditorCard = memo(({
-  day,
-  shouldMountEditor,
-  isFuture,
-  isToday,
-  isYesterday,
-  isTomorrow,
-  heroReveal,
-  title,
-  humanDate,
-  datePart,
-  weekdayPart,
-  relativeLabel,
-  searchQuery,
-  quote,
-  dateError,
-  markdownExtension,
-  editorTheme,
-  clearActiveLine,
-  titleFontFamily,
-  previousDayId,
-  nextDayId,
-  onChange,
-  onBlur,
-  onDelete,
-  onDateChange,
-  onFocusDay,
-  onRequestEditorMount,
-  registerEditor,
-  registerDayRef,
-}: DayEditorCardProps) => {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const menuRef = useRef<HTMLDivElement | null>(null)
-  const dateInputRef = useRef<HTMLInputElement | null>(null)
-  const hoverTimeoutRef = useRef<number | null>(null)
-  const [showDeleteMenu, setShowDeleteMenu] = useState(false)
-  const [showDesktopDelete, setShowDesktopDelete] = useState(false)
-  const searchHighlight = useMemo(() => createHighlightPlugin(searchQuery), [searchQuery])
-  const quoteHighlight = useMemo(() => (quote ? createHighlightPlugin(quote) : null), [quote])
-  const previewContent = useMemo(() => {
-    const trimmed = day.contentMd.trim()
-    if (!trimmed) {
-      return ' '
-    }
-
-    return trimmed
-      .split('\n')
-      .slice(0, 14)
-      .join('\n')
-  }, [day.contentMd])
-
-  useEffect(() => {
-    return () => {
-      registerEditor(day.dayId, null)
-    }
-  }, [day.dayId, registerEditor])
-
-  useEffect(() => {
-    if (!showDeleteMenu) return
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target
-      if (target instanceof Node && menuRef.current?.contains(target)) {
-        return
-      }
-      setShowDeleteMenu(false)
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-    }
-  }, [showDeleteMenu])
-
-  const clearHoverTimeout = () => {
-    if (hoverTimeoutRef.current) {
-      window.clearTimeout(hoverTimeoutRef.current)
-      hoverTimeoutRef.current = null
-    }
-  }
-
-  const handleHoverStart = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== 'mouse') return
-    setShowDesktopDelete(true)
-    clearHoverTimeout()
-    hoverTimeoutRef.current = window.setTimeout(() => {
-      setShowDesktopDelete(false)
-    }, 10000)
-  }
-
-  const handleHoverEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== 'mouse') return
-    clearHoverTimeout()
-    setShowDesktopDelete(false)
-  }
-
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        window.clearTimeout(hoverTimeoutRef.current)
-        hoverTimeoutRef.current = null
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      document.body.dataset.dayEditorFocus = 'false'
-    }
-  }, [])
-
-  const navigationKeymap = useMemo(
-    () =>
-      keymap.of([
-        {
-          key: 'ArrowUp',
-          run: (view) => {
-            if (!previousDayId) return false
-            const { from, to } = view.state.selection.main
-            if (from !== 0 || to !== 0) return false
-            onFocusDay(previousDayId, 'end')
-            return true
-          },
-        },
-        {
-          key: 'ArrowDown',
-          run: (view) => {
-            if (!nextDayId) return false
-            const { from, to } = view.state.selection.main
-            const end = view.state.doc.length
-            if (from !== end || to !== end) return false
-            onFocusDay(nextDayId, 'start')
-            return true
-          },
-        },
-        {
-          key: 'Escape',
-          run: (view) => {
-            view.contentDOM.blur()
-            return true
-          },
-        },
-      ]),
-    [nextDayId, onFocusDay, previousDayId],
-  )
-
-  const editorExtensions = useMemo(() => {
-    const extensions: Extension[] = [
-      markdownExtension,
-      editorTheme,
-      clearActiveLine,
-      EditorView.lineWrapping,
-      navigationKeymap,
-      todoKeymap,
-      todoPointerHandler,
-      ...editorHighlights,
-    ]
-    if (searchHighlight) {
-      extensions.push(searchHighlight)
-    }
-    if (quoteHighlight) {
-      extensions.push(quoteHighlight)
-    }
-    return extensions
-  }, [clearActiveLine, editorTheme, markdownExtension, navigationKeymap, quoteHighlight, searchHighlight])
-
-  const handleOpenDatePicker = () => {
-    const input = dateInputRef.current
-    if (!input) return
-    const picker = (input as HTMLInputElement & { showPicker?: () => void }).showPicker
-    if (picker) {
-      picker.call(input)
-      return
-    }
-    input.focus()
-    input.click()
-  }
-
-  const handleContainerRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      containerRef.current = node
-      registerDayRef(day.dayId, node)
-    },
-    [day.dayId, registerDayRef],
-  )
-
-  return (
-    <div
-      ref={handleContainerRef}
-      onPointerEnter={handleHoverStart}
-      onPointerLeave={handleHoverEnd}
-      data-scroll-target={isToday ? 'today' : undefined}
-      className={`scroll-anchor group rounded-[4px] border p-4 transition ${
-        heroReveal ? 'hero-reveal' : ''
-      } ${
-        isFuture
-          ? 'border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.03)] hover:border-slate-300/60'
-          : 'border-slate-200/60 bg-white shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] hover:border-slate-300/60'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="relative flex items-center gap-2 text-left" onClick={handleOpenDatePicker}>
-          <h3
-            className={`day-title ${
-              isToday ? 'text-[1.8rem]' : isYesterday || isTomorrow ? 'text-[1.5rem]' : 'text-[1.3rem]'
-            } ${isFuture ? 'opacity-70' : ''}`}
-            style={{ fontFamily: titleFontFamily }}
-          >
-            {relativeLabel ? (
-              <>
-                <span className="font-bold text-[#113355]">{relativeLabel}</span>
-                <span className="ml-2 font-normal text-[#8899aa]">{humanDate}</span>
-              </>
-            ) : weekdayPart ? (
-              <>
-                <span className="font-bold text-[#113355]">{datePart}</span>
-                <span className="ml-2 font-normal text-[#8899aa]">{weekdayPart}</span>
-              </>
-            ) : (
-              <span className="font-bold text-[#113355]">{title}</span>
-            )}
-          </h3>
-          <input
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            type="date"
-            aria-label={`Change date for ${day.dayId}`}
-            value={day.dayId}
-            ref={dateInputRef}
-            onChange={(event) => void onDateChange(day.dayId, event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.currentTarget.blur()
-              }
-            }}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <div ref={menuRef} className="relative touch-actions">
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300"
-              type="button"
-              aria-label="Open note actions"
-              onClick={() => setShowDeleteMenu((state) => !state)}
-            >
-              <img src="/dots-three.svg" alt="" className="h-4 w-4 opacity-70" />
-            </button>
-            {showDeleteMenu && (
-              <div className="absolute right-0 top-10 z-10 min-w-[150px] rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-                <button
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
-                  type="button"
-                  onClick={() => {
-                    setShowDeleteMenu(false)
-                    void onDelete(day.dayId)
-                  }}
-                >
-                  <img
-                    src="/trash.svg"
-                    alt=""
-                    className="h-4 w-4"
-                    style={{
-                      filter:
-                        'invert(29%) sepia(51%) saturate(2878%) hue-rotate(341deg) brightness(91%) contrast(95%)',
-                    }}
-                  />
-                  Delete note
-                </button>
-              </div>
-            )}
-          </div>
-          <button
-            className={`hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:flex touch-hide ${
-              showDesktopDelete ? 'opacity-100' : 'pointer-events-none opacity-0'
-            }`}
-            type="button"
-            aria-label="Delete"
-            onClick={() => {
-              void onDelete(day.dayId)
-            }}
-          >
-            <img
-              src="/trash.svg"
-              alt=""
-              className="h-4 w-4"
-              style={{
-                filter:
-                  'invert(29%) sepia(51%) saturate(2878%) hue-rotate(341deg) brightness(91%) contrast(95%)',
-              }}
-            />
-          </button>
-        </div>
-      </div>
-      {dateError && (
-        <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600">
-          {dateError}
-        </div>
-      )}
-      <div className="mt-3 overflow-hidden rounded-xl">
-        {shouldMountEditor ? (
-          <CodeMirror
-            value={day.contentMd}
-            extensions={editorExtensions}
-            onChange={(value) => onChange(day.dayId, value)}
-            onFocus={() => {
-              document.body.dataset.dayEditorFocus = 'true'
-            }}
-            onBlur={(event) => void onBlur(day.dayId, event.nativeEvent)}
-            onCreateEditor={(view) => registerEditor(day.dayId, view)}
-            basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLineGutter: false }}
-          />
-        ) : (
-          <button
-            className="block min-h-[34px] w-full cursor-text rounded-xl border border-slate-100 bg-white px-2 py-1 text-left text-[0.98rem] leading-6 text-slate-700 transition hover:border-slate-200"
-            type="button"
-            aria-label={`Edit note for ${day.dayId}`}
-            onClick={() => onRequestEditorMount(day.dayId, 'end')}
-          >
-            <pre className="max-h-64 overflow-hidden whitespace-pre-wrap break-words font-inherit text-inherit">
-              {previewContent}
-            </pre>
-          </button>
-        )}
-      </div>
-    </div>
-  )
-})
 
 type TrayInputMode = 'chat' | 'search'
 
@@ -992,15 +89,6 @@ const TrayInput = memo(({
     }
   }, [mode])
 
-  const activeText = draftText
-
-  const updateDraft = useCallback(
-    (value: string) => {
-      setDraftText(value)
-    },
-    [],
-  )
-
   useEffect(() => {
     if (mode !== 'search') return
 
@@ -1032,12 +120,12 @@ const TrayInput = memo(({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    const trimmed = activeText.trim()
+    const trimmed = draftText.trim()
     if (!trimmed) return
 
     if (mode === 'chat') {
       setDraftText('')
-      await onChatSubmit(activeText)
+      await onChatSubmit(draftText)
       return
     }
   }
@@ -1085,12 +173,14 @@ const TrayInput = memo(({
           <input
             id={inputConfig.id}
             autoComplete="off"
-            type="Text"
+            type="text"
             inputMode="text"
             className="w-full rounded-full bg-transparent py-2 pl-3 pr-3 text-base outline-none sm:pl-10"
             placeholder={inputConfig.placeholder}
-            value={activeText}
-            onChange={(event) => updateDraft(event.target.value)}
+            value={draftText}
+            onChange={(event) => {
+              setDraftText(event.target.value)
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.currentTarget.blur()
@@ -1102,7 +192,7 @@ const TrayInput = memo(({
         {mode === 'chat' && (
           <button
             className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
-              activeText.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
+              draftText.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
             }`}
             type="submit"
             disabled={sending}
@@ -1116,7 +206,7 @@ const TrayInput = memo(({
             />
           </button>
         )}
-        {mode === 'search' && activeText.trim() && (
+        {mode === 'search' && draftText.trim() && (
           <button
             className="group flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-500"
             type="button"
@@ -1135,51 +225,12 @@ const TrayInput = memo(({
   )
 })
 
-// --- Constants ---
-
-const SYSTEM_PROMPT = `You are the Daily Notes Analyst, an expert in parsing, retrieving, and synthesizing information from the user's chronological daily notes. Your data source is a collection of daily entries organized by date.
-
-### Core Responsibilities
-1. **Chronological Navigation**: Accurately interpret relative dates (e.g., 'yesterday', 'last Tuesday', 'three days ago') based on the current date. Locate specific entries based on day IDs.
-2. **Content Extraction**: Retrieve specific details such as meeting notes, decisions made, thoughts recorded, or tasks logged on specific days.
-3. **Task Management**: Identify and list user tasks, distinguishing between completed (\`[x]\`) and incomplete (\`[ ]\`) items across days.
-4. **Pattern Recognition**: Connect related information across different dates to provide comprehensive answers (e.g., tracking a topic or project over time).
-
-### Operational Guidelines
-- **Entry Structure**: Each entry is identified by a day ID in \`YYYY-MM-DD\` format.
-- **Citation Required**: When providing answers, always reference the specific day(s) where information was found using exact quotes.
-- **Context Awareness**: Pay attention to the current date provided in the context to correctly interpret relative date references.
-- **Search Strategy**: For topic-specific queries, aggregate findings chronologically across all relevant days.
-
-### Interaction Style
-- Be concise and organized.
-- Use bullet points to list items like todos or highlights.
-- If a requested date has no entry, explicitly state that no notes were found for that day.
-
-### Response Format
-Reply in plain Markdown text.
-
-When citing notes, include self-closing reference tags anywhere in the response:
-<ref day="YYYY-MM-DD" quote="exact substring"/>
-
-When the user asks to append content into notes, optionally include one self-closing insert tag:
-<insert text="text to append" target_day="YYYY-MM-DD"/>
-
-Rules:
-- Only use these tags: <ref .../> and <insert .../>.
-- Keep tags self-closing; do not use closing tags or nesting.
-- Keep normal prose outside tags.
-- Escape literal < and > in prose as &lt; and &gt;.
-- Quotes in attributes must be exact substrings from the cited day. If unsure, omit the citation tag.`
-
 const OLDER_DAYS_OBSERVER_MARGIN = '350px 0px 550px 0px'
 const INITIAL_EDITOR_MOUNT_COUNT = 6
 const EDITOR_HYDRATE_OBSERVER_MARGIN = '70% 0px 90% 0px'
 const EDITOR_PIN_TTL_MS = 20_000
 const EDITOR_PIN_PRUNE_INTERVAL_MS = 4_000
 const LOG_SCOPE = 'TimelinePerf'
-
-type EditorPinReason = 'interaction' | 'citation' | 'loadDay' | 'dateMove' | 'edit'
 
 // --- Component ---
 
@@ -1230,15 +281,6 @@ export default function Timeline() {
     [setSearchText],
   )
 
-  // Chat State
-  const [sending, setSending] = useState(false)
-  const [chatError, setChatError] = useState<string | null>(null)
-  const messagesRef = useRef<ChatUiMessage[]>([])
-
-  useEffect(() => {
-    messagesRef.current = messages
-  }, [messages])
-
   useEffect(() => {
     setChatMessageCount(messages.length)
   }, [messages.length, setChatMessageCount])
@@ -1252,11 +294,7 @@ export default function Timeline() {
   const [isLogoAnimating, setIsLogoAnimating] = useState(false)
   const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
-  const [mountedDayIds, setMountedDayIds] = useState<Set<string>>(() => new Set())
-  const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return window.matchMedia('(max-width: 767px)').matches
-  })
+  const [isNarrowViewportMode, setIsNarrowViewportMode] = useState(() => isNarrowViewport())
 
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
@@ -1264,9 +302,9 @@ export default function Timeline() {
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
   const isTimelineVisible = mode !== 'search'
   const hasChatMessages = messages.length > 0
-  const showDesktopChatMode = mode === 'chat' && !isNarrowViewport && hasChatMessages
+  const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode && hasChatMessages
   const showDesktopChatPanel = showDesktopChatMode && desktopChatPanelOpen
-  const showMobileChatOverlay = mode === 'chat' && isNarrowViewport && chatPanelOpen
+  const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
@@ -1279,13 +317,6 @@ export default function Timeline() {
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
   const dayRefs = useRef(new Map<string, HTMLDivElement>())
-  const mountedDayIdsRef = useRef(new Set<string>())
-  const nearViewportDayIdsRef = useRef(new Set<string>())
-  const pinnedDayExpiryRef = useRef(new Map<string, number>())
-  const dayOrderRef = useRef<string[]>([])
-  const maxMountedCountRef = useRef(0)
-  const hydrationRequestedAtRef = useRef(new Map<string, number>())
-  const dayHydrationObserverRef = useRef<IntersectionObserver | null>(null)
   const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
   const mobileChatScrollRef = useRef<HTMLDivElement | null>(null)
   const saveTimeouts = useRef(new Map<string, number>())
@@ -1359,10 +390,10 @@ export default function Timeline() {
   }, [])
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 767px)')
+    const mediaQuery = getNarrowViewportMediaQuery()
 
     const updateViewport = () => {
-      setIsNarrowViewport(mediaQuery.matches)
+      setIsNarrowViewportMode(mediaQuery.matches)
     }
 
     updateViewport()
@@ -1449,15 +480,12 @@ export default function Timeline() {
 
     if (hasNoNotes && !isLogoAnimating) {
       document.body.dataset.heroWallpaper = 'true'
-    } else {
-      delete document.body.dataset.heroWallpaper
+      document.body.dataset.heroUi = 'true'
+      return
     }
 
-    if (hasNoNotes && !isLogoAnimating) {
-      document.body.dataset.heroUi = 'true'
-    } else {
-      delete document.body.dataset.heroUi
-    }
+    delete document.body.dataset.heroWallpaper
+    delete document.body.dataset.heroUi
   }, [hasNoNotes, isLogoAnimating])
 
   useLayoutEffect(() => {
@@ -1478,16 +506,6 @@ export default function Timeline() {
     document.body.dataset.heroReveal = 'true'
   }, [isHeroRevealHold])
 
-
-  useEffect(() => {
-    return () => {
-      delete document.body.dataset.emptyState
-      delete document.body.dataset.heroWallpaper
-      delete document.body.dataset.heroUi
-      delete document.body.dataset.heroReveal
-    }
-  }, [])
-
   // Restore scroll position when returning to Timeline
   useEffect(() => {
     if (hasRestoredScroll.current) return
@@ -1503,7 +521,6 @@ export default function Timeline() {
     }
   }, [])
 
-  // Search
   useEffect(() => {
     if (mode !== 'search') return
 
@@ -1545,6 +562,11 @@ export default function Timeline() {
       for (const handle of saveTimeouts.current.values()) {
         window.clearTimeout(handle)
       }
+
+      delete document.body.dataset.emptyState
+      delete document.body.dataset.heroWallpaper
+      delete document.body.dataset.heroUi
+      delete document.body.dataset.heroReveal
     }
   }, [])
 
@@ -1558,6 +580,23 @@ export default function Timeline() {
       // Ignore auto-push errors
     }
   }, [canSync, pushToSyncAndRefresh])
+
+  const { sending, chatError, handleChatSend, handleChatInsert } = useTimelineChat({
+    messages,
+    setMessages,
+    aiLanguage,
+    allowThinking,
+    allowWebSearch,
+    geminiApiKey,
+    geminiModel,
+    isNarrowViewport: isNarrowViewportMode,
+    chatPanelOpen,
+    desktopChatPanelOpen,
+    setChatPanelOpen,
+    setDesktopChatPanelOpen,
+    loadTimeline,
+    handleAutoPush,
+  })
 
   const runLogoTransition = useCallback(() => {
     const heroLogo = heroLogoRef.current
@@ -1641,153 +680,28 @@ export default function Timeline() {
     [],
   )
 
-  const applyMountedDayIds = useCallback((next: Set<string>, reason: string) => {
-    const previous = mountedDayIdsRef.current
-    if (areStringSetsEqual(previous, next)) {
-      return
-    }
-
-    let addedCount = 0
-    let removedCount = 0
-    for (const dayId of next) {
-      if (!previous.has(dayId)) {
-        addedCount += 1
-      }
-    }
-    for (const dayId of previous) {
-      if (!next.has(dayId)) {
-        removedCount += 1
-      }
-    }
-
-    mountedDayIdsRef.current = next
-    setMountedDayIds(next)
-    maxMountedCountRef.current = Math.max(maxMountedCountRef.current, next.size)
-
-    debugLog(LOG_SCOPE, 'editorMountWindow:update', {
-      reason,
-      mountedCount: next.size,
-      addedCount,
-      removedCount,
-      nearViewportCount: nearViewportDayIdsRef.current.size,
-      pinnedCount: pinnedDayExpiryRef.current.size,
-      maxMountedCount: maxMountedCountRef.current,
-    })
-  }, [])
-
-  const recomputeMountedEditors = useCallback(
-    (reason: string) => {
-      const dayOrder = dayOrderRef.current
-      if (!dayOrder.length) {
-        applyMountedDayIds(new Set(), reason)
-        return
-      }
-
-      if (mode === 'search') {
-        applyMountedDayIds(new Set(dayOrder), reason)
-        return
-      }
-
-      const dayOrderSet = new Set(dayOrder)
-      const now = getNowMs()
-      for (const [dayId, expiresAt] of pinnedDayExpiryRef.current) {
-        if (expiresAt > now) continue
-        pinnedDayExpiryRef.current.delete(dayId)
-      }
-
-      const next = new Set<string>()
-
-      if (!supportsIntersectionObserver) {
-        for (const dayId of dayOrder) {
-          next.add(dayId)
-        }
-        applyMountedDayIds(next, reason)
-        return
-      }
-
-      for (let index = 0; index < Math.min(INITIAL_EDITOR_MOUNT_COUNT, dayOrder.length); index += 1) {
-        next.add(dayOrder[index])
-      }
-
-      for (const dayId of nearViewportDayIdsRef.current) {
-        if (dayOrderSet.has(dayId)) {
-          next.add(dayId)
-        }
-      }
-
-      for (const dayId of pinnedDayExpiryRef.current.keys()) {
-        if (dayOrderSet.has(dayId)) {
-          next.add(dayId)
-        }
-      }
-
-      const pendingDayId = pendingFocusRef.current?.dayId
-      if (pendingDayId && dayOrderSet.has(pendingDayId)) {
-        next.add(pendingDayId)
-      }
-
-      for (const [dayId, view] of editorRefs.current) {
-        if (!view.hasFocus) continue
-        if (dayOrderSet.has(dayId)) {
-          next.add(dayId)
-        }
-      }
-
-      applyMountedDayIds(next, reason)
-    },
-    [applyMountedDayIds, mode, supportsIntersectionObserver],
-  )
-
-  const pinDayForEditorMount = useCallback(
-    (dayId: string, reason: EditorPinReason, recompute = true) => {
-      const now = getNowMs()
-      const nextExpiry = now + EDITOR_PIN_TTL_MS
-      const currentExpiry = pinnedDayExpiryRef.current.get(dayId) ?? 0
-      pinnedDayExpiryRef.current.set(dayId, nextExpiry)
-
-      if (nextExpiry - currentExpiry > 500) {
-        debugLog(LOG_SCOPE, 'editorMountWindow:pin', {
-          dayId,
-          reason,
-          ttlMs: EDITOR_PIN_TTL_MS,
-        })
-      }
-
-      if (recompute) {
-        recomputeMountedEditors(`pin:${reason}`)
-      }
-    },
-    [recomputeMountedEditors],
-  )
-
-  const requestDayEditorMount = useCallback(
-    (dayId: string, position: 'start' | 'end') => {
-      const hydrateTimer = startDebugTimer(LOG_SCOPE, 'editorHydrate:request', {
-        dayId,
-        position,
-      })
-
-      hydrationRequestedAtRef.current.set(dayId, getNowMs())
-      const wasMounted = mountedDayIdsRef.current.has(dayId)
-      pinDayForEditorMount(dayId, 'interaction')
-      pendingFocusRef.current = { dayId, position }
-
-      requestAnimationFrame(() => {
-        const focusedImmediately = focusDayEditor(dayId, position, false)
-        if (focusedImmediately) {
-          pendingFocusRef.current = null
-        }
-
-        hydrateTimer.end('editorHydrate:request:raf', {
-          dayId,
-          focusedImmediately,
-          wasMounted,
-          mountedAfterRequest: mountedDayIdsRef.current.has(dayId),
-        })
-      })
-    },
-    [focusDayEditor, pinDayForEditorMount],
-  )
+  const {
+    mountedDayIds,
+    pinDayForEditorMount,
+    requestDayEditorMount,
+    registerEditor,
+    registerDayRef,
+    recomputeMountedEditors,
+    setDayOrder,
+  } = useEditorMountWindow({
+    days,
+    isSearchMode: mode === 'search',
+    isTimelineVisible,
+    supportsIntersectionObserver,
+    initialEditorMountCount: INITIAL_EDITOR_MOUNT_COUNT,
+    editorHydrateObserverMargin: EDITOR_HYDRATE_OBSERVER_MARGIN,
+    editorPinTtlMs: EDITOR_PIN_TTL_MS,
+    editorPinPruneIntervalMs: EDITOR_PIN_PRUNE_INTERVAL_MS,
+    editorRefs,
+    dayRefs,
+    pendingFocusRef,
+    focusDayEditor,
+  })
 
   const revealDay = useCallback(
     (
@@ -1817,47 +731,6 @@ export default function Timeline() {
     },
     [focusDayEditor],
   )
-
-  const scrollToCitationQuote = useCallback(async (citation: Citation) => {
-    const maxAttempts = 20
-    let attempts = 0
-
-    return await new Promise<boolean>((resolve) => {
-      const run = () => {
-        const view = editorRefs.current.get(citation.day)
-
-        if (!view) {
-          if (attempts >= maxAttempts) {
-            resolve(false)
-            return
-          }
-
-          attempts += 1
-          requestAnimationFrame(run)
-          return
-        }
-
-        const quoteOffset = findQuoteOffset(view.state.doc.toString(), citation.quote)
-        if (quoteOffset < 0) {
-          resolve(false)
-          return
-        }
-
-        const topMargin = getCitationScrollTopMargin()
-
-        view.dispatch({
-          effects: EditorView.scrollIntoView(quoteOffset, {
-            y: 'start',
-            yMargin: topMargin,
-          }),
-        })
-
-        resolve(true)
-      }
-
-      run()
-    })
-  }, [])
 
   const handleCreateDay = useCallback(
     async (
@@ -1992,493 +865,16 @@ export default function Timeline() {
     [highlightedQuote, pinDayForEditorMount, scheduleSave, setSearchResults],
   )
 
-
-  const handleCitationClick = useCallback(
-    async (citation: Citation) => {
-      const wasLoaded = days.some((day) => day.dayId === citation.day)
-      if (!wasLoaded) {
-        await loadDay(citation.day)
-      }
-
-      pinDayForEditorMount(citation.day, 'citation')
-      setHighlightedQuote(citation)
-
-      if (isNarrowViewport) {
-        setChatPanelOpen(false)
-        document.getElementById('chat-input')?.blur()
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              resolve()
-            })
-          })
-        })
-      }
-
-      revealDay(citation.day, undefined, 'start', false, 'auto')
-      const jumpedToQuote = await scrollToCitationQuote(citation)
-
-      if (!jumpedToQuote && !wasLoaded) {
-        window.setTimeout(() => {
-          revealDay(citation.day, undefined, 'start', false, 'auto')
-          void scrollToCitationQuote(citation)
-        }, 220)
-      }
-    },
-    [
-      days,
-      isNarrowViewport,
-      loadDay,
-      pinDayForEditorMount,
-      revealDay,
-      scrollToCitationQuote,
-      setChatPanelOpen,
-    ],
-  )
-
-  const activateInlineCitation = useCallback(
-    (message: ChatUiMessage, index: number) => {
-      const citation = message.meta?.citations[index]
-      if (!citation) {
-        return
-      }
-
-      void handleCitationClick(citation)
-    },
-    [handleCitationClick],
-  )
-
-  const handleAssistantMarkdownClick = useCallback(
-    (message: ChatUiMessage, event: React.MouseEvent<HTMLElement>) => {
-      const index = getCitationIndexFromTarget(event.target)
-      if (index === null) {
-        return
-      }
-
-      event.preventDefault()
-      activateInlineCitation(message, index)
-    },
-    [activateInlineCitation],
-  )
-
-  const handleAssistantMarkdownKeyDown = useCallback(
-    (message: ChatUiMessage, event: React.KeyboardEvent<HTMLElement>) => {
-      if (event.key !== 'Enter' && event.key !== ' ') {
-        return
-      }
-
-      const index = getCitationIndexFromTarget(event.target)
-      if (index === null) {
-        return
-      }
-
-      event.preventDefault()
-      activateInlineCitation(message, index)
-    },
-    [activateInlineCitation],
-  )
-
-  const registerEditor = useCallback(
-    (dayId: string, view: EditorView | null) => {
-      if (view) {
-        editorRefs.current.set(dayId, view)
-
-        const requestedAt = hydrationRequestedAtRef.current.get(dayId)
-        if (requestedAt != null) {
-          hydrationRequestedAtRef.current.delete(dayId)
-          debugLog(LOG_SCOPE, 'editorHydrate:mounted', {
-            dayId,
-            elapsedMs: toElapsedMs(requestedAt),
-          })
-        }
-
-        const pending = pendingFocusRef.current
-        if (pending && pending.dayId === dayId) {
-          focusDayEditor(dayId, pending.position, false)
-          pendingFocusRef.current = null
-        }
-
-        recomputeMountedEditors('registerEditor')
-        return
-      }
-
-      editorRefs.current.delete(dayId)
-      recomputeMountedEditors('unregisterEditor')
-    },
-    [focusDayEditor, recomputeMountedEditors],
-  )
-
-  const registerDayRef = useCallback(
-    (dayId: string, node: HTMLDivElement | null) => {
-      const previousNode = dayRefs.current.get(dayId)
-      if (previousNode && previousNode !== node) {
-        dayHydrationObserverRef.current?.unobserve(previousNode)
-      }
-
-      if (node) {
-        node.dataset.dayId = dayId
-        dayRefs.current.set(dayId, node)
-        if (isTimelineVisible) {
-          dayHydrationObserverRef.current?.observe(node)
-        }
-        return
-      }
-
-      if (previousNode) {
-        dayHydrationObserverRef.current?.unobserve(previousNode)
-      }
-      dayRefs.current.delete(dayId)
-      nearViewportDayIdsRef.current.delete(dayId)
-    },
-    [isTimelineVisible],
-  )
-
-  useEffect(() => {
-    if (!supportsIntersectionObserver || !isTimelineVisible) {
-      return
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        let changed = false
-        for (const entry of entries) {
-          if (!(entry.target instanceof HTMLElement)) continue
-          const dayId = entry.target.dataset.dayId
-          if (!dayId) continue
-
-          if (entry.isIntersecting) {
-            if (!nearViewportDayIdsRef.current.has(dayId)) {
-              nearViewportDayIdsRef.current.add(dayId)
-              changed = true
-            }
-            continue
-          }
-
-          if (nearViewportDayIdsRef.current.delete(dayId)) {
-            changed = true
-          }
-        }
-
-        if (changed) {
-          recomputeMountedEditors('nearViewportObserver')
-        }
-      },
-      {
-        root: null,
-        rootMargin: EDITOR_HYDRATE_OBSERVER_MARGIN,
-        threshold: 0,
-      },
-    )
-
-    dayHydrationObserverRef.current = observer
-    const nearViewportDayIds = nearViewportDayIdsRef.current
-    for (const node of dayRefs.current.values()) {
-      observer.observe(node)
-    }
-
-    return () => {
-      observer.disconnect()
-      nearViewportDayIds.clear()
-      dayHydrationObserverRef.current = null
-    }
-  }, [isTimelineVisible, recomputeMountedEditors, supportsIntersectionObserver])
-
-  const handleChatSend = useCallback(
-    async (draft: string) => {
-      const trimmed = draft.trim()
-      if (!trimmed) return
-
-      if (isNarrowViewport && !chatPanelOpen) {
-        setChatPanelOpen(true)
-      }
-
-      if (!isNarrowViewport && !desktopChatPanelOpen) {
-        setDesktopChatPanelOpen(true)
-      }
-
-      setChatError(null)
-
-      if (!geminiApiKey) {
-        setChatError('Add a Gemini API key in Settings first.')
-        return
-      }
-
-      const userMessage: ChatUiMessage = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content: trimmed,
-      }
-
-      const assistantId = crypto.randomUUID()
-      const assistantMessage: ChatUiMessage = {
-        id: assistantId,
-        role: 'assistant',
-        content: '',
-        meta: { citations: [], isStreaming: true },
-      }
-
-      setMessages((state) => [...state, userMessage, assistantMessage])
-      setSending(true)
-
-      const currentMessages = [...messagesRef.current, userMessage].map((m) => ({
-        role: m.role,
-        content: m.content,
-      })) as LlmMessage[]
-
-      try {
-        const contextDays = await buildContextDays(trimmed)
-        const contextText = formatContext(contextDays)
-        const contextMap = new Map(contextDays.map((day) => [day.dayId, day.contentMd]))
-
-        const languageInstruction = aiLanguage === 'follow'
-          ? 'Reply in the same language the user writes in.'
-          : `Always reply in ${aiLanguage}.`
-
-        const date = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', weekday: 'long' })
-
-        const llmMessages = [
-          {
-            role: 'system' as const,
-            content: `${SYSTEM_PROMPT}\n\n<user_notes>\n${contextText}\n</user_notes>\n\nToday is ${date}.\nGiven the user's notes above, answer their question accurately and concisely. ${languageInstruction}`,
-          },
-          ...currentMessages,
-        ]
-
-        console.info('[LLM Request]', {
-          messageCount: llmMessages.length,
-          contextDays: contextDays.length,
-          contextChars: contextText.length,
-          userChars: trimmed.length,
-        })
-
-        const streamTagParser = createStreamTagParser()
-        const streamedCitations: Citation[] = []
-        const streamedCitationIndexes = new Map<string, number>()
-        let streamedInsertText: string | null = null
-        let streamedInsertTargetDay: string | null = null
-        let streamedAnswer = ''
-
-        const applyStreamTagPieces = (pieces: StreamTagPiece[]) => {
-          if (!pieces.length) {
-            return
-          }
-
-          let textDelta = ''
-          let metaChanged = false
-
-          for (const piece of pieces) {
-            if (piece.type === 'text') {
-              textDelta += piece.value
-              continue
-            }
-
-            if (piece.type === 'ref') {
-              const key = `${piece.day}\u0000${piece.quote}`
-              let citationIndex = streamedCitationIndexes.get(key)
-              if (citationIndex === undefined) {
-                citationIndex = streamedCitations.length
-                streamedCitationIndexes.set(key, citationIndex)
-                streamedCitations.push({ day: piece.day, quote: piece.quote })
-                metaChanged = true
-              }
-
-              textDelta += toCitationMarker(citationIndex)
-              continue
-            }
-
-            const changedInsert =
-              streamedInsertText !== piece.text || streamedInsertTargetDay !== piece.targetDay
-            streamedInsertText = piece.text
-            streamedInsertTargetDay = piece.targetDay
-            if (changedInsert) {
-              metaChanged = true
-            }
-          }
-
-          if (textDelta) {
-            streamedAnswer += textDelta
-          }
-
-          if (!textDelta && !metaChanged) {
-            return
-          }
-
-          setMessages((state) =>
-            state.map((message) =>
-              message.id === assistantId
-                ? {
-                  ...message,
-                  content: textDelta ? `${message.content}${textDelta}` : message.content,
-                  meta: {
-                    citations: [...streamedCitations],
-                    insertText: streamedInsertText,
-                    insertTargetDay: streamedInsertTargetDay,
-                    isStreaming: true,
-                  },
-                }
-                : message,
-            ),
-          )
-        }
-
-        const { text: responseText } = await chat({
-          provider: 'gemini',
-          apiKey: geminiApiKey,
-          model: geminiModel,
-          messages: llmMessages,
-          allowThinking,
-          allowWebSearch,
-          temperature: 0,
-          stream: true,
-          onToken: (chunk) => {
-            const parsedChunk = streamTagParser.push(chunk)
-            applyStreamTagPieces(parsedChunk.pieces)
-          },
-        })
-
-        const finalStreamChunk = streamTagParser.flush()
-        applyStreamTagPieces(finalStreamChunk.pieces)
-
-        let finalResponseText = responseText
-        let payload: AssistantPayload | null = null
-
-        if (streamedAnswer.trim() || streamedCitations.length || streamedInsertText) {
-          payload = {
-            answer: streamedAnswer.trim(),
-            citations: streamedCitations,
-            insertText: streamedInsertText,
-            insertTargetDay: streamedInsertTargetDay,
-          }
-        }
-
-        if (!payload) {
-          payload = parseAssistantPayload(responseText)
-        }
-
-        const sanitized = stripCodeFences(responseText)
-        console.info('[LLM Response]', {
-          chars: responseText.length,
-          sanitizedChars: sanitized.length,
-          streamedChars: streamedAnswer.length,
-        })
-
-        if (hasAssistantPayloadContent(payload)) {
-          console.info('[LLM Parsed]', { hasCitations: Boolean(payload?.citations.length) })
-        } else {
-          console.error('[LLM Parse Error]', { preview: sanitized.slice(0, 200) })
-
-          try {
-            const { text: retryText } = await chat({
-              provider: 'gemini',
-              apiKey: geminiApiKey,
-              model: geminiModel,
-              messages: llmMessages,
-              allowThinking,
-              allowWebSearch,
-              temperature: 0,
-              stream: false,
-            })
-
-            finalResponseText = retryText
-            payload = parseAssistantPayload(retryText)
-
-            if (hasAssistantPayloadContent(payload)) {
-              console.info('[LLM Retry Parsed]', { hasCitations: Boolean(payload?.citations.length) })
-            } else {
-              console.error('[LLM Retry Parse Error]', { preview: stripCodeFences(retryText).slice(0, 200) })
-            }
-          } catch (retryError) {
-            console.error('[LLM Retry Error]', retryError)
-          }
-        }
-
-        const citations = (payload?.citations ?? []).filter((citation) => {
-          const content = contextMap.get(citation.day)
-          if (!content) return false
-
-          if (content.includes(citation.quote)) {
-            return true
-          }
-
-          const normalizedQuote = normalizeCitationText(citation.quote)
-          if (!normalizedQuote) {
-            return false
-          }
-
-          const normalizedContent = normalizeCitationText(content)
-          return normalizedContent.includes(normalizedQuote)
-        })
-
-        const parsedFallback = parseAssistantPayload(finalResponseText || responseText)
-        const fallbackAnswer = parsedFallback?.answer ?? stripCodeFences(finalResponseText || responseText)
-
-        setMessages((state) =>
-          state.map((message) =>
-            message.id === assistantId
-              ? {
-                ...message,
-                content: payload?.answer || fallbackAnswer || responseText,
-                meta: {
-                  citations,
-                  insertText: payload?.insertText ?? null,
-                  insertTargetDay: payload?.insertTargetDay ?? null,
-                  isStreaming: false,
-                },
-              }
-              : message,
-          ),
-        )
-      } catch (err) {
-        setMessages((state) =>
-          state.map((message) =>
-            message.id === assistantId
-              ? {
-                ...message,
-                meta: {
-                  citations: message.meta?.citations ?? [],
-                  insertText: message.meta?.insertText ?? null,
-                  insertTargetDay: message.meta?.insertTargetDay ?? null,
-                  isStreaming: false,
-                },
-              }
-              : message,
-          ),
-        )
-        setChatError(err instanceof Error ? err.message : 'LLM request failed.')
-      } finally {
-        setSending(false)
-      }
-    },
-    [
-      aiLanguage,
-      allowThinking,
-      allowWebSearch,
-      buildContextDays,
-      chatPanelOpen,
-      chat,
-      desktopChatPanelOpen,
-      formatContext,
-      geminiApiKey,
-      geminiModel,
-      isNarrowViewport,
-      setDesktopChatPanelOpen,
-      setChatPanelOpen,
-      setChatError,
-      setMessages,
-      setSending,
-    ],
-  )
-
-  const handleChatInsert = async (message: ChatUiMessage) => {
-    const insertText = message.meta?.insertText
-    if (!insertText) return
-
-    const targetDay = message.meta?.insertTargetDay ?? getTodayId()
-    const payload = `${insertText.trim()}`
-    await appendToDay(targetDay, payload)
-    await loadTimeline()
-    await handleAutoPush()
-  }
+  const { handleAssistantMarkdownClick, handleAssistantMarkdownKeyDown } = useCitationNavigation({
+    days,
+    editorRefs,
+    loadDay,
+    pinDayForEditorMount,
+    revealDay,
+    setHighlightedQuote,
+    isNarrowViewportMode,
+    setChatPanelOpen,
+  })
 
   const handleEmptyCta = useCallback(() => {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -2492,20 +888,17 @@ export default function Timeline() {
 
   // --- Computed Data ---
 
-  // Standard Timeline Cards
-  const timelineCards = useMemo<TimelineDayCard[]>(() => days.map((day) => ({ day })), [days])
-
   const maxWeekdayOffset = 14
-  const hasToday = useMemo(() => timelineCards.some((card) => card.day.dayId === todayId), [timelineCards, todayId])
+  const hasToday = useMemo(() => days.some((day) => day.dayId === todayId), [days, todayId])
 
   const futureDayId = useMemo(() => {
-    const existing = new Set(timelineCards.map((card) => card.day.dayId))
+    const existing = new Set(days.map((day) => day.dayId))
     let candidate = addDays(todayId, 1) // Start from tomorrow
     while (existing.has(candidate)) {
       candidate = addDays(candidate, 1)
     }
     return candidate
-  }, [timelineCards, todayId])
+  }, [days, todayId])
 
   const handleScrollToToday = useCallback(() => {
     if (hasToday) {
@@ -2563,16 +956,16 @@ export default function Timeline() {
     const handleFocusEvent = () => {
       void handleFocusToday()
     }
-    window.addEventListener('timeline-focus-today', handleFocusEvent)
-    return () => window.removeEventListener('timeline-focus-today', handleFocusEvent)
+    window.addEventListener(TIMELINE_FOCUS_TODAY_EVENT, handleFocusEvent)
+    return () => window.removeEventListener(TIMELINE_FOCUS_TODAY_EVENT, handleFocusEvent)
   }, [handleFocusToday])
 
   useEffect(() => {
     const handleScrollEvent = () => {
       handleScrollToToday()
     }
-    window.addEventListener('timeline-scroll-today', handleScrollEvent)
-    return () => window.removeEventListener('timeline-scroll-today', handleScrollEvent)
+    window.addEventListener(TIMELINE_SCROLL_TODAY_EVENT, handleScrollEvent)
+    return () => window.removeEventListener(TIMELINE_SCROLL_TODAY_EVENT, handleScrollEvent)
   }, [handleScrollToToday])
 
   useEffect(() => {
@@ -2650,65 +1043,19 @@ export default function Timeline() {
     }
   }, [])
 
-  const handleLoadOlderDays = useCallback(
-    (source: 'observer' | 'button') => {
-      const before = useDaysStore.getState()
-      const loadMoreTimer = startDebugTimer(LOG_SCOPE, 'olderDays:trigger', {
-        source,
-        loadedCountBefore: before.days.length,
-        hasMorePastBefore: before.hasMorePast,
-      })
-
-      void loadOlderDays().then(() => {
-        const after = useDaysStore.getState()
-        loadMoreTimer.end('olderDays:done', {
-          source,
-          loadedCountAfter: after.days.length,
-          hasMorePastAfter: after.hasMorePast,
-          loadingMoreAfter: after.loadingMore,
-        })
-      })
-    },
-    [loadOlderDays],
-  )
-
-  useEffect(() => {
-    if (!isTimelineVisible) return
-    if (!supportsIntersectionObserver || !hasMorePast) return
-
-    const sentinelNode = olderDaysSentinelRef.current
-    if (!sentinelNode) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return
-        if (loading || loadingMore) return
-
-        debugLog(LOG_SCOPE, 'olderDays:observerIntersection', {
-          loadedCount: days.length,
-          loading,
-          loadingMore,
-          hasMorePast,
-        })
-
-        handleLoadOlderDays('observer')
-      },
-      {
-        root: null,
-        rootMargin: OLDER_DAYS_OBSERVER_MARGIN,
-        threshold: 0,
-      },
-    )
-
-    observer.observe(sentinelNode)
-    return () => {
-      observer.disconnect()
-    }
-  }, [days.length, handleLoadOlderDays, hasMorePast, isTimelineVisible, loading, loadingMore, supportsIntersectionObserver])
+  const { handleLoadOlderDays } = useOlderDaysLoader({
+    loadOlderDays,
+    isTimelineVisible,
+    supportsIntersectionObserver,
+    hasMorePast,
+    loading,
+    loadingMore,
+    olderDaysSentinelRef,
+    olderDaysObserverMargin: OLDER_DAYS_OBSERVER_MARGIN,
+  })
 
   const standardItems = useMemo<TimelineItem[]>(() => {
-    // Case: No cards at all -> show only +Today
-    if (timelineCards.length === 0) {
+    if (days.length === 0) {
       return [{ type: 'add-today', dayId: todayId }]
     }
 
@@ -2717,49 +1064,44 @@ export default function Timeline() {
     let addedFutureButton = false
     let addedTodayButton = false
 
-    for (const card of timelineCards) {
-      const isFutureCard = card.day.dayId > todayId
-      const isPastCard = card.day.dayId < todayId
+    for (const day of days) {
+      const isFutureCard = day.dayId > todayId
+      const isPastCard = day.dayId < todayId
 
-      // Insert +FutureDay button when transitioning from future to today/past
       if (!addedFutureButton && showAddFuture && !isFutureCard) {
         items.push({ type: 'add-future', dayId: futureDayId })
         addedFutureButton = true
       }
 
-      // Insert +Today button when transitioning to past (if no today exists)
       if (!addedTodayButton && !hasToday && isPastCard) {
         items.push({ type: 'add-today', dayId: todayId })
         addedTodayButton = true
       }
 
-      items.push({ type: 'day', card })
+      items.push({ type: 'day', day })
     }
 
-    // If all cards were future, add the +FutureDay button at the end
     if (!addedFutureButton && showAddFuture) {
       items.push({ type: 'add-future', dayId: futureDayId })
     }
 
-    // If no today and no past cards, add +Today at the end
     if (!addedTodayButton && !hasToday) {
       items.push({ type: 'add-today', dayId: todayId })
     }
 
     return items
-  }, [timelineCards, hasToday, todayId, futureDayId])
+  }, [days, futureDayId, hasToday, todayId])
 
-  // Search Results Cards
-  const searchCards = useMemo<TimelineItem[]>(() => {
-    if (mode !== 'search' || !searchText.trim()) return []
-    return searchResults.map((day) => ({
-      type: 'day',
-      card: { day },
-    }))
-  }, [mode, searchText, searchResults])
+  const activeItems = useMemo<TimelineItem[]>(() => {
+    if (mode === 'search' && searchText.trim() && searchResults.length > 0) {
+      return searchResults.map((day) => ({
+        type: 'day',
+        day,
+      }))
+    }
 
-  // Active Items
-  const activeItems = (mode === 'search' && searchText.trim() && searchResults.length > 0) ? searchCards : standardItems
+    return standardItems
+  }, [mode, searchResults, searchText, standardItems])
 
   useEffect(() => {
     if (!isHeroRevealHold) return
@@ -2800,8 +1142,8 @@ export default function Timeline() {
   const dayOrder = useMemo(
     () =>
       activeItems
-        .filter((item): item is { type: 'day'; card: TimelineDayCard } => item.type === 'day')
-        .map((item) => item.card.day.dayId),
+        .filter((item): item is { type: 'day'; day: Day } => item.type === 'day')
+        .map((item) => item.day.dayId),
     [activeItems],
   )
   const dayIndexMap = useMemo(() => {
@@ -2811,63 +1153,8 @@ export default function Timeline() {
   }, [dayOrder])
 
   useEffect(() => {
-    dayOrderRef.current = dayOrder
-    recomputeMountedEditors('dayOrderChanged')
-  }, [dayOrder, recomputeMountedEditors])
-
-  useEffect(() => {
-    if (!isTimelineVisible) return
-
-    const interval = window.setInterval(() => {
-      recomputeMountedEditors('pinTtlPrune')
-    }, EDITOR_PIN_PRUNE_INTERVAL_MS)
-
-    return () => {
-      window.clearInterval(interval)
-    }
-  }, [isTimelineVisible, recomputeMountedEditors])
-
-  useEffect(() => {
-    const loadedDayIds = new Set(days.map((day) => day.dayId))
-    let changed = false
-
-    for (const dayId of nearViewportDayIdsRef.current) {
-      if (loadedDayIds.has(dayId)) continue
-      nearViewportDayIdsRef.current.delete(dayId)
-      changed = true
-    }
-
-    for (const dayId of mountedDayIdsRef.current) {
-      if (loadedDayIds.has(dayId)) continue
-      mountedDayIdsRef.current.delete(dayId)
-      changed = true
-    }
-
-    for (const dayId of pinnedDayExpiryRef.current.keys()) {
-      if (loadedDayIds.has(dayId)) continue
-      pinnedDayExpiryRef.current.delete(dayId)
-      changed = true
-    }
-
-    for (const dayId of hydrationRequestedAtRef.current.keys()) {
-      if (loadedDayIds.has(dayId)) continue
-      hydrationRequestedAtRef.current.delete(dayId)
-      changed = true
-    }
-
-    if (pendingFocusRef.current && !loadedDayIds.has(pendingFocusRef.current.dayId)) {
-      pendingFocusRef.current = null
-      changed = true
-    }
-
-    if (changed) {
-      debugLog(LOG_SCOPE, 'editorMountWindow:prune', {
-        loadedCount: days.length,
-      })
-    }
-
-    recomputeMountedEditors(changed ? 'daysPruned' : 'daysChanged')
-  }, [days, recomputeMountedEditors])
+    setDayOrder(dayOrder)
+  }, [dayOrder, setDayOrder])
 
   const handleFocusDay = useCallback(
     (dayId: string, position: 'start' | 'end') => {
@@ -2913,46 +1200,19 @@ export default function Timeline() {
       )}
 
       {hasNoNotes && (
-        <section className="hero-empty relative my-auto flex min-h-[60vh] flex-col items-center justify-center gap-8 px-6 py-16 text-center sm:px-12 sm:py-20">
-          <div className="absolute -right-16 -top-20 h-44 w-44 rounded-full bg-[#22B3FF]/10 blur-3xl" aria-hidden="true" />
-          <div className="absolute -bottom-24 -left-10 h-36 w-36 rounded-full bg-[#22B3FF]/10 blur-3xl" aria-hidden="true" />
-          <div className="relative flex items-center justify-center">
-            <span className="absolute -inset-6 rounded-full bg-white/70 blur-2xl" aria-hidden="true" />
-            <img
-              ref={heroLogoRef}
-              src="/logo.png"
-              alt=""
-              className={`hero-logo relative h-16 w-auto drop-shadow-[0_12px_30px_rgba(15,23,42,0.16)] transition-opacity duration-300 sm:h-20 ${
-                isLogoAnimating ? 'opacity-0' : 'opacity-100'
-              }`}
-            />
-          </div>
-          <div className="hero-copy max-w-[550px] space-y-4" style={{ fontFamily: heroFontFamily }}>
-            <p className="text-2xl text-slate-600">
-              Rivolo replaces notes{' '}
-              <br className="hero-break" />
-              with a daily flow.
-            </p>
-            <p className="text-2xl text-slate-600">
-              Structure emerges only{' '}
-              <br className="hero-break" />
-              when you ask for it.
-            </p>
-            <p className="text-2xl text-slate-600">Stop organizing. Start writing.</p>
-          </div>
-          <div className="flex flex-col items-center gap-4">
-            <button className={`${buttonPrimary} px-6 py-3 text-base`} type="button" onClick={handleEmptyCta}>
-              Start Today
-            </button>
-            <p></p>
-          </div>
-        </section>
+        <EmptyStateHero
+          isLogoAnimating={isLogoAnimating}
+          heroFontFamily={heroFontFamily}
+          buttonPrimaryClassName={buttonPrimary}
+          onStartToday={handleEmptyCta}
+          heroLogoRef={heroLogoRef}
+        />
       )}
 
       {/* Main List */}
       {!loading && !hasNoNotes && activeItems.length > 0 && (
         <div className="space-y-3">
-          {activeItems.map((item, index) => {
+          {activeItems.map((item) => {
             if (item.type === 'add-today') {
               return (
                 <div
@@ -3011,11 +1271,7 @@ export default function Timeline() {
               )
             }
 
-            if (item.type === 'divider') {
-              return <div key={`divider-${index}`} className="my-3 border-t border-dashed border-slate-200/80" />
-            }
-
-            const { day } = item.card
+            const { day } = item
             const isToday = day.dayId === todayId
             const isYesterday = day.dayId === yesterdayId
             const isTomorrow = day.dayId === tomorrowId
@@ -3035,7 +1291,7 @@ export default function Timeline() {
             const previousDayId = dayIndex > 0 ? dayOrder[dayIndex - 1] : null
             const nextDayId = dayIndex >= 0 && dayIndex < dayOrder.length - 1 ? dayOrder[dayIndex + 1] : null
             const dateError = dateErrors[day.dayId] ?? null
-            const quote = highlightedQuote?.day === day.dayId ? highlightedQuote.quote : null
+            const quote = highlightedQuote && highlightedQuote.day === day.dayId ? highlightedQuote.quote : null
             const shouldMountEditor =
               mode === 'search' || mountedDayIds.has(day.dayId) || editorRefs.current.has(day.dayId)
 
@@ -3109,50 +1365,14 @@ export default function Timeline() {
 
           <aside className="timeline-chat-sidebar" aria-hidden={!showDesktopChatPanel}>
             <div className="timeline-chat-sidebar-inner">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-center'}`}
-                >
-                  <div
-                    className={`space-y-2 text-m ${
-                      message.role === 'user'
-                        ? 'max-w-[85%] rounded-2xl bg-[#22B3FF] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
-                        : 'w-full max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
-                    }`}
-                  >
-                    {message.role === 'assistant' ? (
-                      <div
-                        className="assistant-markdown"
-                        onClick={(event) => handleAssistantMarkdownClick(message, event)}
-                        onKeyDown={(event) => handleAssistantMarkdownKeyDown(message, event)}
-                        dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '', message.meta?.citations ?? []) }}
-                      />
-                    ) : (
-                      <p className="whitespace-pre-wrap">{message.content || '...'}</p>
-                    )}
-
-                    {message.role === 'assistant' && message.meta?.isStreaming ? (
-                      <div className="assistant-stream-indicator" aria-label="Assistant is streaming" aria-live="polite">
-                        <span aria-hidden="true" />
-                        <span aria-hidden="true" />
-                        <span aria-hidden="true" />
-                      </div>
-                    ) : null}
-
-                    {message.role === 'assistant' && message.meta?.insertText && !message.meta?.isStreaming ? (
-                      <button
-                        className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                        onClick={() => void handleChatInsert(message)}
-                      >
-                        {message.meta.insertTargetDay
-                          ? `Insert into ${message.meta.insertTargetDay}`
-                          : 'Insert summary'}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
+              <ChatMessageList
+                messages={messages}
+                onAssistantMarkdownClick={handleAssistantMarkdownClick}
+                onAssistantMarkdownKeyDown={handleAssistantMarkdownKeyDown}
+                onChatInsert={(message) => {
+                  void handleChatInsert(message)
+                }}
+              />
             </div>
           </aside>
         </div>
@@ -3179,50 +1399,15 @@ export default function Timeline() {
                 paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 5.75rem)',
               }}
             >
-              {chatMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex px-1 ${message.role === 'user' ? 'justify-end' : 'justify-center'}`}
-                >
-                  <div
-                    className={`space-y-2 text-m ${
-                      message.role === 'user'
-                        ? 'max-w-[85%] rounded-2xl bg-[#22B3FF] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
-                        : 'w-full max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
-                    }`}
-                  >
-                    {message.role === 'assistant' ? (
-                      <div
-                        className="assistant-markdown"
-                        onClick={(event) => handleAssistantMarkdownClick(message, event)}
-                        onKeyDown={(event) => handleAssistantMarkdownKeyDown(message, event)}
-                        dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '', message.meta?.citations ?? []) }}
-                      />
-                    ) : (
-                      <p className="whitespace-pre-wrap">{message.content || '...'}</p>
-                    )}
-
-                    {message.role === 'assistant' && message.meta?.isStreaming ? (
-                      <div className="assistant-stream-indicator" aria-label="Assistant is streaming" aria-live="polite">
-                        <span aria-hidden="true" />
-                        <span aria-hidden="true" />
-                        <span aria-hidden="true" />
-                      </div>
-                    ) : null}
-
-                    {message.role === 'assistant' && message.meta?.insertText && !message.meta?.isStreaming ? (
-                      <button
-                        className="rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition"
-                        onClick={() => void handleChatInsert(message)}
-                      >
-                        {message.meta.insertTargetDay
-                          ? `Insert into ${message.meta.insertTargetDay}`
-                          : 'Insert summary'}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
+              <ChatMessageList
+                messages={chatMessages}
+                mobile
+                onAssistantMarkdownClick={handleAssistantMarkdownClick}
+                onAssistantMarkdownKeyDown={handleAssistantMarkdownKeyDown}
+                onChatInsert={(message) => {
+                  void handleChatInsert(message)
+                }}
+              />
             </div>
           </div>
         </>
