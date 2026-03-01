@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import BottomTrayRow from './app-shell/BottomTrayRow'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
-import { TIMELINE_FOCUS_TODAY_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
+import {
+  TIMELINE_FOCUS_TODAY_EVENT,
+  TIMELINE_NEW_CHAT_EVENT,
+  TIMELINE_SCROLL_TODAY_EVENT,
+} from '../lib/timelineEvents'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
 import { useAutoPullSync } from './app-shell/useAutoPullSync'
@@ -45,6 +49,8 @@ export default function AppShell() {
     isNarrowViewportMode && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
   const showDesktopChatEdgeHandle = !isNarrowViewportMode && isDesktopChatModeWithMessages
   const showMobileChatHeaderBlur = isHome && isNarrowViewportMode && mode === 'chat' && chatPanelOpen
+  const showMobileNewChatButton =
+    isHome && mode === 'chat' && isNarrowViewportMode && chatMessageCount > 0
   const syncDirection = syncOperation === 'push' ? 'up' : 'down'
 
   const chatButton = (
@@ -255,6 +261,18 @@ export default function AppShell() {
               onToggle={() => setShowShortcuts((prev) => !prev)}
               buttonClassName={topIconButton}
             />
+          )}
+          {showMobileNewChatButton && (
+            <button
+              type="button"
+              className={`${topIconButton} hero-ui-fade-up sm:hidden`}
+              aria-label="New chat"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent(TIMELINE_NEW_CHAT_EVENT))
+              }}
+            >
+              <img src="/pencil-simple-line.svg" alt="" className="h-5 w-5" />
+            </button>
           )}
         </div>
         <NavLink to="/" className="relative z-10 justify-self-center" aria-label="Home">

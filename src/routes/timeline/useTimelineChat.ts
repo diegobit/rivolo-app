@@ -391,10 +391,24 @@ export const useTimelineChat = ({
     [handleAutoPush, loadTimeline],
   )
 
+  const handleNewChat = useCallback(() => {
+    if (sending) return
+
+    setMessages(() => [])
+    messagesRef.current = []
+    setChatError(null)
+
+    if (isNarrowViewport) {
+      setChatPanelOpen(false)
+      document.getElementById('chat-input')?.blur()
+    }
+  }, [isNarrowViewport, sending, setChatPanelOpen, setMessages])
+
   return {
     sending,
     chatError,
     handleChatSend,
     handleChatInsert,
+    handleNewChat,
   }
 }
