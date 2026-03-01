@@ -9,7 +9,11 @@ import ChatMessageList from '../components/timeline/ChatMessageList'
 import { isIOS } from '../lib/device'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { getNarrowViewportMediaQuery, isNarrowViewport } from '../lib/viewport'
-import { TIMELINE_FOCUS_TODAY_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
+import {
+  TIMELINE_FOCUS_TODAY_EVENT,
+  TIMELINE_NEW_CHAT_EVENT,
+  TIMELINE_SCROLL_TODAY_EVENT,
+} from '../lib/timelineEvents'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import { debugLog, startDebugTimer } from '../lib/debugLogs'
 import type { Day } from '../lib/dayRepository'
@@ -581,7 +585,7 @@ export default function Timeline() {
     }
   }, [canSync, pushToSyncAndRefresh])
 
-  const { sending, chatError, handleChatSend, handleChatInsert } = useTimelineChat({
+  const { sending, chatError, handleChatSend, handleChatInsert, handleNewChat } = useTimelineChat({
     messages,
     setMessages,
     aiLanguage,
@@ -967,6 +971,15 @@ export default function Timeline() {
     window.addEventListener(TIMELINE_SCROLL_TODAY_EVENT, handleScrollEvent)
     return () => window.removeEventListener(TIMELINE_SCROLL_TODAY_EVENT, handleScrollEvent)
   }, [handleScrollToToday])
+
+  useEffect(() => {
+    const handleNewChatEvent = () => {
+      handleNewChat()
+    }
+
+    window.addEventListener(TIMELINE_NEW_CHAT_EVENT, handleNewChatEvent)
+    return () => window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, handleNewChatEvent)
+  }, [handleNewChat])
 
   useEffect(() => {
     const blurFocusedEditor = () => {
@@ -1365,6 +1378,15 @@ export default function Timeline() {
 
           <aside className="timeline-chat-sidebar" aria-hidden={!showDesktopChatPanel}>
             <div className="timeline-chat-sidebar-inner">
+              <button
+                type="button"
+                className="-mt-0.5 inline-flex h-9 items-center gap-2 self-start rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={handleNewChat}
+                disabled={sending}
+              >
+                <img src="/pencil-simple-line.svg" alt="" className="h-3.5 w-3.5 opacity-80" />
+                New chat
+              </button>
               <ChatMessageList
                 messages={messages}
                 onAssistantMarkdownClick={handleAssistantMarkdownClick}
