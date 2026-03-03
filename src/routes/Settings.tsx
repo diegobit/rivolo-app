@@ -6,7 +6,6 @@ import ImportExportSection from '../components/settings/ImportExportSection'
 import LlmSection from '../components/settings/LlmSection'
 import { isIOS } from '../lib/device'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
-import { buildPreviewHtml } from '../lib/previewMarkdown'
 import {
   getMonospaceFontFamily,
   getMonospaceFontSize,
@@ -109,7 +108,6 @@ export default function Settings() {
   const [online, setOnline] = useState(navigator.onLine)
   const [dropboxPath, setDropboxPath] = useState('')
   const [showFontPreview, setShowFontPreview] = useState(false)
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
 
   const savedDropboxPath = filePath || DEFAULT_DROPBOX_PATH
   const isDropboxPathDirty = dropboxPath.trim() !== savedDropboxPath
@@ -131,47 +129,6 @@ export default function Settings() {
   const handleFontPreviewToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
     setShowFontPreview(event.currentTarget.open)
   }
-
-  useEffect(() => {
-    let active = true
-
-    if (!showFontPreview) {
-      setPreviewHtml(null)
-      return () => {
-        active = false
-      }
-    }
-
-    const loadHighlighting = async () => {
-      try {
-        const [{ default: hljs }, { default: markdown }, { default: python }] = await Promise.all([
-          import('highlight.js/lib/core'),
-          import('highlight.js/lib/languages/markdown'),
-          import('highlight.js/lib/languages/python'),
-        ])
-
-        if (!hljs.getLanguage('markdown')) {
-          hljs.registerLanguage('markdown', markdown)
-        }
-        if (!hljs.getLanguage('python')) {
-          hljs.registerLanguage('python', python)
-        }
-
-        if (!active) return
-        setPreviewHtml(buildPreviewHtml(previewText, hljs))
-      } catch (error) {
-        if (active) {
-          setPreviewHtml(null)
-        }
-      }
-    }
-
-    void loadHighlighting()
-
-    return () => {
-      active = false
-    }
-  }, [showFontPreview])
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -320,7 +277,6 @@ export default function Settings() {
         monospaceFont={monospaceFont}
         titleFont={titleFont}
         showFontPreview={showFontPreview}
-        previewHtml={previewHtml}
         previewText={previewText}
         titlePreviewFontFamily={titlePreviewFontFamily}
         bodyPreviewFontFamily={bodyPreviewFontFamily}
