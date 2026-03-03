@@ -327,12 +327,12 @@
     border-radius: 3px;
   }
 
-  .cm-hashtag {
+  .cm-editor .cm-content .cm-hashtag {
     color: #c779da;
     font-weight: 700;
   }
 
-  .cm-mention {
+  .cm-editor .cm-content .cm-mention {
     color: #0098e5;
     font-weight: 600;
   }
