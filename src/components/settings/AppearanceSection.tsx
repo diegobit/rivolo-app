@@ -1,3 +1,6 @@
+import CodeMirror from '@uiw/react-codemirror'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { EditorView } from '@codemirror/view'
 import {
   type BodyFont,
   type MonospaceFont,
@@ -6,8 +9,35 @@ import {
   monospaceFontOptions,
   titleFontOptions,
 } from '../../lib/fonts'
-import { escapeHtml } from '../../lib/html'
+import { editorHighlights } from '../../lib/editorHighlights'
 import { buttonPill, buttonPillActive } from '../../lib/ui'
+
+const previewMarkdownExtension = markdown({ base: markdownLanguage })
+const previewEditorTheme = EditorView.theme({
+  '&': {
+    backgroundColor: 'transparent',
+  },
+  '.cm-scroller': {
+    fontFamily: 'inherit',
+    fontSize: 'inherit',
+  },
+  '.cm-content': {
+    minHeight: '0',
+    padding: '0',
+  },
+  '.cm-line': {
+    padding: '0',
+  },
+  '.cm-gutters': {
+    display: 'none',
+  },
+  '.cm-activeLine': {
+    backgroundColor: 'transparent',
+  },
+  '&.cm-focused': {
+    outline: 'none',
+  },
+})
 
 type AppearanceSectionProps = {
   wallpaper: 'white' | 'thoughts-light' | 'thoughts-medium' | 'thoughts-high'
@@ -17,7 +47,6 @@ type AppearanceSectionProps = {
   monospaceFont: MonospaceFont
   titleFont: TitleFont
   showFontPreview: boolean
-  previewHtml: string | null
   previewText: string
   titlePreviewFontFamily: string
   bodyPreviewFontFamily: string
@@ -38,7 +67,6 @@ export default function AppearanceSection({
   monospaceFont,
   titleFont,
   showFontPreview,
-  previewHtml,
   previewText,
   titlePreviewFontFamily,
   bodyPreviewFontFamily,
@@ -174,16 +202,23 @@ export default function AppearanceSection({
                 <span className="font-bold">Today</span>
                 <span className="font-normal text-slate-500">24, Saturday</span>
               </div>
-              <pre
+              <div
                 className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm font-normal text-slate-900"
                 style={{ fontFamily: bodyPreviewFontFamily, fontSize: bodyPreviewFontSize }}
               >
-                <code
-                  className="hljs language-markdown"
+                <CodeMirror
+                  value={previewText}
+                  extensions={[previewMarkdownExtension, previewEditorTheme, EditorView.lineWrapping, ...editorHighlights]}
+                  editable={false}
+                  basicSetup={{
+                    lineNumbers: false,
+                    foldGutter: false,
+                    highlightActiveLine: false,
+                    highlightActiveLineGutter: false,
+                  }}
                   style={{ fontFamily: bodyPreviewFontFamily, fontSize: bodyPreviewFontSize }}
-                  dangerouslySetInnerHTML={{ __html: previewHtml ?? escapeHtml(previewText) }}
                 />
-              </pre>
+              </div>
             </div>
           )}
         </details>
