@@ -622,9 +622,11 @@ export default function Timeline() {
     clone.style.pointerEvents = 'none'
     clone.style.zIndex = '60'
     clone.style.transformOrigin = 'top left'
-    clone.style.transition = `transform ${heroLogoDuration}ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity ${heroFadeDuration}ms ease`
+    clone.style.transform = 'translate(0px, 0px) scale(1, 1)'
+    clone.style.transition = `transform ${heroLogoDuration}ms cubic-bezier(0.22, 0.61, 0.36, 1)`
 
     document.body.appendChild(clone)
+    clone.getBoundingClientRect()
     setIsLogoAnimating(true)
 
     const deltaX = headerRect.left - heroRect.left
@@ -633,25 +635,47 @@ export default function Timeline() {
     const scaleY = headerRect.height / heroRect.height
 
     let finished = false
+
+    const waitForHeaderRevealAndRemove = () => {
+      const startedAt = performance.now()
+      const maxWaitMs = heroLogoDuration + heroFadeDuration + 300
+
+      const check = () => {
+        const headerReady = document.body.dataset.emptyState !== 'true'
+        const timedOut = performance.now() - startedAt >= maxWaitMs
+        if (headerReady || timedOut) {
+          clone.remove()
+          return
+        }
+        window.requestAnimationFrame(check)
+      }
+
+      window.requestAnimationFrame(check)
+    }
+
+    let timeout = 0
+    const handleTransitionEnd = (event: TransitionEvent) => {
+      if (event.target !== clone) return
+      if (event.propertyName !== 'transform') return
+      finish()
+    }
+
     const finish = () => {
       if (finished) return
       finished = true
-      clone.remove()
+      window.clearTimeout(timeout)
+      clone.removeEventListener('transitionend', handleTransitionEnd)
       setIsLogoAnimating(false)
+      waitForHeaderRevealAndRemove()
     }
 
-    const timeout = window.setTimeout(finish, heroLogoDuration + 100)
-    clone.addEventListener(
-      'transitionend',
-      () => {
-        window.clearTimeout(timeout)
-        finish()
-      },
-      { once: true },
-    )
+    timeout = window.setTimeout(finish, heroLogoDuration + 100)
+    clone.addEventListener('transitionend', handleTransitionEnd)
 
     requestAnimationFrame(() => {
-      clone.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(${scaleX}, ${scaleY})`
+      requestAnimationFrame(() => {
+        clone.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(${scaleX}, ${scaleY})`
+      })
     })
 
     return true
@@ -1119,36 +1143,52 @@ export default function Timeline() {
   useEffect(() => {
     if (!isHeroRevealHold) return
 
+    const shouldWaitForTomorrowButton = activeItems.some(
+      (item) => item.type === 'add-future' && item.dayId === tomorrowId,
+    )
+
     const isReadyToReveal = () => {
       const hasTodayCard = dayRefs.current.has(todayId)
-      const hasTomorrowItem = activeItems.some(
-        (item) => item.type === 'add-future' && item.dayId === tomorrowId,
-      )
-      const hasTomorrowButton =
-        hasTomorrowItem && Boolean(document.querySelector("[data-hero-tomorrow='true']"))
-      return hasTodayCard && hasTomorrowButton
+      if (!hasTodayCard) return false
+      if (!shouldWaitForTomorrowButton) return true
+      return Boolean(document.querySelector("[data-hero-tomorrow='true']"))
     }
 
+    let finished = false
     const startFade = () => {
+      if (finished) return
+      finished = true
       setIsHeroRevealHold(false)
       window.setTimeout(() => {
         setIsHeroRevealActive(false)
       }, heroFadeDuration)
     }
 
-    const raf = window.requestAnimationFrame(() => {
+    const startedAt = performance.now()
+    let raf = 0
+
+    const pollReady = () => {
+      if (finished) return
+
       if (isReadyToReveal()) {
         startFade()
+        return
       }
-    })
 
-    const fallback = window.setTimeout(() => {
-      startFade()
-    }, heroRevealFallback)
+      if (performance.now() - startedAt >= heroRevealFallback) {
+        startFade()
+        return
+      }
+
+      raf = window.requestAnimationFrame(pollReady)
+    }
+
+    raf = window.requestAnimationFrame(pollReady)
 
     return () => {
-      window.cancelAnimationFrame(raf)
-      window.clearTimeout(fallback)
+      if (raf) {
+        window.cancelAnimationFrame(raf)
+      }
     }
   }, [activeItems, heroFadeDuration, heroRevealFallback, isHeroRevealHold, todayId, tomorrowId])
 
