@@ -327,14 +327,16 @@
     border-radius: 3px;
   }
 
-  .cm-editor .cm-content .cm-hashtag {
-    color: #c779da;
-    font-weight: 700;
+  .cm-editor .cm-content .cm-hashtag,
+  .cm-editor .cm-content .cm-hashtag * {
+    color: #c779da !important;
+    font-weight: 700 !important;
   }
 
-  .cm-editor .cm-content .cm-mention {
-    color: #0098e5;
-    font-weight: 600;
+  .cm-editor .cm-content .cm-mention,
+  .cm-editor .cm-content .cm-mention * {
+    color: #0098e5 !important;
+    font-weight: 600 !important;
   }
 
   .cm-todo-marker {
