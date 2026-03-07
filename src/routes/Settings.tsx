@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import AppearanceSection from '../components/settings/AppearanceSection'
 import DropboxSyncSection from '../components/settings/DropboxSyncSection'
 import ImportExportSection from '../components/settings/ImportExportSection'
@@ -17,6 +17,7 @@ import {
 } from '../lib/fonts'
 import { shareOrDownload } from '../lib/share'
 import { DEFAULT_DROPBOX_PATH } from '../lib/dropbox'
+import { buttonSecondaryFlat } from '../lib/ui'
 import { useDropboxSyncActions } from './settings/useDropboxSyncActions'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
@@ -319,6 +320,16 @@ export default function Settings() {
         onImport={handleImport}
         onExport={handleExport}
       />
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-600">Legal</h2>
+        <p className="mt-1 text-xs text-slate-500">Review the GDPR privacy notice for Rivolo and connected services.</p>
+        <div className="mt-3">
+          <Link to="/privacy" className={buttonSecondaryFlat}>
+            Privacy Policy
+          </Link>
+        </div>
+      </section>
     </div>
   )
 }

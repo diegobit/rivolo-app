@@ -39,7 +39,8 @@ export default function AppShell() {
   const [showScrollToToday, setShowScrollToToday] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
-  const showBackButton = location.pathname === '/settings'
+  const showBackButton = location.pathname === '/settings' || location.pathname === '/privacy'
+  const backTarget = location.pathname === '/privacy' ? '/settings' : '/'
   const isHome = location.pathname === '/'
   const isDesktopChatModeWithMessages =
     isHome && mode === 'chat' && !isNarrowViewportMode && chatMessageCount > 0
@@ -252,7 +253,7 @@ export default function AppShell() {
         )}
         <div className="relative z-10 flex items-center gap-2">
           {showBackButton && (
-            <NavLink to="/" className={backButtonClass} aria-label="Back">
+            <NavLink to={backTarget} className={backButtonClass} aria-label="Back">
               <img
                 src="/caret-left.svg"
                 alt=""
