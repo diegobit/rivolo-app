@@ -187,6 +187,18 @@
     height: 100%;
   }
 
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  @supports not (scrollbar-gutter: stable) {
+    @media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+      html {
+        overflow-y: scroll;
+      }
+    }
+  }
+
   body {
     @apply bg-white text-slate-900 antialiased;
     font-family: 'Inter', system-ui, sans-serif;
@@ -741,6 +753,14 @@
 
 #bottom-tray:empty {
   display: none;
+}
+
+#bottom-tray-pills:empty {
+  display: none;
+}
+
+#bottom-tray-pills {
+  min-height: 2.25rem;
 }
 
 #bottom-tray.bottom-tray-shell {

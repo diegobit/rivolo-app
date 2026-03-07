@@ -16,7 +16,7 @@ import {
 } from '../lib/timelineEvents'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import { debugLog, startDebugTimer } from '../lib/debugLogs'
-import type { Day } from '../lib/dayRepository'
+import type { Day, DaySearchResult, SearchFilter } from '../lib/dayRepository'
 import { searchDays } from '../lib/dayRepository'
 import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
@@ -46,11 +46,17 @@ type TimelineItem =
 
 type TrayInputMode = 'chat' | 'search'
 
+type SearchResultMode = 'whole-day' | 'matched-lines'
+
+type SearchFilterOption = {
+  value: SearchFilter
+  label: string
+}
+
 type TrayInputProps = {
   mode: TrayInputMode
   sending: boolean
   chatError: string | null
-  noSearchResults: boolean
   onChatSubmit: (value: string) => Promise<void>
   onSearchTextChange: (value: string) => void
 }
@@ -62,11 +68,271 @@ type TrayInputConfig = {
   enterKeyHint: 'send' | 'search'
 }
 
+const SEARCH_FILTER_OPTIONS: SearchFilterOption[] = [
+  { value: 'open-todos', label: 'TODOs' },
+  { value: 'tags', label: '# Tags' },
+  { value: 'mentions', label: '@ Mentions' },
+  { value: 'headings', label: 'Headings' },
+]
+
+const getResultModeLabel = (resultMode: SearchResultMode) =>
+  resultMode === 'whole-day' ? 'Days' : 'Lines'
+
+const highlightQueryText = (text: string, query: string, keyPrefix: string) => {
+  const trimmed = query.trim()
+  if (!trimmed) {
+    return [text]
+  }
+
+  const normalizedText = text.toLocaleLowerCase()
+  const normalizedQuery = trimmed.toLocaleLowerCase()
+  const parts: React.ReactNode[] = []
+  let cursor = 0
+
+  while (cursor < text.length) {
+    const nextIndex = normalizedText.indexOf(normalizedQuery, cursor)
+    if (nextIndex === -1) {
+      parts.push(text.slice(cursor))
+      break
+    }
+
+    if (nextIndex > cursor) {
+      parts.push(text.slice(cursor, nextIndex))
+    }
+
+    const endIndex = nextIndex + trimmed.length
+    parts.push(
+      <mark key={`${keyPrefix}-${nextIndex}-${endIndex}`} className="rounded bg-[#22B3FF]/15 text-inherit">
+        {text.slice(nextIndex, endIndex)}
+      </mark>,
+    )
+    cursor = endIndex
+  }
+
+  return parts
+}
+
+const renderInlineTokenHighlights = (text: string, query: string, keyPrefix: string) => {
+  const tokenRegex = /[#@][A-Za-z0-9_/-]+/g
+  const nodes: React.ReactNode[] = []
+  let cursor = 0
+  let tokenMatch = tokenRegex.exec(text)
+
+  while (tokenMatch) {
+    const token = tokenMatch[0]
+    const start = tokenMatch.index
+    const end = start + token.length
+
+    if (start > cursor) {
+      nodes.push(...highlightQueryText(text.slice(cursor, start), query, `${keyPrefix}-plain-${cursor}`))
+    }
+
+    nodes.push(
+      <span
+        key={`${keyPrefix}-token-${start}`}
+        className={token.startsWith('#') ? 'font-bold text-[#c779da]' : 'font-semibold text-[#0098e5]'}
+      >
+        {highlightQueryText(token, query, `${keyPrefix}-token-inner-${start}`)}
+      </span>,
+    )
+
+    cursor = end
+    tokenMatch = tokenRegex.exec(text)
+  }
+
+  if (cursor < text.length) {
+    nodes.push(...highlightQueryText(text.slice(cursor), query, `${keyPrefix}-plain-tail`))
+  }
+
+  return nodes.length ? nodes : [text]
+}
+
+const renderSyntaxLine = (line: string, query: string, keyPrefix: string) => {
+  const headingMatch = line.match(/^(\s{0,3}#{1,6}\s+)(.*)$/)
+  if (headingMatch) {
+    return (
+      <>
+        <span className="font-black text-[#368b1c]">
+          {highlightQueryText(headingMatch[1], query, `${keyPrefix}-heading-marker`)}
+        </span>
+        {renderInlineTokenHighlights(headingMatch[2], query, `${keyPrefix}-heading-text`)}
+      </>
+    )
+  }
+
+  const todoMatch = line.match(/^(\s*-\s+)(\[[ xX]\])(.*)$/)
+  if (todoMatch) {
+    return (
+      <>
+        <span className="font-semibold text-[#b45309]">
+          {highlightQueryText(todoMatch[1], query, `${keyPrefix}-todo-list`)}
+        </span>
+        <span className="font-semibold text-[#ed9b38]">
+          {highlightQueryText(todoMatch[2], query, `${keyPrefix}-todo-marker`)}
+        </span>
+        {renderInlineTokenHighlights(todoMatch[3], query, `${keyPrefix}-todo-text`)}
+      </>
+    )
+  }
+
+  const listMarkerMatch = line.match(/^(\s*(?:[-+*]|\d+[.)]))(\s+)(.*)$/)
+  if (listMarkerMatch) {
+    return (
+      <>
+        <span className="font-semibold text-[#b45309]">
+          {highlightQueryText(listMarkerMatch[1], query, `${keyPrefix}-list-marker`)}
+        </span>
+        {highlightQueryText(listMarkerMatch[2], query, `${keyPrefix}-list-space`)}
+        {renderInlineTokenHighlights(listMarkerMatch[3], query, `${keyPrefix}-list-text`)}
+      </>
+    )
+  }
+
+  return renderInlineTokenHighlights(line, query, `${keyPrefix}-plain`)
+}
+
+const SearchModePills = memo(({
+  searchFilter,
+  resultMode,
+  onSearchFilterChange,
+  onToggleResultMode,
+}: {
+  searchFilter: SearchFilter | null
+  resultMode: SearchResultMode
+  onSearchFilterChange: (filter: SearchFilter | null) => void
+  onToggleResultMode: () => void
+}) => (
+  <div className="pointer-events-auto flex items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <button
+      className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[#bfd9ff] bg-[#EBF4FF] px-2 text-xs font-semibold text-[#0f5580] shadow-[0_1px_2px_rgba(15,23,42,0.1),0_2px_8px_rgba(15,23,42,0.06)] transition hover:border-[#9dc6ff]"
+      type="button"
+      onClick={onToggleResultMode}
+      aria-label={`Toggle result mode. Current mode: ${getResultModeLabel(resultMode)}`}
+    >
+      <span className="px-1 text-[10px] uppercase tracking-[0.05em] text-[#0f5580]/70">View</span>
+      <span
+        className={`rounded-full px-2 py-0.5 ${
+          resultMode === 'whole-day' ? 'bg-white text-[#0f5580] shadow-sm' : 'text-[#0f5580]/70'
+        }`}
+      >
+        Days
+      </span>
+      <span
+        className={`rounded-full px-2 py-0.5 ${
+          resultMode === 'matched-lines' ? 'bg-white text-[#0f5580] shadow-sm' : 'text-[#0f5580]/70'
+        }`}
+      >
+        Lines
+      </span>
+    </button>
+    {searchFilter ? (
+      <button
+        className="group inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-[#bfd9ff] bg-[#EBF4FF] px-3 text-xs font-semibold text-[#0f5580] shadow-[0_1px_2px_rgba(15,23,42,0.1),0_2px_8px_rgba(15,23,42,0.06)] transition hover:border-[#9dc6ff]"
+        type="button"
+        onClick={() => onSearchFilterChange(null)}
+        aria-label={`Remove ${SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label ?? 'filter'} filter`}
+      >
+        {SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label}
+        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[#0f5580] transition group-hover:bg-[#dcecff]">
+          <svg viewBox="0 0 16 16" className="h-2.5 w-2.5" fill="none" aria-hidden="true">
+            <path d="M4 4l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M12 4L4 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </span>
+      </button>
+    ) : (
+      SEARCH_FILTER_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          className="inline-flex h-8 shrink-0 items-center rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.1),0_2px_8px_rgba(15,23,42,0.06)] transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
+          type="button"
+          onClick={() => onSearchFilterChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))
+    )}
+  </div>
+))
+
+const MatchedLinesCard = memo(({
+  day,
+  matchedBlocks,
+  todayId,
+  titleFontFamily,
+  contentTextStyle,
+  searchQuery,
+}: {
+  day: Day
+  matchedBlocks: string[]
+  todayId: string
+  titleFontFamily: string
+  contentTextStyle: React.CSSProperties
+  searchQuery: string
+}) => {
+  const dayDate = parseDayId(day.dayId)
+  const todayDate = parseDayId(todayId)
+  const diffDays = Math.round((dayDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24))
+  const showWeekday = Math.abs(diffDays) <= 6
+  const humanDate = formatHumanDate(day.dayId, todayId, {
+    includeRelativeLabel: false,
+    includeWeekday: showWeekday,
+  })
+  const isToday = day.dayId === todayId
+  const isYesterday = day.dayId === addDays(todayId, -1)
+  const isTomorrow = day.dayId === addDays(todayId, 1)
+  const relativeLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : isTomorrow ? 'Tomorrow' : null
+  const [datePart, weekdayPart] = humanDate.split(', ')
+  const titleSizeClass = isToday ? 'text-[1.8rem]' : isYesterday || isTomorrow ? 'text-[1.5rem]' : 'text-[1.3rem]'
+
+  return (
+    <section className="scroll-anchor rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition hover:border-slate-300/60">
+      <header className="mb-3 flex items-start justify-between gap-3">
+        <h3
+          className={`day-title ${titleSizeClass}`}
+          style={{ fontFamily: titleFontFamily }}
+        >
+          {relativeLabel ? (
+            <>
+              <span className="font-bold text-[#113355]">{relativeLabel}</span>
+              <span className="ml-2 font-normal text-[#8899aa]">{humanDate}</span>
+            </>
+          ) : weekdayPart ? (
+            <>
+              <span className="font-bold text-[#113355]">{datePart}</span>
+              <span className="ml-2 font-normal text-[#8899aa]">{weekdayPart}</span>
+            </>
+          ) : (
+            <span className="font-bold text-[#113355]">{humanDate}</span>
+          )}
+        </h3>
+      </header>
+      <div className="mt-3 overflow-hidden rounded-xl">
+        <div className="space-y-0" style={contentTextStyle}>
+          {matchedBlocks.map((block, blockIndex) => (
+            <div key={`${day.dayId}-${blockIndex}`}>
+              {block.split('\n').map((line, lineIndex) => (
+              <p
+                key={`${day.dayId}-${blockIndex}-${lineIndex}`}
+                className="m-0 whitespace-pre-wrap break-words px-[2px] pl-[6px] text-slate-900"
+              >
+                {line
+                    ? renderSyntaxLine(line, searchQuery, `${day.dayId}-${blockIndex}-${lineIndex}`)
+                    : <span>&nbsp;</span>}
+              </p>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+})
+
 const TrayInput = memo(({
   mode,
   sending,
   chatError,
-  noSearchResults,
   onChatSubmit,
   onSearchTextChange,
 }: TrayInputProps) => {
@@ -143,21 +409,12 @@ const TrayInput = memo(({
     onSearchTextChange('')
   }
 
-  const showNoResults = noSearchResults && Boolean(draftText.trim())
   const showChatError = Boolean(chatError) && mode === 'chat'
 
   return (
     <div className="relative">
       <form className="flex items-center gap-3" onSubmit={handleSubmit}>
         <div className="relative flex-1">
-          <p
-            className={`absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
-              showNoResults ? 'opacity-100' : 'pointer-events-none opacity-0'
-            }`}
-            aria-hidden={!showNoResults}
-          >
-            No results
-          </p>
           <p
             className={`absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
               showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
@@ -290,9 +547,11 @@ export default function Timeline() {
   }, [messages.length, setChatMessageCount])
 
   // Search State
-  const [searchResults, setSearchResults] = useState<Day[]>([])
+  const [searchResults, setSearchResults] = useState<DaySearchResult[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
+  const [searchFilter, setSearchFilter] = useState<SearchFilter | null>(null)
+  const [searchResultMode, setSearchResultMode] = useState<SearchResultMode>('whole-day')
   const [dateErrors, setDateErrors] = useState<Record<string, string | null>>({})
   const [highlightedQuote, setHighlightedQuote] = useState<Citation | null>(null)
   const [isLogoAnimating, setIsLogoAnimating] = useState(false)
@@ -304,6 +563,7 @@ export default function Timeline() {
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
+  const hasSearchIntent = mode === 'search' && (Boolean(searchQuery) || Boolean(searchFilter))
   const isTimelineVisible = mode !== 'search'
   const hasChatMessages = messages.length > 0
   const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode && hasChatMessages
@@ -367,6 +627,25 @@ export default function Timeline() {
     [fontPreference, bodyFont, monospaceFont, isIosDevice],
   )
   const titleFontFamily = useMemo(() => getTitleFontFamily(titleFont), [titleFont])
+  const matchedResultsTextStyle = useMemo<React.CSSProperties>(
+    () => ({
+      fontSize:
+        fontPreference === 'monospace'
+          ? isIosDevice && monospaceFont === 'iawriter'
+            ? '1rem'
+            : getMonospaceFontSize(monospaceFont)
+          : '0.98rem',
+      lineHeight: 1.4,
+      fontWeight: '400',
+      fontFamily:
+        fontPreference === 'monospace'
+          ? getMonospaceFontFamily(monospaceFont)
+          : getBodyFontFamily(bodyFont),
+      fontSynthesis: 'weight style',
+      color: '#000000',
+    }),
+    [bodyFont, fontPreference, isIosDevice, monospaceFont],
+  )
   const heroFontFamily = useMemo(() => getTitleFontFamily('handlee'), [])
   const clearActiveLine = useMemo(
     () =>
@@ -528,7 +807,7 @@ export default function Timeline() {
   useEffect(() => {
     if (mode !== 'search') return
 
-    if (!searchText.trim()) {
+    if (!searchText.trim() && !searchFilter) {
       setSearchResults([])
       setSearchLoading(false)
       return
@@ -540,7 +819,7 @@ export default function Timeline() {
 
     const runSearch = async () => {
       try {
-        const data = await searchDays(searchText)
+        const data = await searchDays(searchText, { filter: searchFilter })
         if (cancelled) return
         setSearchResults(data)
       } catch {
@@ -559,7 +838,7 @@ export default function Timeline() {
     return () => {
       cancelled = true
     }
-  }, [mode, searchText])
+  }, [mode, searchFilter, searchText])
 
   useEffect(() => {
     return () => {
@@ -718,7 +997,7 @@ export default function Timeline() {
     setDayOrder,
   } = useEditorMountWindow({
     days,
-    isSearchMode: mode === 'search',
+    isSearchMode: mode === 'search' && searchResultMode === 'whole-day',
     isTimelineVisible,
     supportsIntersectionObserver,
     initialEditorMountCount: INITIAL_EDITOR_MOUNT_COUNT,
@@ -886,7 +1165,17 @@ export default function Timeline() {
       pinDayForEditorMount(dayId, 'edit', false)
 
       setSearchResults((state) =>
-        state.map((day) => (day.dayId === dayId ? { ...day, contentMd: value } : day)),
+        state.map((result) =>
+          result.day.dayId === dayId
+            ? {
+                ...result,
+                day: {
+                  ...result.day,
+                  contentMd: value,
+                },
+              }
+            : result,
+        ),
       )
       scheduleSave(dayId, value)
     },
@@ -1130,15 +1419,19 @@ export default function Timeline() {
   }, [days, futureDayId, hasToday, todayId])
 
   const activeItems = useMemo<TimelineItem[]>(() => {
-    if (mode === 'search' && searchText.trim() && searchResults.length > 0) {
-      return searchResults.map((day) => ({
-        type: 'day',
-        day,
-      }))
+    if (hasSearchIntent) {
+      if (searchResultMode === 'whole-day') {
+        return searchResults.map(({ day }) => ({
+          type: 'day',
+          day,
+        }))
+      }
+
+      return []
     }
 
     return standardItems
-  }, [mode, searchResults, searchText, standardItems])
+  }, [hasSearchIntent, searchResultMode, searchResults, standardItems])
 
   useEffect(() => {
     if (!isHeroRevealHold) return
@@ -1221,15 +1514,27 @@ export default function Timeline() {
 
   // No Results State
   const noSearchResults =
-    mode === 'search' &&
+    hasSearchIntent &&
     !searchLoading &&
-    Boolean(searchText.trim()) &&
     searchResults.length === 0 &&
     !searchError
+  const showMatchedLineResults = hasSearchIntent && searchResultMode === 'matched-lines'
 
   // --- Render ---
 
   const chatMessages = useMemo(() => [...messages].reverse(), [messages])
+
+  const searchPillsContent =
+    mode === 'search' ? (
+      <SearchModePills
+        searchFilter={searchFilter}
+        resultMode={searchResultMode}
+        onSearchFilterChange={setSearchFilter}
+        onToggleResultMode={() => {
+          setSearchResultMode((current) => (current === 'whole-day' ? 'matched-lines' : 'whole-day'))
+        }}
+      />
+    ) : null
 
   const trayContent =
     mode === 'timeline' ? null : (
@@ -1237,7 +1542,6 @@ export default function Timeline() {
         mode={mode}
         sending={sending}
         chatError={chatError}
-        noSearchResults={noSearchResults}
         onChatSubmit={handleChatSend}
         onSearchTextChange={handleSearchTextChange}
       />
@@ -1252,7 +1556,7 @@ export default function Timeline() {
         </section>
       )}
 
-      {hasNoNotes && (
+      {!hasSearchIntent && hasNoNotes && (
         <EmptyStateHero
           isLogoAnimating={isLogoAnimating}
           heroFontFamily={heroFontFamily}
@@ -1262,8 +1566,30 @@ export default function Timeline() {
         />
       )}
 
+      {!loading && noSearchResults && (
+        <section className="flex min-h-[46vh] items-center justify-center">
+          <p className="text-base font-semibold text-slate-400">No results</p>
+        </section>
+      )}
+
       {/* Main List */}
-      {!loading && !hasNoNotes && activeItems.length > 0 && (
+      {!loading && !hasNoNotes && showMatchedLineResults && searchResults.length > 0 && (
+        <div className="space-y-3">
+          {searchResults.map(({ day, matchedBlocks }) => (
+            <MatchedLinesCard
+              key={day.dayId}
+              day={day}
+              matchedBlocks={matchedBlocks}
+              todayId={todayId}
+              titleFontFamily={titleFontFamily}
+              contentTextStyle={matchedResultsTextStyle}
+              searchQuery={searchQuery}
+            />
+          ))}
+        </div>
+      )}
+
+      {!loading && !hasNoNotes && !showMatchedLineResults && activeItems.length > 0 && (
         <div className="space-y-3">
           {activeItems.map((item) => {
             if (item.type === 'add-today') {
@@ -1346,7 +1672,9 @@ export default function Timeline() {
             const dateError = dateErrors[day.dayId] ?? null
             const quote = highlightedQuote && highlightedQuote.day === day.dayId ? highlightedQuote.quote : null
             const shouldMountEditor =
-              mode === 'search' || mountedDayIds.has(day.dayId) || editorRefs.current.has(day.dayId)
+                (mode === 'search' && searchResultMode === 'whole-day') ||
+                mountedDayIds.has(day.dayId) ||
+                editorRefs.current.has(day.dayId)
 
             return (
               <DayEditorCard
@@ -1410,6 +1738,7 @@ export default function Timeline() {
 
   return (
     <div>
+      {searchPillsContent ? <BottomTrayPortal containerId="bottom-tray-pills">{searchPillsContent}</BottomTrayPortal> : null}
       {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
 
       {showDesktopChatMode ? (

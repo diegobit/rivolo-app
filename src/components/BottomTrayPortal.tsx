@@ -3,14 +3,15 @@ import { createPortal } from 'react-dom'
 
 type BottomTrayPortalProps = {
   children: ReactNode
+  containerId?: string
 }
 
-export default function BottomTrayPortal({ children }: BottomTrayPortalProps) {
+export default function BottomTrayPortal({ children, containerId = 'bottom-tray' }: BottomTrayPortalProps) {
   const [container, setContainer] = useState<HTMLElement | null>(null)
 
   useEffect(() => {
-    setContainer(document.getElementById('bottom-tray'))
-  }, [])
+    setContainer(document.getElementById(containerId))
+  }, [containerId])
 
   if (!container) {
     return null
