@@ -8,7 +8,7 @@ Rivolo (REE-voh-loh) is the Italian word for "small stream". Every day, you writ
 
 Try it here: [rivolo.app](https://rivolo.app)
 
-The app runs in your browser; there's no backend. The only data you "share" is with Gemini, through its APIs, and Dropbox, if you choose to enable syncing.
+Rivolo is a static web app that runs entirely in your browser (no backend). The production app is deployed on Cloudflare Pages. The only data you "share" is with Gemini, through its APIs, and Dropbox, if you choose to enable syncing.
 
 > [!NOTE]
 > The app was completely developed with coding agents. I use it daily. I wrote about this [here](https://diegobit.com/post/rivolo).
