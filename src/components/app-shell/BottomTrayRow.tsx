@@ -33,7 +33,11 @@ export default function BottomTrayRow({
 
   return (
     <>
-      <div className="app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
+      <div
+        className={`app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.75)_20%,black_80%)] ${
+          mode === 'search' ? 'bottom-tray-blur-search' : ''
+        }`}
+      />
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md" />
 
       <div className="app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex items-center justify-center gap-2 px-2 sm:gap-3 sm:px-0">

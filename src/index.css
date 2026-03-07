@@ -779,6 +779,10 @@
   height: calc(8rem + env(safe-area-inset-bottom));
 }
 
+.bottom-tray-blur.bottom-tray-blur-search {
+  height: calc(9rem + env(safe-area-inset-bottom));
+}
+
 .bottom-tray-row {
   bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 0.5rem);
 }
