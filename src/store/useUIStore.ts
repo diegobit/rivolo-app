@@ -27,7 +27,6 @@ export const useUIStore = create<UIState>((set) => ({
   setMode: (mode) =>
     set((state) => ({
       mode,
-      chatPanelOpen: mode === 'chat' && isNarrowViewport() ? true : state.chatPanelOpen,
       desktopChatPanelOpen:
         mode === 'chat' && !isNarrowViewport() ? true : state.desktopChatPanelOpen,
     })),
