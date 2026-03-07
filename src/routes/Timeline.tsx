@@ -255,79 +255,153 @@ const SearchModePills = memo(({
   </div>
 ))
 
-const MatchedLinesCard = memo(({
-  day,
-  matchedBlocks,
-  todayId,
-  titleFontFamily,
-  contentTextStyle,
-  searchQuery,
-}: {
-  day: Day
-  matchedBlocks: string[]
-  todayId: string
-  titleFontFamily: string
-  contentTextStyle: React.CSSProperties
-  searchQuery: string
-}) => {
-  const dayDate = parseDayId(day.dayId)
+const getMatchedResultDayLabel = (dayId: string, todayId: string) => {
+  const dayDate = parseDayId(dayId)
   const todayDate = parseDayId(todayId)
   const diffDays = Math.round((dayDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24))
   const showWeekday = Math.abs(diffDays) <= 6
-  const humanDate = formatHumanDate(day.dayId, todayId, {
+  const humanDate = formatHumanDate(dayId, todayId, {
     includeRelativeLabel: false,
     includeWeekday: showWeekday,
   })
-  const isToday = day.dayId === todayId
-  const isYesterday = day.dayId === addDays(todayId, -1)
-  const isTomorrow = day.dayId === addDays(todayId, 1)
+  const isToday = dayId === todayId
+  const isYesterday = dayId === addDays(todayId, -1)
+  const isTomorrow = dayId === addDays(todayId, 1)
   const relativeLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : isTomorrow ? 'Tomorrow' : null
-  const [datePart, weekdayPart] = humanDate.split(', ')
-  const titleSizeClass = isToday ? 'text-[1.8rem]' : isYesterday || isTomorrow ? 'text-[1.5rem]' : 'text-[1.3rem]'
+
+  if (relativeLabel) {
+    return `${relativeLabel}, ${humanDate}`
+  }
+
+  return humanDate
+}
+
+const HEADING_LINE_REGEX = /^\s{0,3}(#{1,6})\s+/
+const HEADING_PREVIEW_LINE_COUNT = 3
+
+const getHeadingSectionEndIndex = (lines: string[], headingStart: number, headingLevel: number) => {
+  for (let index = headingStart + 1; index < lines.length; index += 1) {
+    const headingMatch = lines[index].match(HEADING_LINE_REGEX)
+    if (headingMatch && headingMatch[1].length <= headingLevel) {
+      return index
+    }
+  }
+
+  return lines.length
+}
+
+const buildHeadingPreview = (sectionLines: string[]) => {
+  if (!sectionLines.length) {
+    return {
+      headingLine: '',
+      displayBlock: '',
+      hasMore: false,
+    }
+  }
+
+  const headingLine = sectionLines[0]
+  const bodyLines = sectionLines.slice(1)
+  const previewBodyLines = bodyLines.slice(0, HEADING_PREVIEW_LINE_COUNT)
+
+  return {
+    headingLine,
+    displayBlock: [headingLine, ...previewBodyLines].join('\n'),
+    hasMore: bodyLines.length > HEADING_PREVIEW_LINE_COUNT,
+  }
+}
+
+const getHeadingPreviewFromSectionBlock = (block: string) => {
+  const sectionLines = block.split('\n').map((line) => line.trimEnd())
+  if (!sectionLines.length) {
+    return null
+  }
+
+  if (!HEADING_LINE_REGEX.test(sectionLines[0])) {
+    return null
+  }
+
+  return buildHeadingPreview(sectionLines)
+}
+
+const getHeadingPreviewFromDay = (day: Day, headingLine: string) => {
+  const normalizedHeadingLine = headingLine.trimEnd()
+  if (!HEADING_LINE_REGEX.test(normalizedHeadingLine)) {
+    return null
+  }
+
+  const lines = day.contentMd.split('\n')
+  const headingIndex = lines.findIndex(
+    (line) => line.trimEnd() === normalizedHeadingLine && HEADING_LINE_REGEX.test(line),
+  )
+  if (headingIndex < 0) {
+    return null
+  }
+
+  const headingMatch = lines[headingIndex].match(HEADING_LINE_REGEX)
+  if (!headingMatch) {
+    return null
+  }
+
+  const sectionEnd = getHeadingSectionEndIndex(lines, headingIndex, headingMatch[1].length)
+  const sectionLines = lines.slice(headingIndex, sectionEnd).map((line) => line.trimEnd())
+  return buildHeadingPreview(sectionLines)
+}
+
+const MatchedLineResultCard = memo(({
+  day,
+  block,
+  openQuote,
+  hasMore,
+  todayId,
+  contentTextStyle,
+  searchQuery,
+  onOpen,
+}: {
+  day: Day
+  block: string
+  openQuote: string
+  hasMore: boolean
+  todayId: string
+  contentTextStyle: React.CSSProperties
+  searchQuery: string
+  onOpen: (dayId: string, quote: string) => void
+}) => {
+  const dayLabel = getMatchedResultDayLabel(day.dayId, todayId)
 
   return (
-    <section className="scroll-anchor rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition hover:border-slate-300/60">
-      <header className="mb-3 flex items-start justify-between gap-3">
-        <h3
-          className={`day-title ${titleSizeClass}`}
-          style={{ fontFamily: titleFontFamily }}
-        >
-          {relativeLabel ? (
-            <>
-              <span className="font-bold text-[#113355]">{relativeLabel}</span>
-              <span className="ml-2 font-normal text-[#8899aa]">{humanDate}</span>
-            </>
-          ) : weekdayPart ? (
-            <>
-              <span className="font-bold text-[#113355]">{datePart}</span>
-              <span className="ml-2 font-normal text-[#8899aa]">{weekdayPart}</span>
-            </>
-          ) : (
-            <span className="font-bold text-[#113355]">{humanDate}</span>
-          )}
-        </h3>
-      </header>
-      <div className="mt-3 overflow-hidden rounded-xl">
-        <div className="space-y-0" style={contentTextStyle}>
-          {matchedBlocks.map((block, blockIndex) => (
-            <div key={`${day.dayId}-${blockIndex}`}>
-              {block.split('\n').map((line, lineIndex) => (
-              <p
-                key={`${day.dayId}-${blockIndex}-${lineIndex}`}
-                className="m-0 whitespace-pre-wrap break-words px-[2px] pl-[6px] text-slate-900"
-              >
-                {line
-                    ? renderSyntaxLine(line, searchQuery, `${day.dayId}-${blockIndex}-${lineIndex}`)
-                    : <span>&nbsp;</span>}
-              </p>
-              ))}
-            </div>
-          ))}
-        </div>
+    <section className="scroll-anchor relative rounded-[4px] border border-slate-200/60 bg-white px-3 py-2.5 pr-14 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition hover:border-slate-300/60">
+      <button
+        className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700 sm:h-9 sm:w-9"
+        type="button"
+        aria-label={`Open note for ${dayLabel}`}
+        onClick={() => onOpen(day.dayId, openQuote)}
+      >
+        <img src="/arrow-square-in.svg" alt="" className="h-5 w-5" />
+      </button>
+      <div className="mb-1.5">
+        <p className="m-0" style={{ ...contentTextStyle, color: '#64748b' }}>
+          {dayLabel}
+        </p>
+      </div>
+      <div className="space-y-0" style={contentTextStyle}>
+        {block.split('\n').map((line, lineIndex) => (
+          <p key={`${day.dayId}-${lineIndex}`} className="m-0 whitespace-pre-wrap break-words px-[2px] pl-[6px] text-slate-900">
+            {line ? renderSyntaxLine(line, searchQuery, `${day.dayId}-${lineIndex}`) : <span>&nbsp;</span>}
+          </p>
+        ))}
+        {hasMore && <p className="m-0 px-[2px] pl-[6px] text-slate-400">...</p>}
       </div>
     </section>
   )
 })
+
+type MatchedLineResultItem = {
+  key: string
+  day: Day
+  block: string
+  openQuote: string
+  hasMore: boolean
+}
 
 const TrayInput = memo(({
   mode,
@@ -1184,7 +1258,7 @@ export default function Timeline() {
     [highlightedQuote, pinDayForEditorMount, scheduleSave, setSearchResults],
   )
 
-  const { handleAssistantMarkdownClick, handleAssistantMarkdownKeyDown } = useCitationNavigation({
+  const { handleCitationClick, handleAssistantMarkdownClick, handleAssistantMarkdownKeyDown } = useCitationNavigation({
     days,
     editorRefs,
     loadDay,
@@ -1521,6 +1595,63 @@ export default function Timeline() {
     searchResults.length === 0 &&
     !searchError
   const showMatchedLineResults = hasSearchIntent && searchResultMode === 'matched-lines'
+  const matchedLineResultItems = useMemo<MatchedLineResultItem[]>(() => {
+    if (!showMatchedLineResults) {
+      return []
+    }
+
+    const items: MatchedLineResultItem[] = []
+    for (const { day, matchedBlocks, blockKind } of searchResults) {
+      matchedBlocks.forEach((block, index) => {
+        if (!block.trim()) {
+          return
+        }
+
+        let displayBlock = block
+        let openQuote = block
+        let hasMore = false
+
+        if (blockKind === 'section') {
+          const preview = getHeadingPreviewFromSectionBlock(block)
+          if (preview?.displayBlock) {
+            displayBlock = preview.displayBlock
+            openQuote = preview.headingLine || block
+            hasMore = preview.hasMore
+          }
+        } else {
+          const trimmedBlock = block.trimEnd()
+          if (HEADING_LINE_REGEX.test(trimmedBlock)) {
+            const preview = getHeadingPreviewFromDay(day, trimmedBlock)
+            if (preview?.displayBlock) {
+              displayBlock = preview.displayBlock
+              openQuote = preview.headingLine || block
+              hasMore = preview.hasMore
+            }
+          }
+        }
+
+        items.push({
+          key: `${day.dayId}-${blockKind}-${index}`,
+          day,
+          block: displayBlock,
+          openQuote,
+          hasMore,
+        })
+      })
+    }
+
+    return items
+  }, [searchResults, showMatchedLineResults])
+
+  const handleOpenMatchedLineResult = useCallback(
+    (dayId: string, quote: string) => {
+      setSearchResultMode('whole-day')
+      requestAnimationFrame(() => {
+        void handleCitationClick({ day: dayId, quote })
+      })
+    },
+    [handleCitationClick],
+  )
 
   // --- Render ---
 
@@ -1575,17 +1706,19 @@ export default function Timeline() {
       )}
 
       {/* Main List */}
-      {!loading && !hasNoNotes && showMatchedLineResults && searchResults.length > 0 && (
+      {!loading && !hasNoNotes && showMatchedLineResults && matchedLineResultItems.length > 0 && (
         <div className="space-y-3">
-          {searchResults.map(({ day, matchedBlocks }) => (
-            <MatchedLinesCard
-              key={day.dayId}
+          {matchedLineResultItems.map(({ key, day, block, openQuote, hasMore }) => (
+            <MatchedLineResultCard
+              key={key}
               day={day}
-              matchedBlocks={matchedBlocks}
+              block={block}
+              openQuote={openQuote}
+              hasMore={hasMore}
               todayId={todayId}
-              titleFontFamily={titleFontFamily}
               contentTextStyle={matchedResultsTextStyle}
               searchQuery={searchQuery}
+              onOpen={handleOpenMatchedLineResult}
             />
           ))}
         </div>
