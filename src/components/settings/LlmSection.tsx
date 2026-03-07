@@ -84,7 +84,7 @@ export default function LlmSection({
           type="text"
           inputMode="text"
           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-          placeholder="gemini-2.5-flash"
+          placeholder="gemini-3-flash-preview"
           value={geminiModel}
           onChange={(event) => onGeminiModelChange(event.target.value)}
         />
