@@ -1,7 +1,8 @@
 import { listDays } from './dayRepository'
 import type { Day } from './dayRepository'
 
-export const buildContextDays = async (_query: string) => {
+export const buildContextDays = async (query: string) => {
+  void query
   const allDays = await listDays(10000) // Get all days
   return allDays
 }

@@ -841,8 +841,10 @@ export default function Timeline() {
   }, [mode, searchFilter, searchText])
 
   useEffect(() => {
+    const pendingTimeouts = saveTimeouts.current
+
     return () => {
-      for (const handle of saveTimeouts.current.values()) {
+      for (const handle of pendingTimeouts.values()) {
         window.clearTimeout(handle)
       }
 
@@ -862,7 +864,7 @@ export default function Timeline() {
     } catch {
       // Ignore auto-push errors
     }
-  }, [canSync, pushToSyncAndRefresh])
+  }, [canSync])
 
   const { sending, chatError, handleChatSend, handleChatInsert, handleNewChat } = useTimelineChat({
     messages,

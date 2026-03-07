@@ -375,7 +375,14 @@ export const useEditorMountWindow = ({
       })
     }
 
-    recomputeMountedEditors(changed ? 'daysPruned' : 'daysChanged')
+    const reason = changed ? 'daysPruned' : 'daysChanged'
+    const frame = window.requestAnimationFrame(() => {
+      recomputeMountedEditors(reason)
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
   }, [days, pendingFocusRef, recomputeMountedEditors])
 
   const setDayOrder = useCallback(
