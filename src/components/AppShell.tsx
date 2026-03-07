@@ -77,6 +77,7 @@ export default function AppShell() {
     <div className="relative flex-1">
       <div
         id="bottom-tray-pills"
+        data-mode={mode}
         className="bottom-tray-pills pointer-events-none absolute bottom-full left-0 right-0 mb-2 flex min-h-0 items-end justify-start"
       />
       <div

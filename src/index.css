@@ -763,6 +763,12 @@
   min-height: 2.25rem;
 }
 
+@media (max-width: 639px) {
+  #bottom-tray-pills[data-mode='search'] {
+    left: -3.25rem;
+  }
+}
+
 #bottom-tray.bottom-tray-shell {
   border-color: #e2e8f0;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);

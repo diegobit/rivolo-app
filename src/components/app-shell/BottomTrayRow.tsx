@@ -29,6 +29,8 @@ export default function BottomTrayRow({
   onToggleDesktopChatPanel,
   onScrollToToday,
 }: BottomTrayRowProps) {
+  const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.1rem]'
+
   return (
     <>
       <div className="app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent,black_40%)]" />
@@ -63,7 +65,7 @@ export default function BottomTrayRow({
         {showScrollToToday && (
           <button
             type="button"
-            className={`absolute top-[-3.1rem] flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:right-0 sm:h-10 sm:w-10 ${
+            className={`absolute ${mobileScrollToTodayTopClass} flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:right-0 sm:h-10 sm:w-10 ${
               showMobileChatTogglePill ? 'right-[3.75rem]' : 'right-2'
             }`}
             aria-label="Scroll to Today"
