@@ -148,13 +148,6 @@ export default function AppShell() {
   }, [showShortcuts])
 
   useEffect(() => {
-    if (isHome) return
-    if (showShortcuts) {
-      setShowShortcuts(false)
-    }
-  }, [isHome, showShortcuts])
-
-  useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
       if (event.metaKey || event.ctrlKey || event.altKey) return
@@ -265,7 +258,7 @@ export default function AppShell() {
           {isHome && (
             <ShortcutsPopover
               shortcutsRef={shortcutsRef}
-              showShortcuts={showShortcuts}
+              showShortcuts={isHome && showShortcuts}
               onToggle={() => setShowShortcuts((prev) => !prev)}
               buttonClassName={topIconButton}
             />

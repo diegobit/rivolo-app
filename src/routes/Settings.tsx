@@ -56,7 +56,7 @@ def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
 \`\`\`
 
 0123456789 ~ !  @  #  $  %  ^  &  *  (  )  _  +  - =
-12*34=56 $\{var\} (a && b) == True
+12*34=56 \${var} (a && b) == True
 `
 
 export default function Settings() {
@@ -107,10 +107,11 @@ export default function Settings() {
   const [dropboxStatus, setDropboxStatus] = useState<string | null>(null)
   const [syncBusy, setSyncBusy] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
-  const [dropboxPath, setDropboxPath] = useState('')
+  const [dropboxPathDraft, setDropboxPathDraft] = useState<string | null>(null)
   const [showFontPreview, setShowFontPreview] = useState(false)
 
   const savedDropboxPath = filePath || DEFAULT_DROPBOX_PATH
+  const dropboxPath = dropboxPathDraft ?? savedDropboxPath
   const isDropboxPathDirty = dropboxPath.trim() !== savedDropboxPath
 
   const handleMonospaceFont = (font: MonospaceFont) => {
@@ -140,10 +141,6 @@ export default function Settings() {
     void loadDropboxState()
     void loadSyncState()
   }, [loadDropboxState, loadSettings, loadSyncState])
-
-  useEffect(() => {
-    setDropboxPath(filePath || DEFAULT_DROPBOX_PATH)
-  }, [filePath])
 
   useEffect(() => {
     const handleStatus = () => setOnline(navigator.onLine)
@@ -306,7 +303,7 @@ export default function Settings() {
         placeholderPath={DEFAULT_DROPBOX_PATH}
         onConnectDropbox={handleConnectDropbox}
         onDisconnectDropbox={handleDisconnectDropbox}
-        onDropboxPathChange={setDropboxPath}
+        onDropboxPathChange={(value) => setDropboxPathDraft(value)}
         onSavePath={() => {
           void updateFilePath(dropboxPath.trim())
         }}

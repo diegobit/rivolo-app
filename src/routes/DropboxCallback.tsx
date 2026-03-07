@@ -9,20 +9,15 @@ export default function DropboxCallback() {
   const [searchParams] = useSearchParams()
   const { loadState: loadDropboxState } = useDropboxStore()
   const { setActiveProvider } = useSyncStore()
-  const [status, setStatus] = useState('Connecting to Dropbox...')
-  const [error, setError] = useState<string | null>(null)
+  const errorParam = searchParams.get('error_description') ?? searchParams.get('error')
+  const code = searchParams.get('code')
+  const state = searchParams.get('state')
+  const initialError = errorParam ? `Dropbox auth failed: ${errorParam}` : code ? null : 'Missing Dropbox authorization code.'
+  const [status, setStatus] = useState(initialError ? 'Dropbox connection could not be completed.' : 'Connecting to Dropbox...')
+  const [error, setError] = useState<string | null>(initialError)
 
   useEffect(() => {
-    const errorParam = searchParams.get('error_description') ?? searchParams.get('error')
-    if (errorParam) {
-      setError(`Dropbox auth failed: ${errorParam}`)
-      return
-    }
-
-    const code = searchParams.get('code')
-    const state = searchParams.get('state')
-    if (!code) {
-      setError('Missing Dropbox authorization code.')
+    if (initialError || !code) {
       return
     }
 
@@ -37,7 +32,7 @@ export default function DropboxCallback() {
         setError(err instanceof Error ? err.message : 'Dropbox connect failed.')
       }
     })()
-  }, [loadDropboxState, navigate, searchParams, setActiveProvider])
+  }, [code, initialError, loadDropboxState, navigate, setActiveProvider, state])
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
