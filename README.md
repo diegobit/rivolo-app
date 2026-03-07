@@ -4,14 +4,14 @@
 
 <p align="center"><em>The no-notes notes app.</em></p>
 
-Rivolo (REE-voh-loh) is the italian word for "small stream". Every day, you add your thought to the current day, without organizing anything. Whenever you need anything complex, ask the LLM to surface what you need.
+Rivolo (REE-voh-loh) is the Italian word for "small stream". Every day, you write your thoughts, ideas, notes and todos without organizing anything. Whenever you need to find something complex, just ask the LLM to surface what you need.
 
 Try it here: [rivolo.app](https://rivolo.app)
 
-The app runs on your browser, there's no backend. The only data you "share" is with Gemini, through their APIs, and Dropbox, if you choose to enable syncing.
+The app runs in your browser; there's no backend. The only data you "share" is with Gemini, through its APIs, and Dropbox, if you choose to enable syncing.
 
 > [!NOTE]
-> The app was completely developed with coding agents. I use the app daily. I wrote about this [here](https://diegobit.com/post/rivolo).
+> The app was completely developed with coding agents. I use it daily. I wrote about this [here](https://diegobit.com/post/rivolo).
 
 ## Run
 
