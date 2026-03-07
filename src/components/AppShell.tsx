@@ -74,12 +74,18 @@ export default function AppShell() {
   )
 
   const trayCenter = (
-    <div
-      id="bottom-tray"
-      data-mode={mode}
-      data-highlight-input={highlightInputMode}
-      className="bottom-tray-shell hero-ui-fade-down flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-2 shadow-[0_6px_18px_rgba(15,23,42,0.12)] transition duration-300 sm:p-3"
-    />
+    <div className="relative flex-1">
+      <div
+        id="bottom-tray-pills"
+        className="bottom-tray-pills pointer-events-none absolute bottom-full left-0 right-0 mb-2 flex min-h-0 items-end justify-start"
+      />
+      <div
+        id="bottom-tray"
+        data-mode={mode}
+        data-highlight-input={highlightInputMode}
+        className="bottom-tray-shell hero-ui-fade-down flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-2 shadow-[0_6px_18px_rgba(15,23,42,0.12)] transition duration-300 sm:p-3"
+      />
+    </div>
   )
 
   useEffect(() => {
