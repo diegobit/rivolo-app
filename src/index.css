@@ -776,7 +776,7 @@
 
 .bottom-tray-blur {
   bottom: var(--keyboard-offset, 0px);
-  height: calc(8rem + env(safe-area-inset-bottom));
+  height: calc(6.5rem + env(safe-area-inset-bottom));
 }
 
 .bottom-tray-blur.bottom-tray-blur-search {
