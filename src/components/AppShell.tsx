@@ -74,6 +74,16 @@ export default function AppShell() {
     </button>
   )
 
+  const modeToggleButton = (
+    <button
+      className={trayIconButton}
+      onClick={() => setMode(mode === 'search' ? 'chat' : 'search')}
+      aria-label={mode === 'search' ? 'Switch to chat' : 'Switch to search'}
+    >
+      <img src={mode === 'search' ? '/sparkle.svg' : '/magnifying-glass.svg'} alt="" className="h-5 w-5" />
+    </button>
+  )
+
   const trayCenter = (
     <div className="relative flex-1">
       <div
@@ -323,6 +333,7 @@ export default function AppShell() {
           mode={mode}
           chatButton={chatButton}
           searchButton={searchButton}
+          modeToggleButton={modeToggleButton}
           trayCenter={trayCenter}
           showMobileChatTogglePill={showMobileChatTogglePill}
           chatPanelOpen={chatPanelOpen}
