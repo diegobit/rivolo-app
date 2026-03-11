@@ -832,7 +832,7 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
 }
 
 #bottom-tray.bottom-tray-shell[data-highlight-input='true'][data-mode='chat']:focus-within {
-  border-color: #f28c94;
+  border-color: #22b3ff;
 }
 
 #bottom-tray.bottom-tray-shell[data-highlight-input='true'][data-mode='search']:focus-within {
@@ -854,7 +854,7 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
 }
 
 #bottom-tray.bottom-tray-shell[data-highlight-input='true'][data-mode='chat']:focus-within .tray-input-icon {
-  background-color: #f28c94;
+  background-color: #22b3ff;
 }
 
 #bottom-tray.bottom-tray-shell[data-highlight-input='true'][data-mode='search']:focus-within .tray-input-icon {
