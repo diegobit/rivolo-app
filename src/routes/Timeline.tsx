@@ -413,25 +413,25 @@ const TrayInput = memo(({
   const [draftText, setDraftText] = useState('')
   const debounceRef = useRef<number | null>(null)
   const prevModeRef = useRef<TrayInputMode>(mode)
+  const isChatMode = mode === 'chat'
 
   const inputConfig = useMemo<TrayInputConfig>(() => {
-    switch (mode) {
-      case 'chat':
-        return {
-          placeholder: 'Ask anything',
-          icon: '/sparkle.svg',
-          id: 'chat-input',
-          enterKeyHint: 'send',
-        }
-      default:
-        return {
-          placeholder: 'Search all days',
-          icon: '/magnifying-glass.svg',
-          id: 'search-input',
-          enterKeyHint: 'search',
-        }
+    if (isChatMode) {
+      return {
+        placeholder: 'Ask anything',
+        icon: '/sparkle.svg',
+        id: 'chat-input',
+        enterKeyHint: 'send',
+      }
     }
-  }, [mode])
+
+    return {
+      placeholder: 'Search all days',
+      icon: '/magnifying-glass.svg',
+      id: 'search-input',
+      enterKeyHint: 'search',
+    }
+  }, [isChatMode])
 
   useEffect(() => {
     if (mode !== 'search') return

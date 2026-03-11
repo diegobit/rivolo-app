@@ -4,6 +4,7 @@ type BottomTrayRowProps = {
   mode: 'timeline' | 'chat' | 'search'
   chatButton: ReactNode
   searchButton: ReactNode
+  modeToggleButton: ReactNode
   trayCenter: ReactNode
   showMobileChatTogglePill: boolean
   chatPanelOpen: boolean
@@ -19,6 +20,7 @@ export default function BottomTrayRow({
   mode,
   chatButton,
   searchButton,
+  modeToggleButton,
   trayCenter,
   showMobileChatTogglePill,
   chatPanelOpen,
@@ -41,11 +43,17 @@ export default function BottomTrayRow({
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md" />
 
       <div className="app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex items-center justify-center gap-2 px-2 sm:gap-3 sm:px-0">
-        {mode !== 'chat' && <Fragment key="chat-btn">{chatButton}</Fragment>}
-        {mode === 'chat' && <Fragment key="tray">{trayCenter}</Fragment>}
-
-        {mode !== 'search' && <Fragment key="search-btn">{searchButton}</Fragment>}
-        {mode === 'search' && <Fragment key="tray">{trayCenter}</Fragment>}
+        {mode === 'timeline' ? (
+          <>
+            <Fragment key="chat-btn">{chatButton}</Fragment>
+            <Fragment key="search-btn">{searchButton}</Fragment>
+          </>
+        ) : (
+          <>
+            <Fragment key="mode-toggle-btn">{modeToggleButton}</Fragment>
+            <Fragment key="tray">{trayCenter}</Fragment>
+          </>
+        )}
 
         {showMobileChatTogglePill && (
           <button
