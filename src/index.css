@@ -355,11 +355,18 @@
     color: #ed9b38;
     font-weight: 600;
     cursor: pointer;
+    border-radius: 4px;
+    margin: 0 -0.16em;
+    padding: 0 0.16em;
+    transition: background-color 120ms ease;
   }
 
   .cm-todo-marker:hover {
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
+    background-color: rgb(237 155 56 / 0.15);
+  }
+
+  .cm-todo-marker:active {
+    background-color: rgb(237 155 56 / 0.3);
   }
 
   .cm-list-marker {
