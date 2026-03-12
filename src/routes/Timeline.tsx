@@ -643,6 +643,7 @@ const EDITOR_HYDRATE_OBSERVER_MARGIN = '70% 0px 90% 0px'
 const EDITOR_PIN_TTL_MS = 20_000
 const EDITOR_PIN_PRUNE_INTERVAL_MS = 4_000
 const LOG_SCOPE = 'TimelinePerf'
+const DELETE_UNDO_WINDOW_MS = 6_000
 
 // --- Component ---
 
@@ -682,7 +683,6 @@ export default function Timeline() {
   } = useUIStore()
   const messages = useChatStore((state) => state.messages)
   const setMessages = useChatStore((state) => state.setMessages)
-  const hasNoNotes = !loading && days.length === 0
 
   // Mode-specific Input State
   const [searchText, setSearchText] = useState('')
@@ -709,6 +709,20 @@ export default function Timeline() {
   const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
   const [isNarrowViewportMode, setIsNarrowViewportMode] = useState(() => isNarrowViewport())
+  const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(null)
+
+  const visibleDays = useMemo(
+    () => (pendingDeleteDayId ? days.filter((day) => day.dayId !== pendingDeleteDayId) : days),
+    [days, pendingDeleteDayId],
+  )
+  const visibleSearchResults = useMemo(
+    () =>
+      pendingDeleteDayId
+        ? searchResults.filter((result) => result.day.dayId !== pendingDeleteDayId)
+        : searchResults,
+    [pendingDeleteDayId, searchResults],
+  )
+  const hasNoNotes = !loading && visibleDays.length === 0
 
   const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
@@ -736,6 +750,9 @@ export default function Timeline() {
   const mobileChatScrollRef = useRef<HTMLDivElement | null>(null)
   const saveTimeouts = useRef(new Map<string, number>())
   const createdDayIdsRef = useRef(new Set<string>())
+  const pendingDeleteTimerRef = useRef<number | null>(null)
+  const pendingDeleteDayIdRef = useRef<string | null>(null)
+  const finalizeDeleteOnUnmountRef = useRef<(dayId: string) => Promise<void>>(async () => {})
   const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
   const addTodayRef = useRef<HTMLDivElement | null>(null)
   const heroLogoRef = useRef<HTMLImageElement | null>(null)
@@ -1017,6 +1034,91 @@ export default function Timeline() {
     }
   }, [canSync])
 
+  const clearPendingDeleteTimer = useCallback(() => {
+    if (pendingDeleteTimerRef.current !== null) {
+      window.clearTimeout(pendingDeleteTimerRef.current)
+      pendingDeleteTimerRef.current = null
+    }
+  }, [])
+
+  const clearPendingSaveTimeout = useCallback((dayId: string) => {
+    const existing = saveTimeouts.current.get(dayId)
+    if (existing) {
+      window.clearTimeout(existing)
+      saveTimeouts.current.delete(dayId)
+    }
+  }, [])
+
+  const clearDateError = useCallback((dayId: string) => {
+    setDateErrors((state) => {
+      if (!state[dayId]) return state
+      const next = { ...state }
+      delete next[dayId]
+      return next
+    })
+  }, [])
+
+  const finalizeDeleteDayNow = useCallback(
+    async (
+      dayId: string,
+      options?: { skipDateErrorCleanup?: boolean; skipSearchResultsCleanup?: boolean },
+    ) => {
+      clearPendingSaveTimeout(dayId)
+      createdDayIdsRef.current.delete(dayId)
+
+      if (!options?.skipDateErrorCleanup) {
+        clearDateError(dayId)
+      }
+
+      if (!options?.skipSearchResultsCleanup) {
+        setSearchResults((state) => state.filter((result) => result.day.dayId !== dayId))
+      }
+      await deleteDay(dayId)
+      await handleAutoPush()
+    },
+    [clearDateError, clearPendingSaveTimeout, deleteDay, handleAutoPush],
+  )
+
+  useEffect(() => {
+    finalizeDeleteOnUnmountRef.current = (dayId: string) =>
+      finalizeDeleteDayNow(dayId, { skipDateErrorCleanup: true, skipSearchResultsCleanup: true })
+  }, [finalizeDeleteDayNow])
+
+  useEffect(() => {
+    return () => {
+      if (pendingDeleteTimerRef.current !== null) {
+        window.clearTimeout(pendingDeleteTimerRef.current)
+        pendingDeleteTimerRef.current = null
+      }
+
+      const pendingDayId = pendingDeleteDayIdRef.current
+      pendingDeleteDayIdRef.current = null
+      if (pendingDayId) {
+        void finalizeDeleteOnUnmountRef.current(pendingDayId)
+      }
+    }
+  }, [])
+
+  const finalizePendingDelete = useCallback(
+    async (dayId: string) => {
+      if (pendingDeleteDayIdRef.current !== dayId) {
+        return
+      }
+
+      clearPendingDeleteTimer()
+      pendingDeleteDayIdRef.current = null
+      await finalizeDeleteDayNow(dayId)
+      setPendingDeleteDayId((current) => (current === dayId ? null : current))
+    },
+    [clearPendingDeleteTimer, finalizeDeleteDayNow],
+  )
+
+  const handleUndoDelete = useCallback(() => {
+    clearPendingDeleteTimer()
+    pendingDeleteDayIdRef.current = null
+    setPendingDeleteDayId(null)
+  }, [clearPendingDeleteTimer])
+
   const { sending, chatError, handleChatSend, handleChatInsert, handleNewChat } = useTimelineChat({
     messages,
     setMessages,
@@ -1149,7 +1251,7 @@ export default function Timeline() {
     recomputeMountedEditors,
     setDayOrder,
   } = useEditorMountWindow({
-    days,
+    days: visibleDays,
     isSearchMode: mode === 'search' && searchResultMode === 'whole-day',
     isTimelineVisible,
     supportsIntersectionObserver,
@@ -1202,6 +1304,11 @@ export default function Timeline() {
       },
     ) => {
       const { focusPosition = 'end', scrollBlock = 'center', focusScroll = true } = options ?? {}
+
+      if (pendingDeleteDayIdRef.current === dayId) {
+        handleUndoDelete()
+      }
+
       pendingFocusRef.current = { dayId, position: focusPosition }
       pinDayForEditorMount(dayId, 'loadDay')
       const result = await loadDay(dayId)
@@ -1216,27 +1323,33 @@ export default function Timeline() {
         pendingFocusRef.current = null
       }
     },
-    [loadDay, pinDayForEditorMount, revealDay],
+    [handleUndoDelete, loadDay, pinDayForEditorMount, revealDay],
   )
 
   const handleDeleteDay = useCallback(
     async (dayId: string) => {
-      const existing = saveTimeouts.current.get(dayId)
-      if (existing) {
-        window.clearTimeout(existing)
-        saveTimeouts.current.delete(dayId)
+      const currentPendingDayId = pendingDeleteDayIdRef.current
+      if (currentPendingDayId && currentPendingDayId !== dayId) {
+        await finalizePendingDelete(currentPendingDayId)
       }
-      createdDayIdsRef.current.delete(dayId)
-      setDateErrors((state) => {
-        if (!state[dayId]) return state
-        const next = { ...state }
-        delete next[dayId]
-        return next
-      })
-      await deleteDay(dayId)
-      await handleAutoPush()
+
+      if (pendingDeleteDayIdRef.current === dayId) {
+        return
+      }
+
+      clearPendingSaveTimeout(dayId)
+      clearPendingDeleteTimer()
+      pendingDeleteDayIdRef.current = dayId
+      setPendingDeleteDayId(dayId)
+
+      pendingDeleteTimerRef.current = window.setTimeout(() => {
+        if (pendingDeleteDayIdRef.current !== dayId) {
+          return
+        }
+        void finalizePendingDelete(dayId)
+      }, DELETE_UNDO_WINDOW_MS)
     },
-    [deleteDay, handleAutoPush],
+    [clearPendingDeleteTimer, clearPendingSaveTimeout, finalizePendingDelete],
   )
 
   const handleEditorBlur = useCallback(
@@ -1252,22 +1365,15 @@ export default function Timeline() {
       const view = editorRefs.current.get(dayId)
       const content = view?.state.doc.toString() ?? ''
       if (!content.trim() && createdDayIdsRef.current.has(dayId)) {
-        if (days.length <= 1) {
+        if (visibleDays.length <= 1) {
           return
         }
-        const existing = saveTimeouts.current.get(dayId)
-        if (existing) {
-          window.clearTimeout(existing)
-          saveTimeouts.current.delete(dayId)
-        }
-        createdDayIdsRef.current.delete(dayId)
-        await deleteDay(dayId)
-        await handleAutoPush()
+        await finalizeDeleteDayNow(dayId)
       }
 
       recomputeMountedEditors('editorBlur')
     },
-    [days, deleteDay, handleAutoPush, recomputeMountedEditors],
+    [finalizeDeleteDayNow, recomputeMountedEditors, visibleDays.length],
   )
 
   const handleDateCommit = useCallback(
@@ -1359,16 +1465,16 @@ export default function Timeline() {
   // --- Computed Data ---
 
   const maxWeekdayOffset = 14
-  const hasToday = useMemo(() => days.some((day) => day.dayId === todayId), [days, todayId])
+  const hasToday = useMemo(() => visibleDays.some((day) => day.dayId === todayId), [todayId, visibleDays])
 
   const futureDayId = useMemo(() => {
-    const existing = new Set(days.map((day) => day.dayId))
+    const existing = new Set(visibleDays.map((day) => day.dayId))
     let candidate = addDays(todayId, 1) // Start from tomorrow
     while (existing.has(candidate)) {
       candidate = addDays(candidate, 1)
     }
     return candidate
-  }, [days, todayId])
+  }, [todayId, visibleDays])
 
   const handleScrollToToday = useCallback(() => {
     if (hasToday) {
@@ -1534,7 +1640,7 @@ export default function Timeline() {
   })
 
   const standardItems = useMemo<TimelineItem[]>(() => {
-    if (days.length === 0) {
+    if (visibleDays.length === 0) {
       return [{ type: 'add-today', dayId: todayId }]
     }
 
@@ -1543,7 +1649,7 @@ export default function Timeline() {
     let addedFutureButton = false
     let addedTodayButton = false
 
-    for (const day of days) {
+    for (const day of visibleDays) {
       const isFutureCard = day.dayId > todayId
       const isPastCard = day.dayId < todayId
 
@@ -1569,12 +1675,12 @@ export default function Timeline() {
     }
 
     return items
-  }, [days, futureDayId, hasToday, todayId])
+  }, [futureDayId, hasToday, todayId, visibleDays])
 
   const activeItems = useMemo<TimelineItem[]>(() => {
     if (hasSearchIntent) {
       if (searchResultMode === 'whole-day') {
-        return searchResults.map(({ day }) => ({
+        return visibleSearchResults.map(({ day }) => ({
           type: 'day',
           day,
         }))
@@ -1584,7 +1690,7 @@ export default function Timeline() {
     }
 
     return standardItems
-  }, [hasSearchIntent, searchResultMode, searchResults, standardItems])
+  }, [hasSearchIntent, searchResultMode, standardItems, visibleSearchResults])
 
   useEffect(() => {
     if (!isHeroRevealHold) return
@@ -1669,7 +1775,7 @@ export default function Timeline() {
   const noSearchResults =
     hasSearchIntent &&
     !searchLoading &&
-    searchResults.length === 0 &&
+    visibleSearchResults.length === 0 &&
     !searchError
   const showMatchedLineResults = hasSearchIntent && searchResultMode === 'matched-lines'
   const matchedLineResultItems = useMemo<MatchedLineResultItem[]>(() => {
@@ -1678,7 +1784,7 @@ export default function Timeline() {
     }
 
     const items: MatchedLineResultItem[] = []
-    for (const { day, matchedBlocks, blockKind } of searchResults) {
+    for (const { day, matchedBlocks, blockKind } of visibleSearchResults) {
       const lineIndexes = blockKind === 'line' ? getMatchedBlockLineIndexes(day.contentMd, matchedBlocks) : null
 
       matchedBlocks.forEach((block, index) => {
@@ -1729,7 +1835,7 @@ export default function Timeline() {
     }
 
     return items
-  }, [searchResults, showMatchedLineResults])
+  }, [showMatchedLineResults, visibleSearchResults])
 
   const handleOpenMatchedLineResult = useCallback(
     (dayId: string, quote: string) => {
@@ -1990,7 +2096,7 @@ export default function Timeline() {
         </div>
       )}
 
-      {!loading && !hasNoNotes && isTimelineVisible && days.length > 0 && (
+      {!loading && !hasNoNotes && isTimelineVisible && visibleDays.length > 0 && (
         <div className="mt-4 space-y-2">
           {hasMorePast && <div ref={olderDaysSentinelRef} className="h-px w-full" aria-hidden="true" />}
 
@@ -2045,6 +2151,29 @@ export default function Timeline() {
         </div>
       ) : (
         timelineContent
+      )}
+
+      {pendingDeleteDayId && (
+        <div className="pointer-events-none fixed left-0 top-[calc(env(safe-area-inset-top)+3.5rem)] z-40 px-3">
+          <div
+            className="pointer-events-auto flex w-[min(12rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-[0_14px_28px_-18px_rgba(15,23,42,0.45)] backdrop-blur-sm"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="truncate text-sm font-medium text-slate-700">Day deleted</span>
+            <button
+              className="group inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#d9efff] px-2 py-1 text-xs font-bold text-[#0b84c6] transition hover:bg-[#22B3FF] hover:text-white"
+              type="button"
+              onClick={handleUndoDelete}
+            >
+              <span
+                aria-hidden="true"
+                className="h-3.5 w-3.5 bg-current [mask-image:url('/arrow-u-up-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/arrow-u-up-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
+              />
+              UNDO
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Mobile chat overlay (Mode A) */}
