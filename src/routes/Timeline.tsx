@@ -78,6 +78,45 @@ const SEARCH_FILTER_OPTIONS: SearchFilterOption[] = [
 const getResultModeLabel = (resultMode: SearchResultMode) =>
   resultMode === 'whole-day' ? 'Days' : 'Lines'
 
+const TODO_LINE_REGEX = /^(\s*-\s+)(\[[ xX]\])(.*)$/
+const TODO_TOGGLE_REGEX = /^(\s*-\s+\[)([ xX])(\].*)$/
+
+const toggleTodoLineMarker = (line: string) => {
+  const match = line.match(TODO_TOGGLE_REGEX)
+  if (!match) {
+    return null
+  }
+
+  const toggledValue = match[2].toLocaleLowerCase() === 'x' ? ' ' : 'x'
+  return `${match[1]}${toggledValue}${match[3]}`
+}
+
+const getMatchedBlockLineIndexes = (contentMd: string, matchedBlocks: string[]) => {
+  const normalizedLines = contentMd.split('\n').map((line) => line.trimEnd())
+  const usedIndexes = new Set<number>()
+
+  return matchedBlocks.map((block) => {
+    const normalizedBlock = block.trimEnd()
+
+    for (let index = 0; index < normalizedLines.length; index += 1) {
+      if (usedIndexes.has(index)) {
+        continue
+      }
+
+      if (normalizedLines[index] === normalizedBlock) {
+        usedIndexes.add(index)
+        return index
+      }
+    }
+
+    return -1
+  })
+}
+
+type RenderSyntaxLineOptions = {
+  onToggleTodo?: () => void
+}
+
 const highlightQueryText = (text: string, query: string, keyPrefix: string) => {
   const trimmed = query.trim()
   if (!trimmed) {
@@ -147,7 +186,7 @@ const renderInlineTokenHighlights = (text: string, query: string, keyPrefix: str
   return nodes.length ? nodes : [text]
 }
 
-const renderSyntaxLine = (line: string, query: string, keyPrefix: string) => {
+const renderSyntaxLine = (line: string, query: string, keyPrefix: string, options?: RenderSyntaxLineOptions) => {
   const headingMatch = line.match(/^(\s{0,3}#{1,6}\s+)(.*)$/)
   if (headingMatch) {
     return (
@@ -160,16 +199,31 @@ const renderSyntaxLine = (line: string, query: string, keyPrefix: string) => {
     )
   }
 
-  const todoMatch = line.match(/^(\s*-\s+)(\[[ xX]\])(.*)$/)
+  const todoMatch = line.match(TODO_LINE_REGEX)
   if (todoMatch) {
+    const todoMarker = highlightQueryText(todoMatch[2], query, `${keyPrefix}-todo-marker`)
+
     return (
       <>
         <span className="font-semibold text-[#b45309]">
           {highlightQueryText(todoMatch[1], query, `${keyPrefix}-todo-list`)}
         </span>
-        <span className="font-semibold text-[#ed9b38]">
-          {highlightQueryText(todoMatch[2], query, `${keyPrefix}-todo-marker`)}
-        </span>
+        {options?.onToggleTodo ? (
+          <button
+            className="-mx-0.5 inline-flex items-center rounded-[4px] px-1 py-0.5 font-semibold text-[#ed9b38] transition hover:bg-[#ed9b38]/15 active:bg-[#ed9b38]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22B3FF]/40"
+            type="button"
+            aria-label="Toggle todo"
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              options.onToggleTodo?.()
+            }}
+          >
+            {todoMarker}
+          </button>
+        ) : (
+          <span className="font-semibold text-[#ed9b38]">{todoMarker}</span>
+        )}
         {renderInlineTokenHighlights(todoMatch[3], query, `${keyPrefix}-todo-text`)}
       </>
     )
@@ -352,19 +406,27 @@ const MatchedLineResultCard = memo(({
   block,
   openQuote,
   hasMore,
+  blockIndex,
+  sourceLineIndex,
+  enableTodoToggle,
   todayId,
   contentTextStyle,
   searchQuery,
   onOpen,
+  onToggleTodo,
 }: {
   day: Day
   block: string
   openQuote: string
   hasMore: boolean
+  blockIndex: number
+  sourceLineIndex: number | null
+  enableTodoToggle: boolean
   todayId: string
   contentTextStyle: React.CSSProperties
   searchQuery: string
   onOpen: (dayId: string, quote: string) => void
+  onToggleTodo: (dayId: string, blockIndex: number, sourceLineIndex: number) => void
 }) => {
   const dayLabel = getMatchedResultDayLabel(day.dayId, todayId)
 
@@ -386,7 +448,20 @@ const MatchedLineResultCard = memo(({
       <div className="space-y-0" style={contentTextStyle}>
         {block.split('\n').map((line, lineIndex) => (
           <p key={`${day.dayId}-${lineIndex}`} className="m-0 whitespace-pre-wrap break-words px-[2px] pl-[6px] text-slate-900">
-            {line ? renderSyntaxLine(line, searchQuery, `${day.dayId}-${lineIndex}`) : <span>&nbsp;</span>}
+            {line
+              ? renderSyntaxLine(
+                  line,
+                  searchQuery,
+                  `${day.dayId}-${lineIndex}`,
+                  enableTodoToggle && sourceLineIndex !== null && lineIndex === 0
+                    ? {
+                        onToggleTodo: () => {
+                          onToggleTodo(day.dayId, blockIndex, sourceLineIndex)
+                        },
+                      }
+                    : undefined,
+                )
+              : <span>&nbsp;</span>}
           </p>
         ))}
         {hasMore && <p className="m-0 px-[2px] pl-[6px] text-slate-400">...</p>}
@@ -401,6 +476,8 @@ type MatchedLineResultItem = {
   block: string
   openQuote: string
   hasMore: boolean
+  blockIndex: number
+  sourceLineIndex: number | null
 }
 
 const TrayInput = memo(({
@@ -1602,6 +1679,8 @@ export default function Timeline() {
 
     const items: MatchedLineResultItem[] = []
     for (const { day, matchedBlocks, blockKind } of searchResults) {
+      const lineIndexes = blockKind === 'line' ? getMatchedBlockLineIndexes(day.contentMd, matchedBlocks) : null
+
       matchedBlocks.forEach((block, index) => {
         if (!block.trim()) {
           return
@@ -1630,12 +1709,21 @@ export default function Timeline() {
           }
         }
 
+        const matchedLineIndex =
+          blockKind === 'line' && lineIndexes
+            ? lineIndexes[index] >= 0
+              ? lineIndexes[index]
+              : null
+            : null
+
         items.push({
           key: `${day.dayId}-${blockKind}-${index}`,
           day,
           block: displayBlock,
           openQuote,
           hasMore,
+          blockIndex: index,
+          sourceLineIndex: matchedLineIndex,
         })
       })
     }
@@ -1653,9 +1741,58 @@ export default function Timeline() {
     [handleCitationClick],
   )
 
+  const handleToggleMatchedLineTodo = useCallback(
+    (dayId: string, blockIndex: number, sourceLineIndex: number) => {
+      let nextContentToSave: string | null = null
+
+      setSearchResults((state) =>
+        state.map((result) => {
+          if (result.day.dayId !== dayId || result.blockKind !== 'line') {
+            return result
+          }
+
+          const lines = result.day.contentMd.split('\n')
+          const currentLine = lines[sourceLineIndex]
+          if (currentLine == null) {
+            return result
+          }
+
+          const toggledLine = toggleTodoLineMarker(currentLine)
+          if (!toggledLine) {
+            return result
+          }
+
+          lines[sourceLineIndex] = toggledLine
+          const nextContent = lines.join('\n')
+          const nextMatchedBlocks = [...result.matchedBlocks]
+          if (blockIndex >= 0 && blockIndex < nextMatchedBlocks.length) {
+            nextMatchedBlocks[blockIndex] = toggledLine.trimEnd()
+          }
+
+          nextContentToSave = nextContent
+
+          return {
+            ...result,
+            day: {
+              ...result.day,
+              contentMd: nextContent,
+            },
+            matchedBlocks: nextMatchedBlocks,
+          }
+        }),
+      )
+
+      if (nextContentToSave !== null) {
+        scheduleSave(dayId, nextContentToSave)
+      }
+    },
+    [scheduleSave],
+  )
+
   // --- Render ---
 
   const chatMessages = useMemo(() => [...messages].reverse(), [messages])
+  const canToggleMatchedResultTodos = showMatchedLineResults && searchFilter === 'open-todos'
 
   const searchPillsContent =
     mode === 'search' ? (
@@ -1708,17 +1845,21 @@ export default function Timeline() {
       {/* Main List */}
       {!loading && !hasNoNotes && showMatchedLineResults && matchedLineResultItems.length > 0 && (
         <div className="space-y-3">
-          {matchedLineResultItems.map(({ key, day, block, openQuote, hasMore }) => (
+          {matchedLineResultItems.map(({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex }) => (
             <MatchedLineResultCard
               key={key}
               day={day}
               block={block}
               openQuote={openQuote}
               hasMore={hasMore}
+              blockIndex={blockIndex}
+              sourceLineIndex={sourceLineIndex}
+              enableTodoToggle={canToggleMatchedResultTodos}
               todayId={todayId}
               contentTextStyle={matchedResultsTextStyle}
               searchQuery={searchQuery}
               onOpen={handleOpenMatchedLineResult}
+              onToggleTodo={handleToggleMatchedLineTodo}
             />
           ))}
         </div>
