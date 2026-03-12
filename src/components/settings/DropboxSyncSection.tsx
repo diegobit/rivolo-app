@@ -124,7 +124,7 @@ export default function DropboxSyncSection({
             onClick={() => onPush(true)}
             disabled={syncBusy || !online || !dropboxSummary.connected}
           >
-            Force overwrite
+            Force overwrite Dropbox from local copy
           </button>
         </div>
         {dropboxStatus && <p className="text-xs text-slate-500">{dropboxStatus}</p>}
