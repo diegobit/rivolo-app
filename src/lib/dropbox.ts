@@ -421,7 +421,7 @@ export const pushToDropbox = async (force = false) => {
   const state = await getDropboxState()
   const path = await resolveDropboxPath(state)
 
-  if (!state.localDirty && !force) {
+  if (!state.localDirty && !force && !state.lastRemoteRev) {
     console.info('[Dropbox] push:clean', { filePath: path })
     return { status: 'clean' as const }
   }
@@ -429,12 +429,19 @@ export const pushToDropbox = async (force = false) => {
   const metadata = await fetchMetadata(path)
 
   if (!force && state.lastRemoteRev && (!metadata || metadata.rev !== state.lastRemoteRev)) {
+    const reason = metadata ? ('remote_changed' as const) : ('remote_missing' as const)
     console.warn('[Dropbox] push:blocked', {
       filePath: path,
       localRev: state.lastRemoteRev,
       remoteRev: metadata?.rev ?? 'missing',
+      reason,
     })
-    return { status: 'blocked' as const, metadata }
+    return { status: 'blocked' as const, reason, metadata }
+  }
+
+  if (!state.localDirty && !force) {
+    console.info('[Dropbox] push:clean', { filePath: path })
+    return { status: 'clean' as const }
   }
 
   const content = await exportMarkdownFromDb()

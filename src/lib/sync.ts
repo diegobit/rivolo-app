@@ -18,9 +18,17 @@ export type SyncPullResult = {
   status: 'noop' | 'pulled'
 }
 
-export type SyncPushResult = {
-  status: 'clean' | 'blocked' | 'pushed'
-}
+export type SyncPushResult =
+  | {
+      status: 'clean'
+    }
+  | {
+      status: 'blocked'
+      reason: 'remote_missing' | 'remote_changed'
+    }
+  | {
+      status: 'pushed'
+    }
 
 export type SyncProvider = {
   id: SyncProviderId
