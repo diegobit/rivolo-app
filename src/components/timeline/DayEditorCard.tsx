@@ -3,7 +3,6 @@ import CodeMirror from '@uiw/react-codemirror'
 import { EditorView, keymap } from '@codemirror/view'
 import type { Extension } from '@codemirror/state'
 import { createHighlightPlugin } from '../../lib/editor/searchHighlight'
-import { snippetKeymap } from '../../lib/editor/snippetExtensions'
 import { todoKeymap, todoPointerHandler } from '../../lib/editor/todoExtensions'
 import { editorHighlights } from '../../lib/editorHighlights'
 import type { Day } from '../../lib/dayRepository'
@@ -160,7 +159,6 @@ const DayEditorCard = memo(({
       clearActiveLine,
       EditorView.lineWrapping,
       navigationKeymap,
-      snippetKeymap,
       todoKeymap,
       todoPointerHandler,
       ...editorHighlights,

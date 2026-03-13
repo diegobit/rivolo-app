@@ -84,24 +84,6 @@ export default function ShortcutsPopover({
                 </div>
                 <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                   <span className="flex items-center gap-1">
-                    <kbd className="kbd">/td</kbd>
-                    <span className="text-slate-400">/</span>
-                    <kbd className="kbd">/todo</kbd>
-                  </span>
-                  <span className="text-slate-400">-&gt;</span>
-                  <span>Line-start TODO snippet</span>
-                </div>
-                <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                  <span className="flex items-center gap-1">
-                    <kbd className="kbd">/cd</kbd>
-                    <span className="text-slate-400">/</span>
-                    <kbd className="kbd">/code</kbd>
-                  </span>
-                  <span className="text-slate-400">-&gt;</span>
-                  <span>Line-start code block snippet</span>
-                </div>
-                <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                  <span className="flex items-center gap-1">
                     <kbd className="kbd">I</kbd>
                   </span>
                   <span className="text-slate-400">-&gt;</span>
