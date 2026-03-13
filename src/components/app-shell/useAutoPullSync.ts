@@ -4,6 +4,7 @@ import { pullFromSyncAndRefresh } from '../../store/syncActions'
 type AutoPullStatus = {
   connected: boolean
   filePath: string | null
+  localDirty: boolean
 }
 
 export const useAutoPullSync = (status: AutoPullStatus) => {
@@ -14,6 +15,7 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
     (reason: 'start' | 'reconnect' | 'visibility') => {
       if (!navigator.onLine) return
       if (!status.connected || !status.filePath) return
+      if (status.localDirty) return
       if (autoPullInFlight.current) return
 
       const now = Date.now()
@@ -22,7 +24,7 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
       autoPullInFlight.current = true
       lastAutoPullAt.current = now
       console.info('[Sync] auto-pull:trigger', { reason })
-      void pullFromSyncAndRefresh()
+      void pullFromSyncAndRefresh({ allowDirty: false })
         .catch(() => {
           // Auto-pull failures are handled by manual sync.
         })
@@ -30,7 +32,7 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
           autoPullInFlight.current = false
         })
     },
-    [status.connected, status.filePath],
+    [status.connected, status.filePath, status.localDirty],
   )
 
   useEffect(() => {

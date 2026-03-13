@@ -1,5 +1,5 @@
 import { exportMarkdownFromDb, importMarkdownToDb } from './importExport'
-import { getDropboxState, updateDropboxState } from './dropboxState'
+import { finalizeDropboxPushState, getDropboxState, updateDropboxState } from './dropboxState'
 import type { DropboxState } from './dropboxState'
 import type { SyncProvider, SyncStatus } from './sync'
 
@@ -447,11 +447,7 @@ export const pushToDropbox = async (force = false) => {
   const content = await exportMarkdownFromDb()
   const upload = await uploadFile(path, content, resolveUploadMode(state.lastRemoteRev, force))
 
-  await updateDropboxState({
-    lastRemoteRev: upload.rev,
-    lastSyncAt: Date.now(),
-    localDirty: false,
-  })
+  await finalizeDropboxPushState(upload.rev, state.localRevision)
 
   console.info('[Dropbox] push:ok', { filePath: path, rev: upload.rev })
   return { status: 'pushed' as const, metadata: upload }

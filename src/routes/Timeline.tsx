@@ -710,17 +710,26 @@ export default function Timeline() {
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
   const [isNarrowViewportMode, setIsNarrowViewportMode] = useState(() => isNarrowViewport())
   const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(null)
+  const [committingDeleteDayIds, setCommittingDeleteDayIds] = useState<string[]>([])
+
+  const hiddenDeleteDayIds = useMemo(() => {
+    const next = new Set(committingDeleteDayIds)
+    if (pendingDeleteDayId) {
+      next.add(pendingDeleteDayId)
+    }
+    return next
+  }, [committingDeleteDayIds, pendingDeleteDayId])
 
   const visibleDays = useMemo(
-    () => (pendingDeleteDayId ? days.filter((day) => day.dayId !== pendingDeleteDayId) : days),
-    [days, pendingDeleteDayId],
+    () => (hiddenDeleteDayIds.size ? days.filter((day) => !hiddenDeleteDayIds.has(day.dayId)) : days),
+    [days, hiddenDeleteDayIds],
   )
   const visibleSearchResults = useMemo(
     () =>
-      pendingDeleteDayId
-        ? searchResults.filter((result) => result.day.dayId !== pendingDeleteDayId)
+      hiddenDeleteDayIds.size
+        ? searchResults.filter((result) => !hiddenDeleteDayIds.has(result.day.dayId))
         : searchResults,
-    [pendingDeleteDayId, searchResults],
+    [hiddenDeleteDayIds, searchResults],
   )
   const hasNoNotes = !loading && visibleDays.length === 0
 
@@ -752,7 +761,10 @@ export default function Timeline() {
   const createdDayIdsRef = useRef(new Set<string>())
   const pendingDeleteTimerRef = useRef<number | null>(null)
   const pendingDeleteDayIdRef = useRef<string | null>(null)
+  const committingDeleteDayIdsRef = useRef(new Set<string>())
+  const finalizeDeleteQueueRef = useRef<Promise<void>>(Promise.resolve())
   const finalizeDeleteOnUnmountRef = useRef<(dayId: string) => Promise<void>>(async () => {})
+  const isMountedRef = useRef(true)
   const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
   const addTodayRef = useRef<HTMLDivElement | null>(null)
   const heroLogoRef = useRef<HTMLImageElement | null>(null)
@@ -1058,6 +1070,28 @@ export default function Timeline() {
     })
   }, [])
 
+  const addCommittingDeleteDay = useCallback((dayId: string) => {
+    if (committingDeleteDayIdsRef.current.has(dayId)) {
+      return
+    }
+
+    committingDeleteDayIdsRef.current.add(dayId)
+    if (isMountedRef.current) {
+      setCommittingDeleteDayIds((state) => (state.includes(dayId) ? state : [...state, dayId]))
+    }
+  }, [])
+
+  const removeCommittingDeleteDay = useCallback((dayId: string) => {
+    if (!committingDeleteDayIdsRef.current.has(dayId)) {
+      return
+    }
+
+    committingDeleteDayIdsRef.current.delete(dayId)
+    if (isMountedRef.current) {
+      setCommittingDeleteDayIds((state) => state.filter((value) => value !== dayId))
+    }
+  }, [])
+
   const finalizeDeleteDayNow = useCallback(
     async (
       dayId: string,
@@ -1066,18 +1100,51 @@ export default function Timeline() {
       clearPendingSaveTimeout(dayId)
       createdDayIdsRef.current.delete(dayId)
 
-      if (!options?.skipDateErrorCleanup) {
+      if (!options?.skipDateErrorCleanup && isMountedRef.current) {
         clearDateError(dayId)
       }
 
-      if (!options?.skipSearchResultsCleanup) {
+      if (!options?.skipSearchResultsCleanup && isMountedRef.current) {
         setSearchResults((state) => state.filter((result) => result.day.dayId !== dayId))
       }
       await deleteDay(dayId)
-      await handleAutoPush()
+      void handleAutoPush()
     },
     [clearDateError, clearPendingSaveTimeout, deleteDay, handleAutoPush],
   )
+
+  const enqueueDeleteFinalization = useCallback(
+    (dayId: string) => {
+      if (committingDeleteDayIdsRef.current.has(dayId)) {
+        return finalizeDeleteQueueRef.current
+      }
+
+      addCommittingDeleteDay(dayId)
+
+      const run = async () => {
+        try {
+          await finalizeDeleteDayNow(dayId)
+        } finally {
+          removeCommittingDeleteDay(dayId)
+        }
+      }
+
+      const queuedRun = finalizeDeleteQueueRef.current.then(run, run)
+      finalizeDeleteQueueRef.current = queuedRun.then(
+        () => undefined,
+        () => undefined,
+      )
+
+      return queuedRun
+    },
+    [addCommittingDeleteDay, finalizeDeleteDayNow, removeCommittingDeleteDay],
+  )
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     finalizeDeleteOnUnmountRef.current = (dayId: string) =>
@@ -1100,17 +1167,17 @@ export default function Timeline() {
   }, [])
 
   const finalizePendingDelete = useCallback(
-    async (dayId: string) => {
+    (dayId: string) => {
       if (pendingDeleteDayIdRef.current !== dayId) {
         return
       }
 
       clearPendingDeleteTimer()
       pendingDeleteDayIdRef.current = null
-      await finalizeDeleteDayNow(dayId)
       setPendingDeleteDayId((current) => (current === dayId ? null : current))
+      void enqueueDeleteFinalization(dayId)
     },
-    [clearPendingDeleteTimer, finalizeDeleteDayNow],
+    [clearPendingDeleteTimer, enqueueDeleteFinalization],
   )
 
   const handleUndoDelete = useCallback(() => {
@@ -1309,6 +1376,10 @@ export default function Timeline() {
         handleUndoDelete()
       }
 
+      if (committingDeleteDayIdsRef.current.has(dayId)) {
+        await finalizeDeleteQueueRef.current
+      }
+
       pendingFocusRef.current = { dayId, position: focusPosition }
       pinDayForEditorMount(dayId, 'loadDay')
       const result = await loadDay(dayId)
@@ -1327,13 +1398,13 @@ export default function Timeline() {
   )
 
   const handleDeleteDay = useCallback(
-    async (dayId: string) => {
+    (dayId: string) => {
       const currentPendingDayId = pendingDeleteDayIdRef.current
       if (currentPendingDayId && currentPendingDayId !== dayId) {
-        await finalizePendingDelete(currentPendingDayId)
+        finalizePendingDelete(currentPendingDayId)
       }
 
-      if (pendingDeleteDayIdRef.current === dayId) {
+      if (pendingDeleteDayIdRef.current === dayId || committingDeleteDayIdsRef.current.has(dayId)) {
         return
       }
 
@@ -1346,7 +1417,7 @@ export default function Timeline() {
         if (pendingDeleteDayIdRef.current !== dayId) {
           return
         }
-        void finalizePendingDelete(dayId)
+        finalizePendingDelete(dayId)
       }, DELETE_UNDO_WINDOW_MS)
     },
     [clearPendingDeleteTimer, clearPendingSaveTimeout, finalizePendingDelete],
