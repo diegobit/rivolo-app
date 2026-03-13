@@ -803,6 +803,26 @@ export default function Timeline() {
           borderLeft: '2px solid #22B3FF',
           borderRadius: '2px',
         },
+        '& .cm-selectionBackground': {
+          backgroundColor: 'rgba(0, 122, 255, 0.22)',
+        },
+        '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
+          backgroundColor: 'rgba(0, 122, 255, 0.32)',
+        },
+        '.cm-content ::selection': {
+          backgroundColor: 'rgba(0, 122, 255, 0.32)',
+        },
+        '.cm-line::selection, .cm-line > span::selection': {
+          backgroundColor: 'rgba(0, 122, 255, 0.32)',
+        },
+        '.cm-selectionMatch': {
+          backgroundColor: 'rgba(148, 163, 184, 0.24)',
+          borderRadius: '3px',
+        },
+        '.cm-selectionMatch-main': {
+          backgroundColor: 'rgba(125, 211, 252, 0.30)',
+          borderRadius: '3px',
+        },
       }),
     [fontPreference, bodyFont, monospaceFont, isIosDevice],
   )
