@@ -1,4 +1,4 @@
-import { Prec, type Line } from '@codemirror/state'
+import { EditorSelection, Prec, type Line } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 
 const TODO_MARKER_REGEX = /^(\s*-\s+\[)([ xX])(\])/
@@ -56,6 +56,9 @@ const toggleTodoAtPos = (view: EditorView, pos: number) => {
 const toggleOrCreateTodosInSelection = (view: EditorView) => {
   const changes: Array<{ from: number; to: number; insert: string }> = []
   const seenLines = new Set<number>()
+  const shouldMoveCursorToEnd =
+    view.state.selection.ranges.length === 1 && view.state.selection.main.empty
+  let nextCursorPos: number | null = null
 
   for (const range of view.state.selection.ranges) {
     const startLine = view.state.doc.lineAt(range.from)
@@ -83,17 +86,32 @@ const toggleOrCreateTodosInSelection = (view: EditorView) => {
         continue
       }
 
+      const todoLineText = createTodoLine(line.text)
       changes.push({
         from: line.from,
         to: line.to,
-        insert: createTodoLine(line.text),
+        insert: todoLineText,
       })
+
+      if (shouldMoveCursorToEnd) {
+        nextCursorPos = line.from + todoLineText.length
+      }
     }
   }
 
   if (!changes.length) return false
   changes.sort((a, b) => a.from - b.from)
-  view.dispatch({ changes })
+
+  if (nextCursorPos == null) {
+    view.dispatch({ changes })
+    return true
+  }
+
+  view.dispatch({
+    changes,
+    selection: EditorSelection.cursor(nextCursorPos),
+    scrollIntoView: true,
+  })
   return true
 }
 
