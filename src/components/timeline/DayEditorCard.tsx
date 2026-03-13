@@ -73,9 +73,7 @@ const DayEditorCard = memo(({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const dateInputRef = useRef<HTMLInputElement | null>(null)
-  const hoverTimeoutRef = useRef<number | null>(null)
   const [showDeleteMenu, setShowDeleteMenu] = useState(false)
-  const [showDesktopDelete, setShowDesktopDelete] = useState(false)
   const searchHighlight = useMemo(() => createHighlightPlugin(searchQuery), [searchQuery])
   const quoteHighlight = useMemo(() => (quote ? createHighlightPlugin(quote) : null), [quote])
   const previewContent = useMemo(() => {
@@ -112,37 +110,6 @@ const DayEditorCard = memo(({
       document.removeEventListener('pointerdown', handlePointerDown)
     }
   }, [showDeleteMenu])
-
-  const clearHoverTimeout = () => {
-    if (hoverTimeoutRef.current) {
-      window.clearTimeout(hoverTimeoutRef.current)
-      hoverTimeoutRef.current = null
-    }
-  }
-
-  const handleHoverStart = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== 'mouse') return
-    setShowDesktopDelete(true)
-    clearHoverTimeout()
-    hoverTimeoutRef.current = window.setTimeout(() => {
-      setShowDesktopDelete(false)
-    }, 10000)
-  }
-
-  const handleHoverEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== 'mouse') return
-    clearHoverTimeout()
-    setShowDesktopDelete(false)
-  }
-
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        window.clearTimeout(hoverTimeoutRef.current)
-        hoverTimeoutRef.current = null
-      }
-    }
-  }, [])
 
   useEffect(() => {
     return () => {
@@ -228,8 +195,6 @@ const DayEditorCard = memo(({
   return (
     <div
       ref={handleContainerRef}
-      onPointerEnter={handleHoverStart}
-      onPointerLeave={handleHoverEnd}
       data-scroll-target={isToday ? 'today' : undefined}
       className={`scroll-anchor group rounded-[4px] border p-4 transition ${
         heroReveal ? 'hero-reveal' : ''
@@ -310,9 +275,7 @@ const DayEditorCard = memo(({
             )}
           </div>
           <button
-            className={`hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:flex touch-hide ${
-              showDesktopDelete ? 'opacity-100' : 'pointer-events-none opacity-0'
-            }`}
+            className="hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white opacity-0 shadow-sm transition hover:border-slate-300 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 sm:flex touch-hide pointer-events-none"
             type="button"
             aria-label="Delete"
             onClick={() => {

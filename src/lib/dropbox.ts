@@ -1,5 +1,5 @@
 import { exportMarkdownFromDb, importMarkdownToDb } from './importExport'
-import { getDropboxState, updateDropboxState } from './dropboxState'
+import { finalizeDropboxPushState, getDropboxState, updateDropboxState } from './dropboxState'
 import type { DropboxState } from './dropboxState'
 import type { SyncProvider, SyncStatus } from './sync'
 
@@ -421,7 +421,7 @@ export const pushToDropbox = async (force = false) => {
   const state = await getDropboxState()
   const path = await resolveDropboxPath(state)
 
-  if (!state.localDirty && !force) {
+  if (!state.localDirty && !force && !state.lastRemoteRev) {
     console.info('[Dropbox] push:clean', { filePath: path })
     return { status: 'clean' as const }
   }
@@ -429,22 +429,25 @@ export const pushToDropbox = async (force = false) => {
   const metadata = await fetchMetadata(path)
 
   if (!force && state.lastRemoteRev && (!metadata || metadata.rev !== state.lastRemoteRev)) {
+    const reason = metadata ? ('remote_changed' as const) : ('remote_missing' as const)
     console.warn('[Dropbox] push:blocked', {
       filePath: path,
       localRev: state.lastRemoteRev,
       remoteRev: metadata?.rev ?? 'missing',
+      reason,
     })
-    return { status: 'blocked' as const, metadata }
+    return { status: 'blocked' as const, reason, metadata }
+  }
+
+  if (!state.localDirty && !force) {
+    console.info('[Dropbox] push:clean', { filePath: path })
+    return { status: 'clean' as const }
   }
 
   const content = await exportMarkdownFromDb()
   const upload = await uploadFile(path, content, resolveUploadMode(state.lastRemoteRev, force))
 
-  await updateDropboxState({
-    lastRemoteRev: upload.rev,
-    lastSyncAt: Date.now(),
-    localDirty: false,
-  })
+  await finalizeDropboxPushState(upload.rev, state.localRevision)
 
   console.info('[Dropbox] push:ok', { filePath: path, rev: upload.rev })
   return { status: 'pushed' as const, metadata: upload }

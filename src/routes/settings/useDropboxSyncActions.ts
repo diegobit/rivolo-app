@@ -2,6 +2,13 @@ import { disconnectActiveProvider } from '../../lib/sync'
 import { startDropboxAuth } from '../../lib/dropbox'
 import { pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../../store/syncActions'
 
+const REMOTE_RECOVERY_MESSAGE =
+  'Dropbox file is missing or invalid. Local data is safe. Use "Restore Dropbox from local" to recreate cloud backup.'
+
+const isRemoteRecoveryError = (message: string) =>
+  message === 'Dropbox file not found. Push to create it first.' ||
+  message === 'Dropbox file has no day markers. Import aborted to avoid data loss.'
+
 type UseDropboxSyncActionsParams = {
   online: boolean
   dropboxConnected: boolean
@@ -62,7 +69,8 @@ export const useDropboxSyncActions = ({
       setDropboxStatus(result.status === 'noop' ? 'No changes on Dropbox.' : 'Pulled and imported.')
     } catch (error) {
       console.warn('[Dropbox] pull:failed', { error })
-      setDropboxStatus(error instanceof Error ? error.message : 'Dropbox pull failed.')
+      const message = error instanceof Error ? error.message : 'Dropbox pull failed.'
+      setDropboxStatus(isRemoteRecoveryError(message) ? REMOTE_RECOVERY_MESSAGE : message)
     } finally {
       setSyncBusy(false)
     }
@@ -76,6 +84,15 @@ export const useDropboxSyncActions = ({
       return
     }
 
+    if (force) {
+      const confirmed = window.confirm(
+        'Restore Dropbox from your local data? This overwrites the Dropbox file contents.',
+      )
+      if (!confirmed) {
+        return
+      }
+    }
+
     setSyncBusy(true)
     try {
       const result = await pushToSyncAndRefresh(force)
@@ -83,7 +100,11 @@ export const useDropboxSyncActions = ({
       if (result.status === 'clean') {
         setDropboxStatus('No local changes to push.')
       } else if (result.status === 'blocked') {
-        setDropboxStatus('Remote changed. Pull first or force overwrite.')
+        setDropboxStatus(
+          result.reason === 'remote_missing'
+            ? 'Dropbox file is missing. Local data is safe. Use "Restore Dropbox from local" to recreate cloud backup.'
+            : 'Dropbox changed remotely. Pull first, or use "Restore Dropbox from local" to overwrite cloud backup.',
+        )
       } else {
         setDropboxStatus('Uploaded to Dropbox.')
       }

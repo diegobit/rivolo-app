@@ -1,7 +1,8 @@
-import { Prec, type Line } from '@codemirror/state'
+import { EditorSelection, Prec, type Line } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 
 const TODO_MARKER_REGEX = /^(\s*-\s+\[)([ xX])(\])/
+const LIST_MARKER_REGEX = /^(\s*)(?:[-+*]|\d+[.)])\s+(.*)$/
 
 const getTodoMarker = (line: Line) => {
   const match = line.text.match(TODO_MARKER_REGEX)
@@ -25,6 +26,18 @@ const getTodoMarker = (line: Line) => {
 
 const getToggleValue = (value: string) => (value.toLowerCase() === 'x' ? ' ' : 'x')
 
+const createTodoLine = (lineText: string) => {
+  const listMatch = lineText.match(LIST_MARKER_REGEX)
+  if (listMatch) {
+    const content = listMatch[2].trimEnd()
+    return content ? `${listMatch[1]}- [ ] ${content}` : `${listMatch[1]}- [ ] `
+  }
+
+  const indentation = lineText.match(/^\s*/)?.[0] ?? ''
+  const content = lineText.slice(indentation.length).trimEnd()
+  return content ? `${indentation}- [ ] ${content}` : `${indentation}- [ ] `
+}
+
 const toggleTodoAtPos = (view: EditorView, pos: number) => {
   const line = view.state.doc.lineAt(pos)
   const marker = getTodoMarker(line)
@@ -40,34 +53,65 @@ const toggleTodoAtPos = (view: EditorView, pos: number) => {
   return true
 }
 
-const toggleTodosInSelection = (view: EditorView) => {
+const toggleOrCreateTodosInSelection = (view: EditorView) => {
   const changes: Array<{ from: number; to: number; insert: string }> = []
-  const seen = new Set<number>()
+  const seenLines = new Set<number>()
+  const shouldMoveCursorToEnd =
+    view.state.selection.ranges.length === 1 && view.state.selection.main.empty
+  let nextCursorPos: number | null = null
+
   for (const range of view.state.selection.ranges) {
     const startLine = view.state.doc.lineAt(range.from)
     const endLine = view.state.doc.lineAt(range.to)
+
     for (let number = startLine.number; number <= endLine.number; number += 1) {
       const line = view.state.doc.line(number)
-      const marker = getTodoMarker(line)
-      if (!marker) continue
+
       const isCursor = range.from === range.to
       if (!isCursor) {
         const lineIntersects = range.from < line.to && range.to > line.from
         if (!lineIntersects) continue
       }
-      if (seen.has(marker.toggleFrom)) continue
-      seen.add(marker.toggleFrom)
+
+      if (seenLines.has(line.number)) continue
+      seenLines.add(line.number)
+
+      const marker = getTodoMarker(line)
+      if (marker) {
+        changes.push({
+          from: marker.toggleFrom,
+          to: marker.toggleTo,
+          insert: getToggleValue(marker.value),
+        })
+        continue
+      }
+
+      const todoLineText = createTodoLine(line.text)
       changes.push({
-        from: marker.toggleFrom,
-        to: marker.toggleTo,
-        insert: getToggleValue(marker.value),
+        from: line.from,
+        to: line.to,
+        insert: todoLineText,
       })
+
+      if (shouldMoveCursorToEnd) {
+        nextCursorPos = line.from + todoLineText.length
+      }
     }
   }
 
   if (!changes.length) return false
   changes.sort((a, b) => a.from - b.from)
-  view.dispatch({ changes })
+
+  if (nextCursorPos == null) {
+    view.dispatch({ changes })
+    return true
+  }
+
+  view.dispatch({
+    changes,
+    selection: EditorSelection.cursor(nextCursorPos),
+    scrollIntoView: true,
+  })
   return true
 }
 
@@ -95,7 +139,7 @@ export const todoKeymap = Prec.high(
   keymap.of([
     {
       key: 'Mod-Enter',
-      run: (view) => toggleTodosInSelection(view),
+      run: (view) => toggleOrCreateTodosInSelection(view),
     },
   ]),
 )
