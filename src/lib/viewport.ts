@@ -1,4 +1,4 @@
-export const NARROW_VIEWPORT_MEDIA_QUERY = '(max-width: 767px)'
+export const NARROW_VIEWPORT_MEDIA_QUERY = '(max-width: 699px)'
 
 export const isNarrowViewport = () => {
   if (typeof window === 'undefined') {

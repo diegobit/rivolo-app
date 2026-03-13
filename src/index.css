@@ -192,7 +192,7 @@
   }
 
   @supports not (scrollbar-gutter: stable) {
-    @media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+    @media (min-width: 700px) and (hover: hover) and (pointer: fine) {
       html {
         overflow-y: scroll;
       }
@@ -355,11 +355,18 @@
     color: #ed9b38;
     font-weight: 600;
     cursor: pointer;
+    border-radius: 4px;
+    margin: 0 -0.16em;
+    padding: 0 0.16em;
+    transition: background-color 120ms ease;
   }
 
   .cm-todo-marker:hover {
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
+    background-color: rgb(237 155 56 / 0.15);
+  }
+
+  .cm-todo-marker:active {
+    background-color: rgb(237 155 56 / 0.3);
   }
 
   .cm-list-marker {
@@ -623,7 +630,7 @@
     width: min(96vw, 620px);
   }
 
-  @media (min-width: 768px) {
+  @media (min-width: 700px) {
     .app-shell-root {
       --desktop-chat-sidebar-width: clamp(300px, 40vw, 600px);
       --desktop-chat-shift: 0px;
@@ -776,7 +783,7 @@
 
 .bottom-tray-blur {
   bottom: var(--keyboard-offset, 0px);
-  height: calc(8rem + env(safe-area-inset-bottom));
+  height: calc(6.5rem + env(safe-area-inset-bottom));
 }
 
 .bottom-tray-blur.bottom-tray-blur-search {
@@ -787,7 +794,7 @@
   bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 0.5rem);
 }
 
-@media (min-width: 768px) {
+@media (min-width: 700px) {
   .bottom-tray-row {
     bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1.5rem);
   }
