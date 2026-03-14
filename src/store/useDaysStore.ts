@@ -30,8 +30,8 @@ type DaysState = {
 }
 
 const RECENT_WINDOW_DAYS = 31
-const INITIAL_MIN_DAYS = 25
-const OLDER_PAGE_SIZE = 15
+const INITIAL_MIN_DAYS = 15
+const OLDER_PAGE_SIZE = 10
 const LOG_SCOPE = 'DaysStorePerf'
 
 const getErrorMessage = (error: unknown) => {
