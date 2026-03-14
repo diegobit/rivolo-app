@@ -712,6 +712,14 @@ export default function Timeline() {
   const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(null)
   const [committingDeleteDayIds, setCommittingDeleteDayIds] = useState<string[]>([])
 
+  useEffect(() => {
+    if (!isNarrowViewportMode) return
+    if (mode !== 'chat') return
+    if (messages.length > 0) return
+    if (!chatPanelOpen) return
+    setChatPanelOpen(false)
+  }, [chatPanelOpen, isNarrowViewportMode, messages.length, mode, setChatPanelOpen])
+
   const hiddenDeleteDayIds = useMemo(() => {
     const next = new Set(committingDeleteDayIds)
     if (pendingDeleteDayId) {
