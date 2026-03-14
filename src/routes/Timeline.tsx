@@ -738,7 +738,7 @@ export default function Timeline() {
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
   const hasSearchIntent = mode === 'search' && (Boolean(searchQuery) || Boolean(searchFilter))
-  const isTimelineVisible = mode !== 'search'
+  const isTimelineVisible = mode !== 'search' || !hasSearchIntent
   const hasChatMessages = messages.length > 0
   const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode && hasChatMessages
   const showDesktopChatPanel = showDesktopChatMode && desktopChatPanelOpen
