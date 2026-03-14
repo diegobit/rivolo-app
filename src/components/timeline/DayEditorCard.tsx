@@ -275,7 +275,7 @@ const DayEditorCard = memo(({
             )}
           </div>
           <button
-            className="hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white opacity-0 shadow-sm transition hover:border-slate-300 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 sm:flex touch-hide pointer-events-none"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white opacity-0 shadow-sm transition hover:border-slate-300 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 touch-hide pointer-events-none"
             type="button"
             aria-label="Delete"
             onClick={() => {
