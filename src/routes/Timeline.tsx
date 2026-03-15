@@ -67,10 +67,10 @@ type TrayInputConfig = {
   enterKeyHint: 'send' | 'search'
 }
 
-const CHAT_TEXTAREA_MIN_HEIGHT_PX = 36
+const CHAT_TEXTAREA_MIN_HEIGHT_PX = 40
 const CHAT_TEXTAREA_MAX_HEIGHT_PX = 136
 const CHAT_TEXTAREA_EXPANDED_DELTA_PX = 4
-const CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX = 40
+const CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX = CHAT_TEXTAREA_MIN_HEIGHT_PX
 
 const SEARCH_FILTER_OPTIONS: SearchFilterOption[] = [
   { value: 'open-todos', label: 'TODOs' },
@@ -498,9 +498,8 @@ const TrayInput = memo(({
   const chatTextareaSingleLineHeightRef = useRef(0)
   const isChatMode = mode === 'chat'
   const hasSearchText = draftText.trim().length > 0
-  const trayFormAlignmentClass = isChatMode ? 'items-end' : 'items-center'
   const trayFieldClassName =
-    'w-full h-9 rounded-full appearance-none bg-transparent py-1.5 pl-3 pr-3 text-base leading-6 outline-none placeholder:text-slate-400'
+    'block w-full h-10 rounded-full appearance-none bg-transparent py-2 pl-3 pr-3 text-base leading-6 outline-none placeholder:text-slate-400'
 
   const inputConfig = useMemo<TrayInputConfig>(() => {
     if (isChatMode) {
@@ -614,7 +613,7 @@ const TrayInput = memo(({
 
   return (
     <div className="relative">
-      <form className={`flex ${trayFormAlignmentClass} gap-3`} onSubmit={handleSubmit}>
+      <form className="flex items-end gap-3" onSubmit={handleSubmit}>
         <div className="relative flex-1">
           <p
             className={`absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
@@ -661,12 +660,16 @@ const TrayInput = memo(({
               enterKeyHint={inputConfig.enterKeyHint}
             />
           ) : (
-            <input
+            <textarea
               id={inputConfig.id}
               autoComplete="off"
-              type="text"
+              rows={1}
               inputMode="text"
-              className={trayFieldClassName}
+              className={`${trayFieldClassName} resize-none overflow-hidden`}
+              style={{
+                minHeight: `${CHAT_TEXTAREA_MIN_HEIGHT_PX}px`,
+                maxHeight: `${CHAT_TEXTAREA_MIN_HEIGHT_PX}px`,
+              }}
               placeholder={inputConfig.placeholder}
               value={draftText}
               onChange={(event) => {
@@ -675,6 +678,11 @@ const TrayInput = memo(({
               onKeyDown={(event) => {
                 if (event.key === 'Escape') {
                   event.currentTarget.blur()
+                  return
+                }
+
+                if (event.key === 'Enter') {
+                  event.preventDefault()
                 }
               }}
               enterKeyHint={inputConfig.enterKeyHint}
