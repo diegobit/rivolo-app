@@ -152,12 +152,23 @@ const DayEditorCard = memo(({
     [nextDayId, onFocusDay, previousDayId],
   )
 
+  const writingAssistAttributes = useMemo(
+    () =>
+      EditorView.contentAttributes.of({
+        spellcheck: 'true',
+        autocorrect: 'on',
+        autocapitalize: 'sentences',
+      }),
+    [],
+  )
+
   const editorExtensions = useMemo(() => {
     const extensions: Extension[] = [
       markdownExtension,
       editorTheme,
       clearActiveLine,
       EditorView.lineWrapping,
+      writingAssistAttributes,
       navigationKeymap,
       todoKeymap,
       todoPointerHandler,
@@ -170,7 +181,15 @@ const DayEditorCard = memo(({
       extensions.push(quoteHighlight)
     }
     return extensions
-  }, [clearActiveLine, editorTheme, markdownExtension, navigationKeymap, quoteHighlight, searchHighlight])
+  }, [
+    clearActiveLine,
+    editorTheme,
+    markdownExtension,
+    navigationKeymap,
+    quoteHighlight,
+    searchHighlight,
+    writingAssistAttributes,
+  ])
 
   const handleOpenDatePicker = () => {
     const input = dateInputRef.current
