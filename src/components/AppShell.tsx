@@ -282,7 +282,7 @@ export default function AppShell() {
                 window.dispatchEvent(new CustomEvent(TIMELINE_NEW_CHAT_EVENT))
               }}
             >
-              <img src="/pencil-simple-line.svg" alt="" className="h-5 w-5" />
+              <img src="/eraser.svg" alt="" className="h-5 w-5" />
             </button>
           )}
         </div>
