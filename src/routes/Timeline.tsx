@@ -63,10 +63,13 @@ type TrayInputProps = {
 
 type TrayInputConfig = {
   placeholder: string
-  icon: string
   id: string
   enterKeyHint: 'send' | 'search'
 }
+
+const CHAT_TEXTAREA_MIN_HEIGHT_PX = 36
+const CHAT_TEXTAREA_MAX_HEIGHT_PX = 136
+const CHAT_TEXTAREA_EXPANDED_DELTA_PX = 4
 
 const SEARCH_FILTER_OPTIONS: SearchFilterOption[] = [
   { value: 'open-todos', label: 'TODOs' },
@@ -490,13 +493,16 @@ const TrayInput = memo(({
   const [draftText, setDraftText] = useState('')
   const debounceRef = useRef<number | null>(null)
   const prevModeRef = useRef<TrayInputMode>(mode)
+  const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const isChatMode = mode === 'chat'
+  const hasSearchText = draftText.trim().length > 0
+  const trayFormAlignmentClass = isChatMode ? 'items-end' : 'items-center'
+  const trayFieldClassName = 'w-full h-9 rounded-full bg-transparent py-1.5 pl-3 pr-3 text-base leading-6 outline-none'
 
   const inputConfig = useMemo<TrayInputConfig>(() => {
     if (isChatMode) {
       return {
         placeholder: 'Ask anything',
-        icon: '/sparkle.svg',
         id: 'chat-input',
         enterKeyHint: 'send',
       }
@@ -504,11 +510,49 @@ const TrayInput = memo(({
 
     return {
       placeholder: 'Search all days',
-      icon: '/magnifying-glass.svg',
       id: 'search-input',
       enterKeyHint: 'search',
     }
   }, [isChatMode])
+
+  const syncChatTextareaHeight = useCallback(() => {
+    const textarea = chatTextareaRef.current
+    if (!textarea) {
+      return
+    }
+
+    textarea.style.height = 'auto'
+    const measuredHeight = textarea.scrollHeight
+    const singleLineCeiling = CHAT_TEXTAREA_MIN_HEIGHT_PX + CHAT_TEXTAREA_EXPANDED_DELTA_PX
+    const nextHeight = Math.min(
+      measuredHeight <= singleLineCeiling ? CHAT_TEXTAREA_MIN_HEIGHT_PX : measuredHeight,
+      CHAT_TEXTAREA_MAX_HEIGHT_PX,
+    )
+    textarea.style.height = `${nextHeight}px`
+    textarea.style.overflowY = textarea.scrollHeight > CHAT_TEXTAREA_MAX_HEIGHT_PX ? 'auto' : 'hidden'
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!isChatMode) {
+      return
+    }
+
+    syncChatTextareaHeight()
+  }, [draftText, isChatMode, syncChatTextareaHeight])
+
+  const submitChatDraft = useCallback(async () => {
+    if (mode !== 'chat' || sending) {
+      return
+    }
+
+    const trimmed = draftText.trim()
+    if (!trimmed) {
+      return
+    }
+
+    setDraftText('')
+    await onChatSubmit(trimmed)
+  }, [draftText, mode, onChatSubmit, sending])
 
   useEffect(() => {
     if (mode !== 'search') return
@@ -540,13 +584,8 @@ const TrayInput = memo(({
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-
-    const trimmed = draftText.trim()
-    if (!trimmed) return
-
     if (mode === 'chat') {
-      setDraftText('')
-      await onChatSubmit(draftText)
+      await submitChatDraft()
       return
     }
   }
@@ -564,7 +603,7 @@ const TrayInput = memo(({
 
   return (
     <div className="relative">
-      <form className="flex items-center gap-3" onSubmit={handleSubmit}>
+      <form className={`flex ${trayFormAlignmentClass} gap-3`} onSubmit={handleSubmit}>
         <div className="relative flex-1">
           <p
             className={`absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
@@ -574,36 +613,66 @@ const TrayInput = memo(({
           >
             {chatError}
           </p>
-          <span
-            aria-hidden="true"
-            className="tray-input-icon pointer-events-none absolute left-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 opacity-80 sm:block"
-            style={{
-              maskImage: `url(${inputConfig.icon})`,
-              WebkitMaskImage: `url(${inputConfig.icon})`,
-            }}
-          />
-          <input
-            id={inputConfig.id}
-            autoComplete="off"
-            type="text"
-            inputMode="text"
-            className="w-full rounded-full bg-transparent py-2 pl-3 pr-3 text-base outline-none sm:pl-10"
-            placeholder={inputConfig.placeholder}
-            value={draftText}
-            onChange={(event) => {
-              setDraftText(event.target.value)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.currentTarget.blur()
-              }
-            }}
-            enterKeyHint={inputConfig.enterKeyHint}
-          />
+          {isChatMode ? (
+            <textarea
+              id={inputConfig.id}
+              ref={chatTextareaRef}
+              autoComplete="off"
+              rows={1}
+              inputMode="text"
+              className={`${trayFieldClassName} resize-none`}
+              style={{
+                minHeight: `${CHAT_TEXTAREA_MIN_HEIGHT_PX}px`,
+                maxHeight: `${CHAT_TEXTAREA_MAX_HEIGHT_PX}px`,
+              }}
+              placeholder={inputConfig.placeholder}
+              value={draftText}
+              onChange={(event) => {
+                setDraftText(event.target.value)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.currentTarget.blur()
+                  return
+                }
+
+                if (event.key !== 'Enter' || event.shiftKey) {
+                  return
+                }
+
+                if (event.metaKey || event.ctrlKey || event.altKey || event.nativeEvent.isComposing) {
+                  return
+                }
+
+                event.preventDefault()
+                void submitChatDraft()
+              }}
+              enterKeyHint={inputConfig.enterKeyHint}
+            />
+          ) : (
+            <input
+              id={inputConfig.id}
+              autoComplete="off"
+              type="text"
+              inputMode="text"
+              className={trayFieldClassName}
+              placeholder={inputConfig.placeholder}
+              value={draftText}
+              onChange={(event) => {
+                setDraftText(event.target.value)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.currentTarget.blur()
+                }
+              }}
+              enterKeyHint={inputConfig.enterKeyHint}
+            />
+          )}
         </div>
         {mode === 'chat' && (
           <button
-            className={`flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition ${
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm transition ${
               draftText.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
             }`}
             type="submit"
@@ -618,19 +687,23 @@ const TrayInput = memo(({
             />
           </button>
         )}
-        {mode === 'search' && draftText.trim() && (
-          <button
-            className="group flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-500"
-            type="button"
-            aria-label="Clear search"
-            onClick={handleClearSearch}
-          >
-            <img
-              src="/plus.svg"
-              alt=""
-              className="h-4 w-4 rotate-45  [filter:invert(0.5)] group-hover:[filter:invert(1)]"
-            />
-          </button>
+        {mode === 'search' && (
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+            {hasSearchText ? (
+              <button
+                className="group flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-500"
+                type="button"
+                aria-label="Clear search"
+                onClick={handleClearSearch}
+              >
+                <img
+                  src="/plus.svg"
+                  alt=""
+                  className="h-4 w-4 rotate-45  [filter:invert(0.5)] group-hover:[filter:invert(1)]"
+                />
+              </button>
+            ) : null}
+          </div>
         )}
       </form>
     </div>
@@ -2291,8 +2364,8 @@ export default function Timeline() {
               className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
               style={{
                 paddingTop: 'calc(env(safe-area-inset-top) + 4rem)',
-                paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 8rem)',
-                scrollPaddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 8rem)',
+                paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
+                scrollPaddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
               }}
             >
               <ChatMessageList

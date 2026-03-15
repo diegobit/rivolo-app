@@ -175,6 +175,14 @@
   :root {
     color-scheme: light;
     --keyboard-offset: 0px;
+    --bottom-tray-height: 3.5rem;
+    --bottom-tray-radius: 28px;
+  }
+
+  @media (min-width: 700px) {
+    :root {
+      --bottom-tray-radius: 32px;
+    }
   }
 
   * {
@@ -189,6 +197,31 @@
 
   html {
     scrollbar-gutter: stable;
+  }
+
+  html,
+  body,
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.42) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: rgba(148, 163, 184, 0.42);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
   }
 
   @supports not (scrollbar-gutter: stable) {
@@ -778,16 +811,17 @@
 
 #bottom-tray.bottom-tray-shell {
   border-color: #e2e8f0;
+  border-radius: var(--bottom-tray-radius, 28px);
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
 }
 
 .bottom-tray-blur {
   bottom: var(--keyboard-offset, 0px);
-  height: calc(6.5rem + env(safe-area-inset-bottom));
+  height: calc(var(--bottom-tray-height, 3.5rem) + env(safe-area-inset-bottom) + 3rem);
 }
 
 .bottom-tray-blur.bottom-tray-blur-search {
-  height: calc(9rem + env(safe-area-inset-bottom));
+  height: calc(var(--bottom-tray-height, 3.5rem) + env(safe-area-inset-bottom) + 5.5rem);
 }
 
 .bottom-tray-row {
@@ -844,28 +878,6 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
 
 #bottom-tray.bottom-tray-shell[data-highlight-input='true'][data-mode='search']:focus-within {
   border-color: #e1b737;
-}
-
-#bottom-tray.bottom-tray-shell .tray-input-icon {
-  background-color: #94a3b8;
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-}
-
-#bottom-tray.bottom-tray-shell[data-highlight-input='true'][data-mode='timeline']:focus-within .tray-input-icon {
-  background-color: #73cb01;
-}
-
-#bottom-tray.bottom-tray-shell[data-highlight-input='true'][data-mode='chat']:focus-within .tray-input-icon {
-  background-color: #22b3ff;
-}
-
-#bottom-tray.bottom-tray-shell[data-highlight-input='true'][data-mode='search']:focus-within .tray-input-icon {
-  background-color: #e1b737;
 }
 
 .scroll-anchor {

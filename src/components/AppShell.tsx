@@ -20,6 +20,7 @@ const trayIconButton =
   'flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:h-10 sm:w-10'
 const backButtonClass =
   'flex h-11 w-11 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90 sm:h-9 sm:w-9'
+const MIN_BOTTOM_TRAY_HEIGHT_PX = 56
 
 export default function AppShell() {
   const location = useLocation()
@@ -143,6 +144,48 @@ export default function AppShell() {
   useEffect(() => {
     document.body.dataset.wallpaper = wallpaper
   }, [wallpaper])
+
+  useEffect(() => {
+    const rootStyle = document.documentElement.style
+
+    if (!showTrayRow) {
+      rootStyle.removeProperty('--bottom-tray-height')
+      return
+    }
+
+    const tray = document.getElementById('bottom-tray')
+    if (!tray) {
+      rootStyle.removeProperty('--bottom-tray-height')
+      return
+    }
+
+    const syncBottomTrayHeight = () => {
+      const nextHeight = Math.max(Math.round(tray.getBoundingClientRect().height), MIN_BOTTOM_TRAY_HEIGHT_PX)
+      rootStyle.setProperty('--bottom-tray-height', `${nextHeight}px`)
+    }
+
+    syncBottomTrayHeight()
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', syncBottomTrayHeight)
+      return () => {
+        window.removeEventListener('resize', syncBottomTrayHeight)
+        rootStyle.removeProperty('--bottom-tray-height')
+      }
+    }
+
+    const observer = new ResizeObserver(() => {
+      syncBottomTrayHeight()
+    })
+    observer.observe(tray)
+    window.addEventListener('resize', syncBottomTrayHeight)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', syncBottomTrayHeight)
+      rootStyle.removeProperty('--bottom-tray-height')
+    }
+  }, [showTrayRow])
 
   useKeyboardOffsetCssVar()
   useAutoPullSync(syncStatus)
