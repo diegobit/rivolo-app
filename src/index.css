@@ -656,7 +656,7 @@
   }
 
   .app-shell-fixed-header-width {
-    width: min(96vw, 720px);
+    width: min(96vw, 620px);
   }
 
   .app-shell-fixed-tray-width {
