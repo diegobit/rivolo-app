@@ -32,6 +32,8 @@ export default function BottomTrayRow({
   onScrollToToday,
 }: BottomTrayRowProps) {
   const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.1rem]'
+  const trayRowAlignmentClass = mode === 'timeline' ? 'items-center' : 'items-end'
+  const modeToggleOffsetClassName = mode === 'timeline' ? '' : 'mb-1.5 sm:mb-3'
 
   return (
     <>
@@ -42,7 +44,7 @@ export default function BottomTrayRow({
       />
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-white/30 backdrop-blur-md" />
 
-      <div className="app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex items-center justify-center gap-2 px-2 sm:gap-3 sm:px-0">
+      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${trayRowAlignmentClass} justify-center gap-2 px-2 sm:gap-3 sm:px-0`}>
         {mode === 'timeline' ? (
           <>
             <Fragment key="chat-btn">{chatButton}</Fragment>
@@ -50,7 +52,9 @@ export default function BottomTrayRow({
           </>
         ) : (
           <>
-            <Fragment key="mode-toggle-btn">{modeToggleButton}</Fragment>
+            <Fragment key="mode-toggle-btn">
+              <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>
+            </Fragment>
             <Fragment key="tray">{trayCenter}</Fragment>
           </>
         )}
