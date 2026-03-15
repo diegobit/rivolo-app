@@ -70,6 +70,7 @@ type TrayInputConfig = {
 const CHAT_TEXTAREA_MIN_HEIGHT_PX = 36
 const CHAT_TEXTAREA_MAX_HEIGHT_PX = 136
 const CHAT_TEXTAREA_EXPANDED_DELTA_PX = 4
+const CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX = 40
 
 const SEARCH_FILTER_OPTIONS: SearchFilterOption[] = [
   { value: 'open-todos', label: 'TODOs' },
@@ -494,10 +495,12 @@ const TrayInput = memo(({
   const debounceRef = useRef<number | null>(null)
   const prevModeRef = useRef<TrayInputMode>(mode)
   const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const chatTextareaSingleLineHeightRef = useRef(0)
   const isChatMode = mode === 'chat'
   const hasSearchText = draftText.trim().length > 0
   const trayFormAlignmentClass = isChatMode ? 'items-end' : 'items-center'
-  const trayFieldClassName = 'w-full h-9 rounded-full bg-transparent py-1.5 pl-3 pr-3 text-base leading-6 outline-none'
+  const trayFieldClassName =
+    'w-full h-9 rounded-full appearance-none bg-transparent py-1.5 pl-3 pr-3 text-base leading-6 outline-none placeholder:text-slate-400'
 
   const inputConfig = useMemo<TrayInputConfig>(() => {
     if (isChatMode) {
@@ -523,14 +526,22 @@ const TrayInput = memo(({
 
     textarea.style.height = 'auto'
     const measuredHeight = textarea.scrollHeight
-    const singleLineCeiling = CHAT_TEXTAREA_MIN_HEIGHT_PX + CHAT_TEXTAREA_EXPANDED_DELTA_PX
+    if (chatTextareaSingleLineHeightRef.current === 0 || !draftText.trim()) {
+      chatTextareaSingleLineHeightRef.current = measuredHeight
+    }
+
+    const baselineSingleLineHeight =
+      chatTextareaSingleLineHeightRef.current > 0
+        ? chatTextareaSingleLineHeightRef.current
+        : CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX
+    const singleLineCeiling = baselineSingleLineHeight + CHAT_TEXTAREA_EXPANDED_DELTA_PX
     const nextHeight = Math.min(
       measuredHeight <= singleLineCeiling ? CHAT_TEXTAREA_MIN_HEIGHT_PX : measuredHeight,
       CHAT_TEXTAREA_MAX_HEIGHT_PX,
     )
     textarea.style.height = `${nextHeight}px`
     textarea.style.overflowY = textarea.scrollHeight > CHAT_TEXTAREA_MAX_HEIGHT_PX ? 'auto' : 'hidden'
-  }, [])
+  }, [draftText])
 
   useLayoutEffect(() => {
     if (!isChatMode) {
