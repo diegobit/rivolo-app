@@ -2325,7 +2325,7 @@ export default function Timeline() {
         timelineContent
       )}
 
-      {pendingDeleteDayId && (
+      {pendingDeleteDayId && !hasNoNotes && (
         <div className="pointer-events-none fixed left-0 top-[calc(env(safe-area-inset-top)+3.7rem)] z-40 px-3">
           <div
             className="pointer-events-auto flex w-[min(12rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-[0_14px_28px_-18px_rgba(15,23,42,0.45)] backdrop-blur-sm"
