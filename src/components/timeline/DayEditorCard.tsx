@@ -23,6 +23,7 @@ type DayEditorCardProps = {
   searchQuery: string
   quote: string | null
   dateError: string | null
+  autocorrection: boolean
   markdownExtension: Extension
   editorTheme: Extension
   clearActiveLine: Extension
@@ -55,6 +56,7 @@ const DayEditorCard = memo(({
   searchQuery,
   quote,
   dateError,
+  autocorrection,
   markdownExtension,
   editorTheme,
   clearActiveLine,
@@ -155,11 +157,11 @@ const DayEditorCard = memo(({
   const writingAssistAttributes = useMemo(
     () =>
       EditorView.contentAttributes.of({
-        spellcheck: 'true',
-        autocorrect: 'on',
-        autocapitalize: 'sentences',
+        spellcheck: autocorrection ? 'true' : 'false',
+        autocorrect: autocorrection ? 'on' : 'off',
+        autocapitalize: autocorrection ? 'sentences' : 'off',
       }),
-    [],
+    [autocorrection],
   )
 
   const editorExtensions = useMemo(() => {

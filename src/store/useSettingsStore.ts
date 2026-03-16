@@ -27,6 +27,7 @@ type SettingsState = {
   loading: boolean
   wallpaper: Wallpaper
   highlightInputMode: boolean
+  autocorrection: boolean
   fontPreference: FontPreference
   bodyFont: BodyFont
   monospaceFont: MonospaceFont
@@ -39,6 +40,7 @@ type SettingsState = {
   updateAiLanguage: (language: AiLanguage) => Promise<void>
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
   updateHighlightInputMode: (enabled: boolean) => Promise<void>
+  updateAutocorrection: (enabled: boolean) => Promise<void>
   updateFontPreference: (fontPreference: FontPreference) => Promise<void>
   updateBodyFont: (bodyFont: BodyFont) => Promise<void>
   updateMonospaceFont: (monospaceFont: MonospaceFont) => Promise<void>
@@ -55,6 +57,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   loading: false,
   wallpaper: isIOS() ? 'white' : 'thoughts-light',
   highlightInputMode: false,
+  autocorrection: true,
   fontPreference: 'monospace',
   bodyFont: 'system',
   monospaceFont: 'iawriter',
@@ -69,6 +72,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const storedAiLanguage = (await getSetting('ai.language')) as AiLanguage | null
     const storedWallpaper = (await getSetting('appearance.wallpaper')) as Wallpaper | null
     const storedHighlightInputMode = await getSetting('appearance.highlightInputMode')
+    const storedAutocorrection = await getSetting('appearance.autocorrection')
     const storedFontPreference = (await getSetting('appearance.font')) as FontPreference | null
     const storedBodyFont = await getSetting('appearance.bodyFont')
     const storedMonospaceFont = await getSetting('appearance.monospaceFont')
@@ -87,6 +91,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     const shouldPersistHighlightInputMode =
       storedHighlightInputMode === null ||
       (storedHighlightInputMode !== 'true' && storedHighlightInputMode !== 'false')
+    const autocorrection = storedAutocorrection !== 'false'
+    const shouldPersistAutocorrection =
+      storedAutocorrection === null ||
+      (storedAutocorrection !== 'true' && storedAutocorrection !== 'false')
     const fontPreference = storedFontPreference ?? 'monospace'
     const bodyFont = isBodyFont(storedBodyFont) ? storedBodyFont : 'system'
     const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
@@ -109,6 +117,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }
     if (shouldPersistHighlightInputMode) {
       await setSetting('appearance.highlightInputMode', highlightInputMode ? 'true' : 'false')
+    }
+    if (shouldPersistAutocorrection) {
+      await setSetting('appearance.autocorrection', autocorrection ? 'true' : 'false')
     }
     if (!storedFontPreference) {
       await setSetting('appearance.font', fontPreference)
@@ -135,6 +146,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       aiLanguage,
       wallpaper,
       highlightInputMode,
+      autocorrection,
       fontPreference,
       bodyFont,
       monospaceFont,
@@ -178,6 +190,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   updateHighlightInputMode: async (enabled: boolean) => {
     await setSetting('appearance.highlightInputMode', enabled ? 'true' : 'false')
     set({ highlightInputMode: enabled })
+  },
+
+  updateAutocorrection: async (enabled: boolean) => {
+    await setSetting('appearance.autocorrection', enabled ? 'true' : 'false')
+    set({ autocorrection: enabled })
   },
 
   updateFontPreference: async (fontPreference: FontPreference) => {
