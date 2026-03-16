@@ -42,6 +42,7 @@ const previewEditorTheme = EditorView.theme({
 type AppearanceSectionProps = {
   wallpaper: 'white' | 'thoughts-light' | 'thoughts-medium' | 'thoughts-high'
   highlightInputMode: boolean
+  autocorrection: boolean
   fontPreference: 'proportional' | 'monospace'
   bodyFont: BodyFont
   monospaceFont: MonospaceFont
@@ -53,6 +54,7 @@ type AppearanceSectionProps = {
   bodyPreviewFontSize: string
   onWallpaperChange: (value: 'white' | 'thoughts-light' | 'thoughts-medium' | 'thoughts-high') => void
   onHighlightInputModeChange: (enabled: boolean) => void
+  onAutocorrectionChange: (enabled: boolean) => void
   onTitleFontChange: (font: TitleFont) => void
   onBodyFontChange: (font: BodyFont) => void
   onMonospaceFontChange: (font: MonospaceFont) => void
@@ -62,6 +64,7 @@ type AppearanceSectionProps = {
 export default function AppearanceSection({
   wallpaper,
   highlightInputMode,
+  autocorrection,
   fontPreference,
   bodyFont,
   monospaceFont,
@@ -73,6 +76,7 @@ export default function AppearanceSection({
   bodyPreviewFontSize,
   onWallpaperChange,
   onHighlightInputModeChange,
+  onAutocorrectionChange,
   onTitleFontChange,
   onBodyFontChange,
   onMonospaceFontChange,
@@ -131,6 +135,26 @@ export default function AppearanceSection({
             className={!highlightInputMode ? buttonPillActive : buttonPill}
             type="button"
             onClick={() => onHighlightInputModeChange(false)}
+          >
+            NO
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Autocorrection</h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            className={autocorrection ? buttonPillActive : buttonPill}
+            type="button"
+            onClick={() => onAutocorrectionChange(true)}
+          >
+            YES
+          </button>
+          <button
+            className={!autocorrection ? buttonPillActive : buttonPill}
+            type="button"
+            onClick={() => onAutocorrectionChange(false)}
           >
             NO
           </button>

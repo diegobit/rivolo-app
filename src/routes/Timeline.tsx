@@ -759,6 +759,7 @@ export default function Timeline() {
     allowThinking,
     allowWebSearch,
     aiLanguage,
+    autocorrection,
     fontPreference,
     bodyFont,
     monospaceFont,
@@ -2267,6 +2268,7 @@ export default function Timeline() {
                 searchQuery={searchQuery}
                 quote={quote}
                 dateError={dateError}
+                autocorrection={autocorrection}
                 markdownExtension={markdownExtension}
                 editorTheme={editorTheme}
                 clearActiveLine={clearActiveLine}

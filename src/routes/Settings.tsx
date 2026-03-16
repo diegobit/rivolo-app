@@ -71,6 +71,7 @@ export default function Settings() {
     updateAiLanguage,
     updateWallpaper,
     updateHighlightInputMode,
+    updateAutocorrection,
     updateFontPreference,
     updateBodyFont,
     updateMonospaceFont,
@@ -82,6 +83,7 @@ export default function Settings() {
     aiLanguage,
     wallpaper,
     highlightInputMode,
+    autocorrection,
     fontPreference,
     bodyFont,
     monospaceFont,
@@ -270,6 +272,7 @@ export default function Settings() {
       <AppearanceSection
         wallpaper={wallpaper}
         highlightInputMode={highlightInputMode}
+        autocorrection={autocorrection}
         fontPreference={fontPreference}
         bodyFont={bodyFont}
         monospaceFont={monospaceFont}
@@ -284,6 +287,9 @@ export default function Settings() {
         }}
         onHighlightInputModeChange={(enabled) => {
           void updateHighlightInputMode(enabled)
+        }}
+        onAutocorrectionChange={(enabled) => {
+          void updateAutocorrection(enabled)
         }}
         onTitleFontChange={handleTitleFont}
         onBodyFontChange={handleBodyFont}
