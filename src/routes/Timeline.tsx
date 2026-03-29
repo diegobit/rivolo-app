@@ -748,6 +748,7 @@ export default function Timeline() {
     loadTimeline,
     loadOlderDays,
     loadDay,
+    patchDayContent,
     updateDayContent,
     moveDayDate,
     deleteDay,
@@ -804,6 +805,11 @@ export default function Timeline() {
   const [isNarrowViewportMode, setIsNarrowViewportMode] = useState(() => isNarrowViewport())
   const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(null)
   const [committingDeleteDayIds, setCommittingDeleteDayIds] = useState<string[]>([])
+  const searchResultsRef = useRef<DaySearchResult[]>([])
+
+  useEffect(() => {
+    searchResultsRef.current = searchResults
+  }, [searchResults])
 
   useEffect(() => {
     if (!isNarrowViewportMode) return
@@ -859,6 +865,7 @@ export default function Timeline() {
   const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
   const mobileChatScrollRef = useRef<HTMLDivElement | null>(null)
   const saveTimeouts = useRef(new Map<string, number>())
+  const daySaveQueueRef = useRef(new Map<string, Promise<void>>())
   const createdDayIdsRef = useRef(new Set<string>())
   const pendingDeleteTimerRef = useRef<number | null>(null)
   const pendingDeleteDayIdRef = useRef<string | null>(null)
@@ -1403,19 +1410,45 @@ export default function Timeline() {
     return true
   }, [])
 
+  const enqueueDaySave = useCallback(
+    (dayId: string, content: string) => {
+      const queue = daySaveQueueRef.current
+      const previous = queue.get(dayId) ?? Promise.resolve()
+
+      const queuedRun = previous
+        .catch(() => undefined)
+        .then(async () => {
+          await updateDayContent(dayId, content)
+          await handleAutoPush()
+        })
+        .catch((error: unknown) => {
+          console.error('[Timeline] saveDay:failed', { dayId, error })
+        })
+
+      const trackedRun = queuedRun.finally(() => {
+        if (queue.get(dayId) === trackedRun) {
+          queue.delete(dayId)
+        }
+      })
+
+      queue.set(dayId, trackedRun)
+      return trackedRun
+    },
+    [handleAutoPush, updateDayContent],
+  )
+
   const scheduleSave = useCallback(
     (dayId: string, content: string) => {
       const existing = saveTimeouts.current.get(dayId)
       if (existing) {
         window.clearTimeout(existing)
       }
-      const handle = window.setTimeout(async () => {
-        await updateDayContent(dayId, content)
-        await handleAutoPush()
+      const handle = window.setTimeout(() => {
+        void enqueueDaySave(dayId, content)
       }, 1000)
       saveTimeouts.current.set(dayId, handle)
     },
-    [handleAutoPush, updateDayContent],
+    [enqueueDaySave],
   )
 
   const focusDayEditor = useCallback(
@@ -2041,50 +2074,57 @@ export default function Timeline() {
 
   const handleToggleMatchedLineTodo = useCallback(
     (dayId: string, blockIndex: number, sourceLineIndex: number) => {
+      const currentResults = searchResultsRef.current
       let nextContentToSave: string | null = null
+      let hasChanges = false
 
-      setSearchResults((state) =>
-        state.map((result) => {
-          if (result.day.dayId !== dayId || result.blockKind !== 'line') {
-            return result
-          }
+      const nextResults = currentResults.map((result) => {
+        if (result.day.dayId !== dayId || result.blockKind !== 'line') {
+          return result
+        }
 
-          const lines = result.day.contentMd.split('\n')
-          const currentLine = lines[sourceLineIndex]
-          if (currentLine == null) {
-            return result
-          }
+        const lines = result.day.contentMd.split('\n')
+        const currentLine = lines[sourceLineIndex]
+        if (currentLine == null) {
+          return result
+        }
 
-          const toggledLine = toggleTodoLineMarker(currentLine)
-          if (!toggledLine) {
-            return result
-          }
+        const toggledLine = toggleTodoLineMarker(currentLine)
+        if (!toggledLine) {
+          return result
+        }
 
-          lines[sourceLineIndex] = toggledLine
-          const nextContent = lines.join('\n')
-          const nextMatchedBlocks = [...result.matchedBlocks]
-          if (blockIndex >= 0 && blockIndex < nextMatchedBlocks.length) {
-            nextMatchedBlocks[blockIndex] = toggledLine.trimEnd()
-          }
+        lines[sourceLineIndex] = toggledLine
+        const nextContent = lines.join('\n')
+        const nextMatchedBlocks = [...result.matchedBlocks]
+        if (blockIndex >= 0 && blockIndex < nextMatchedBlocks.length) {
+          nextMatchedBlocks[blockIndex] = toggledLine.trimEnd()
+        }
 
-          nextContentToSave = nextContent
+        nextContentToSave = nextContent
+        hasChanges = true
 
-          return {
-            ...result,
-            day: {
-              ...result.day,
-              contentMd: nextContent,
-            },
-            matchedBlocks: nextMatchedBlocks,
-          }
-        }),
-      )
+        return {
+          ...result,
+          day: {
+            ...result.day,
+            contentMd: nextContent,
+          },
+          matchedBlocks: nextMatchedBlocks,
+        }
+      })
 
-      if (nextContentToSave !== null) {
-        scheduleSave(dayId, nextContentToSave)
+      if (!hasChanges || nextContentToSave === null) {
+        return
       }
+
+      searchResultsRef.current = nextResults
+      setSearchResults(nextResults)
+      patchDayContent(dayId, nextContentToSave)
+      clearPendingSaveTimeout(dayId)
+      void enqueueDaySave(dayId, nextContentToSave)
     },
-    [scheduleSave],
+    [clearPendingSaveTimeout, enqueueDaySave, patchDayContent],
   )
 
   // --- Render ---

@@ -24,6 +24,7 @@ type DaysState = {
   loadOlderDays: () => Promise<void>
   loadDay: (dayId: string) => Promise<{ created: boolean }>
   appendToToday: (line: string) => Promise<void>
+  patchDayContent: (dayId: string, content: string) => void
   updateDayContent: (dayId: string, content: string) => Promise<void>
   moveDayDate: (fromDayId: string, toDayId: string) => Promise<{ conflict: boolean }>
   deleteDay: (dayId: string) => Promise<void>
@@ -272,6 +273,26 @@ export const useDaysStore = create<DaysState>((set, get) => ({
       days: upsertDayInList(state.days, day),
       activeDay: state.activeDay?.dayId === todayId ? day : state.activeDay,
     }))
+  },
+
+  patchDayContent: (dayId: string, content: string) => {
+    set((state) => {
+      const existing = state.days.find((item) => item.dayId === dayId)
+      if (!existing || existing.contentMd === content) {
+        return state
+      }
+
+      const patchedDay = {
+        ...existing,
+        contentMd: content,
+        updatedAt: Date.now(),
+      }
+
+      return {
+        days: upsertDayInList(state.days, patchedDay),
+        activeDay: state.activeDay?.dayId === dayId ? patchedDay : state.activeDay,
+      }
+    })
   },
 
   updateDayContent: async (dayId: string, content: string) => {
