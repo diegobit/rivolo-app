@@ -39,6 +39,7 @@ export type SyncProvider = {
 }
 
 let pushInFlight: Promise<SyncPushResult> | null = null
+let queuedForcePush: Promise<SyncPushResult> | null = null
 
 const EMPTY_STATUS: SyncStatus = {
   connected: false,
@@ -88,15 +89,46 @@ export const pushToSync = async (force = false) => {
   if (!provider) {
     throw new Error('No sync provider connected.')
   }
+
+  const trackPush = (pushPromise: Promise<SyncPushResult>) => {
+    pushInFlight = pushPromise
+    pushPromise.then(
+      () => {
+        if (pushInFlight === pushPromise) {
+          pushInFlight = null
+        }
+        if (queuedForcePush === pushPromise) {
+          queuedForcePush = null
+        }
+      },
+      () => {
+        if (pushInFlight === pushPromise) {
+          pushInFlight = null
+        }
+        if (queuedForcePush === pushPromise) {
+          queuedForcePush = null
+        }
+      },
+    )
+    return pushPromise
+  }
+
   if (pushInFlight) {
-    console.info('[Sync] push:coalesced')
+    if (force && !queuedForcePush) {
+      console.info('[Sync] push:force-queued')
+      const currentPush = pushInFlight
+      queuedForcePush = currentPush.then(
+        () => provider.push(true),
+        () => provider.push(true),
+      )
+      return trackPush(queuedForcePush)
+    }
+
+    console.info(force ? '[Sync] push:force-coalesced' : '[Sync] push:coalesced')
     return pushInFlight
   }
-  pushInFlight = provider.push(force)
-  pushInFlight.finally(() => {
-    pushInFlight = null
-  })
-  return pushInFlight
+
+  return trackPush(provider.push(force))
 }
 
 export const disconnectActiveProvider = async () => {
