@@ -65,6 +65,7 @@ export default function Settings() {
   const {
     loadSettings,
     saveGeminiKey,
+    clearGeminiKey,
     updateGeminiModel,
     updateAllowThinking,
     updateAllowWebSearch,
@@ -210,6 +211,12 @@ export default function Settings() {
     setApiKey('')
   }
 
+  const handleClearKey = async () => {
+    await clearGeminiKey()
+    setApiKey('')
+    setStatus('Gemini key removed.')
+  }
+
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -256,6 +263,7 @@ export default function Settings() {
         apiKey={apiKey}
         status={status}
         onSaveKey={handleSaveKey}
+        onClearKey={handleClearKey}
         onApiKeyChange={setApiKey}
         onGeminiModelChange={(value) => {
           void updateGeminiModel(value)

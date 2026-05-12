@@ -1,4 +1,4 @@
-import { buttonPill, buttonPillActive, buttonPrimary } from '../../lib/ui'
+import { buttonPill, buttonPillActive, buttonPrimary, buttonSecondary } from '../../lib/ui'
 
 type LlmSectionProps = {
   geminiApiKey: string | null
@@ -9,6 +9,7 @@ type LlmSectionProps = {
   apiKey: string
   status: string | null
   onSaveKey: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>
+  onClearKey: () => void | Promise<void>
   onApiKeyChange: (value: string) => void
   onGeminiModelChange: (value: string) => void
   onFollowLanguage: () => void
@@ -26,6 +27,7 @@ export default function LlmSection({
   apiKey,
   status,
   onSaveKey,
+  onClearKey,
   onApiKeyChange,
   onGeminiModelChange,
   onFollowLanguage,
@@ -56,7 +58,7 @@ export default function LlmSection({
         <div className="flex flex-wrap items-center gap-3">
           <input
             autoComplete="off"
-            type="text"
+            type="password"
             inputMode="text"
             className="min-w-[220px] flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
             placeholder="Gemini API key"
@@ -74,6 +76,11 @@ export default function LlmSection({
           >
             {geminiApiKey ? 'Replace Gemini Key' : 'Save Gemini Key'}
           </button>
+          {geminiApiKey && (
+            <button className={buttonSecondary} type="button" onClick={onClearKey}>
+              Remove Gemini Key
+            </button>
+          )}
         </div>
       </form>
 
