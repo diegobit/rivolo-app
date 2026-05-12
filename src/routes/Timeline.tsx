@@ -29,7 +29,7 @@ import { useSyncStore } from '../store/useSyncStore'
 import { useDaysStore } from '../store/useDaysStore'
 import { useUIStore } from '../store/useUIStore'
 import { useChatStore, type ChatCitation as Citation } from '../store/useChatStore'
-import { pushToSyncAndRefresh } from '../store/syncActions'
+import { flushAutoPushToSync, scheduleAutoPushToSync } from '../store/syncActions'
 
 const isEditableElement = (element: HTMLElement | null) =>
   Boolean(
@@ -1157,11 +1157,7 @@ export default function Timeline() {
 
   const handleAutoPush = useCallback(async () => {
     if (!canSync || !navigator.onLine) return
-    try {
-      await pushToSyncAndRefresh()
-    } catch {
-      // Ignore auto-push errors
-    }
+    scheduleAutoPushToSync()
   }, [canSync])
 
   const clearPendingDeleteTimer = useCallback(() => {
@@ -1499,6 +1495,13 @@ export default function Timeline() {
     const flushTimelineSaves = () => {
       void flushAllPendingDaySaves()
         .then(() => flushDatabaseSave())
+        .then(() => {
+          if (!canSync || !navigator.onLine) {
+            return undefined
+          }
+
+          return flushAutoPushToSync()
+        })
         .catch((error: unknown) => {
           console.error('[Timeline] flush pending saves failed', { error })
         })
@@ -1514,12 +1517,18 @@ export default function Timeline() {
       flushTimelineSaves()
     }
 
+    const handleWindowBlur = () => {
+      flushTimelineSaves()
+    }
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('pagehide', handlePageHide)
+    window.addEventListener('blur', handleWindowBlur)
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('pagehide', handlePageHide)
+      window.removeEventListener('blur', handleWindowBlur)
       flushTimelineSaves()
 
       for (const handle of pendingTimeouts.values()) {
@@ -1532,7 +1541,7 @@ export default function Timeline() {
       delete document.body.dataset.heroUi
       delete document.body.dataset.heroReveal
     }
-  }, [flushAllPendingDaySaves])
+  }, [canSync, flushAllPendingDaySaves])
 
   const focusDayEditor = useCallback(
     (dayId: string, position: 'start' | 'end', shouldScroll = true) => {
