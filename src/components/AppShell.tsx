@@ -40,6 +40,7 @@ export default function AppShell() {
   const [showScrollToToday, setShowScrollToToday] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
+  const focusModeInputAfterSwitchRef = useRef(false)
   const showBackButton = location.pathname === '/settings' || location.pathname === '/privacy'
   const backTarget = location.pathname === '/privacy' ? '/settings' : '/'
   const isHome = location.pathname === '/'
@@ -243,6 +244,7 @@ export default function AppShell() {
           document.getElementById('chat-input')?.focus()
           return
         }
+        focusModeInputAfterSwitchRef.current = true
         setMode('chat')
         return
       }
@@ -254,6 +256,7 @@ export default function AppShell() {
           document.getElementById('search-input')?.focus()
           return
         }
+        focusModeInputAfterSwitchRef.current = true
         setMode('search')
         return
       }
@@ -267,11 +270,15 @@ export default function AppShell() {
   useEffect(() => {
     if (!isHome) return
     if (mode === 'timeline') return
+    const shouldFocusInput = !isNarrowViewportMode || focusModeInputAfterSwitchRef.current
+    focusModeInputAfterSwitchRef.current = false
+    if (!shouldFocusInput) return
+
     const inputId = mode === 'chat' ? 'chat-input' : 'search-input'
     requestAnimationFrame(() => {
       document.getElementById(inputId)?.focus()
     })
-  }, [isHome, mode])
+  }, [isHome, isNarrowViewportMode, mode])
 
 
   return (
