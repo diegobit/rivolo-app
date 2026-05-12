@@ -47,6 +47,43 @@ const HEADING_REGEX = /^\s{0,3}(#{1,6})\s+/
 
 const includesText = (value: string, query: string) => value.toLocaleLowerCase().includes(query)
 
+const toFtsPhraseQuery = (query: string) => {
+  const trimmed = query.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  return `"${trimmed.replace(/"/g, '""')}"`
+}
+
+const getPlainTextSearchRows = async (query: string, limit: number) => {
+  if (!(await isFtsAvailable())) {
+    return null
+  }
+
+  const ftsQuery = toFtsPhraseQuery(query)
+  if (!ftsQuery) {
+    return null
+  }
+
+  try {
+    return await queryAll<DayRow>(
+      `
+        SELECT d.day_id, d.human_title, d.content_md, d.created_at, d.updated_at
+        FROM days_fts
+        JOIN days d ON d.day_id = days_fts.day_id
+        WHERE days_fts MATCH ?
+        ORDER BY d.day_id DESC
+        LIMIT ?
+      `,
+      [ftsQuery, Math.max(limit * 4, limit + 20)],
+    )
+  } catch (error) {
+    console.warn('[Search] FTS query failed, falling back to JS scan.', { error })
+    return null
+  }
+}
+
 const hasMatchingToken = (line: string, regex: RegExp, query: string) => {
   regex.lastIndex = 0
   const matches = line.match(regex)
@@ -368,13 +405,16 @@ export const searchDays = async (
     return []
   }
 
-  const rows = await queryAll<DayRow>(
-    `
-      SELECT day_id, human_title, content_md, created_at, updated_at
-      FROM days
-      ORDER BY day_id DESC
-    `,
-  )
+  const ftsRows = !filter && trimmed ? await getPlainTextSearchRows(trimmed, limit) : null
+  const rows = ftsRows?.length
+    ? ftsRows
+    : await queryAll<DayRow>(
+        `
+          SELECT day_id, human_title, content_md, created_at, updated_at
+          FROM days
+          ORDER BY day_id DESC
+        `,
+      )
 
   const results: DaySearchResult[] = []
 
