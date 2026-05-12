@@ -8,6 +8,7 @@ const DB_KEY = 'single-note-db'
 let sqlPromise: Promise<SqlJsStatic> | null = null
 let dbPromise: Promise<Database> | null = null
 let saveTimer: number | null = null
+let pendingSavePromise: Promise<void> | null = null
 let ftsAvailable: boolean | null = null
 
 const ensureSql = () => {
@@ -58,15 +59,46 @@ const ensureSchema = (db: Database) => {
   `)
 }
 
+const persistDatabase = (db: Database) => {
+  const data = db.export()
+  const savePromise = set(DB_KEY, data)
+  pendingSavePromise = savePromise
+
+  savePromise.catch((error: unknown) => {
+    console.error('[DB] persist:failed', { error })
+  }).finally(() => {
+    if (pendingSavePromise === savePromise) {
+      pendingSavePromise = null
+    }
+  })
+
+  return savePromise
+}
+
 const scheduleSave = (db: Database) => {
   if (saveTimer) {
     window.clearTimeout(saveTimer)
   }
 
   saveTimer = window.setTimeout(() => {
-    const data = db.export()
-    void set(DB_KEY, data)
+    saveTimer = null
+    void persistDatabase(db)
   }, 400)
+}
+
+export const flushDatabaseSave = async () => {
+  const db = await getDatabase()
+
+  if (saveTimer) {
+    window.clearTimeout(saveTimer)
+    saveTimer = null
+  }
+
+  if (pendingSavePromise) {
+    await pendingSavePromise
+  }
+
+  await persistDatabase(db)
 }
 
 export const getDatabase = async () => {
