@@ -3,7 +3,7 @@ import { startDropboxAuth } from '../../lib/dropbox'
 import { pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../../store/syncActions'
 
 const REMOTE_RECOVERY_MESSAGE =
-  'Dropbox file is missing or invalid. Local data is safe. Use "Restore Dropbox from local" to recreate cloud backup.'
+  'Dropbox file is missing or invalid. Local data is safe. Use "Restore Dropbox from local copy" to recreate cloud backup.'
 
 const isRemoteRecoveryError = (message: string) =>
   message === 'Dropbox file not found. Push to create it first.' ||
@@ -12,8 +12,8 @@ const isRemoteRecoveryError = (message: string) =>
 type UseDropboxSyncActionsParams = {
   online: boolean
   dropboxConnected: boolean
+  localDirty: boolean
   setDropboxStatus: (value: string | null) => void
-  setSyncBusy: (value: boolean) => void
   loadDropboxState: () => Promise<void>
   loadSyncState: () => Promise<void>
 }
@@ -21,8 +21,8 @@ type UseDropboxSyncActionsParams = {
 export const useDropboxSyncActions = ({
   online,
   dropboxConnected,
+  localDirty,
   setDropboxStatus,
-  setSyncBusy,
   loadDropboxState,
   loadSyncState,
 }: UseDropboxSyncActionsParams) => {
@@ -62,17 +62,24 @@ export const useDropboxSyncActions = ({
       return
     }
 
-    setSyncBusy(true)
+    if (localDirty) {
+      const confirmed = window.confirm(
+        'Pull from Dropbox and replace local notes? Unpushed local changes will be overwritten.',
+      )
+      if (!confirmed) {
+        return
+      }
+    }
+
     try {
       const result = await pullFromSyncAndRefresh()
       await loadDropboxState()
+      await loadSyncState()
       setDropboxStatus(result.status === 'noop' ? 'No changes on Dropbox.' : 'Pulled and imported.')
     } catch (error) {
       console.warn('[Dropbox] pull:failed', { error })
       const message = error instanceof Error ? error.message : 'Dropbox pull failed.'
       setDropboxStatus(isRemoteRecoveryError(message) ? REMOTE_RECOVERY_MESSAGE : message)
-    } finally {
-      setSyncBusy(false)
     }
   }
 
@@ -86,32 +93,30 @@ export const useDropboxSyncActions = ({
 
     if (force) {
       const confirmed = window.confirm(
-        'Restore Dropbox from your local data? This overwrites the Dropbox file contents.',
+        'Restore Dropbox from local copy? This overwrites the Dropbox file contents.',
       )
       if (!confirmed) {
         return
       }
     }
 
-    setSyncBusy(true)
     try {
       const result = await pushToSyncAndRefresh(force)
       await loadDropboxState()
+      await loadSyncState()
       if (result.status === 'clean') {
         setDropboxStatus('No local changes to push.')
       } else if (result.status === 'blocked') {
         setDropboxStatus(
           result.reason === 'remote_missing'
-            ? 'Dropbox file is missing. Local data is safe. Use "Restore Dropbox from local" to recreate cloud backup.'
-            : 'Dropbox changed remotely. Pull first, or use "Restore Dropbox from local" to overwrite cloud backup.',
+            ? 'Dropbox file is missing. Local data is safe. Use "Restore Dropbox from local copy" to recreate cloud backup.'
+            : 'Dropbox changed remotely. Pull first, or use "Restore Dropbox from local copy" to overwrite cloud backup.',
         )
       } else {
         setDropboxStatus('Uploaded to Dropbox.')
       }
     } catch (error) {
       setDropboxStatus(error instanceof Error ? error.message : 'Dropbox push failed.')
-    } finally {
-      setSyncBusy(false)
     }
   }
 

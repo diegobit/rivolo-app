@@ -100,14 +100,13 @@ export default function Settings() {
     loadState: loadDropboxState,
     updateFilePath,
   } = useDropboxStore()
-  const { activeProvider, loadState: loadSyncState } = useSyncStore()
+  const { activeProvider, loadState: loadSyncState, syncing } = useSyncStore()
 
   const [apiKey, setApiKey] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [importStatus, setImportStatus] = useState<string | null>(null)
 
   const [dropboxStatus, setDropboxStatus] = useState<string | null>(null)
-  const [syncBusy, setSyncBusy] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
   const [dropboxPathDraft, setDropboxPathDraft] = useState<string | null>(null)
   const [showFontPreview, setShowFontPreview] = useState(false)
@@ -229,12 +228,19 @@ export default function Settings() {
     await shareOrDownload(filename, content)
   }
 
+  const handleSaveDropboxPath = async () => {
+    await updateFilePath(dropboxPath.trim() || DEFAULT_DROPBOX_PATH)
+    setDropboxPathDraft(null)
+    await loadDropboxState()
+    await loadSyncState()
+  }
+
   const { handleConnectDropbox, handleDisconnectDropbox, handlePull, handlePush } =
     useDropboxSyncActions({
       online,
       dropboxConnected,
+      localDirty,
       setDropboxStatus,
-      setSyncBusy,
       loadDropboxState,
       loadSyncState,
     })
@@ -304,15 +310,13 @@ export default function Settings() {
         online={online}
         dropboxPath={dropboxPath}
         isDropboxPathDirty={isDropboxPathDirty}
-        syncBusy={syncBusy}
+        syncBusy={syncing}
         dropboxStatus={dropboxStatus}
         placeholderPath={DEFAULT_DROPBOX_PATH}
         onConnectDropbox={handleConnectDropbox}
         onDisconnectDropbox={handleDisconnectDropbox}
         onDropboxPathChange={(value) => setDropboxPathDraft(value)}
-        onSavePath={() => {
-          void updateFilePath(dropboxPath.trim())
-        }}
+        onSavePath={handleSaveDropboxPath}
         onPull={handlePull}
         onPush={handlePush}
       />
