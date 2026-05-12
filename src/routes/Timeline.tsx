@@ -1556,7 +1556,6 @@ export default function Timeline() {
     setDayOrder,
   } = useEditorMountWindow({
     days: visibleDays,
-    isSearchMode: mode === 'search' && searchResultMode === 'whole-day',
     isTimelineVisible,
     supportsIntersectionObserver,
     initialEditorMountCount: INITIAL_EDITOR_MOUNT_COUNT,
@@ -2373,10 +2372,7 @@ export default function Timeline() {
             const nextDayId = dayIndex >= 0 && dayIndex < dayOrder.length - 1 ? dayOrder[dayIndex + 1] : null
             const dateError = dateErrors[day.dayId] ?? null
             const quote = highlightedQuote && highlightedQuote.day === day.dayId ? highlightedQuote.quote : null
-            const shouldMountEditor =
-                (mode === 'search' && searchResultMode === 'whole-day') ||
-                mountedDayIds.has(day.dayId) ||
-                editorRefs.current.has(day.dayId)
+            const shouldMountEditor = mountedDayIds.has(day.dayId) || editorRefs.current.has(day.dayId)
 
             return (
               <DayEditorCard
