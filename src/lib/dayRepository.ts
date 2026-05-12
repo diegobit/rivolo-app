@@ -1,5 +1,5 @@
 import { formatDayTitle } from './dates'
-import { isFtsAvailable, queryAll, queryOne, run, upsertFts } from './db'
+import { isFtsAvailable, queryAll, queryOne, run, runDatabaseTransaction, upsertFts } from './db'
 import { markLocalDirty } from './dropboxState'
 
 export type Day = {
@@ -24,6 +24,12 @@ type DayRow = {
   content_md: string
   created_at: number
   updated_at: number
+}
+
+type DayWrite = {
+  dayId: string
+  humanTitle: string
+  contentMd: string
 }
 
 const mapRow = (row: DayRow): Day => ({
@@ -323,6 +329,31 @@ export const clearDays = async () => {
   if (await isFtsAvailable()) {
     await run('DELETE FROM days_fts')
   }
+}
+
+export const replaceDays = async (days: DayWrite[], options: { markDirty?: boolean } = {}) => {
+  const markDirty = options.markDirty ?? true
+  const now = Date.now()
+
+  await runDatabaseTransaction(async () => {
+    await run('DELETE FROM days')
+    if (await isFtsAvailable()) {
+      await run('DELETE FROM days_fts')
+    }
+
+    for (const day of days) {
+      const title = day.humanTitle || formatDayTitle(day.dayId)
+      await run(
+        'INSERT INTO days (day_id, human_title, content_md, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        [day.dayId, title, day.contentMd, now, now],
+      )
+      await upsertFts(day.dayId, title, day.contentMd)
+    }
+
+    if (markDirty) {
+      await markLocalDirty()
+    }
+  })
 }
 
 export const searchDays = async (
