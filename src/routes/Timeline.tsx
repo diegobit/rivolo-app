@@ -741,41 +741,36 @@ const DELETE_UNDO_WINDOW_MS = 6_000
 // --- Component ---
 
 export default function Timeline() {
-  const {
-    days,
-    loading,
-    loadingMore,
-    hasMorePast,
-    loadTimeline,
-    loadOlderDays,
-    loadDay,
-    patchDayContent,
-    updateDayContent,
-    moveDayDate,
-    deleteDay,
-  } = useDaysStore()
-  const {
-    loadSettings,
-    geminiApiKey,
-    geminiModel,
-    allowThinking,
-    allowWebSearch,
-    aiLanguage,
-    autocorrection,
-    fontPreference,
-    bodyFont,
-    monospaceFont,
-    titleFont,
-  } = useSettingsStore()
-  const { loadState: loadSyncState, status: syncStatus } = useSyncStore()
-  const {
-    mode,
-    chatPanelOpen,
-    setChatPanelOpen,
-    desktopChatPanelOpen,
-    setDesktopChatPanelOpen,
-    setChatMessageCount,
-  } = useUIStore()
+  const days = useDaysStore((state) => state.days)
+  const loading = useDaysStore((state) => state.loading)
+  const loadingMore = useDaysStore((state) => state.loadingMore)
+  const hasMorePast = useDaysStore((state) => state.hasMorePast)
+  const loadTimeline = useDaysStore((state) => state.loadTimeline)
+  const loadOlderDays = useDaysStore((state) => state.loadOlderDays)
+  const loadDay = useDaysStore((state) => state.loadDay)
+  const patchDayContent = useDaysStore((state) => state.patchDayContent)
+  const updateDayContent = useDaysStore((state) => state.updateDayContent)
+  const moveDayDate = useDaysStore((state) => state.moveDayDate)
+  const deleteDay = useDaysStore((state) => state.deleteDay)
+  const loadSettings = useSettingsStore((state) => state.loadSettings)
+  const geminiApiKey = useSettingsStore((state) => state.geminiApiKey)
+  const geminiModel = useSettingsStore((state) => state.geminiModel)
+  const allowThinking = useSettingsStore((state) => state.allowThinking)
+  const allowWebSearch = useSettingsStore((state) => state.allowWebSearch)
+  const aiLanguage = useSettingsStore((state) => state.aiLanguage)
+  const autocorrection = useSettingsStore((state) => state.autocorrection)
+  const fontPreference = useSettingsStore((state) => state.fontPreference)
+  const bodyFont = useSettingsStore((state) => state.bodyFont)
+  const monospaceFont = useSettingsStore((state) => state.monospaceFont)
+  const titleFont = useSettingsStore((state) => state.titleFont)
+  const loadSyncState = useSyncStore((state) => state.loadState)
+  const syncStatus = useSyncStore((state) => state.status)
+  const mode = useUIStore((state) => state.mode)
+  const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
+  const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
+  const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
+  const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
+  const setChatMessageCount = useUIStore((state) => state.setChatMessageCount)
   const messages = useChatStore((state) => state.messages)
   const setMessages = useChatStore((state) => state.setMessages)
 

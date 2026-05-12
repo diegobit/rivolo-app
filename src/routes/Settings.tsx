@@ -61,47 +61,45 @@ def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
 
 export default function Settings() {
   const navigate = useNavigate()
-  const { loadTimeline } = useDaysStore()
-  const {
-    loadSettings,
-    saveGeminiKey,
-    clearGeminiKey,
-    updateGeminiModel,
-    updateAllowThinking,
-    updateAllowWebSearch,
-    updateAiLanguage,
-    updateWallpaper,
-    updateHighlightInputMode,
-    updateAutocorrection,
-    updateFontPreference,
-    updateBodyFont,
-    updateMonospaceFont,
-    updateTitleFont,
-    geminiApiKey,
-    geminiModel,
-    allowThinking,
-    allowWebSearch,
-    aiLanguage,
-    wallpaper,
-    highlightInputMode,
-    autocorrection,
-    fontPreference,
-    bodyFont,
-    monospaceFont,
-    titleFont,
-  } = useSettingsStore()
-  const {
-    filePath,
-    lastRemoteRev,
-    lastSyncAt,
-    localDirty,
-    hasAuth,
-    accountEmail,
-    accountName,
-    loadState: loadDropboxState,
-    updateFilePath,
-  } = useDropboxStore()
-  const { activeProvider, loadState: loadSyncState, syncing } = useSyncStore()
+  const loadTimeline = useDaysStore((state) => state.loadTimeline)
+  const loadSettings = useSettingsStore((state) => state.loadSettings)
+  const saveGeminiKey = useSettingsStore((state) => state.saveGeminiKey)
+  const clearGeminiKey = useSettingsStore((state) => state.clearGeminiKey)
+  const updateGeminiModel = useSettingsStore((state) => state.updateGeminiModel)
+  const updateAllowThinking = useSettingsStore((state) => state.updateAllowThinking)
+  const updateAllowWebSearch = useSettingsStore((state) => state.updateAllowWebSearch)
+  const updateAiLanguage = useSettingsStore((state) => state.updateAiLanguage)
+  const updateWallpaper = useSettingsStore((state) => state.updateWallpaper)
+  const updateHighlightInputMode = useSettingsStore((state) => state.updateHighlightInputMode)
+  const updateAutocorrection = useSettingsStore((state) => state.updateAutocorrection)
+  const updateFontPreference = useSettingsStore((state) => state.updateFontPreference)
+  const updateBodyFont = useSettingsStore((state) => state.updateBodyFont)
+  const updateMonospaceFont = useSettingsStore((state) => state.updateMonospaceFont)
+  const updateTitleFont = useSettingsStore((state) => state.updateTitleFont)
+  const geminiApiKey = useSettingsStore((state) => state.geminiApiKey)
+  const geminiModel = useSettingsStore((state) => state.geminiModel)
+  const allowThinking = useSettingsStore((state) => state.allowThinking)
+  const allowWebSearch = useSettingsStore((state) => state.allowWebSearch)
+  const aiLanguage = useSettingsStore((state) => state.aiLanguage)
+  const wallpaper = useSettingsStore((state) => state.wallpaper)
+  const highlightInputMode = useSettingsStore((state) => state.highlightInputMode)
+  const autocorrection = useSettingsStore((state) => state.autocorrection)
+  const fontPreference = useSettingsStore((state) => state.fontPreference)
+  const bodyFont = useSettingsStore((state) => state.bodyFont)
+  const monospaceFont = useSettingsStore((state) => state.monospaceFont)
+  const titleFont = useSettingsStore((state) => state.titleFont)
+  const filePath = useDropboxStore((state) => state.filePath)
+  const lastRemoteRev = useDropboxStore((state) => state.lastRemoteRev)
+  const lastSyncAt = useDropboxStore((state) => state.lastSyncAt)
+  const localDirty = useDropboxStore((state) => state.localDirty)
+  const hasAuth = useDropboxStore((state) => state.hasAuth)
+  const accountEmail = useDropboxStore((state) => state.accountEmail)
+  const accountName = useDropboxStore((state) => state.accountName)
+  const loadDropboxState = useDropboxStore((state) => state.loadState)
+  const updateFilePath = useDropboxStore((state) => state.updateFilePath)
+  const activeProvider = useSyncStore((state) => state.activeProvider)
+  const loadSyncState = useSyncStore((state) => state.loadState)
+  const syncing = useSyncStore((state) => state.syncing)
 
   const [apiKey, setApiKey] = useState('')
   const [status, setStatus] = useState<string | null>(null)
