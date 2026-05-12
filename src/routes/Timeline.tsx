@@ -1119,9 +1119,10 @@ export default function Timeline() {
   useEffect(() => {
     if (mode !== 'search') return
 
-    if (!searchText.trim() && !searchFilter) {
+    if (!searchQuery && !searchFilter) {
       setSearchResults([])
       setSearchLoading(false)
+      setSearchError(null)
       return
     }
 
@@ -1131,7 +1132,7 @@ export default function Timeline() {
 
     const runSearch = async () => {
       try {
-        const data = await searchDays(searchText, { filter: searchFilter })
+        const data = await searchDays(searchQuery, { filter: searchFilter })
         if (cancelled) return
         setSearchResults(data)
       } catch {
@@ -1150,7 +1151,7 @@ export default function Timeline() {
     return () => {
       cancelled = true
     }
-  }, [mode, searchFilter, searchText])
+  }, [mode, searchFilter, searchQuery])
 
   // --- Handlers ---
 
@@ -2081,6 +2082,7 @@ export default function Timeline() {
     !searchLoading &&
     visibleSearchResults.length === 0 &&
     !searchError
+  const showSearchError = hasSearchIntent && !searchLoading && Boolean(searchError)
   const showMatchedLineResults = hasSearchIntent && searchResultMode === 'matched-lines'
   const matchedLineResultItems = useMemo<MatchedLineResultItem[]>(() => {
     if (!showMatchedLineResults) {
@@ -2257,6 +2259,12 @@ export default function Timeline() {
       {!loading && noSearchResults && (
         <section className="flex min-h-[46vh] items-center justify-center">
           <p className="text-base font-semibold text-slate-400">No results</p>
+        </section>
+      )}
+
+      {!loading && showSearchError && (
+        <section className="flex min-h-[46vh] items-center justify-center px-4 text-center">
+          <p className="text-base font-semibold text-rose-400">{searchError}</p>
         </section>
       )}
 
