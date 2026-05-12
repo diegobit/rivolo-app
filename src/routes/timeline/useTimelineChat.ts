@@ -133,6 +133,72 @@ export const useTimelineChat = ({
         role: message.role,
         content: message.content,
       })) as LlmMessage[]
+      const streamedCitations: Citation[] = []
+      const streamedCitationIndexes = new Map<string, number>()
+      let streamedInsertText: string | null = null
+      let streamedInsertTargetDay: string | null = null
+      let streamedAnswer = ''
+      let pendingStreamText = ''
+      let pendingStreamMetaChanged = false
+      let streamUpdateFrame: number | null = null
+
+      const flushStreamUpdate = () => {
+        const textDelta = pendingStreamText
+        const metaChanged = pendingStreamMetaChanged
+        pendingStreamText = ''
+        pendingStreamMetaChanged = false
+
+        if (!textDelta && !metaChanged) {
+          return
+        }
+
+        setMessages((state) =>
+          state.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  content: textDelta ? `${message.content}${textDelta}` : message.content,
+                  meta: {
+                    citations: [...streamedCitations],
+                    insertText: streamedInsertText,
+                    insertTargetDay: streamedInsertTargetDay,
+                    isStreaming: true,
+                  },
+                }
+              : message,
+          ),
+        )
+      }
+
+      const cancelScheduledStreamUpdate = () => {
+        if (streamUpdateFrame === null) {
+          return
+        }
+
+        window.cancelAnimationFrame(streamUpdateFrame)
+        streamUpdateFrame = null
+      }
+
+      const scheduleStreamUpdate = () => {
+        if (streamUpdateFrame !== null) {
+          return
+        }
+
+        streamUpdateFrame = window.requestAnimationFrame(() => {
+          streamUpdateFrame = null
+          flushStreamUpdate()
+        })
+      }
+
+      const queueStreamUpdate = (textDelta: string, metaChanged: boolean) => {
+        if (textDelta) {
+          pendingStreamText += textDelta
+        }
+        if (metaChanged) {
+          pendingStreamMetaChanged = true
+        }
+        scheduleStreamUpdate()
+      }
 
       try {
         const contextDays = await buildContextDays(trimmed)
@@ -165,12 +231,6 @@ export const useTimelineChat = ({
         })
 
         const streamTagParser = createStreamTagParser()
-        const streamedCitations: Citation[] = []
-        const streamedCitationIndexes = new Map<string, number>()
-        let streamedInsertText: string | null = null
-        let streamedInsertTargetDay: string | null = null
-        let streamedAnswer = ''
-
         const applyStreamTagPieces = (pieces: StreamTagPiece[]) => {
           if (!pieces.length) {
             return
@@ -216,22 +276,7 @@ export const useTimelineChat = ({
             return
           }
 
-          setMessages((state) =>
-            state.map((message) =>
-              message.id === assistantId
-                ? {
-                    ...message,
-                    content: textDelta ? `${message.content}${textDelta}` : message.content,
-                    meta: {
-                      citations: [...streamedCitations],
-                      insertText: streamedInsertText,
-                      insertTargetDay: streamedInsertTargetDay,
-                      isStreaming: true,
-                    },
-                  }
-                : message,
-            ),
-          )
+          queueStreamUpdate(textDelta, metaChanged)
         }
 
         const { text: responseText } = await chat({
@@ -251,6 +296,8 @@ export const useTimelineChat = ({
 
         const finalStreamChunk = streamTagParser.flush()
         applyStreamTagPieces(finalStreamChunk.pieces)
+        cancelScheduledStreamUpdate()
+        flushStreamUpdate()
 
         let finalResponseText = responseText
         let payload: AssistantPayload | null = null
@@ -342,6 +389,8 @@ export const useTimelineChat = ({
           ),
         )
       } catch (error) {
+        cancelScheduledStreamUpdate()
+        flushStreamUpdate()
         setMessages((state) =>
           state.map((message) =>
             message.id === assistantId
