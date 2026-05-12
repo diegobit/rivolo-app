@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { appendToDay } from '../../lib/dayRepository'
 import { getTodayId } from '../../lib/dates'
 import { chat, type ChatMessage as LlmMessage } from '../../lib/llm'
 import { hasAssistantPayloadContent, parseAssistantPayload, stripCodeFences, type AssistantPayload } from '../../lib/assistantPayload'
@@ -57,8 +56,7 @@ type UseTimelineChatParams = {
   desktopChatPanelOpen: boolean
   setChatPanelOpen: (open: boolean) => void
   setDesktopChatPanelOpen: (open: boolean) => void
-  loadTimeline: () => Promise<void>
-  handleAutoPush: () => Promise<void>
+  onInsertNote: (targetDay: string, text: string) => Promise<void>
 }
 
 const normalizeCitationText = (value: string) =>
@@ -81,8 +79,7 @@ export const useTimelineChat = ({
   desktopChatPanelOpen,
   setChatPanelOpen,
   setDesktopChatPanelOpen,
-  loadTimeline,
-  handleAutoPush,
+  onInsertNote,
 }: UseTimelineChatParams) => {
   const [sending, setSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
@@ -433,11 +430,9 @@ export const useTimelineChat = ({
 
       const targetDay = message.meta?.insertTargetDay ?? getTodayId()
       const payload = `${insertText.trim()}`
-      await appendToDay(targetDay, payload)
-      await loadTimeline()
-      await handleAutoPush()
+      await onInsertNote(targetDay, payload)
     },
-    [handleAutoPush, loadTimeline],
+    [onInsertNote],
   )
 
   const handleNewChat = useCallback(() => {

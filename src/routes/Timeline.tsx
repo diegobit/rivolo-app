@@ -17,7 +17,7 @@ import {
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import { debugLog, startDebugTimer } from '../lib/debugLogs'
 import type { Day, DaySearchResult, SearchFilter } from '../lib/dayRepository'
-import { searchDays } from '../lib/dayRepository'
+import { appendToDay, searchDays } from '../lib/dayRepository'
 import { flushDatabaseSave } from '../lib/db'
 import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
@@ -1315,6 +1315,15 @@ export default function Timeline() {
     setPendingDeleteDayId(null)
   }, [clearPendingDeleteTimer])
 
+  const handleChatInsertNote = useCallback(
+    async (targetDay: string, text: string) => {
+      await appendToDay(targetDay, text)
+      await loadTimeline()
+      await handleAutoPush()
+    },
+    [handleAutoPush, loadTimeline],
+  )
+
   const { sending, chatError, handleChatSend, handleChatInsert, handleNewChat } = useTimelineChat({
     messages,
     setMessages,
@@ -1328,8 +1337,7 @@ export default function Timeline() {
     desktopChatPanelOpen,
     setChatPanelOpen,
     setDesktopChatPanelOpen,
-    loadTimeline,
-    handleAutoPush,
+    onInsertNote: handleChatInsertNote,
   })
 
   const runLogoTransition = useCallback(() => {
