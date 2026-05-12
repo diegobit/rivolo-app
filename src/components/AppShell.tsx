@@ -24,17 +24,20 @@ const MIN_BOTTOM_TRAY_HEIGHT_PX = 56
 
 export default function AppShell() {
   const location = useLocation()
-  const { loadSettings, wallpaper, highlightInputMode } = useSettingsStore()
-  const { loadState: loadSyncState, status: syncStatus, syncing, syncOperation } = useSyncStore()
-  const {
-    mode,
-    setMode,
-    chatPanelOpen,
-    setChatPanelOpen,
-    desktopChatPanelOpen,
-    setDesktopChatPanelOpen,
-    chatMessageCount,
-  } = useUIStore()
+  const loadSettings = useSettingsStore((state) => state.loadSettings)
+  const wallpaper = useSettingsStore((state) => state.wallpaper)
+  const highlightInputMode = useSettingsStore((state) => state.highlightInputMode)
+  const loadSyncState = useSyncStore((state) => state.loadState)
+  const syncStatus = useSyncStore((state) => state.status)
+  const syncing = useSyncStore((state) => state.syncing)
+  const syncOperation = useSyncStore((state) => state.syncOperation)
+  const mode = useUIStore((state) => state.mode)
+  const setMode = useUIStore((state) => state.setMode)
+  const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
+  const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
+  const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
+  const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
+  const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
