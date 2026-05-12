@@ -228,10 +228,16 @@ export const ensureDay = async (dayId: string) => {
   return { dayId, humanTitle, contentMd: '', createdAt: now, updatedAt: now }
 }
 
-export const saveDay = async (dayId: string, contentMd: string, humanTitle?: string) => {
+export const saveDay = async (
+  dayId: string,
+  contentMd: string,
+  humanTitle?: string,
+  options: { markDirty?: boolean } = {},
+) => {
   const existing = await getDay(dayId)
   const now = Date.now()
   const title = humanTitle ?? existing?.humanTitle ?? formatDayTitle(dayId)
+  const markDirty = options.markDirty ?? true
 
   if (existing) {
     await run('UPDATE days SET human_title = ?, content_md = ?, updated_at = ? WHERE day_id = ?', [
@@ -248,7 +254,9 @@ export const saveDay = async (dayId: string, contentMd: string, humanTitle?: str
   }
 
   await upsertFts(dayId, title, contentMd)
-  await markLocalDirty()
+  if (markDirty) {
+    await markLocalDirty()
+  }
   return getDay(dayId)
 }
 

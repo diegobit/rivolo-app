@@ -9,6 +9,8 @@ let sqlPromise: Promise<SqlJsStatic> | null = null
 let dbPromise: Promise<Database> | null = null
 let saveTimer: number | null = null
 let pendingSavePromise: Promise<void> | null = null
+let bulkMutationDepth = 0
+let bulkMutationDirty = false
 let ftsAvailable: boolean | null = null
 
 const ensureSql = () => {
@@ -86,6 +88,15 @@ const scheduleSave = (db: Database) => {
   }, 400)
 }
 
+const markDatabaseChanged = (db: Database) => {
+  if (bulkMutationDepth > 0) {
+    bulkMutationDirty = true
+    return
+  }
+
+  scheduleSave(db)
+}
+
 export const flushDatabaseSave = async () => {
   const db = await getDatabase()
 
@@ -118,7 +129,32 @@ export const getDatabase = async () => {
 export const run = async (sql: string, params: (string | number | null)[] = []) => {
   const db = await getDatabase()
   db.run(sql, params)
-  scheduleSave(db)
+  markDatabaseChanged(db)
+}
+
+export const runBulkDatabaseMutation = async <T>(callback: () => Promise<T>) => {
+  const isOutermostBulk = bulkMutationDepth === 0
+  bulkMutationDepth += 1
+  let result: T
+
+  try {
+    result = await callback()
+  } catch (error) {
+    bulkMutationDepth -= 1
+    if (isOutermostBulk) {
+      bulkMutationDirty = false
+    }
+    throw error
+  }
+
+  bulkMutationDepth -= 1
+
+  if (isOutermostBulk && bulkMutationDirty) {
+    bulkMutationDirty = false
+    await flushDatabaseSave()
+  }
+
+  return result
 }
 
 export const queryAll = async <T = Record<string, string | number | null>>(
@@ -171,5 +207,5 @@ export const upsertFts = async (
     humanTitle,
     content,
   ])
-  scheduleSave(db)
+  markDatabaseChanged(db)
 }
