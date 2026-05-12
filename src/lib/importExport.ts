@@ -1,5 +1,5 @@
 import { exportMarkdown, parseMarkdown } from './markdown'
-import { clearDays, listDays, saveDay } from './dayRepository'
+import { listDays, replaceDays, saveDay } from './dayRepository'
 import { runBulkDatabaseMutation } from './db'
 import { formatDayTitle } from './dates'
 
@@ -17,14 +17,22 @@ export const importMarkdownToDb = async (
     return { imported: 0, warnings }
   }
 
-  await runBulkDatabaseMutation(async () => {
-    if (options.replace) {
-      await clearDays()
-    }
+  const normalizedDays = days.map((day) => ({
+    ...day,
+    humanTitle: day.humanTitle || formatDayTitle(day.dayId),
+  }))
 
-    for (const day of days) {
-      const title = day.humanTitle || formatDayTitle(day.dayId)
-      await saveDay(day.dayId, day.contentMd, title, { markDirty })
+  if (options.replace) {
+    await runBulkDatabaseMutation(async () => {
+      await replaceDays(normalizedDays, { markDirty })
+    })
+
+    return { imported: days.length, warnings }
+  }
+
+  await runBulkDatabaseMutation(async () => {
+    for (const day of normalizedDays) {
+      await saveDay(day.dayId, day.contentMd, day.humanTitle, { markDirty })
     }
   })
 

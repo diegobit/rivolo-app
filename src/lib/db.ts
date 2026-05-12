@@ -157,6 +157,24 @@ export const runBulkDatabaseMutation = async <T>(callback: () => Promise<T>) => 
   return result
 }
 
+export const runDatabaseTransaction = async <T>(callback: () => Promise<T>) => {
+  const db = await getDatabase()
+  db.run('BEGIN TRANSACTION')
+
+  try {
+    const result = await callback()
+    db.run('COMMIT')
+    return result
+  } catch (error) {
+    try {
+      db.run('ROLLBACK')
+    } catch (rollbackError) {
+      console.error('[DB] transaction rollback failed', { rollbackError })
+    }
+    throw error
+  }
+}
+
 export const queryAll = async <T = Record<string, string | number | null>>(
   sql: string,
   params: (string | number | null)[] = [],
