@@ -21,7 +21,43 @@ const ensureSql = () => {
   return sqlPromise
 }
 
+const hasMissingFtsRows = (db: Database) => {
+  const result = db.exec(`
+    SELECT d.day_id
+    FROM days d
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM days_fts f
+      WHERE f.day_id = d.day_id
+    )
+    LIMIT 1;
+  `)
+
+  return Boolean(result[0]?.values.length)
+}
+
+const backfillMissingFtsRows = (db: Database) => {
+  if (!hasMissingFtsRows(db)) {
+    return false
+  }
+
+  db.run(`
+    INSERT INTO days_fts (day_id, human_title, content_md)
+    SELECT d.day_id, d.human_title, d.content_md
+    FROM days d
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM days_fts f
+      WHERE f.day_id = d.day_id
+    );
+  `)
+
+  return true
+}
+
 const ensureSchema = (db: Database) => {
+  let shouldPersist = false
+
   db.run(`
     CREATE TABLE IF NOT EXISTS days (
       day_id TEXT PRIMARY KEY,
@@ -38,6 +74,7 @@ const ensureSchema = (db: Database) => {
       USING fts5(day_id UNINDEXED, human_title, content_md);
     `)
     ftsAvailable = true
+    shouldPersist = backfillMissingFtsRows(db)
   } catch (error) {
     ftsAvailable = false
     console.warn('FTS5 unavailable, falling back to LIKE search.', error)
@@ -59,6 +96,8 @@ const ensureSchema = (db: Database) => {
       meta_json TEXT
     );
   `)
+
+  return shouldPersist
 }
 
 const persistDatabase = (db: Database) => {
@@ -118,7 +157,10 @@ export const getDatabase = async () => {
       const SQL = await ensureSql()
       const stored = await get(DB_KEY)
       const db = stored ? new SQL.Database(new Uint8Array(stored)) : new SQL.Database()
-      ensureSchema(db)
+      const shouldPersistSchema = ensureSchema(db)
+      if (shouldPersistSchema) {
+        await persistDatabase(db)
+      }
       return db
     })()
   }
