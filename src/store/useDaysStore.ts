@@ -232,33 +232,43 @@ export const useDaysStore = create<DaysState>((set, get) => ({
     const loadDayTimer = startDebugTimer(LOG_SCOPE, 'loadDay', { dayId })
 
     set({ loading: true })
-    const existing = await getDay(dayId)
-    debugLog(LOG_SCOPE, 'loadDay:fetched', {
-      dayId,
-      found: Boolean(existing),
-      contentLength: existing?.contentMd.length ?? 0,
-    })
+    try {
+      const existing = await getDay(dayId)
+      debugLog(LOG_SCOPE, 'loadDay:fetched', {
+        dayId,
+        found: Boolean(existing),
+        contentLength: existing?.contentMd.length ?? 0,
+      })
 
-    const day = existing ?? (await ensureDay(dayId))
-    const created = !existing
-    debugLog(LOG_SCOPE, 'loadDay:resolved', {
-      dayId,
-      created,
-      contentLength: day?.contentMd.length ?? 0,
-    })
-    set((state) => ({
-      activeDay: day,
-      days: upsertDayInList(state.days, day),
-      loading: false,
-    }))
+      const day = existing ?? (await ensureDay(dayId))
+      const created = !existing
+      debugLog(LOG_SCOPE, 'loadDay:resolved', {
+        dayId,
+        created,
+        contentLength: day?.contentMd.length ?? 0,
+      })
+      set((state) => ({
+        activeDay: day,
+        days: upsertDayInList(state.days, day),
+        loading: false,
+      }))
 
-    loadDayTimer.end('loadDay:done', {
-      dayId,
-      created,
-      loadedCountAfter: get().days.length,
-    })
+      loadDayTimer.end('loadDay:done', {
+        dayId,
+        created,
+        loadedCountAfter: get().days.length,
+      })
 
-    return { created }
+      return { created }
+    } catch (error) {
+      console.error('[DaysStore] loadDay:failed', { dayId, error })
+      loadDayTimer.end('loadDay:failed', {
+        dayId,
+        error: getErrorMessage(error),
+      })
+      set({ loading: false })
+      return { created: false }
+    }
   },
 
   appendToToday: async (line: string) => {

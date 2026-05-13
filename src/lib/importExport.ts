@@ -1,12 +1,14 @@
 import { exportMarkdown, parseMarkdown } from './markdown'
-import { clearDays, listDays, saveDay } from './dayRepository'
+import { listDays, replaceDays, saveDay } from './dayRepository'
+import { runBulkDatabaseMutation } from './db'
 import { formatDayTitle } from './dates'
 
 export const importMarkdownToDb = async (
   source: string,
-  options: { replace?: boolean } = {},
+  options: { replace?: boolean; markDirty?: boolean } = {},
 ) => {
   const { days, warnings } = parseMarkdown(source)
+  const markDirty = options.markDirty ?? true
   const hasNoMarkersWarning = warnings.some((warning) =>
     warning.toLowerCase().includes('no day markers'),
   )
@@ -15,14 +17,24 @@ export const importMarkdownToDb = async (
     return { imported: 0, warnings }
   }
 
+  const normalizedDays = days.map((day) => ({
+    ...day,
+    humanTitle: day.humanTitle || formatDayTitle(day.dayId),
+  }))
+
   if (options.replace) {
-    await clearDays()
+    await runBulkDatabaseMutation(async () => {
+      await replaceDays(normalizedDays, { markDirty })
+    })
+
+    return { imported: days.length, warnings }
   }
 
-  for (const day of days) {
-    const title = day.humanTitle || formatDayTitle(day.dayId)
-    await saveDay(day.dayId, day.contentMd, title)
-  }
+  await runBulkDatabaseMutation(async () => {
+    for (const day of normalizedDays) {
+      await saveDay(day.dayId, day.contentMd, day.humanTitle, { markDirty })
+    }
+  })
 
   return { imported: days.length, warnings }
 }

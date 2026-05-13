@@ -1,5 +1,5 @@
 import { formatDayTitle } from './dates'
-import { isFtsAvailable, queryAll, queryOne, run, upsertFts } from './db'
+import { isFtsAvailable, queryAll, queryOne, run, runDatabaseTransaction, upsertFts } from './db'
 import { markLocalDirty } from './dropboxState'
 
 export type Day = {
@@ -26,6 +26,12 @@ type DayRow = {
   updated_at: number
 }
 
+type DayWrite = {
+  dayId: string
+  humanTitle: string
+  contentMd: string
+}
+
 const mapRow = (row: DayRow): Day => ({
   dayId: row.day_id,
   humanTitle: row.human_title,
@@ -40,6 +46,43 @@ const MENTION_REGEX = /(^|[^A-Za-z0-9_])@[A-Za-z0-9_/-]+/g
 const HEADING_REGEX = /^\s{0,3}(#{1,6})\s+/
 
 const includesText = (value: string, query: string) => value.toLocaleLowerCase().includes(query)
+
+const toFtsPhraseQuery = (query: string) => {
+  const trimmed = query.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  return `"${trimmed.replace(/"/g, '""')}"`
+}
+
+const getPlainTextSearchRows = async (query: string, limit: number) => {
+  if (!(await isFtsAvailable())) {
+    return null
+  }
+
+  const ftsQuery = toFtsPhraseQuery(query)
+  if (!ftsQuery) {
+    return null
+  }
+
+  try {
+    return await queryAll<DayRow>(
+      `
+        SELECT d.day_id, d.human_title, d.content_md, d.created_at, d.updated_at
+        FROM days_fts
+        JOIN days d ON d.day_id = days_fts.day_id
+        WHERE days_fts MATCH ?
+        ORDER BY d.day_id DESC
+        LIMIT ?
+      `,
+      [ftsQuery, Math.max(limit * 4, limit + 20)],
+    )
+  } catch (error) {
+    console.warn('[Search] FTS query failed, falling back to JS scan.', { error })
+    return null
+  }
+}
 
 const hasMatchingToken = (line: string, regex: RegExp, query: string) => {
   regex.lastIndex = 0
@@ -228,10 +271,16 @@ export const ensureDay = async (dayId: string) => {
   return { dayId, humanTitle, contentMd: '', createdAt: now, updatedAt: now }
 }
 
-export const saveDay = async (dayId: string, contentMd: string, humanTitle?: string) => {
+export const saveDay = async (
+  dayId: string,
+  contentMd: string,
+  humanTitle?: string,
+  options: { markDirty?: boolean } = {},
+) => {
   const existing = await getDay(dayId)
   const now = Date.now()
   const title = humanTitle ?? existing?.humanTitle ?? formatDayTitle(dayId)
+  const markDirty = options.markDirty ?? true
 
   if (existing) {
     await run('UPDATE days SET human_title = ?, content_md = ?, updated_at = ? WHERE day_id = ?', [
@@ -248,7 +297,9 @@ export const saveDay = async (dayId: string, contentMd: string, humanTitle?: str
   }
 
   await upsertFts(dayId, title, contentMd)
-  await markLocalDirty()
+  if (markDirty) {
+    await markLocalDirty()
+  }
   return getDay(dayId)
 }
 
@@ -317,6 +368,31 @@ export const clearDays = async () => {
   }
 }
 
+export const replaceDays = async (days: DayWrite[], options: { markDirty?: boolean } = {}) => {
+  const markDirty = options.markDirty ?? true
+  const now = Date.now()
+
+  await runDatabaseTransaction(async () => {
+    await run('DELETE FROM days')
+    if (await isFtsAvailable()) {
+      await run('DELETE FROM days_fts')
+    }
+
+    for (const day of days) {
+      const title = day.humanTitle || formatDayTitle(day.dayId)
+      await run(
+        'INSERT INTO days (day_id, human_title, content_md, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        [day.dayId, title, day.contentMd, now, now],
+      )
+      await upsertFts(day.dayId, title, day.contentMd)
+    }
+
+    if (markDirty) {
+      await markLocalDirty()
+    }
+  })
+}
+
 export const searchDays = async (
   query: string,
   options: { filter?: SearchFilter | null } = {},
@@ -329,13 +405,16 @@ export const searchDays = async (
     return []
   }
 
-  const rows = await queryAll<DayRow>(
-    `
-      SELECT day_id, human_title, content_md, created_at, updated_at
-      FROM days
-      ORDER BY day_id DESC
-    `,
-  )
+  const ftsRows = !filter && trimmed ? await getPlainTextSearchRows(trimmed, limit) : null
+  const rows = ftsRows?.length
+    ? ftsRows
+    : await queryAll<DayRow>(
+        `
+          SELECT day_id, human_title, content_md, created_at, updated_at
+          FROM days
+          ORDER BY day_id DESC
+        `,
+      )
 
   const results: DaySearchResult[] = []
 

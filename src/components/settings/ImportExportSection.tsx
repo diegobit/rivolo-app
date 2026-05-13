@@ -20,7 +20,8 @@ export default function ImportExportSection({
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Import</h3>
         <div className="mt-3 flex flex-wrap gap-3">
           <label className={buttonSecondary}>
-            <input type="file" accept=".md,text/markdown,text/plain" onChange={onImport} />
+            <span>Import Markdown</span>
+            <input className="sr-only" type="file" accept=".md,text/markdown,text/plain" onChange={onImport} />
           </label>
         </div>
         {importStatus && <p className="mt-3 text-xs text-slate-500">{importStatus}</p>}

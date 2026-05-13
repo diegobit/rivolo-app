@@ -24,22 +24,26 @@ const MIN_BOTTOM_TRAY_HEIGHT_PX = 56
 
 export default function AppShell() {
   const location = useLocation()
-  const { loadSettings, wallpaper, highlightInputMode } = useSettingsStore()
-  const { loadState: loadSyncState, status: syncStatus, syncing, syncOperation } = useSyncStore()
-  const {
-    mode,
-    setMode,
-    chatPanelOpen,
-    setChatPanelOpen,
-    desktopChatPanelOpen,
-    setDesktopChatPanelOpen,
-    chatMessageCount,
-  } = useUIStore()
+  const loadSettings = useSettingsStore((state) => state.loadSettings)
+  const wallpaper = useSettingsStore((state) => state.wallpaper)
+  const highlightInputMode = useSettingsStore((state) => state.highlightInputMode)
+  const loadSyncState = useSyncStore((state) => state.loadState)
+  const syncStatus = useSyncStore((state) => state.status)
+  const syncing = useSyncStore((state) => state.syncing)
+  const syncOperation = useSyncStore((state) => state.syncOperation)
+  const mode = useUIStore((state) => state.mode)
+  const setMode = useUIStore((state) => state.setMode)
+  const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
+  const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
+  const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
+  const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
+  const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
+  const focusModeInputAfterSwitchRef = useRef(false)
   const showBackButton = location.pathname === '/settings' || location.pathname === '/privacy'
   const backTarget = location.pathname === '/privacy' ? '/settings' : '/'
   const isHome = location.pathname === '/'
@@ -243,6 +247,7 @@ export default function AppShell() {
           document.getElementById('chat-input')?.focus()
           return
         }
+        focusModeInputAfterSwitchRef.current = true
         setMode('chat')
         return
       }
@@ -254,6 +259,7 @@ export default function AppShell() {
           document.getElementById('search-input')?.focus()
           return
         }
+        focusModeInputAfterSwitchRef.current = true
         setMode('search')
         return
       }
@@ -267,11 +273,15 @@ export default function AppShell() {
   useEffect(() => {
     if (!isHome) return
     if (mode === 'timeline') return
+    const shouldFocusInput = !isNarrowViewportMode || focusModeInputAfterSwitchRef.current
+    focusModeInputAfterSwitchRef.current = false
+    if (!shouldFocusInput) return
+
     const inputId = mode === 'chat' ? 'chat-input' : 'search-input'
     requestAnimationFrame(() => {
       document.getElementById(inputId)?.focus()
     })
-  }, [isHome, mode])
+  }, [isHome, isNarrowViewportMode, mode])
 
 
   return (

@@ -67,6 +67,20 @@ export const updateDropboxState = async (updates: Partial<DropboxState>) => {
   })
 }
 
+export const updateDropboxFilePath = async (filePath: string) => {
+  return enqueueDropboxStateWrite((current) => {
+    const pathChanged = current.filePath !== filePath
+    const next = {
+      ...current,
+      filePath,
+      lastRemoteRev: pathChanged ? null : current.lastRemoteRev,
+      lastSyncAt: pathChanged ? null : current.lastSyncAt,
+    }
+
+    return { next, result: next }
+  })
+}
+
 export const markLocalDirty = async () => {
   await enqueueDropboxStateWrite((current) => {
     const next = {

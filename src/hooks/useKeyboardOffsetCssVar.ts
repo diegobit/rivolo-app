@@ -3,8 +3,9 @@ import { useEffect } from 'react'
 export const useKeyboardOffsetCssVar = () => {
   useEffect(() => {
     const root = document.documentElement
+    let animationFrame: number | null = null
 
-    const updateKeyboardOffset = () => {
+    const writeKeyboardOffset = () => {
       if (!window.visualViewport) {
         root.style.setProperty('--keyboard-offset', '0px')
         document.body.dataset.keyboardOpen = 'false'
@@ -17,7 +18,18 @@ export const useKeyboardOffsetCssVar = () => {
       document.body.dataset.keyboardOpen = offset > 0 ? 'true' : 'false'
     }
 
-    updateKeyboardOffset()
+    const updateKeyboardOffset = () => {
+      if (animationFrame !== null) {
+        return
+      }
+
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = null
+        writeKeyboardOffset()
+      })
+    }
+
+    writeKeyboardOffset()
 
     if (!window.visualViewport) return
 
@@ -27,6 +39,9 @@ export const useKeyboardOffsetCssVar = () => {
     window.addEventListener('orientationchange', updateKeyboardOffset)
 
     return () => {
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame)
+      }
       window.visualViewport?.removeEventListener('resize', updateKeyboardOffset)
       window.visualViewport?.removeEventListener('scroll', updateKeyboardOffset)
       window.removeEventListener('resize', updateKeyboardOffset)

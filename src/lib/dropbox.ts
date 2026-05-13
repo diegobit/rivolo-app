@@ -398,7 +398,7 @@ export const pullFromDropbox = async () => {
   }
 
   const content = await downloadFile(path)
-  const result = await importMarkdownToDb(content, { replace: true })
+  const result = await importMarkdownToDb(content, { replace: true, markDirty: false })
   const hasNoMarkersWarning =
     result.imported === 0 &&
     result.warnings.some((warning) => warning.toLowerCase().includes('no day markers'))
