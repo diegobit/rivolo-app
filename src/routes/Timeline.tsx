@@ -18,18 +18,19 @@ import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
 import { debugLog, startDebugTimer } from '../lib/debugLogs'
 import type { Day, DaySearchResult, SearchFilter } from '../lib/dayRepository'
 import { appendToDay, searchDays } from '../lib/dayRepository'
-import { flushDatabaseSave } from '../lib/db'
 import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
+import { useDaySaveQueue } from './timeline/useDaySaveQueue'
 import { useEditorMountWindow } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
+import { usePendingDayDelete } from './timeline/usePendingDayDelete'
 import { useTimelineChat } from './timeline/useTimelineChat'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useDaysStore } from '../store/useDaysStore'
 import { useUIStore } from '../store/useUIStore'
 import { useChatStore, type ChatCitation as Citation } from '../store/useChatStore'
-import { flushAutoPushToSync, scheduleAutoPushToSync } from '../store/syncActions'
+import { scheduleAutoPushToSync } from '../store/syncActions'
 
 const isEditableElement = (element: HTMLElement | null) =>
   Boolean(
@@ -736,7 +737,6 @@ const EDITOR_HYDRATE_OBSERVER_MARGIN = '70% 0px 90% 0px'
 const EDITOR_PIN_TTL_MS = 20_000
 const EDITOR_PIN_PRUNE_INTERVAL_MS = 4_000
 const LOG_SCOPE = 'TimelinePerf'
-const DELETE_UNDO_WINDOW_MS = 6_000
 
 // --- Component ---
 
@@ -799,9 +799,66 @@ export default function Timeline() {
   const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
   const [isNarrowViewportMode, setIsNarrowViewportMode] = useState(() => isNarrowViewport())
-  const [pendingDeleteDayId, setPendingDeleteDayId] = useState<string | null>(null)
-  const [committingDeleteDayIds, setCommittingDeleteDayIds] = useState<string[]>([])
   const searchResultsRef = useRef<DaySearchResult[]>([])
+
+  const hasRestoredScroll = useRef(false)
+  const editorRefs = useRef(new Map<string, EditorView>())
+  const dayRefs = useRef(new Map<string, HTMLDivElement>())
+  const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
+  const mobileChatScrollRef = useRef<HTMLDivElement | null>(null)
+  const createdDayIdsRef = useRef(new Set<string>())
+  const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
+  const addTodayRef = useRef<HTMLDivElement | null>(null)
+  const heroLogoRef = useRef<HTMLImageElement | null>(null)
+  const heroRevealPending = useRef(false)
+
+  const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
+
+  const handleAutoPush = useCallback(async () => {
+    if (!canSync || !navigator.onLine) return
+    scheduleAutoPushToSync()
+  }, [canSync])
+
+  const clearDateError = useCallback((dayId: string) => {
+    setDateErrors((state) => {
+      if (!state[dayId]) return state
+      const next = { ...state }
+      delete next[dayId]
+      return next
+    })
+  }, [])
+
+  const {
+    clearDaySaveToken,
+    discardPendingDaySave,
+    flushPendingDaySave,
+    markDaySavesStale,
+    saveDayImmediately,
+    scheduleSave,
+    setPendingSaveContent,
+  } = useDaySaveQueue({
+    canSync,
+    updateDayContent,
+    onAutoPush: handleAutoPush,
+  })
+
+  const {
+    finalizeDeleteDayNow,
+    handleDeleteDay,
+    handleUndoDelete,
+    hiddenDeleteDayIds,
+    pendingDeleteDayId,
+    prepareDayForCreate,
+  } = usePendingDayDelete({
+    clearDateError,
+    createdDayIdsRef,
+    deleteDay,
+    discardPendingDaySave,
+    flushPendingDaySave,
+    markDaySavesStale,
+    onAutoPush: handleAutoPush,
+    setSearchResults,
+  })
 
   useEffect(() => {
     searchResultsRef.current = searchResults
@@ -814,14 +871,6 @@ export default function Timeline() {
     if (!chatPanelOpen) return
     setChatPanelOpen(false)
   }, [chatPanelOpen, isNarrowViewportMode, messages.length, mode, setChatPanelOpen])
-
-  const hiddenDeleteDayIds = useMemo(() => {
-    const next = new Set(committingDeleteDayIds)
-    if (pendingDeleteDayId) {
-      next.add(pendingDeleteDayId)
-    }
-    return next
-  }, [committingDeleteDayIds, pendingDeleteDayId])
 
   const visibleDays = useMemo(
     () => (hiddenDeleteDayIds.size ? days.filter((day) => !hiddenDeleteDayIds.has(day.dayId)) : days),
@@ -836,7 +885,6 @@ export default function Timeline() {
   )
   const hasNoNotes = !loading && visibleDays.length === 0
 
-  const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
@@ -854,28 +902,6 @@ export default function Timeline() {
   const heroLogoDuration = 600
   const isIosDevice = isIOS()
   const supportsIntersectionObserver = typeof window !== 'undefined' && 'IntersectionObserver' in window
-
-  const hasRestoredScroll = useRef(false)
-  const editorRefs = useRef(new Map<string, EditorView>())
-  const dayRefs = useRef(new Map<string, HTMLDivElement>())
-  const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
-  const mobileChatScrollRef = useRef<HTMLDivElement | null>(null)
-  const saveTimeouts = useRef(new Map<string, number>())
-  const pendingSaveContentRef = useRef(new Map<string, string>())
-  const daySaveQueueRef = useRef(new Map<string, Promise<void>>())
-  const daySaveTokensRef = useRef(new Map<string, number>())
-  const flushPendingDaySaveRef = useRef<(dayId: string) => Promise<void>>(() => Promise.resolve())
-  const createdDayIdsRef = useRef(new Set<string>())
-  const pendingDeleteTimerRef = useRef<number | null>(null)
-  const pendingDeleteDayIdRef = useRef<string | null>(null)
-  const committingDeleteDayIdsRef = useRef(new Set<string>())
-  const finalizeDeleteQueueRef = useRef<Promise<void>>(Promise.resolve())
-  const finalizeDeleteOnUnmountRef = useRef<(dayId: string) => Promise<void>>(async () => {})
-  const isMountedRef = useRef(true)
-  const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
-  const addTodayRef = useRef<HTMLDivElement | null>(null)
-  const heroLogoRef = useRef<HTMLImageElement | null>(null)
-  const heroRevealPending = useRef(false)
 
   const markdownExtension = useMemo(() => markdown({ base: markdownLanguage }), [])
   const editorTheme = useMemo(
@@ -1096,6 +1122,15 @@ export default function Timeline() {
     document.body.dataset.heroReveal = 'true'
   }, [isHeroRevealHold])
 
+  useEffect(() => {
+    return () => {
+      delete document.body.dataset.emptyState
+      delete document.body.dataset.heroWallpaper
+      delete document.body.dataset.heroUi
+      delete document.body.dataset.heroReveal
+    }
+  }, [])
+
   // Restore scroll position when returning to Timeline
   useEffect(() => {
     if (hasRestoredScroll.current) return
@@ -1149,166 +1184,6 @@ export default function Timeline() {
   }, [mode, searchFilter, searchQuery])
 
   // --- Handlers ---
-
-  const handleAutoPush = useCallback(async () => {
-    if (!canSync || !navigator.onLine) return
-    scheduleAutoPushToSync()
-  }, [canSync])
-
-  const clearPendingDeleteTimer = useCallback(() => {
-    if (pendingDeleteTimerRef.current !== null) {
-      window.clearTimeout(pendingDeleteTimerRef.current)
-      pendingDeleteTimerRef.current = null
-    }
-  }, [])
-
-  const clearPendingSaveTimeout = useCallback((dayId: string) => {
-    const existing = saveTimeouts.current.get(dayId)
-    if (existing) {
-      window.clearTimeout(existing)
-      saveTimeouts.current.delete(dayId)
-    }
-  }, [])
-
-  const getDaySaveToken = useCallback((dayId: string) => daySaveTokensRef.current.get(dayId) ?? 0, [])
-
-  const markDaySavesStale = useCallback(
-    (dayId: string) => {
-      daySaveTokensRef.current.set(dayId, getDaySaveToken(dayId) + 1)
-    },
-    [getDaySaveToken],
-  )
-
-  const clearDaySaveToken = useCallback((dayId: string) => {
-    daySaveTokensRef.current.delete(dayId)
-  }, [])
-
-  const clearDateError = useCallback((dayId: string) => {
-    setDateErrors((state) => {
-      if (!state[dayId]) return state
-      const next = { ...state }
-      delete next[dayId]
-      return next
-    })
-  }, [])
-
-  const addCommittingDeleteDay = useCallback((dayId: string) => {
-    if (committingDeleteDayIdsRef.current.has(dayId)) {
-      return
-    }
-
-    committingDeleteDayIdsRef.current.add(dayId)
-    if (isMountedRef.current) {
-      setCommittingDeleteDayIds((state) => (state.includes(dayId) ? state : [...state, dayId]))
-    }
-  }, [])
-
-  const removeCommittingDeleteDay = useCallback((dayId: string) => {
-    if (!committingDeleteDayIdsRef.current.has(dayId)) {
-      return
-    }
-
-    committingDeleteDayIdsRef.current.delete(dayId)
-    if (isMountedRef.current) {
-      setCommittingDeleteDayIds((state) => state.filter((value) => value !== dayId))
-    }
-  }, [])
-
-  const finalizeDeleteDayNow = useCallback(
-    async (
-      dayId: string,
-      options?: { skipDateErrorCleanup?: boolean; skipSearchResultsCleanup?: boolean },
-    ) => {
-      await flushPendingDaySaveRef.current(dayId)
-      markDaySavesStale(dayId)
-      pendingSaveContentRef.current.delete(dayId)
-      createdDayIdsRef.current.delete(dayId)
-
-      if (!options?.skipDateErrorCleanup && isMountedRef.current) {
-        clearDateError(dayId)
-      }
-
-      if (!options?.skipSearchResultsCleanup && isMountedRef.current) {
-        setSearchResults((state) => state.filter((result) => result.day.dayId !== dayId))
-      }
-      await deleteDay(dayId)
-      void handleAutoPush()
-    },
-    [clearDateError, deleteDay, handleAutoPush, markDaySavesStale],
-  )
-
-  const enqueueDeleteFinalization = useCallback(
-    (dayId: string) => {
-      if (committingDeleteDayIdsRef.current.has(dayId)) {
-        return finalizeDeleteQueueRef.current
-      }
-
-      addCommittingDeleteDay(dayId)
-
-      const run = async () => {
-        try {
-          await finalizeDeleteDayNow(dayId)
-        } finally {
-          removeCommittingDeleteDay(dayId)
-        }
-      }
-
-      const queuedRun = finalizeDeleteQueueRef.current.then(run, run)
-      finalizeDeleteQueueRef.current = queuedRun.then(
-        () => undefined,
-        () => undefined,
-      )
-
-      return queuedRun
-    },
-    [addCommittingDeleteDay, finalizeDeleteDayNow, removeCommittingDeleteDay],
-  )
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false
-    }
-  }, [])
-
-  useEffect(() => {
-    finalizeDeleteOnUnmountRef.current = (dayId: string) =>
-      finalizeDeleteDayNow(dayId, { skipDateErrorCleanup: true, skipSearchResultsCleanup: true })
-  }, [finalizeDeleteDayNow])
-
-  useEffect(() => {
-    return () => {
-      if (pendingDeleteTimerRef.current !== null) {
-        window.clearTimeout(pendingDeleteTimerRef.current)
-        pendingDeleteTimerRef.current = null
-      }
-
-      const pendingDayId = pendingDeleteDayIdRef.current
-      pendingDeleteDayIdRef.current = null
-      if (pendingDayId) {
-        void finalizeDeleteOnUnmountRef.current(pendingDayId)
-      }
-    }
-  }, [])
-
-  const finalizePendingDelete = useCallback(
-    (dayId: string) => {
-      if (pendingDeleteDayIdRef.current !== dayId) {
-        return
-      }
-
-      clearPendingDeleteTimer()
-      pendingDeleteDayIdRef.current = null
-      setPendingDeleteDayId((current) => (current === dayId ? null : current))
-      void enqueueDeleteFinalization(dayId)
-    },
-    [clearPendingDeleteTimer, enqueueDeleteFinalization],
-  )
-
-  const handleUndoDelete = useCallback(() => {
-    clearPendingDeleteTimer()
-    pendingDeleteDayIdRef.current = null
-    setPendingDeleteDayId(null)
-  }, [clearPendingDeleteTimer])
 
   const handleChatInsertNote = useCallback(
     async (targetDay: string, text: string) => {
@@ -1414,138 +1289,6 @@ export default function Timeline() {
     return true
   }, [])
 
-  const enqueueDaySave = useCallback(
-    (dayId: string, content: string) => {
-      const queue = daySaveQueueRef.current
-      const saveToken = getDaySaveToken(dayId)
-      const previous = queue.get(dayId) ?? Promise.resolve()
-
-      const queuedRun = previous
-        .catch(() => undefined)
-        .then(async () => {
-          if (getDaySaveToken(dayId) !== saveToken) {
-            return
-          }
-
-          await updateDayContent(dayId, content)
-          if (getDaySaveToken(dayId) !== saveToken) {
-            return
-          }
-
-          await handleAutoPush()
-        })
-        .catch((error: unknown) => {
-          console.error('[Timeline] saveDay:failed', { dayId, error })
-        })
-
-      const trackedRun = queuedRun.finally(() => {
-        if (queue.get(dayId) === trackedRun) {
-          queue.delete(dayId)
-        }
-      })
-
-      queue.set(dayId, trackedRun)
-      return trackedRun
-    },
-    [getDaySaveToken, handleAutoPush, updateDayContent],
-  )
-
-  const scheduleSave = useCallback(
-    (dayId: string, content: string) => {
-      pendingSaveContentRef.current.set(dayId, content)
-      const existing = saveTimeouts.current.get(dayId)
-      if (existing) {
-        window.clearTimeout(existing)
-      }
-      const handle = window.setTimeout(() => {
-        saveTimeouts.current.delete(dayId)
-        const pendingContent = pendingSaveContentRef.current.get(dayId) ?? content
-        pendingSaveContentRef.current.delete(dayId)
-        void enqueueDaySave(dayId, pendingContent)
-      }, 1000)
-      saveTimeouts.current.set(dayId, handle)
-    },
-    [enqueueDaySave],
-  )
-
-  const flushPendingDaySave = useCallback(
-    (dayId: string) => {
-      const pendingContent = pendingSaveContentRef.current.get(dayId)
-      if (pendingContent === undefined) {
-        return daySaveQueueRef.current.get(dayId) ?? Promise.resolve()
-      }
-
-      clearPendingSaveTimeout(dayId)
-      pendingSaveContentRef.current.delete(dayId)
-      return enqueueDaySave(dayId, pendingContent)
-    },
-    [clearPendingSaveTimeout, enqueueDaySave],
-  )
-
-  useEffect(() => {
-    flushPendingDaySaveRef.current = flushPendingDaySave
-  }, [flushPendingDaySave])
-
-  const flushAllPendingDaySaves = useCallback(async () => {
-    const pendingDayIds = [...pendingSaveContentRef.current.keys()]
-    await Promise.all(pendingDayIds.map((dayId) => flushPendingDaySave(dayId)))
-    await Promise.all([...daySaveQueueRef.current.values()])
-  }, [flushPendingDaySave])
-
-  useEffect(() => {
-    const pendingTimeouts = saveTimeouts.current
-
-    const flushTimelineSaves = () => {
-      void flushAllPendingDaySaves()
-        .then(() => flushDatabaseSave())
-        .then(() => {
-          if (!canSync || !navigator.onLine) {
-            return undefined
-          }
-
-          return flushAutoPushToSync()
-        })
-        .catch((error: unknown) => {
-          console.error('[Timeline] flush pending saves failed', { error })
-        })
-    }
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        flushTimelineSaves()
-      }
-    }
-
-    const handlePageHide = () => {
-      flushTimelineSaves()
-    }
-
-    const handleWindowBlur = () => {
-      flushTimelineSaves()
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('pagehide', handlePageHide)
-    window.addEventListener('blur', handleWindowBlur)
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('pagehide', handlePageHide)
-      window.removeEventListener('blur', handleWindowBlur)
-      flushTimelineSaves()
-
-      for (const handle of pendingTimeouts.values()) {
-        window.clearTimeout(handle)
-      }
-      pendingTimeouts.clear()
-
-      delete document.body.dataset.emptyState
-      delete document.body.dataset.heroWallpaper
-      delete document.body.dataset.heroUi
-      delete document.body.dataset.heroReveal
-    }
-  }, [canSync, flushAllPendingDaySaves])
-
   const focusDayEditor = useCallback(
     (dayId: string, position: 'start' | 'end', shouldScroll = true) => {
       const view = editorRefs.current.get(dayId)
@@ -1619,14 +1362,7 @@ export default function Timeline() {
       },
     ) => {
       const { focusPosition = 'end', scrollBlock = 'center', focusScroll = true } = options ?? {}
-
-      if (pendingDeleteDayIdRef.current === dayId) {
-        handleUndoDelete()
-      }
-
-      if (committingDeleteDayIdsRef.current.has(dayId)) {
-        await finalizeDeleteQueueRef.current
-      }
+      await prepareDayForCreate(dayId)
 
       pendingFocusRef.current = { dayId, position: focusPosition }
       pinDayForEditorMount(dayId, 'loadDay')
@@ -1642,32 +1378,7 @@ export default function Timeline() {
         pendingFocusRef.current = null
       }
     },
-    [handleUndoDelete, loadDay, pinDayForEditorMount, revealDay],
-  )
-
-  const handleDeleteDay = useCallback(
-    (dayId: string) => {
-      const currentPendingDayId = pendingDeleteDayIdRef.current
-      if (currentPendingDayId && currentPendingDayId !== dayId) {
-        finalizePendingDelete(currentPendingDayId)
-      }
-
-      if (pendingDeleteDayIdRef.current === dayId || committingDeleteDayIdsRef.current.has(dayId)) {
-        return
-      }
-
-      clearPendingDeleteTimer()
-      pendingDeleteDayIdRef.current = dayId
-      setPendingDeleteDayId(dayId)
-
-      pendingDeleteTimerRef.current = window.setTimeout(() => {
-        if (pendingDeleteDayIdRef.current !== dayId) {
-          return
-        }
-        finalizePendingDelete(dayId)
-      }, DELETE_UNDO_WINDOW_MS)
-    },
-    [clearPendingDeleteTimer, finalizePendingDelete],
+    [loadDay, pinDayForEditorMount, prepareDayForCreate, revealDay],
   )
 
   const handleEditorBlur = useCallback(
@@ -1701,7 +1412,7 @@ export default function Timeline() {
       const content = view?.state.doc.toString() ?? ''
 
       if (view) {
-        pendingSaveContentRef.current.set(dayId, content)
+        setPendingSaveContent(dayId, content)
       }
 
       await flushPendingDaySave(dayId)
@@ -1724,7 +1435,16 @@ export default function Timeline() {
       await handleAutoPush()
       revealDay(nextDayId, 'end')
     },
-    [clearDaySaveToken, flushPendingDaySave, handleAutoPush, markDaySavesStale, moveDayDate, pinDayForEditorMount, revealDay],
+    [
+      clearDaySaveToken,
+      flushPendingDaySave,
+      handleAutoPush,
+      markDaySavesStale,
+      moveDayDate,
+      pinDayForEditorMount,
+      revealDay,
+      setPendingSaveContent,
+    ],
   )
 
   const handleEditorChange = useCallback(
@@ -2213,11 +1933,9 @@ export default function Timeline() {
       searchResultsRef.current = nextResults
       setSearchResults(nextResults)
       patchDayContent(dayId, nextContentToSave)
-      clearPendingSaveTimeout(dayId)
-      pendingSaveContentRef.current.delete(dayId)
-      void enqueueDaySave(dayId, nextContentToSave)
+      void saveDayImmediately(dayId, nextContentToSave)
     },
-    [clearPendingSaveTimeout, enqueueDaySave, patchDayContent],
+    [patchDayContent, saveDayImmediately],
   )
 
   // --- Render ---
