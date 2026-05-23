@@ -8,6 +8,9 @@ const DB_KEY = 'single-note-db'
 let sqlPromise: Promise<SqlJsStatic> | null = null
 let dbPromise: Promise<Database> | null = null
 let saveTimer: number | null = null
+let pendingSavePromise: Promise<void> | null = null
+let bulkMutationDepth = 0
+let bulkMutationDirty = false
 let ftsAvailable: boolean | null = null
 
 const ensureSql = () => {
@@ -58,15 +61,55 @@ const ensureSchema = (db: Database) => {
   `)
 }
 
+const persistDatabase = (db: Database) => {
+  const data = db.export()
+  const savePromise = set(DB_KEY, data)
+  pendingSavePromise = savePromise
+
+  savePromise.catch((error: unknown) => {
+    console.error('[DB] persist:failed', { error })
+  }).finally(() => {
+    if (pendingSavePromise === savePromise) {
+      pendingSavePromise = null
+    }
+  })
+
+  return savePromise
+}
+
 const scheduleSave = (db: Database) => {
   if (saveTimer) {
     window.clearTimeout(saveTimer)
   }
 
   saveTimer = window.setTimeout(() => {
-    const data = db.export()
-    void set(DB_KEY, data)
+    saveTimer = null
+    void persistDatabase(db)
   }, 400)
+}
+
+const markDatabaseChanged = (db: Database) => {
+  if (bulkMutationDepth > 0) {
+    bulkMutationDirty = true
+    return
+  }
+
+  scheduleSave(db)
+}
+
+export const flushDatabaseSave = async () => {
+  const db = await getDatabase()
+
+  if (saveTimer) {
+    window.clearTimeout(saveTimer)
+    saveTimer = null
+  }
+
+  if (pendingSavePromise) {
+    await pendingSavePromise
+  }
+
+  await persistDatabase(db)
 }
 
 export const getDatabase = async () => {
@@ -86,7 +129,50 @@ export const getDatabase = async () => {
 export const run = async (sql: string, params: (string | number | null)[] = []) => {
   const db = await getDatabase()
   db.run(sql, params)
-  scheduleSave(db)
+  markDatabaseChanged(db)
+}
+
+export const runBulkDatabaseMutation = async <T>(callback: () => Promise<T>) => {
+  const isOutermostBulk = bulkMutationDepth === 0
+  bulkMutationDepth += 1
+  let result: T
+
+  try {
+    result = await callback()
+  } catch (error) {
+    bulkMutationDepth -= 1
+    if (isOutermostBulk) {
+      bulkMutationDirty = false
+    }
+    throw error
+  }
+
+  bulkMutationDepth -= 1
+
+  if (isOutermostBulk && bulkMutationDirty) {
+    bulkMutationDirty = false
+    await flushDatabaseSave()
+  }
+
+  return result
+}
+
+export const runDatabaseTransaction = async <T>(callback: () => Promise<T>) => {
+  const db = await getDatabase()
+  db.run('BEGIN TRANSACTION')
+
+  try {
+    const result = await callback()
+    db.run('COMMIT')
+    return result
+  } catch (error) {
+    try {
+      db.run('ROLLBACK')
+    } catch (rollbackError) {
+      console.error('[DB] transaction rollback failed', { rollbackError })
+    }
+    throw error
+  }
 }
 
 export const queryAll = async <T = Record<string, string | number | null>>(
@@ -139,5 +225,5 @@ export const upsertFts = async (
     humanTitle,
     content,
   ])
-  scheduleSave(db)
+  markDatabaseChanged(db)
 }

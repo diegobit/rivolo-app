@@ -10,7 +10,7 @@ type Wallpaper = 'white' | 'thoughts-light' | 'thoughts-medium' | 'thoughts-high
 type FontPreference = 'proportional' | 'monospace'
 
 type LlmSecrets = {
-  geminiApiKey: string
+  geminiApiKey?: string
 }
 
 const DEFAULT_GEMINI_MODEL = 'gemini-3-flash-preview'
@@ -34,6 +34,7 @@ type SettingsState = {
   titleFont: TitleFont
   loadSettings: () => Promise<void>
   saveGeminiKey: (apiKey: string) => Promise<void>
+  clearGeminiKey: () => Promise<void>
   updateGeminiModel: (model: string) => Promise<void>
   updateAllowThinking: (enabled: boolean) => Promise<void>
   updateAllowWebSearch: (enabled: boolean) => Promise<void>
@@ -159,6 +160,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     await setJsonSetting('llm.secrets', { geminiApiKey: apiKey })
     await setSetting('llm.provider', 'gemini')
     set({ geminiApiKey: apiKey, provider: 'gemini' })
+  },
+
+  clearGeminiKey: async () => {
+    await setJsonSetting('llm.secrets', {})
+    set({ geminiApiKey: null })
   },
 
   updateGeminiModel: async (model: string) => {
