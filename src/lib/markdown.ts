@@ -1,5 +1,5 @@
-import { formatDayTitle } from './dates'
-import type { Day } from './dayRepository'
+import { formatDayTitle } from './dates.js'
+import type { Day } from './notesCore.js'
 
 export type ParsedDay = {
   dayId: string

@@ -13,6 +13,10 @@ Rivolo is a static web app that runs entirely in your browser (no backend). The 
 > [!NOTE]
 > The app was completely developed with coding agents. I use it daily. I wrote about this [here](https://diegobit.com/post/rivolo).
 
+## MCP
+
+Rivolo includes a local read-only MCP server for querying your exported notes from other AI tools. Build it with `npm run mcp:build`, then point your MCP client at `dist-mcp/mcp/index.js` with `RIVOLO_NOTES_FILE` set to your local Rivolo markdown file.
+
 ## Run
 
 ```bash
