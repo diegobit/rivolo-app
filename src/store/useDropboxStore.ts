@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getDropboxState, updateDropboxState } from '../lib/dropboxState'
+import { getDropboxState, updateDropboxFilePath } from '../lib/dropboxState'
 
 export type DropboxViewState = {
   filePath: string
@@ -39,11 +39,13 @@ export const useDropboxStore = create<DropboxViewState>((set) => ({
   },
 
   updateFilePath: async (path: string) => {
-    const state = await updateDropboxState({ filePath: path })
+    const state = await updateDropboxFilePath(path)
     set({
       filePath: state.filePath ?? '',
       lastRemoteRev: state.lastRemoteRev,
+      lastSyncAt: state.lastSyncAt,
       localDirty: state.localDirty,
+      hasAuth: Boolean(state.auth),
       accountId: state.accountId,
       accountEmail: state.accountEmail,
       accountName: state.accountName,

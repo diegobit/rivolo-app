@@ -4,7 +4,12 @@ import { useSyncStore } from './useSyncStore'
 
 type SyncQueueOperation = 'pull' | 'push'
 
+const AUTO_PUSH_DELAY_MS = 7_000
+
 let syncQueueTail: Promise<void> = Promise.resolve()
+let autoPushTimer: number | null = null
+let autoPushInFlight: Promise<void> | null = null
+let autoPushRequestedWhileRunning = false
 
 const enqueueSyncOperation = async <T>(operation: SyncQueueOperation, runner: () => Promise<T>) => {
   const run = async () => {
@@ -49,3 +54,54 @@ export const pushToSyncAndRefresh = async (force = false) =>
     await useSyncStore.getState().loadState()
     return result
   })
+
+const runAutoPush = () => {
+  if (autoPushInFlight) {
+    autoPushRequestedWhileRunning = true
+    return autoPushInFlight
+  }
+
+  autoPushRequestedWhileRunning = false
+  const run = pushToSyncAndRefresh().then(
+    () => undefined,
+    () => undefined,
+  )
+  autoPushInFlight = run
+  run.then(
+    () => {
+      autoPushInFlight = null
+      if (autoPushRequestedWhileRunning) {
+        autoPushRequestedWhileRunning = false
+        void runAutoPush()
+      }
+    },
+    () => {
+      autoPushInFlight = null
+    },
+  )
+  return run
+}
+
+export const scheduleAutoPushToSync = () => {
+  if (autoPushTimer !== null) {
+    window.clearTimeout(autoPushTimer)
+  }
+
+  autoPushTimer = window.setTimeout(() => {
+    autoPushTimer = null
+    void runAutoPush()
+  }, AUTO_PUSH_DELAY_MS)
+}
+
+export const flushAutoPushToSync = async () => {
+  if (autoPushTimer === null) {
+    if (autoPushInFlight) {
+      await autoPushInFlight
+    }
+    return
+  }
+
+  window.clearTimeout(autoPushTimer)
+  autoPushTimer = null
+  await runAutoPush()
+}
