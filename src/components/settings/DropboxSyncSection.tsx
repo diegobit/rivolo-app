@@ -66,11 +66,11 @@ export default function DropboxSyncSection({
       <div className="mt-4 space-y-3">
         <div className="flex flex-wrap gap-2">
           {dropboxSummary.connected ? (
-            <button className={buttonDanger} type="button" onClick={onDisconnectDropbox}>
+            <button className={buttonDanger} type="button" onClick={onDisconnectDropbox} disabled={syncBusy}>
               Disconnect Dropbox
             </button>
           ) : (
-            <button className={buttonPrimary} type="button" onClick={onConnectDropbox} disabled={!online}>
+            <button className={buttonPrimary} type="button" onClick={onConnectDropbox} disabled={syncBusy || !online}>
               Connect Dropbox
             </button>
           )}
@@ -92,7 +92,7 @@ export default function DropboxSyncSection({
                 : 'rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-500'
             }
             type="button"
-            disabled={!isDropboxPathDirty}
+            disabled={syncBusy || !isDropboxPathDirty}
             onClick={onSavePath}
           >
             Save Path
@@ -124,7 +124,7 @@ export default function DropboxSyncSection({
             onClick={() => onPush(true)}
             disabled={syncBusy || !online || !dropboxSummary.connected}
           >
-            Force overwrite Dropbox from local copy
+            Restore Dropbox from local copy
           </button>
         </div>
         {dropboxStatus && <p className="text-xs text-slate-500">{dropboxStatus}</p>}

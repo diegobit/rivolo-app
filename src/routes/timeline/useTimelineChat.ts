@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { appendToDay } from '../../lib/dayRepository'
 import { getTodayId } from '../../lib/dates'
 import { chat, type ChatMessage as LlmMessage } from '../../lib/llm'
 import { hasAssistantPayloadContent, parseAssistantPayload, stripCodeFences, type AssistantPayload } from '../../lib/assistantPayload'
@@ -57,8 +56,7 @@ type UseTimelineChatParams = {
   desktopChatPanelOpen: boolean
   setChatPanelOpen: (open: boolean) => void
   setDesktopChatPanelOpen: (open: boolean) => void
-  loadTimeline: () => Promise<void>
-  handleAutoPush: () => Promise<void>
+  onInsertNote: (targetDay: string, text: string) => Promise<void>
 }
 
 const normalizeCitationText = (value: string) =>
@@ -81,8 +79,7 @@ export const useTimelineChat = ({
   desktopChatPanelOpen,
   setChatPanelOpen,
   setDesktopChatPanelOpen,
-  loadTimeline,
-  handleAutoPush,
+  onInsertNote,
 }: UseTimelineChatParams) => {
   const [sending, setSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
@@ -133,6 +130,72 @@ export const useTimelineChat = ({
         role: message.role,
         content: message.content,
       })) as LlmMessage[]
+      const streamedCitations: Citation[] = []
+      const streamedCitationIndexes = new Map<string, number>()
+      let streamedInsertText: string | null = null
+      let streamedInsertTargetDay: string | null = null
+      let streamedAnswer = ''
+      let pendingStreamText = ''
+      let pendingStreamMetaChanged = false
+      let streamUpdateFrame: number | null = null
+
+      const flushStreamUpdate = () => {
+        const textDelta = pendingStreamText
+        const metaChanged = pendingStreamMetaChanged
+        pendingStreamText = ''
+        pendingStreamMetaChanged = false
+
+        if (!textDelta && !metaChanged) {
+          return
+        }
+
+        setMessages((state) =>
+          state.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  content: textDelta ? `${message.content}${textDelta}` : message.content,
+                  meta: {
+                    citations: [...streamedCitations],
+                    insertText: streamedInsertText,
+                    insertTargetDay: streamedInsertTargetDay,
+                    isStreaming: true,
+                  },
+                }
+              : message,
+          ),
+        )
+      }
+
+      const cancelScheduledStreamUpdate = () => {
+        if (streamUpdateFrame === null) {
+          return
+        }
+
+        window.cancelAnimationFrame(streamUpdateFrame)
+        streamUpdateFrame = null
+      }
+
+      const scheduleStreamUpdate = () => {
+        if (streamUpdateFrame !== null) {
+          return
+        }
+
+        streamUpdateFrame = window.requestAnimationFrame(() => {
+          streamUpdateFrame = null
+          flushStreamUpdate()
+        })
+      }
+
+      const queueStreamUpdate = (textDelta: string, metaChanged: boolean) => {
+        if (textDelta) {
+          pendingStreamText += textDelta
+        }
+        if (metaChanged) {
+          pendingStreamMetaChanged = true
+        }
+        scheduleStreamUpdate()
+      }
 
       try {
         const contextDays = await buildContextDays(trimmed)
@@ -165,12 +228,6 @@ export const useTimelineChat = ({
         })
 
         const streamTagParser = createStreamTagParser()
-        const streamedCitations: Citation[] = []
-        const streamedCitationIndexes = new Map<string, number>()
-        let streamedInsertText: string | null = null
-        let streamedInsertTargetDay: string | null = null
-        let streamedAnswer = ''
-
         const applyStreamTagPieces = (pieces: StreamTagPiece[]) => {
           if (!pieces.length) {
             return
@@ -216,22 +273,7 @@ export const useTimelineChat = ({
             return
           }
 
-          setMessages((state) =>
-            state.map((message) =>
-              message.id === assistantId
-                ? {
-                    ...message,
-                    content: textDelta ? `${message.content}${textDelta}` : message.content,
-                    meta: {
-                      citations: [...streamedCitations],
-                      insertText: streamedInsertText,
-                      insertTargetDay: streamedInsertTargetDay,
-                      isStreaming: true,
-                    },
-                  }
-                : message,
-            ),
-          )
+          queueStreamUpdate(textDelta, metaChanged)
         }
 
         const { text: responseText } = await chat({
@@ -251,6 +293,8 @@ export const useTimelineChat = ({
 
         const finalStreamChunk = streamTagParser.flush()
         applyStreamTagPieces(finalStreamChunk.pieces)
+        cancelScheduledStreamUpdate()
+        flushStreamUpdate()
 
         let finalResponseText = responseText
         let payload: AssistantPayload | null = null
@@ -342,6 +386,8 @@ export const useTimelineChat = ({
           ),
         )
       } catch (error) {
+        cancelScheduledStreamUpdate()
+        flushStreamUpdate()
         setMessages((state) =>
           state.map((message) =>
             message.id === assistantId
@@ -384,11 +430,9 @@ export const useTimelineChat = ({
 
       const targetDay = message.meta?.insertTargetDay ?? getTodayId()
       const payload = `${insertText.trim()}`
-      await appendToDay(targetDay, payload)
-      await loadTimeline()
-      await handleAutoPush()
+      await onInsertNote(targetDay, payload)
     },
-    [handleAutoPush, loadTimeline],
+    [onInsertNote],
   )
 
   const handleNewChat = useCallback(() => {

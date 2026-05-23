@@ -16,7 +16,6 @@ export type EditorPinReason = 'interaction' | 'citation' | 'loadDay' | 'dateMove
 
 type UseEditorMountWindowParams = {
   days: Day[]
-  isSearchMode: boolean
   isTimelineVisible: boolean
   supportsIntersectionObserver: boolean
   initialEditorMountCount: number
@@ -43,7 +42,6 @@ const areStringSetsEqual = (a: Set<string>, b: Set<string>) => {
 
 export const useEditorMountWindow = ({
   days,
-  isSearchMode,
   isTimelineVisible,
   supportsIntersectionObserver,
   initialEditorMountCount,
@@ -106,11 +104,6 @@ export const useEditorMountWindow = ({
         return
       }
 
-      if (isSearchMode) {
-        applyMountedDayIds(new Set(dayOrder), reason)
-        return
-      }
-
       const dayOrderSet = new Set(dayOrder)
       const now = getNowMs()
       for (const [dayId, expiresAt] of pinnedDayExpiryRef.current) {
@@ -162,7 +155,6 @@ export const useEditorMountWindow = ({
       applyMountedDayIds,
       editorRefs,
       initialEditorMountCount,
-      isSearchMode,
       pendingFocusRef,
       supportsIntersectionObserver,
     ],
