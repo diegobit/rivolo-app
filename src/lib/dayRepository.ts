@@ -1,22 +1,9 @@
 import { formatDayTitle } from './dates'
 import { isFtsAvailable, queryAll, queryOne, run, runDatabaseTransaction, upsertFts } from './db'
 import { markLocalDirty } from './dropboxState'
+import { searchDaysInMemory, type Day, type SearchFilter } from './notesCore'
 
-export type Day = {
-  dayId: string
-  humanTitle: string
-  contentMd: string
-  createdAt: number
-  updatedAt: number
-}
-
-export type SearchFilter = 'open-todos' | 'tags' | 'mentions' | 'headings'
-
-export type DaySearchResult = {
-  day: Day
-  matchedBlocks: string[]
-  blockKind: 'line' | 'section'
-}
+export type { Day, DaySearchResult, SearchFilter } from './notesCore'
 
 type DayRow = {
   day_id: string
@@ -39,118 +26,6 @@ const mapRow = (row: DayRow): Day => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 })
-
-const TODO_LINE_REGEX = /^\s*-\s+\[ \]/
-const TAG_REGEX = /(^|[^A-Za-z0-9_])#[A-Za-z0-9_/-]+/g
-const MENTION_REGEX = /(^|[^A-Za-z0-9_])@[A-Za-z0-9_/-]+/g
-const HEADING_REGEX = /^\s{0,3}(#{1,6})\s+/
-
-const includesText = (value: string, query: string) => value.toLocaleLowerCase().includes(query)
-
-const hasMatchingToken = (line: string, regex: RegExp, query: string) => {
-  regex.lastIndex = 0
-  const matches = line.match(regex)
-  if (!matches?.length) {
-    return false
-  }
-
-  if (!query) {
-    return true
-  }
-
-  return matches.some((token) => token.toLocaleLowerCase().includes(query))
-}
-
-const getSectionEndIndex = (lines: string[], headingStart: number, headingLevel: number) => {
-  for (let index = headingStart + 1; index < lines.length; index += 1) {
-    const headingMatch = lines[index].match(HEADING_REGEX)
-    if (headingMatch && headingMatch[1].length <= headingLevel) {
-      return index
-    }
-  }
-
-  return lines.length
-}
-
-const collectHeadingSections = (lines: string[], normalizedQuery: string) => {
-  const sections: string[] = []
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const headingMatch = lines[index].match(HEADING_REGEX)
-    if (!headingMatch) {
-      continue
-    }
-
-    const headingLine = lines[index].trimEnd()
-    if (normalizedQuery && !includesText(headingLine, normalizedQuery)) {
-      continue
-    }
-
-    const headingLevel = headingMatch[1].length
-    const sectionEnd = getSectionEndIndex(lines, index, headingLevel)
-    const sectionText = lines
-      .slice(index, sectionEnd)
-      .map((line) => line.trimEnd())
-      .join('\n')
-      .trimEnd()
-
-    if (sectionText.trim()) {
-      sections.push(sectionText)
-    }
-  }
-
-  return sections
-}
-
-const getMatchedBlocks = (day: Day, query: string, filter: SearchFilter | null) => {
-  const normalizedQuery = query.trim().toLocaleLowerCase()
-  const lines = day.contentMd.split('\n')
-  const matches: string[] = []
-
-  if (filter === 'headings') {
-    return {
-      blockKind: 'section' as const,
-      matchedBlocks: collectHeadingSections(lines, normalizedQuery),
-    }
-  }
-
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd()
-    if (!line.trim()) {
-      continue
-    }
-
-    let isMatch = false
-
-    if (filter === 'open-todos') {
-      isMatch = TODO_LINE_REGEX.test(line) && (!normalizedQuery || includesText(line, normalizedQuery))
-    } else if (filter === 'tags') {
-      isMatch = hasMatchingToken(line, TAG_REGEX, normalizedQuery)
-    } else if (filter === 'mentions') {
-      isMatch = hasMatchingToken(line, MENTION_REGEX, normalizedQuery)
-    } else if (filter === 'headings') {
-      isMatch = false
-    } else if (normalizedQuery) {
-      isMatch = includesText(line, normalizedQuery)
-    }
-
-    if (isMatch) {
-      matches.push(line)
-    }
-  }
-
-  if (!filter && normalizedQuery && includesText(day.humanTitle, normalizedQuery) && matches.length === 0) {
-    const fallbackLine = lines.find((line) => line.trim())
-    if (fallbackLine) {
-      matches.push(fallbackLine.trimEnd())
-    }
-  }
-
-  return {
-    blockKind: 'line' as const,
-    matchedBlocks: matches,
-  }
-}
 
 export const listDays = async (limit = 60) => {
   const rows = await queryAll<DayRow>(
@@ -376,20 +251,5 @@ export const searchDays = async (
     `,
   )
 
-  const results: DaySearchResult[] = []
-
-  for (const row of rows) {
-    const day = mapRow(row)
-    const { matchedBlocks, blockKind } = getMatchedBlocks(day, trimmed, filter)
-    if (!matchedBlocks.length) {
-      continue
-    }
-
-    results.push({ day, matchedBlocks, blockKind })
-    if (results.length >= limit) {
-      break
-    }
-  }
-
-  return results
+  return searchDaysInMemory(rows.map(mapRow), trimmed, { filter }, limit)
 }
