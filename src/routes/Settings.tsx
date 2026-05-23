@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import AppearanceSection from '../components/settings/AppearanceSection'
 import DropboxSyncSection from '../components/settings/DropboxSyncSection'
 import ImportExportSection from '../components/settings/ImportExportSection'
@@ -60,7 +60,6 @@ def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
 `
 
 export default function Settings() {
-  const navigate = useNavigate()
   const loadTimeline = useDaysStore((state) => state.loadTimeline)
   const loadSettings = useSettingsStore((state) => state.loadSettings)
   const saveGeminiKey = useSettingsStore((state) => state.saveGeminiKey)
@@ -151,18 +150,6 @@ export default function Settings() {
       window.removeEventListener('offline', handleStatus)
     }
   }, [])
-
-  useEffect(() => {
-    const handleKeydown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      navigate('/')
-    }
-
-    window.addEventListener('keydown', handleKeydown)
-    return () => window.removeEventListener('keydown', handleKeydown)
-  }, [navigate])
 
   const dropboxConnected = hasAuth && activeProvider === 'dropbox'
   const bodyPreviewFontFamily =

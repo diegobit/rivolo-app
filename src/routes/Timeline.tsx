@@ -6,11 +6,10 @@ import BottomTrayPortal from '../components/BottomTrayPortal'
 import DayEditorCard from '../components/timeline/DayEditorCard'
 import EmptyStateHero from '../components/timeline/EmptyStateHero'
 import ChatMessageList from '../components/timeline/ChatMessageList'
-import { isIOS } from '../lib/device'
+import { isIOS, isPrimaryModifierPressed } from '../lib/device'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { getNarrowViewportMediaQuery, isNarrowViewport } from '../lib/viewport'
 import {
-  TIMELINE_FOCUS_TODAY_EVENT,
   TIMELINE_NEW_CHAT_EVENT,
   TIMELINE_SCROLL_TODAY_EVENT,
 } from '../lib/timelineEvents'
@@ -31,15 +30,6 @@ import { useDaysStore } from '../store/useDaysStore'
 import { useUIStore } from '../store/useUIStore'
 import { useChatStore, type ChatCitation as Citation } from '../store/useChatStore'
 import { scheduleAutoPushToSync } from '../store/syncActions'
-
-const isEditableElement = (element: HTMLElement | null) =>
-  Boolean(
-    element &&
-      (element.tagName === 'INPUT' ||
-        element.tagName === 'TEXTAREA' ||
-        element.tagName === 'SELECT' ||
-        element.isContentEditable),
-  )
 
 type TimelineItem =
   | { type: 'day'; day: Day }
@@ -643,11 +633,6 @@ const TrayInput = memo(({
                 setDraftText(event.target.value)
               }}
               onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.currentTarget.blur()
-                  return
-                }
-
                 if (event.key !== 'Enter' || event.shiftKey) {
                   return
                 }
@@ -678,11 +663,6 @@ const TrayInput = memo(({
                 setDraftText(event.target.value)
               }}
               onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.currentTarget.blur()
-                  return
-                }
-
                 if (event.key === 'Enter') {
                   event.preventDefault()
                 }
@@ -1520,57 +1500,84 @@ export default function Timeline() {
     addTodayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [hasToday, revealDay, todayId])
 
-  const handleFocusToday = useCallback(async () => {
-    if (hasToday) {
-      const hasEditor = editorRefs.current.has(todayId)
-      if (!hasEditor) {
-        requestDayEditorMount(todayId, 'end')
+  const handleNewTodayEntry = useCallback(async () => {
+    const focusTodayEditor = () => {
+      const view = editorRefs.current.get(todayId)
+      if (!view) return false
+
+      const content = view.state.doc.toString()
+      const needsNewline = content.length > 0 && !content.endsWith('\n')
+      const targetPosition = content.length + (needsNewline ? 1 : 0)
+
+      if (needsNewline) {
+        const nextContent = `${content}\n`
+        view.dispatch({
+          changes: { from: content.length, insert: '\n' },
+          selection: EditorSelection.single(targetPosition),
+          scrollIntoView: true,
+        })
+        patchDayContent(todayId, nextContent)
+        scheduleSave(todayId, nextContent)
+      } else {
+        view.dispatch({ selection: EditorSelection.single(targetPosition), scrollIntoView: true })
       }
-      revealDay(todayId, 'end', 'start', false)
-      if (hasEditor) {
-        focusDayEditor(todayId, 'end', false)
-      }
-      return
+
+      view.focus()
+      return true
     }
 
-    await handleCreateDay(todayId, {
-      focusPosition: 'end',
-      scrollBlock: 'start',
-      focusScroll: false,
-    })
-  }, [focusDayEditor, handleCreateDay, hasToday, requestDayEditorMount, revealDay, todayId])
+    if (hasToday) {
+      if (!editorRefs.current.has(todayId)) {
+        const today = visibleDays.find((day) => day.dayId === todayId)
+        if (today?.contentMd && !today.contentMd.endsWith('\n')) {
+          const nextContent = `${today.contentMd}\n`
+          patchDayContent(todayId, nextContent)
+          scheduleSave(todayId, nextContent)
+        }
+        requestDayEditorMount(todayId, 'end')
+      }
+
+      revealDay(todayId, undefined, 'start', false)
+    } else {
+      await handleCreateDay(todayId, {
+        focusPosition: 'end',
+        scrollBlock: 'start',
+        focusScroll: false,
+      })
+    }
+
+    let attempts = 0
+    const maxAttempts = 12
+    const focusWhenReady = () => {
+      if (focusTodayEditor()) return
+      if (attempts >= maxAttempts) return
+      attempts += 1
+      requestAnimationFrame(focusWhenReady)
+    }
+
+    requestAnimationFrame(focusWhenReady)
+  }, [handleCreateDay, hasToday, patchDayContent, requestDayEditorMount, revealDay, scheduleSave, todayId, visibleDays])
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
-      if (event.metaKey || event.ctrlKey || event.altKey) return
+      if (!isPrimaryModifierPressed(event) || !event.shiftKey || event.altKey) return
+
       const key = event.key.toLowerCase()
-      if (key !== 'n' && key !== 't') return
-      if (isEditableElement(document.activeElement as HTMLElement | null)) return
+      if (key !== 'e' && key !== 'y') return
       event.preventDefault()
-      if (key === 'n') {
-        const targetDayId = hasToday ? futureDayId : todayId
-        void handleCreateDay(targetDayId, {
-          focusPosition: 'start',
-          scrollBlock: 'start',
-          focusScroll: false,
-        })
+
+      if (key === 'e') {
+        void handleNewTodayEntry()
         return
       }
+
       handleScrollToToday()
     }
 
-    window.addEventListener('keydown', handleKeydown)
-    return () => window.removeEventListener('keydown', handleKeydown)
-  }, [futureDayId, handleCreateDay, handleScrollToToday, hasToday, todayId])
-
-  useEffect(() => {
-    const handleFocusEvent = () => {
-      void handleFocusToday()
-    }
-    window.addEventListener(TIMELINE_FOCUS_TODAY_EVENT, handleFocusEvent)
-    return () => window.removeEventListener(TIMELINE_FOCUS_TODAY_EVENT, handleFocusEvent)
-  }, [handleFocusToday])
+    window.addEventListener('keydown', handleKeydown, true)
+    return () => window.removeEventListener('keydown', handleKeydown, true)
+  }, [handleNewTodayEntry, handleScrollToToday])
 
   useEffect(() => {
     const handleScrollEvent = () => {

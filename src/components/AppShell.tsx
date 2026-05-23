@@ -2,11 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import BottomTrayRow from './app-shell/BottomTrayRow'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
-import {
-  TIMELINE_FOCUS_TODAY_EVENT,
-  TIMELINE_NEW_CHAT_EVENT,
-  TIMELINE_SCROLL_TODAY_EVENT,
-} from '../lib/timelineEvents'
+import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
+import { isPrimaryModifierPressed } from '../lib/device'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
 import { useAutoPullSync } from './app-shell/useAutoPullSync'
@@ -207,68 +204,36 @@ export default function AppShell() {
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
-      if (event.metaKey || event.ctrlKey || event.altKey) return
-
-      const activeElement = document.activeElement as HTMLElement | null
-      const isEditable = Boolean(
-        activeElement &&
-          (activeElement.tagName === 'INPUT' ||
-            activeElement.tagName === 'TEXTAREA' ||
-            activeElement.tagName === 'SELECT' ||
-            activeElement.isContentEditable),
-      )
       const key = event.key.toLowerCase()
+      const hasPrimaryModifier = isPrimaryModifierPressed(event)
 
-      if (key === 'i') {
-        if (isEditable) return
-        event.preventDefault()
-        if (isHome) {
-          const dispatchFocusToday = () => {
-            window.dispatchEvent(new CustomEvent(TIMELINE_FOCUS_TODAY_EVENT))
-          }
-          if (mode !== 'chat') {
-            setMode('chat')
-            requestAnimationFrame(() => {
-              requestAnimationFrame(dispatchFocusToday)
-            })
-            return
-          }
-          dispatchFocusToday()
-        }
-        return
-      }
-
-      if (isEditable) return
-
-      if (key === 'a') {
-        event.preventDefault()
+      if (hasPrimaryModifier && !event.altKey && !event.shiftKey && (key === 'k' || key === 'f')) {
         if (!isHome) return
-        if (mode === 'chat') {
-          document.getElementById('chat-input')?.focus()
+        event.preventDefault()
+
+        const nextMode = key === 'k' ? 'chat' : 'search'
+        const inputId = nextMode === 'chat' ? 'chat-input' : 'search-input'
+        if (mode === nextMode) {
+          document.getElementById(inputId)?.focus()
           return
         }
+
         focusModeInputAfterSwitchRef.current = true
-        setMode('chat')
+        setMode(nextMode)
         return
       }
 
-      if (key === 'f') {
+      if (hasPrimaryModifier && event.shiftKey && !event.altKey && key === 's') {
+        if (!showDesktopChatEdgeHandle) return
         event.preventDefault()
-        if (!isHome) return
-        if (mode === 'search') {
-          document.getElementById('search-input')?.focus()
-          return
-        }
-        focusModeInputAfterSwitchRef.current = true
-        setMode('search')
+        setDesktopChatPanelOpen(!desktopChatPanelOpen)
         return
       }
-
     }
 
-    window.addEventListener('keydown', handleKeydown)
-    return () => window.removeEventListener('keydown', handleKeydown)
-  }, [isHome, mode, setMode])
+    window.addEventListener('keydown', handleKeydown, true)
+    return () => window.removeEventListener('keydown', handleKeydown, true)
+  }, [desktopChatPanelOpen, isHome, mode, setDesktopChatPanelOpen, setMode, showDesktopChatEdgeHandle])
 
   useEffect(() => {
     if (!isHome) return
