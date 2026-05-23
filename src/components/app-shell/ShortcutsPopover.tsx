@@ -1,4 +1,5 @@
 import type { RefObject } from 'react'
+import { isApplePlatform } from '../../lib/device'
 
 type ShortcutsPopoverProps = {
   shortcutsRef: RefObject<HTMLDivElement | null>
@@ -13,6 +14,8 @@ export default function ShortcutsPopover({
   onToggle,
   buttonClassName,
 }: ShortcutsPopoverProps) {
+  const primaryModifierLabel = isApplePlatform() ? 'Cmd' : 'Ctrl'
+
   return (
     <div ref={shortcutsRef} className="hero-ui-fade-up relative">
       <button
@@ -33,13 +36,17 @@ export default function ShortcutsPopover({
               <div className="grid gap-1">
                 <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                   <span className="flex items-center gap-1">
-                    <kbd className="kbd">A</kbd>
+                    <kbd className="kbd">{primaryModifierLabel}</kbd>
+                    <span className="text-slate-400">+</span>
+                    <kbd className="kbd">K</kbd>
                   </span>
                   <span className="text-slate-400">-&gt;</span>
                   <span>Ask the AI</span>
                 </div>
                 <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                   <span className="flex items-center gap-1">
+                    <kbd className="kbd">{primaryModifierLabel}</kbd>
+                    <span className="text-slate-400">+</span>
                     <kbd className="kbd">F</kbd>
                   </span>
                   <span className="text-slate-400">-&gt;</span>
@@ -54,17 +61,36 @@ export default function ShortcutsPopover({
               <div className="grid gap-1">
                 <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                   <span className="flex items-center gap-1">
-                    <kbd className="kbd">T</kbd>
+                    <kbd className="kbd">{primaryModifierLabel}</kbd>
+                    <span className="text-slate-400">+</span>
+                    <kbd className="kbd">Shift</kbd>
+                    <span className="text-slate-400">+</span>
+                    <kbd className="kbd">E</kbd>
+                  </span>
+                  <span className="text-slate-400">-&gt;</span>
+                  <span>New Today entry</span>
+                </div>
+                <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                  <span className="flex items-center gap-1">
+                    <kbd className="kbd">{primaryModifierLabel}</kbd>
+                    <span className="text-slate-400">+</span>
+                    <kbd className="kbd">Shift</kbd>
+                    <span className="text-slate-400">+</span>
+                    <kbd className="kbd">Y</kbd>
                   </span>
                   <span className="text-slate-400">-&gt;</span>
                   <span>Scroll to Today/Top</span>
                 </div>
                 <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                   <span className="flex items-center gap-1">
-                    <kbd className="kbd">N</kbd>
+                    <kbd className="kbd">{primaryModifierLabel}</kbd>
+                    <span className="text-slate-400">+</span>
+                    <kbd className="kbd">Shift</kbd>
+                    <span className="text-slate-400">+</span>
+                    <kbd className="kbd">S</kbd>
                   </span>
                   <span className="text-slate-400">-&gt;</span>
-                  <span>New Today/Tomorrow</span>
+                  <span>Show/hide sidebar</span>
                 </div>
               </div>
             </div>
@@ -75,26 +101,12 @@ export default function ShortcutsPopover({
               <div className="grid gap-1">
                 <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
                   <span className="flex items-center gap-1">
-                    <kbd className="kbd">Cmd/Ctrl</kbd>
+                    <kbd className="kbd">{primaryModifierLabel}</kbd>
                     <span className="text-slate-400">+</span>
                     <kbd className="kbd">Enter</kbd>
                   </span>
                   <span className="text-slate-400">-&gt;</span>
                   <span>Toggle/Create todo</span>
-                </div>
-                <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                  <span className="flex items-center gap-1">
-                    <kbd className="kbd">I</kbd>
-                  </span>
-                  <span className="text-slate-400">-&gt;</span>
-                  <span>Focus Today editor</span>
-                </div>
-                <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
-                  <span className="flex items-center gap-1">
-                    <kbd className="kbd">Esc</kbd>
-                  </span>
-                  <span className="text-slate-400">-&gt;</span>
-                  <span>Exit focus or back to Homepage</span>
                 </div>
               </div>
             </div>

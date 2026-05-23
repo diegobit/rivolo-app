@@ -296,13 +296,6 @@ const DayEditorCard = memo(({
             return true
           },
         },
-        {
-          key: 'Escape',
-          run: (view) => {
-            view.contentDOM.blur()
-            return true
-          },
-        },
       ]),
     [nextDayId, onFocusDay, previousDayId],
   )
