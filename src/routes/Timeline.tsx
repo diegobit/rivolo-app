@@ -25,6 +25,7 @@ import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
 import { usePendingDayDelete } from './timeline/usePendingDayDelete'
 import { useTimelineChat } from './timeline/useTimelineChat'
 import { useSettingsStore } from '../store/useSettingsStore'
+import { resolveActiveLlmConfig } from '../lib/llm/types'
 import { useSyncStore } from '../store/useSyncStore'
 import { useDaysStore } from '../store/useDaysStore'
 import { useUIStore } from '../store/useUIStore'
@@ -733,9 +734,9 @@ export default function Timeline() {
   const moveDayDate = useDaysStore((state) => state.moveDayDate)
   const deleteDay = useDaysStore((state) => state.deleteDay)
   const loadSettings = useSettingsStore((state) => state.loadSettings)
-  const geminiApiKey = useSettingsStore((state) => state.geminiApiKey)
-  const geminiModel = useSettingsStore((state) => state.geminiModel)
-  const allowThinking = useSettingsStore((state) => state.allowThinking)
+  const llmProvider = useSettingsStore((state) => state.provider)
+  const llmProviderSettings = useSettingsStore((state) => state.providerSettings)
+  const llmSecrets = useSettingsStore((state) => state.llmSecrets)
   const allowWebSearch = useSettingsStore((state) => state.allowWebSearch)
   const aiLanguage = useSettingsStore((state) => state.aiLanguage)
   const autocorrection = useSettingsStore((state) => state.autocorrection)
@@ -743,6 +744,10 @@ export default function Timeline() {
   const bodyFont = useSettingsStore((state) => state.bodyFont)
   const monospaceFont = useSettingsStore((state) => state.monospaceFont)
   const titleFont = useSettingsStore((state) => state.titleFont)
+  const activeLlmConfig = useMemo(
+    () => resolveActiveLlmConfig(llmProvider, llmProviderSettings, llmSecrets),
+    [llmProvider, llmProviderSettings, llmSecrets],
+  )
   const loadSyncState = useSyncStore((state) => state.loadState)
   const syncStatus = useSyncStore((state) => state.status)
   const mode = useUIStore((state) => state.mode)
@@ -1178,10 +1183,8 @@ export default function Timeline() {
     messages,
     setMessages,
     aiLanguage,
-    allowThinking,
     allowWebSearch,
-    geminiApiKey,
-    geminiModel,
+    activeLlmConfig,
     isNarrowViewport: isNarrowViewportMode,
     chatPanelOpen,
     desktopChatPanelOpen,

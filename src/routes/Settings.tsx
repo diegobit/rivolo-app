@@ -17,7 +17,7 @@ import {
 } from '../lib/fonts'
 import { shareOrDownload } from '../lib/share'
 import { DEFAULT_DROPBOX_PATH } from '../lib/dropbox'
-import { buttonSecondaryFlat } from '../lib/ui'
+import { buttonSecondary } from '../lib/ui'
 import { useDropboxSyncActions } from './settings/useDropboxSyncActions'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
@@ -62,10 +62,10 @@ def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
 export default function Settings() {
   const loadTimeline = useDaysStore((state) => state.loadTimeline)
   const loadSettings = useSettingsStore((state) => state.loadSettings)
-  const saveGeminiKey = useSettingsStore((state) => state.saveGeminiKey)
-  const clearGeminiKey = useSettingsStore((state) => state.clearGeminiKey)
-  const updateGeminiModel = useSettingsStore((state) => state.updateGeminiModel)
-  const updateAllowThinking = useSettingsStore((state) => state.updateAllowThinking)
+  const selectProvider = useSettingsStore((state) => state.selectProvider)
+  const saveProviderSettings = useSettingsStore((state) => state.saveProviderSettings)
+  const saveProviderKey = useSettingsStore((state) => state.saveProviderKey)
+  const clearProviderKey = useSettingsStore((state) => state.clearProviderKey)
   const updateAllowWebSearch = useSettingsStore((state) => state.updateAllowWebSearch)
   const updateAiLanguage = useSettingsStore((state) => state.updateAiLanguage)
   const updateWallpaper = useSettingsStore((state) => state.updateWallpaper)
@@ -75,9 +75,10 @@ export default function Settings() {
   const updateBodyFont = useSettingsStore((state) => state.updateBodyFont)
   const updateMonospaceFont = useSettingsStore((state) => state.updateMonospaceFont)
   const updateTitleFont = useSettingsStore((state) => state.updateTitleFont)
-  const geminiApiKey = useSettingsStore((state) => state.geminiApiKey)
-  const geminiModel = useSettingsStore((state) => state.geminiModel)
-  const allowThinking = useSettingsStore((state) => state.allowThinking)
+  const provider = useSettingsStore((state) => state.provider)
+  const providerSettings = useSettingsStore((state) => state.providerSettings)
+  const llmSecrets = useSettingsStore((state) => state.llmSecrets)
+  const settingsError = useSettingsStore((state) => state.settingsError)
   const allowWebSearch = useSettingsStore((state) => state.allowWebSearch)
   const aiLanguage = useSettingsStore((state) => state.aiLanguage)
   const wallpaper = useSettingsStore((state) => state.wallpaper)
@@ -100,8 +101,6 @@ export default function Settings() {
   const loadSyncState = useSyncStore((state) => state.loadState)
   const syncing = useSyncStore((state) => state.syncing)
 
-  const [apiKey, setApiKey] = useState('')
-  const [status, setStatus] = useState<string | null>(null)
   const [importStatus, setImportStatus] = useState<string | null>(null)
 
   const [dropboxStatus, setDropboxStatus] = useState<string | null>(null)
@@ -182,26 +181,6 @@ export default function Settings() {
     [dropboxAccount, dropboxConnected, lastRemoteRev, lastSyncAt, localDirty],
   )
 
-  const handleSaveKey = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setStatus(null)
-
-    if (!apiKey.trim()) {
-      setStatus('API key required.')
-      return
-    }
-
-    await saveGeminiKey(apiKey.trim())
-    setStatus('Gemini key saved.')
-    setApiKey('')
-  }
-
-  const handleClearKey = async () => {
-    await clearGeminiKey()
-    setApiKey('')
-    setStatus('Gemini key removed.')
-  }
-
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -240,19 +219,17 @@ export default function Settings() {
   return (
     <div className="space-y-4">
       <LlmSection
-        geminiApiKey={geminiApiKey}
-        geminiModel={geminiModel}
+        key={provider}
+        provider={provider}
+        providerSettings={providerSettings}
+        llmSecrets={llmSecrets}
         aiLanguage={aiLanguage}
-        allowThinking={allowThinking}
         allowWebSearch={allowWebSearch}
-        apiKey={apiKey}
-        status={status}
-        onSaveKey={handleSaveKey}
-        onClearKey={handleClearKey}
-        onApiKeyChange={setApiKey}
-        onGeminiModelChange={(value) => {
-          void updateGeminiModel(value)
-        }}
+        settingsError={settingsError}
+        onSelectProvider={selectProvider}
+        onSaveProviderSettings={saveProviderSettings}
+        onSaveProviderKey={saveProviderKey}
+        onClearProviderKey={clearProviderKey}
         onFollowLanguage={() => {
           void updateAiLanguage('follow')
         }}
@@ -260,12 +237,7 @@ export default function Settings() {
           const nextValue = value.trim()
           void updateAiLanguage(nextValue || 'follow')
         }}
-        onAllowThinkingChange={(enabled) => {
-          void updateAllowThinking(enabled)
-        }}
-        onAllowWebSearchChange={(enabled) => {
-          void updateAllowWebSearch(enabled)
-        }}
+        onAllowWebSearchChange={updateAllowWebSearch}
       />
 
       <AppearanceSection
@@ -325,7 +297,7 @@ export default function Settings() {
         <h2 className="text-sm font-semibold text-slate-600">Legal</h2>
         <p className="mt-1 text-xs text-slate-500">Review the GDPR privacy notice for Rivolo and connected services.</p>
         <div className="mt-3">
-          <Link to="/privacy" className={buttonSecondaryFlat}>
+          <Link to="/privacy" className={buttonSecondary}>
             Privacy Policy
           </Link>
         </div>

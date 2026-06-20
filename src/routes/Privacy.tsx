@@ -4,7 +4,7 @@ export default function Privacy() {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div>
           <h1 className="text-base font-semibold text-slate-700">Privacy Notice (GDPR)</h1>
-          <p className="mt-1 text-xs text-slate-500">Effective date: March 7, 2026</p>
+          <p className="mt-1 text-xs text-slate-500">Effective date: June 19, 2026</p>
         </div>
       </section>
 
@@ -42,9 +42,14 @@ export default function Privacy() {
             security/performance metadata.
           </p>
           <p>
-            <span className="font-semibold text-slate-700">C) Optional AI feature (Google Gemini)</span>
+            <span className="font-semibold text-slate-700">C) Optional AI feature</span>
             <br />
-            If you use AI features, we send your prompt and relevant notes context needed to answer.
+            If you invoke an AI feature, your browser sends your prompt and relevant notes context directly to the
+            provider you selected: Google Gemini, Anthropic, OpenAI, or an OpenAI-compatible endpoint you configured.
+            If enabled and supported, the selected provider may also process a native web-search request. Rivolo does
+            not automatically send the request to a fallback provider. The request includes the locally stored
+            credential needed to authenticate with that provider; Anthropic requests also use Anthropic's required
+            direct-browser access opt-in header.
           </p>
           <p>
             <span className="font-semibold text-slate-700">D) Optional Dropbox sync</span>
@@ -61,15 +66,16 @@ export default function Privacy() {
           <li>
             Provide and secure the app (including hosting/CDN via Cloudflare): Art. 6(1)(f) legitimate interests.
           </li>
-          <li>Gemini AI feature (optional): Art. 6(1)(a) consent.</li>
+          <li>Selected AI provider feature (optional): Art. 6(1)(a) consent.</li>
           <li>Dropbox sync (optional): Art. 6(1)(a) consent.</li>
         </ul>
-        <p className="mt-2">You can use Rivolo without enabling Gemini or Dropbox.</p>
+        <p className="mt-2">You can use Rivolo without configuring an AI provider or Dropbox.</p>
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">5) Recipients</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>Cloudflare (hosting/CDN/security)</li>
-          <li>Google (Gemini API)</li>
+          <li>Google (Gemini API), Anthropic, or OpenAI, only when selected for an AI request</li>
+          <li>The operator of an OpenAI-compatible endpoint you choose, only when that endpoint is selected</li>
           <li>Dropbox (sync provider)</li>
         </ul>
 
@@ -82,9 +88,16 @@ export default function Privacy() {
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">7) Retention</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Local app data: kept on your device until you delete it or clear site/browser storage.</li>
+          <li>
+            Local app data, including AI provider keys and configuration: kept on your device until you remove it or
+            clear site/browser storage. AI keys and configuration are not synced through Dropbox or included in notes
+            export.
+          </li>
           <li>Cloudflare technical/security data: retained per operational/security configuration.</li>
-          <li>Gemini/Dropbox data: subject to those providers' retention practices and your account settings.</li>
+          <li>
+            AI provider, custom endpoint, and Dropbox data: subject to the selected operator's retention practices and
+            your account settings.
+          </li>
         </ul>
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">8) Your GDPR rights</h2>
@@ -93,8 +106,8 @@ export default function Privacy() {
           based on legitimate interests.
         </p>
         <p className="mt-2">
-          Where processing is based on consent (optional Gemini/Dropbox features), you can withdraw consent at any
-          time.
+          Where processing is based on consent (optional AI/Dropbox features), you can withdraw consent at any time by
+          no longer using the feature and by removing its locally stored credentials.
         </p>
         <p className="mt-2">
           To exercise rights, contact:{' '}
@@ -142,6 +155,26 @@ export default function Privacy() {
           </li>
           <li>
             <a
+              href="https://www.anthropic.com/legal/privacy"
+              target="_blank"
+              rel="noreferrer"
+              className="text-sky-700 underline decoration-sky-300 underline-offset-2"
+            >
+              Anthropic Privacy Policy
+            </a>
+          </li>
+          <li>
+            <a
+              href="https://openai.com/policies/privacy-policy/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-sky-700 underline decoration-sky-300 underline-offset-2"
+            >
+              OpenAI Privacy Policy
+            </a>
+          </li>
+          <li>
+            <a
               href="https://www.dropbox.com/privacy"
               target="_blank"
               rel="noreferrer"
@@ -151,6 +184,10 @@ export default function Privacy() {
             </a>
           </li>
         </ul>
+        <p className="mt-2">
+          If you configure a custom endpoint, its operator's privacy, retention, security, and international-transfer
+          terms apply. Rivolo cannot determine or control those practices.
+        </p>
       </section>
     </div>
   )

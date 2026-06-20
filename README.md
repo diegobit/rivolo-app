@@ -8,7 +8,7 @@ Rivolo (REE-voh-loh) is the Italian word for "small stream". Every day, you writ
 
 Try it here: [rivolo.app](https://rivolo.app)
 
-Rivolo is a static web app that runs entirely in your browser (no backend). The production app is deployed on Cloudflare Pages. The only data you "share" is with Gemini, through its APIs, and Dropbox, if you choose to enable syncing.
+Rivolo is a static web app that runs entirely in your browser (no backend). The production app is deployed on Cloudflare Pages. AI prompts and relevant notes are sent only when you ask, directly to the provider you select: Gemini, Anthropic, OpenAI, or your own OpenAI-compatible endpoint. Dropbox receives notes only if you enable syncing; provider keys and settings stay in the browser. Custom endpoints must be reachable from the device and allow Rivolo's browser origin, headers, and HTTPS connection; on a phone, `localhost` refers to the phone itself.
 
 > [!NOTE]
 > The app was completely developed with coding agents. I use it daily. I wrote about this [here](https://diegobit.com/post/rivolo).

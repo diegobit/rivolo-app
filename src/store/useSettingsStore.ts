@@ -1,29 +1,31 @@
 import { create } from 'zustand'
 import { isIOS } from '../lib/device'
 import { type BodyFont, type MonospaceFont, type TitleFont, isBodyFont, isMonospaceFont, isTitleFont } from '../lib/fonts'
+import {
+  DEFAULT_LLM_PROVIDER_SETTINGS,
+  isLlmProviderId,
+  mergePersistedProviderSettings,
+  normalizeProviderSettings,
+  normalizeSecrets,
+  type LlmProviderId,
+  type LlmProviderSettings,
+  type LlmSecrets,
+} from '../lib/llm/types'
 import { getJsonSetting, getSetting, setJsonSetting, setSetting } from '../lib/settingsRepository'
 
-type Provider = 'gemini'
-
-type Wallpaper = 'white' | 'thoughts-light' | 'thoughts-medium' | 'thoughts-high'
+type Wallpaper = 'white' | 'thoughts-light' | 'thoughts-high'
 
 type FontPreference = 'proportional' | 'monospace'
-
-type LlmSecrets = {
-  geminiApiKey?: string
-}
-
-const DEFAULT_GEMINI_MODEL = 'gemini-3-flash-preview'
 
 type AiLanguage = 'follow' | string
 
 type SettingsState = {
-  provider: Provider
-  geminiApiKey: string | null
-  geminiModel: string
-  allowThinking: boolean
+  provider: LlmProviderId
+  providerSettings: LlmProviderSettings
+  llmSecrets: LlmSecrets
   allowWebSearch: boolean
   aiLanguage: AiLanguage
+  settingsError: string | null
   loading: boolean
   wallpaper: Wallpaper
   highlightInputMode: boolean
@@ -33,10 +35,13 @@ type SettingsState = {
   monospaceFont: MonospaceFont
   titleFont: TitleFont
   loadSettings: () => Promise<void>
-  saveGeminiKey: (apiKey: string) => Promise<void>
-  clearGeminiKey: () => Promise<void>
-  updateGeminiModel: (model: string) => Promise<void>
-  updateAllowThinking: (enabled: boolean) => Promise<void>
+  selectProvider: (provider: LlmProviderId) => Promise<void>
+  saveProviderSettings: (
+    provider: LlmProviderId,
+    settings: LlmProviderSettings[LlmProviderId],
+  ) => Promise<void>
+  saveProviderKey: (provider: LlmProviderId, apiKey: string) => Promise<void>
+  clearProviderKey: (provider: LlmProviderId) => Promise<void>
   updateAllowWebSearch: (enabled: boolean) => Promise<void>
   updateAiLanguage: (language: AiLanguage) => Promise<void>
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
@@ -48,13 +53,16 @@ type SettingsState = {
   updateTitleFont: (titleFont: TitleFont) => Promise<void>
 }
 
-export const useSettingsStore = create<SettingsState>((set) => ({
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   provider: 'gemini',
-  geminiApiKey: null,
-  geminiModel: DEFAULT_GEMINI_MODEL,
-  allowThinking: false,
+  providerSettings: DEFAULT_LLM_PROVIDER_SETTINGS,
+  llmSecrets: {},
   allowWebSearch: true,
   aiLanguage: 'follow',
+  settingsError: null,
   loading: false,
   wallpaper: isIOS() ? 'white' : 'thoughts-light',
   highlightInputMode: false,
@@ -65,162 +73,241 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   titleFont: 'handlee',
 
   loadSettings: async () => {
-    set({ loading: true })
-    const provider = (await getSetting('llm.provider')) as Provider | null
-    const storedGeminiModel = await getSetting('llm.geminiModel')
-    const storedAllowThinking = await getSetting('llm.allowThinking')
-    const storedAllowWebSearch = await getSetting('llm.allowWebSearch')
-    const storedAiLanguage = (await getSetting('ai.language')) as AiLanguage | null
-    const storedWallpaper = (await getSetting('appearance.wallpaper')) as Wallpaper | null
-    const storedHighlightInputMode = await getSetting('appearance.highlightInputMode')
-    const storedAutocorrection = await getSetting('appearance.autocorrection')
-    const storedFontPreference = (await getSetting('appearance.font')) as FontPreference | null
-    const storedBodyFont = await getSetting('appearance.bodyFont')
-    const storedMonospaceFont = await getSetting('appearance.monospaceFont')
-    const storedTitleFont = await getSetting('appearance.titleFont')
-    const geminiModel = storedGeminiModel ?? DEFAULT_GEMINI_MODEL
-    const allowThinking = storedAllowThinking === 'true'
-    const allowWebSearch = storedAllowWebSearch !== 'false'
-    const shouldPersistAllowThinking =
-      storedAllowThinking === null || (storedAllowThinking !== 'true' && storedAllowThinking !== 'false')
-    const shouldPersistAllowWebSearch =
-      storedAllowWebSearch === null || (storedAllowWebSearch !== 'true' && storedAllowWebSearch !== 'false')
-    const aiLanguage = storedAiLanguage ?? 'follow'
-    const defaultWallpaper = isIOS() ? 'white' : 'thoughts-light'
-    const wallpaper = storedWallpaper ?? defaultWallpaper
-    const highlightInputMode = storedHighlightInputMode === 'true'
-    const shouldPersistHighlightInputMode =
-      storedHighlightInputMode === null ||
-      (storedHighlightInputMode !== 'true' && storedHighlightInputMode !== 'false')
-    const autocorrection = storedAutocorrection !== 'false'
-    const shouldPersistAutocorrection =
-      storedAutocorrection === null ||
-      (storedAutocorrection !== 'true' && storedAutocorrection !== 'false')
-    const fontPreference = storedFontPreference ?? 'monospace'
-    const bodyFont = isBodyFont(storedBodyFont) ? storedBodyFont : 'system'
-    const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
-    const titleFont = isTitleFont(storedTitleFont) ? storedTitleFont : 'handlee'
+    set({ loading: true, settingsError: null })
 
-    if (!storedGeminiModel) {
-      await setSetting('llm.geminiModel', geminiModel)
-    }
-    if (shouldPersistAllowThinking) {
-      await setSetting('llm.allowThinking', allowThinking ? 'true' : 'false')
-    }
-    if (shouldPersistAllowWebSearch) {
-      await setSetting('llm.allowWebSearch', allowWebSearch ? 'true' : 'false')
-    }
-    if (!storedAiLanguage) {
-      await setSetting('ai.language', aiLanguage)
-    }
-    if (!storedWallpaper) {
-      await setSetting('appearance.wallpaper', wallpaper)
-    }
-    if (shouldPersistHighlightInputMode) {
-      await setSetting('appearance.highlightInputMode', highlightInputMode ? 'true' : 'false')
-    }
-    if (shouldPersistAutocorrection) {
-      await setSetting('appearance.autocorrection', autocorrection ? 'true' : 'false')
-    }
-    if (!storedFontPreference) {
-      await setSetting('appearance.font', fontPreference)
-    }
-    if (!storedBodyFont || !isBodyFont(storedBodyFont)) {
-      await setSetting('appearance.bodyFont', bodyFont)
-    }
-    if (!storedMonospaceFont || !isMonospaceFont(storedMonospaceFont)) {
-      await setSetting('appearance.monospaceFont', monospaceFont)
-    }
-    if (!storedTitleFont || !isTitleFont(storedTitleFont)) {
-      await setSetting('appearance.titleFont', titleFont)
-    }
+    try {
+      const [
+        storedProvider,
+        storedProviders,
+        storedLlmSchemaVersion,
+        legacyGeminiModel,
+        legacyAllowThinking,
+        storedAllowWebSearch,
+        storedAiLanguage,
+        storedSecrets,
+        storedWallpaper,
+        storedHighlightInputMode,
+        storedAutocorrection,
+        storedFontPreference,
+        storedBodyFont,
+        storedMonospaceFont,
+        storedTitleFont,
+      ] = await Promise.all([
+        getSetting('llm.provider'),
+        getJsonSetting<unknown>('llm.providers'),
+        getSetting('llm.schemaVersion'),
+        getSetting('llm.geminiModel'),
+        getSetting('llm.allowThinking'),
+        getSetting('llm.allowWebSearch'),
+        getSetting('ai.language'),
+        getJsonSetting<unknown>('llm.secrets'),
+        getSetting('appearance.wallpaper'),
+        getSetting('appearance.highlightInputMode'),
+        getSetting('appearance.autocorrection'),
+        getSetting('appearance.font'),
+        getSetting('appearance.bodyFont'),
+        getSetting('appearance.monospaceFont'),
+        getSetting('appearance.titleFont'),
+      ])
 
-    const secrets = await getJsonSetting<LlmSecrets>('llm.secrets')
-    const geminiApiKey = secrets?.geminiApiKey ?? null
+      const provider = isLlmProviderId(storedProvider) ? storedProvider : 'gemini'
+      const llmSchemaVersion = Number.parseInt(storedLlmSchemaVersion ?? '', 10)
+      const providerSettings = normalizeProviderSettings(
+        storedProviders,
+        legacyGeminiModel,
+        legacyAllowThinking,
+        !Number.isFinite(llmSchemaVersion) || llmSchemaVersion < 2,
+      )
+      const llmSecrets = normalizeSecrets(storedSecrets)
+      const allowWebSearch = storedAllowWebSearch !== 'false'
+      const aiLanguage = storedAiLanguage || 'follow'
+      const defaultWallpaper: Wallpaper = isIOS() ? 'white' : 'thoughts-light'
+      const wallpaper: Wallpaper =
+        storedWallpaper === 'thoughts-medium'
+          ? 'thoughts-high'
+          : storedWallpaper === 'white' ||
+              storedWallpaper === 'thoughts-light' ||
+              storedWallpaper === 'thoughts-high'
+            ? storedWallpaper
+            : defaultWallpaper
+      const highlightInputMode = storedHighlightInputMode === 'true'
+      const autocorrection = storedAutocorrection !== 'false'
+      const fontPreference = (storedFontPreference as FontPreference | null) ?? 'monospace'
+      const bodyFont = isBodyFont(storedBodyFont) ? storedBodyFont : 'system'
+      const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
+      const titleFont = isTitleFont(storedTitleFont) ? storedTitleFont : 'handlee'
 
-    set({
-      provider: provider ?? 'gemini',
-      geminiApiKey,
-      geminiModel,
-      allowThinking,
-      allowWebSearch,
-      aiLanguage,
-      wallpaper,
-      highlightInputMode,
-      autocorrection,
-      fontPreference,
-      bodyFont,
-      monospaceFont,
-      titleFont,
-      loading: false,
-    })
+      const persistedProviders = mergePersistedProviderSettings(storedProviders, providerSettings)
+      const secretsRoot = isRecord(storedSecrets) ? storedSecrets : {}
+      const storedGeminiSecret = isRecord(secretsRoot.gemini) ? secretsRoot.gemini : {}
+      const shouldMigrateLegacyGeminiSecret =
+        Boolean(llmSecrets.gemini?.apiKey) &&
+        (typeof storedGeminiSecret.apiKey !== 'string' || !storedGeminiSecret.apiKey.trim())
+      const persistedSecrets = shouldMigrateLegacyGeminiSecret
+        ? {
+            ...secretsRoot,
+            gemini: { ...storedGeminiSecret, apiKey: llmSecrets.gemini?.apiKey },
+          }
+        : secretsRoot
+
+      const migrations: Promise<void>[] = [
+        setJsonSetting('llm.providers', persistedProviders),
+      ]
+      if (storedProvider !== provider) migrations.push(setSetting('llm.provider', provider))
+      if (shouldMigrateLegacyGeminiSecret) migrations.push(setJsonSetting('llm.secrets', persistedSecrets))
+      if (storedAllowWebSearch !== 'true' && storedAllowWebSearch !== 'false') {
+        migrations.push(setSetting('llm.allowWebSearch', allowWebSearch ? 'true' : 'false'))
+      }
+      if (!storedAiLanguage) migrations.push(setSetting('ai.language', aiLanguage))
+      if (storedWallpaper !== wallpaper) migrations.push(setSetting('appearance.wallpaper', wallpaper))
+      if (storedHighlightInputMode !== 'true' && storedHighlightInputMode !== 'false') {
+        migrations.push(setSetting('appearance.highlightInputMode', highlightInputMode ? 'true' : 'false'))
+      }
+      if (storedAutocorrection !== 'true' && storedAutocorrection !== 'false') {
+        migrations.push(setSetting('appearance.autocorrection', autocorrection ? 'true' : 'false'))
+      }
+      if (!storedFontPreference) migrations.push(setSetting('appearance.font', fontPreference))
+      if (!storedBodyFont || !isBodyFont(storedBodyFont)) migrations.push(setSetting('appearance.bodyFont', bodyFont))
+      if (!storedMonospaceFont || !isMonospaceFont(storedMonospaceFont)) {
+        migrations.push(setSetting('appearance.monospaceFont', monospaceFont))
+      }
+      if (!storedTitleFont || !isTitleFont(storedTitleFont)) migrations.push(setSetting('appearance.titleFont', titleFont))
+
+      await Promise.all(migrations)
+      await setSetting('llm.schemaVersion', '2')
+
+      set({
+        provider,
+        providerSettings,
+        llmSecrets,
+        allowWebSearch,
+        aiLanguage,
+        wallpaper,
+        highlightInputMode,
+        autocorrection,
+        fontPreference,
+        bodyFont,
+        monospaceFont,
+        titleFont,
+        loading: false,
+      })
+    } catch (error) {
+      console.error('[Settings migration failed]', error)
+      set({
+        loading: false,
+        settingsError: 'AI settings could not be migrated. Existing local data was left in place.',
+      })
+    }
   },
 
-  saveGeminiKey: async (apiKey: string) => {
-    await setJsonSetting('llm.secrets', { geminiApiKey: apiKey })
-    await setSetting('llm.provider', 'gemini')
-    set({ geminiApiKey: apiKey, provider: 'gemini' })
+  selectProvider: async (provider) => {
+    await setSetting('llm.provider', provider)
+    set({ provider })
   },
 
-  clearGeminiKey: async () => {
-    await setJsonSetting('llm.secrets', {})
-    set({ geminiApiKey: null })
+  saveProviderSettings: async (provider, settings) => {
+    const currentStored = await getJsonSetting<unknown>('llm.providers')
+    const normalizedSettings =
+      provider === 'gemini'
+        ? {
+            ...(settings as LlmProviderSettings['gemini']),
+            allowThinking:
+              (settings as LlmProviderSettings['gemini']).reasoning.thinkingLevel !== 'minimal',
+          }
+        : settings
+    const nextSettings = {
+      ...get().providerSettings,
+      [provider]: normalizedSettings,
+    } as LlmProviderSettings
+    await setJsonSetting('llm.providers', mergePersistedProviderSettings(currentStored, nextSettings))
+
+    if (provider === 'gemini') {
+      const geminiSettings = normalizedSettings as LlmProviderSettings['gemini']
+      await Promise.all([
+        setSetting('llm.geminiModel', geminiSettings.model),
+        setSetting('llm.allowThinking', geminiSettings.allowThinking ? 'true' : 'false'),
+      ])
+    }
+
+    set({ providerSettings: nextSettings })
   },
 
-  updateGeminiModel: async (model: string) => {
-    const normalized = model.trim() || DEFAULT_GEMINI_MODEL
-    await setSetting('llm.geminiModel', normalized)
-    set({ geminiModel: normalized })
+  saveProviderKey: async (provider, apiKey) => {
+    const normalizedKey = apiKey.trim()
+    if (!normalizedKey) return
+
+    const currentStored = await getJsonSetting<unknown>('llm.secrets')
+    const root = isRecord(currentStored) ? currentStored : {}
+    const currentProvider = isRecord(root[provider]) ? root[provider] : {}
+    const nextStored = {
+      ...root,
+      [provider]: { ...currentProvider, apiKey: normalizedKey },
+      ...(provider === 'gemini' ? { geminiApiKey: normalizedKey } : {}),
+    }
+    await setJsonSetting('llm.secrets', nextStored)
+    set({ llmSecrets: { ...get().llmSecrets, [provider]: { apiKey: normalizedKey } } })
   },
 
-  updateAllowThinking: async (enabled: boolean) => {
-    await setSetting('llm.allowThinking', enabled ? 'true' : 'false')
-    set({ allowThinking: enabled })
+  clearProviderKey: async (provider) => {
+    const currentStored = await getJsonSetting<unknown>('llm.secrets')
+    const root = isRecord(currentStored) ? currentStored : {}
+    const currentProvider = isRecord(root[provider]) ? root[provider] : {}
+    const remainingProviderFields = { ...currentProvider }
+    delete remainingProviderFields.apiKey
+    const nextStored: Record<string, unknown> = {
+      ...root,
+      [provider]: remainingProviderFields,
+    }
+    if (provider === 'gemini') delete nextStored.geminiApiKey
+    await setJsonSetting('llm.secrets', nextStored)
+
+    const nextSecrets = { ...get().llmSecrets }
+    delete nextSecrets[provider]
+    set({ llmSecrets: nextSecrets })
   },
 
-  updateAllowWebSearch: async (enabled: boolean) => {
+  updateAllowWebSearch: async (enabled) => {
     await setSetting('llm.allowWebSearch', enabled ? 'true' : 'false')
     set({ allowWebSearch: enabled })
   },
 
-  updateAiLanguage: async (language: AiLanguage) => {
+  updateAiLanguage: async (language) => {
     await setSetting('ai.language', language)
     set({ aiLanguage: language })
   },
 
-  updateWallpaper: async (wallpaper: Wallpaper) => {
+  updateWallpaper: async (wallpaper) => {
     await setSetting('appearance.wallpaper', wallpaper)
     set({ wallpaper })
   },
 
-  updateHighlightInputMode: async (enabled: boolean) => {
+  updateHighlightInputMode: async (enabled) => {
     await setSetting('appearance.highlightInputMode', enabled ? 'true' : 'false')
     set({ highlightInputMode: enabled })
   },
 
-  updateAutocorrection: async (enabled: boolean) => {
+  updateAutocorrection: async (enabled) => {
     await setSetting('appearance.autocorrection', enabled ? 'true' : 'false')
     set({ autocorrection: enabled })
   },
 
-  updateFontPreference: async (fontPreference: FontPreference) => {
+  updateFontPreference: async (fontPreference) => {
     await setSetting('appearance.font', fontPreference)
     set({ fontPreference })
   },
 
-  updateBodyFont: async (bodyFont: BodyFont) => {
+  updateBodyFont: async (bodyFont) => {
     await setSetting('appearance.bodyFont', bodyFont)
     set({ bodyFont })
   },
 
-  updateMonospaceFont: async (monospaceFont: MonospaceFont) => {
+  updateMonospaceFont: async (monospaceFont) => {
     await setSetting('appearance.monospaceFont', monospaceFont)
     set({ monospaceFont })
   },
 
-  updateTitleFont: async (titleFont: TitleFont) => {
+  updateTitleFont: async (titleFont) => {
     await setSetting('appearance.titleFont', titleFont)
     set({ titleFont })
   },
-})
-)
+}))

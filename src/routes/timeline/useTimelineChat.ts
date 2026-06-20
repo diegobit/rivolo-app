@@ -4,6 +4,7 @@ import { chat, type ChatMessage as LlmMessage } from '../../lib/llm'
 import { hasAssistantPayloadContent, parseAssistantPayload, stripCodeFences, type AssistantPayload } from '../../lib/assistantPayload'
 import { createStreamTagParser, toCitationMarker, type StreamTagPiece } from '../../lib/llm/streamTagParser'
 import { DAILY_ANALYST_SYSTEM_PROMPT } from '../../lib/llm/systemPrompts'
+import { validateActiveLlmConfig, type ActiveLlmConfig } from '../../lib/llm/types'
 import { buildContextDays, formatContext } from '../../lib/llmContext'
 import type { ChatCitation as Citation, ChatUiMessage } from '../../store/useChatStore'
 
@@ -13,10 +14,8 @@ type UseTimelineChatParams = {
   messages: ChatUiMessage[]
   setMessages: SetMessages
   aiLanguage: string
-  allowThinking: boolean
   allowWebSearch: boolean
-  geminiApiKey: string | null
-  geminiModel: string
+  activeLlmConfig: ActiveLlmConfig
   isNarrowViewport: boolean
   chatPanelOpen: boolean
   desktopChatPanelOpen: boolean
@@ -36,10 +35,8 @@ export const useTimelineChat = ({
   messages,
   setMessages,
   aiLanguage,
-  allowThinking,
   allowWebSearch,
-  geminiApiKey,
-  geminiModel,
+  activeLlmConfig,
   isNarrowViewport,
   chatPanelOpen,
   desktopChatPanelOpen,
@@ -70,10 +67,12 @@ export const useTimelineChat = ({
 
       setChatError(null)
 
-      if (!geminiApiKey) {
-        setChatError('Add a Gemini API key in Settings first.')
+      const configError = validateActiveLlmConfig(activeLlmConfig)
+      if (configError) {
+        setChatError(configError)
         return
       }
+      const requestConfig = { ...activeLlmConfig } as ActiveLlmConfig
 
       const userMessage: ChatUiMessage = {
         id: crypto.randomUUID(),
@@ -187,6 +186,8 @@ export const useTimelineChat = ({
         ]
 
         console.info('[LLM Request]', {
+          provider: requestConfig.provider,
+          model: requestConfig.model,
           messageCount: llmMessages.length,
           contextDays: contextDays.length,
           contextChars: contextText.length,
@@ -243,11 +244,8 @@ export const useTimelineChat = ({
         }
 
         const { text: responseText } = await chat({
-          provider: 'gemini',
-          apiKey: geminiApiKey,
-          model: geminiModel,
+          config: requestConfig,
           messages: llmMessages,
-          allowThinking,
           allowWebSearch,
           temperature: 0,
           stream: true,
@@ -288,15 +286,12 @@ export const useTimelineChat = ({
         if (hasAssistantPayloadContent(payload)) {
           console.info('[LLM Parsed]', { hasCitations: Boolean(payload?.citations.length) })
         } else {
-          console.error('[LLM Parse Error]', { preview: sanitized.slice(0, 200) })
+          console.error('[LLM Parse Error]', { chars: sanitized.length })
 
           try {
             const { text: retryText } = await chat({
-              provider: 'gemini',
-              apiKey: geminiApiKey,
-              model: geminiModel,
+              config: requestConfig,
               messages: llmMessages,
-              allowThinking,
               allowWebSearch,
               temperature: 0,
               stream: false,
@@ -308,7 +303,7 @@ export const useTimelineChat = ({
             if (hasAssistantPayloadContent(payload)) {
               console.info('[LLM Retry Parsed]', { hasCitations: Boolean(payload?.citations.length) })
             } else {
-              console.error('[LLM Retry Parse Error]', { preview: stripCodeFences(retryText).slice(0, 200) })
+              console.error('[LLM Retry Parse Error]', { chars: stripCodeFences(retryText).length })
             }
           } catch (retryError) {
             console.error('[LLM Retry Error]', retryError)
@@ -376,12 +371,10 @@ export const useTimelineChat = ({
     },
     [
       aiLanguage,
-      allowThinking,
+      activeLlmConfig,
       allowWebSearch,
       chatPanelOpen,
       desktopChatPanelOpen,
-      geminiApiKey,
-      geminiModel,
       isNarrowViewport,
       setDesktopChatPanelOpen,
       setChatPanelOpen,
