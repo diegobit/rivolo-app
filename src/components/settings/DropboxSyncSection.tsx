@@ -1,4 +1,4 @@
-import { buttonDanger, buttonPrimary } from '../../lib/ui'
+import { buttonDanger, buttonPrimary, buttonSecondary } from '../../lib/ui'
 
 type DropboxSummary = {
   connected: boolean
@@ -86,11 +86,7 @@ export default function DropboxSyncSection({
             onChange={(event) => onDropboxPathChange(event.target.value)}
           />
           <button
-            className={
-              isDropboxPathDirty
-                ? buttonPrimary
-                : 'rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-500'
-            }
+            className={buttonPrimary}
             type="button"
             disabled={syncBusy || !isDropboxPathDirty}
             onClick={onSavePath}
@@ -103,7 +99,7 @@ export default function DropboxSyncSection({
       <div className="mt-4 space-y-2">
         <div className="flex flex-wrap gap-2">
           <button
-            className={buttonPrimary}
+            className={buttonSecondary}
             type="button"
             onClick={onPull}
             disabled={syncBusy || !online || !dropboxSummary.connected}

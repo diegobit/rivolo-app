@@ -11,6 +11,7 @@ import {
 } from '../../lib/fonts'
 import { editorHighlights } from '../../lib/editorHighlights'
 import { buttonPill, buttonPillActive } from '../../lib/ui'
+import SettingsToggle from './SettingsToggle'
 
 const previewMarkdownExtension = markdown({ base: markdownLanguage })
 const previewEditorTheme = EditorView.theme({
@@ -40,7 +41,7 @@ const previewEditorTheme = EditorView.theme({
 })
 
 type AppearanceSectionProps = {
-  wallpaper: 'white' | 'thoughts-light' | 'thoughts-medium' | 'thoughts-high'
+  wallpaper: 'white' | 'thoughts-light' | 'thoughts-high'
   highlightInputMode: boolean
   autocorrection: boolean
   fontPreference: 'proportional' | 'monospace'
@@ -52,7 +53,7 @@ type AppearanceSectionProps = {
   titlePreviewFontFamily: string
   bodyPreviewFontFamily: string
   bodyPreviewFontSize: string
-  onWallpaperChange: (value: 'white' | 'thoughts-light' | 'thoughts-medium' | 'thoughts-high') => void
+  onWallpaperChange: (value: 'white' | 'thoughts-light' | 'thoughts-high') => void
   onHighlightInputModeChange: (enabled: boolean) => void
   onAutocorrectionChange: (enabled: boolean) => void
   onTitleFontChange: (font: TitleFont) => void
@@ -91,6 +92,7 @@ export default function AppearanceSection({
           <button
             className={wallpaper === 'white' ? buttonPillActive : buttonPill}
             type="button"
+            aria-pressed={wallpaper === 'white'}
             onClick={() => onWallpaperChange('white')}
           >
             White
@@ -98,66 +100,37 @@ export default function AppearanceSection({
           <button
             className={wallpaper === 'thoughts-light' ? buttonPillActive : buttonPill}
             type="button"
+            aria-pressed={wallpaper === 'thoughts-light'}
             onClick={() => onWallpaperChange('thoughts-light')}
           >
-            Thoughts Light
-          </button>
-          <button
-            className={wallpaper === 'thoughts-medium' ? buttonPillActive : buttonPill}
-            type="button"
-            onClick={() => onWallpaperChange('thoughts-medium')}
-          >
-            Thoughts Medium
+            Rivolo Light
           </button>
           <button
             className={wallpaper === 'thoughts-high' ? buttonPillActive : buttonPill}
             type="button"
+            aria-pressed={wallpaper === 'thoughts-high'}
             onClick={() => onWallpaperChange('thoughts-high')}
           >
-            Thoughts High
+            Rivolo Strong
           </button>
         </div>
       </div>
 
       <div className="mt-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Highlight Input Mode
+          Editor behavior
         </h3>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            className={highlightInputMode ? buttonPillActive : buttonPill}
-            type="button"
-            onClick={() => onHighlightInputModeChange(true)}
-          >
-            YES
-          </button>
-          <button
-            className={!highlightInputMode ? buttonPillActive : buttonPill}
-            type="button"
-            onClick={() => onHighlightInputModeChange(false)}
-          >
-            NO
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Autocorrection</h3>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            className={autocorrection ? buttonPillActive : buttonPill}
-            type="button"
-            onClick={() => onAutocorrectionChange(true)}
-          >
-            YES
-          </button>
-          <button
-            className={!autocorrection ? buttonPillActive : buttonPill}
-            type="button"
-            onClick={() => onAutocorrectionChange(false)}
-          >
-            NO
-          </button>
+        <div className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
+          <SettingsToggle
+            checked={highlightInputMode}
+            label="Highlight input mode"
+            onChange={onHighlightInputModeChange}
+          />
+          <SettingsToggle
+            checked={autocorrection}
+            label="Autocorrection"
+            onChange={onAutocorrectionChange}
+          />
         </div>
       </div>
 
@@ -169,6 +142,7 @@ export default function AppearanceSection({
               key={option.id}
               className={titleFont === option.id ? buttonPillActive : buttonPill}
               type="button"
+              aria-pressed={titleFont === option.id}
               onClick={() => onTitleFontChange(option.id)}
             >
               {option.label}
@@ -189,6 +163,7 @@ export default function AppearanceSection({
                   : buttonPill
               }
               type="button"
+              aria-pressed={fontPreference === 'proportional' && bodyFont === option.id}
               onClick={() => onBodyFontChange(option.id)}
             >
               {option.label}
@@ -203,6 +178,7 @@ export default function AppearanceSection({
                   : buttonPill
               }
               type="button"
+              aria-pressed={fontPreference === 'monospace' && monospaceFont === option.id}
               onClick={() => onMonospaceFontChange(option.id)}
             >
               {option.label}

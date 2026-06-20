@@ -16,24 +16,21 @@ export default function ImportExportSection({
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-sm font-semibold text-slate-600">Import / Export</h2>
-      <div className="mt-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Import</h3>
-        <div className="mt-3 flex flex-wrap gap-3">
-          <label className={buttonSecondary}>
-            <span>Import Markdown</span>
-            <input className="sr-only" type="file" accept=".md,text/markdown,text/plain" onChange={onImport} />
-          </label>
-        </div>
-        {importStatus && <p className="mt-3 text-xs text-slate-500">{importStatus}</p>}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <label className={`${buttonSecondary} flex cursor-pointer items-center justify-center text-center`}>
+          <span>Import Markdown</span>
+          <input className="sr-only" type="file" accept=".md,text/markdown,text/plain" onChange={onImport} />
+        </label>
+        <button
+          className={`${buttonPrimary} flex min-w-0 items-center justify-center overflow-hidden`}
+          type="button"
+          onClick={onExport}
+          title={`Export ${savedDropboxPath}`}
+        >
+          <span className="truncate">Export {savedDropboxPath}</span>
+        </button>
       </div>
-      <div className="mt-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Export</h3>
-        <div className="mt-3 flex flex-wrap gap-3">
-          <button className={buttonPrimary} type="button" onClick={onExport}>
-            Export {savedDropboxPath}
-          </button>
-        </div>
-      </div>
+      {importStatus && <p className="mt-3 text-xs text-slate-500">{importStatus}</p>}
     </section>
   )
 }
