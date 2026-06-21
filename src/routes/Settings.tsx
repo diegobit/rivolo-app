@@ -388,7 +388,16 @@ export default function Settings() {
       </section>
 
       <p className="text-center text-xs text-slate-400">
-        Rivolo v{__APP_VERSION__} • Made by{' '}
+        Rivolo v{__APP_VERSION__} •{' '}
+        <a
+          href="https://github.com/diegobit/rivolo-app"
+          target="_blank"
+          rel="noreferrer"
+          className="underline hover:text-slate-600"
+        >
+          Open source
+        </a>{' '}
+        • Made by{' '}
         <a
           href="https://diegobit.com"
           target="_blank"
