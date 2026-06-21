@@ -160,8 +160,12 @@ export default function Settings() {
     void loadDropboxState()
     void loadGoogleDriveState()
     void loadSyncState()
-    void prepareGoogleDriveAuth().catch(() => undefined)
   }, [loadDropboxState, loadGoogleDriveState, loadSettings, loadSyncState])
+
+  useEffect(() => {
+    if (selectedSyncProvider !== 'google-drive') return
+    void prepareGoogleDriveAuth().catch(() => undefined)
+  }, [selectedSyncProvider])
 
   useEffect(() => {
     const handleStatus = () => setOnline(navigator.onLine)
