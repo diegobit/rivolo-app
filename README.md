@@ -2,7 +2,7 @@
   <img src="public/logo.png" alt="Rivolo" width="180" />
 </p>
 
-<p align="center"><em>The no-notes notes app.</em></p>
+<p align="center"><em>The no-notes notes app 💧</em></p>
 
 Rivolo (REE-voh-loh) is the Italian word for "small stream". Every day, you write your thoughts, ideas, notes and todos without organizing anything. Whenever you need to find something complex, just ask the LLM to surface what you need.
 
