@@ -1,6 +1,6 @@
 import { formatDayTitle } from './dates'
 import { isFtsAvailable, queryAll, queryOne, run, runDatabaseTransaction, upsertFts } from './db'
-import { markLocalDirty } from './dropboxState'
+import { markSyncLocalDirty } from './syncDirty'
 import { searchDaysInMemory, type Day, type SearchFilter } from './notesCore'
 
 export type { Day, DaySearchResult, SearchFilter } from './notesCore'
@@ -100,12 +100,12 @@ export const ensureDay = async (dayId: string) => {
   const stored = await getDay(dayId)
   if (stored) {
     await upsertFts(stored.dayId, stored.humanTitle, stored.contentMd)
-    await markLocalDirty()
+    await markSyncLocalDirty()
     return stored
   }
 
   await upsertFts(dayId, humanTitle, '')
-  await markLocalDirty()
+  await markSyncLocalDirty()
   return { dayId, humanTitle, contentMd: '', createdAt: now, updatedAt: now }
 }
 
@@ -136,7 +136,7 @@ export const saveDay = async (
 
   await upsertFts(dayId, title, contentMd)
   if (markDirty) {
-    await markLocalDirty()
+    await markSyncLocalDirty()
   }
   return getDay(dayId)
 }
@@ -170,7 +170,7 @@ export const moveDay = async (fromDayId: string, toDayId: string) => {
     await upsertFts(toDayId, humanTitle, existing.contentMd)
   }
 
-  await markLocalDirty()
+  await markSyncLocalDirty()
   return { day: await getDay(toDayId), conflict: false }
 }
 
@@ -196,7 +196,7 @@ export const deleteDay = async (dayId: string) => {
   if (await isFtsAvailable()) {
     await run('DELETE FROM days_fts WHERE day_id = ?', [dayId])
   }
-  await markLocalDirty()
+  await markSyncLocalDirty()
 }
 
 export const clearDays = async () => {
@@ -226,7 +226,7 @@ export const replaceDays = async (days: DayWrite[], options: { markDirty?: boole
     }
 
     if (markDirty) {
-      await markLocalDirty()
+      await markSyncLocalDirty()
     }
   })
 }

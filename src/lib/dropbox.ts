@@ -1,5 +1,6 @@
 import { exportMarkdownFromDb, importMarkdownToDb } from './importExport'
 import { finalizeDropboxPushState, getDropboxState, updateDropboxState } from './dropboxState'
+import { markSyncLocalDirty } from './syncDirty'
 import type { DropboxState } from './dropboxState'
 import type { SyncProvider, SyncStatus } from './sync'
 
@@ -374,7 +375,7 @@ export const getDropboxStatus = async (): Promise<SyncStatus> => {
   const state = await getDropboxState()
   return {
     connected: Boolean(state.auth),
-    filePath: state.filePath,
+    targetName: state.filePath,
     lastRemoteVersion: state.lastRemoteRev,
     lastSyncAt: state.lastSyncAt,
     localDirty: state.localDirty,
@@ -407,6 +408,7 @@ export const pullFromDropbox = async () => {
     throw new Error('Dropbox file has no day markers. Import aborted to avoid data loss.')
   }
 
+  await markSyncLocalDirty()
   await updateDropboxState({
     lastRemoteRev: metadata.rev,
     lastSyncAt: Date.now(),

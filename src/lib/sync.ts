@@ -1,4 +1,5 @@
 import { dropboxProvider } from './dropbox'
+import { googleDriveProvider } from './googleDrive'
 import { getSyncState, updateSyncState } from './syncState'
 import type { SyncProviderId } from './syncState'
 
@@ -6,7 +7,7 @@ export type { SyncProviderId } from './syncState'
 
 export type SyncStatus = {
   connected: boolean
-  filePath: string | null
+  targetName: string | null
   lastRemoteVersion: string | null
   lastSyncAt: number | null
   localDirty: boolean
@@ -43,7 +44,7 @@ let queuedForcePush: Promise<SyncPushResult> | null = null
 
 const EMPTY_STATUS: SyncStatus = {
   connected: false,
-  filePath: null,
+  targetName: null,
   lastRemoteVersion: null,
   lastSyncAt: null,
   localDirty: false,
@@ -53,7 +54,10 @@ const EMPTY_STATUS: SyncStatus = {
 
 const providers: Record<SyncProviderId, SyncProvider> = {
   dropbox: dropboxProvider,
+  'google-drive': googleDriveProvider,
 }
+
+export const getProviderStatus = async (providerId: SyncProviderId) => providers[providerId].getStatus()
 
 export const getActiveProviderId = async () => {
   const state = await getSyncState()
@@ -131,12 +135,11 @@ export const pushToSync = async (force = false) => {
   return trackPush(provider.push(force))
 }
 
-export const disconnectActiveProvider = async () => {
-  const provider = await getActiveProvider()
-  if (provider) {
-    await provider.disconnect()
+export const disconnectProvider = async (providerId: SyncProviderId) => {
+  await providers[providerId].disconnect()
+  if ((await getActiveProviderId()) === providerId) {
+    await setActiveProviderId(null)
   }
-  await setActiveProviderId(null)
 }
 
 export const getEmptySyncStatus = () => EMPTY_STATUS

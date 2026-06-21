@@ -797,7 +797,7 @@ export default function Timeline() {
   const heroLogoRef = useRef<HTMLImageElement | null>(null)
   const heroRevealPending = useRef(false)
 
-  const canSync = Boolean(syncStatus.connected && syncStatus.filePath)
+  const canSync = Boolean(syncStatus.connected && syncStatus.targetName)
 
   const handleAutoPush = useCallback(async () => {
     if (!canSync || !navigator.onLine) return

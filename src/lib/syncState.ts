@@ -1,6 +1,15 @@
 import { getJsonSetting, setJsonSetting } from './settingsRepository'
 
-export type SyncProviderId = 'dropbox'
+export const SYNC_PROVIDER_IDS = ['dropbox', 'google-drive'] as const
+export type SyncProviderId = (typeof SYNC_PROVIDER_IDS)[number]
+
+export const SYNC_PROVIDER_LABELS: Record<SyncProviderId, string> = {
+  dropbox: 'Dropbox',
+  'google-drive': 'Google Drive',
+}
+
+export const isSyncProviderId = (value: unknown): value is SyncProviderId =>
+  typeof value === 'string' && SYNC_PROVIDER_IDS.includes(value as SyncProviderId)
 
 type SyncState = {
   activeProvider: SyncProviderId | null
@@ -12,7 +21,11 @@ const DEFAULT_STATE: SyncState = {
 
 export const getSyncState = async () => {
   const stored = await getJsonSetting<SyncState>('sync.state')
-  return { ...DEFAULT_STATE, ...stored }
+  return {
+    ...DEFAULT_STATE,
+    ...stored,
+    activeProvider: isSyncProviderId(stored?.activeProvider) ? stored.activeProvider : null,
+  }
 }
 
 export const updateSyncState = async (updates: Partial<SyncState>) => {

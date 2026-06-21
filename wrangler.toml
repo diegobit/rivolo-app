@@ -1,0 +1,9 @@
+name = "rivolo-app"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-06-21"
+
+[vars]
+GOOGLE_ALLOWED_ORIGINS = "http://localhost:8788"
+
+[env.production.vars]
+GOOGLE_ALLOWED_ORIGINS = "https://rivolo.app"

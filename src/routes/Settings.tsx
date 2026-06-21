@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppearanceSection from '../components/settings/AppearanceSection'
-import DropboxSyncSection from '../components/settings/DropboxSyncSection'
 import ImportExportSection from '../components/settings/ImportExportSection'
 import LlmSection from '../components/settings/LlmSection'
+import SyncSection from '../components/settings/SyncSection'
 import { isIOS } from '../lib/device'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
 import {
@@ -17,10 +17,14 @@ import {
 } from '../lib/fonts'
 import { shareOrDownload } from '../lib/share'
 import { DEFAULT_DROPBOX_PATH } from '../lib/dropbox'
+import { prepareGoogleDriveAuth } from '../lib/googleDriveAuth'
+import { DEFAULT_GOOGLE_DRIVE_FILE_NAME, getGoogleDrivePath } from '../lib/googleDriveState'
+import type { SyncProviderId } from '../lib/sync'
 import { buttonSecondary } from '../lib/ui'
-import { useDropboxSyncActions } from './settings/useDropboxSyncActions'
+import { useSyncProviderActions } from './settings/useSyncProviderActions'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
+import { useGoogleDriveStore } from '../store/useGoogleDriveStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 
@@ -88,29 +92,46 @@ export default function Settings() {
   const bodyFont = useSettingsStore((state) => state.bodyFont)
   const monospaceFont = useSettingsStore((state) => state.monospaceFont)
   const titleFont = useSettingsStore((state) => state.titleFont)
-  const filePath = useDropboxStore((state) => state.filePath)
-  const lastRemoteRev = useDropboxStore((state) => state.lastRemoteRev)
-  const lastSyncAt = useDropboxStore((state) => state.lastSyncAt)
-  const localDirty = useDropboxStore((state) => state.localDirty)
-  const hasAuth = useDropboxStore((state) => state.hasAuth)
-  const accountEmail = useDropboxStore((state) => state.accountEmail)
-  const accountName = useDropboxStore((state) => state.accountName)
+  const dropboxFilePath = useDropboxStore((state) => state.filePath)
+  const dropboxRemoteRev = useDropboxStore((state) => state.lastRemoteRev)
+  const dropboxLastSyncAt = useDropboxStore((state) => state.lastSyncAt)
+  const dropboxLocalDirty = useDropboxStore((state) => state.localDirty)
+  const dropboxHasAuth = useDropboxStore((state) => state.hasAuth)
+  const dropboxAccountEmail = useDropboxStore((state) => state.accountEmail)
+  const dropboxAccountName = useDropboxStore((state) => state.accountName)
   const loadDropboxState = useDropboxStore((state) => state.loadState)
   const updateFilePath = useDropboxStore((state) => state.updateFilePath)
+  const googleDriveConnected = useGoogleDriveStore((state) => state.connected)
+  const googleDriveFileName = useGoogleDriveStore((state) => state.fileName)
+  const googleDriveRemoteVersion = useGoogleDriveStore((state) => state.lastRemoteVersion)
+  const googleDriveLastSyncAt = useGoogleDriveStore((state) => state.lastSyncAt)
+  const googleDriveLocalDirty = useGoogleDriveStore((state) => state.localDirty)
+  const googleDriveAccountEmail = useGoogleDriveStore((state) => state.accountEmail)
+  const googleDriveAccountName = useGoogleDriveStore((state) => state.accountName)
+  const loadGoogleDriveState = useGoogleDriveStore((state) => state.loadState)
+  const updateGoogleDriveFileName = useGoogleDriveStore((state) => state.updateFileName)
   const activeProvider = useSyncStore((state) => state.activeProvider)
+  const activeSyncStatus = useSyncStore((state) => state.status)
   const loadSyncState = useSyncStore((state) => state.loadState)
+  const setActiveSyncProvider = useSyncStore((state) => state.setActiveProvider)
   const syncing = useSyncStore((state) => state.syncing)
 
   const [importStatus, setImportStatus] = useState<string | null>(null)
 
-  const [dropboxStatus, setDropboxStatus] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<string | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
+  const [syncProviderDraft, setSyncProviderDraft] = useState<SyncProviderId | null>(null)
   const [dropboxPathDraft, setDropboxPathDraft] = useState<string | null>(null)
+  const [googleDriveFileNameDraft, setGoogleDriveFileNameDraft] = useState<string | null>(null)
   const [showFontPreview, setShowFontPreview] = useState(false)
 
-  const savedDropboxPath = filePath || DEFAULT_DROPBOX_PATH
+  const selectedSyncProvider = syncProviderDraft ?? activeProvider ?? 'dropbox'
+  const savedDropboxPath = dropboxFilePath || DEFAULT_DROPBOX_PATH
   const dropboxPath = dropboxPathDraft ?? savedDropboxPath
   const isDropboxPathDirty = dropboxPath.trim() !== savedDropboxPath
+  const savedGoogleDriveFileName = googleDriveFileName || DEFAULT_GOOGLE_DRIVE_FILE_NAME
+  const googleFileName = googleDriveFileNameDraft ?? savedGoogleDriveFileName
+  const isGoogleFileNameDirty = googleFileName.trim() !== savedGoogleDriveFileName
 
   const handleMonospaceFont = (font: MonospaceFont) => {
     void updateMonospaceFont(font)
@@ -137,8 +158,10 @@ export default function Settings() {
   useEffect(() => {
     void loadSettings()
     void loadDropboxState()
+    void loadGoogleDriveState()
     void loadSyncState()
-  }, [loadDropboxState, loadSettings, loadSyncState])
+    void prepareGoogleDriveAuth().catch(() => undefined)
+  }, [loadDropboxState, loadGoogleDriveState, loadSettings, loadSyncState])
 
   useEffect(() => {
     const handleStatus = () => setOnline(navigator.onLine)
@@ -150,7 +173,6 @@ export default function Settings() {
     }
   }, [])
 
-  const dropboxConnected = hasAuth && activeProvider === 'dropbox'
   const bodyPreviewFontFamily =
     fontPreference === 'monospace'
       ? getMonospaceFontFamily(monospaceFont)
@@ -164,22 +186,58 @@ export default function Settings() {
       : '1rem'
   const titlePreviewFontFamily = getTitleFontFamily(titleFont)
   const dropboxAccount = useMemo(() => {
-    if (accountName && accountEmail) {
-      return `${accountName} (${accountEmail})`
+    if (dropboxAccountName && dropboxAccountEmail) {
+      return `${dropboxAccountName} (${dropboxAccountEmail})`
     }
-    return accountEmail ?? accountName ?? '—'
-  }, [accountEmail, accountName])
+    return dropboxAccountEmail ?? dropboxAccountName ?? '—'
+  }, [dropboxAccountEmail, dropboxAccountName])
 
   const dropboxSummary = useMemo(
     () => ({
-      connected: dropboxConnected,
-      lastSync: formatSyncTime(lastSyncAt),
-      rev: lastRemoteRev ?? '—',
-      dirty: localDirty,
+      connected: dropboxHasAuth,
+      lastSync: formatSyncTime(dropboxLastSyncAt),
+      remoteVersion: dropboxRemoteRev ?? '—',
+      dirty: dropboxLocalDirty,
       account: dropboxAccount,
+      target: savedDropboxPath,
     }),
-    [dropboxAccount, dropboxConnected, lastRemoteRev, lastSyncAt, localDirty],
+    [dropboxAccount, dropboxHasAuth, dropboxLastSyncAt, dropboxLocalDirty, dropboxRemoteRev, savedDropboxPath],
   )
+
+  const googleDriveAccount = useMemo(() => {
+    if (googleDriveAccountName && googleDriveAccountEmail) {
+      return `${googleDriveAccountName} (${googleDriveAccountEmail})`
+    }
+    return googleDriveAccountEmail ?? googleDriveAccountName ?? '—'
+  }, [googleDriveAccountEmail, googleDriveAccountName])
+
+  const googleDriveSummary = useMemo(
+    () => ({
+      connected: googleDriveConnected,
+      lastSync: formatSyncTime(googleDriveLastSyncAt),
+      remoteVersion: googleDriveRemoteVersion ?? '—',
+      dirty: googleDriveLocalDirty,
+      account: googleDriveAccount,
+      target: getGoogleDrivePath(savedGoogleDriveFileName),
+    }),
+    [
+      googleDriveAccount,
+      googleDriveConnected,
+      googleDriveLastSyncAt,
+      googleDriveLocalDirty,
+      googleDriveRemoteVersion,
+      savedGoogleDriveFileName,
+    ],
+  )
+
+  const selectedSummary = selectedSyncProvider === 'dropbox' ? dropboxSummary : googleDriveSummary
+  const selectedTarget = selectedSyncProvider === 'dropbox' ? dropboxPath : googleFileName
+  const selectedTargetDirty =
+    selectedSyncProvider === 'dropbox' ? isDropboxPathDirty : isGoogleFileNameDirty
+
+  const loadProviderStates = async () => {
+    await Promise.all([loadDropboxState(), loadGoogleDriveState()])
+  }
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -195,25 +253,39 @@ export default function Settings() {
 
   const handleExport = async () => {
     const content = await exportMarkdownFromDb()
-    const filename = (filePath || DEFAULT_DROPBOX_PATH).split('/').pop() || 'inbox.md'
+    const filename = (activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'
     await shareOrDownload(filename, content)
   }
 
-  const handleSaveDropboxPath = async () => {
-    await updateFilePath(dropboxPath.trim() || DEFAULT_DROPBOX_PATH)
-    setDropboxPathDraft(null)
-    await loadDropboxState()
+  const handleSaveSyncTarget = async () => {
+    setSyncStatus(null)
+    if (selectedSyncProvider === 'dropbox') {
+      await updateFilePath(dropboxPath.trim() || DEFAULT_DROPBOX_PATH)
+      setDropboxPathDraft(null)
+    } else {
+      const nextFileName = googleFileName.trim() || DEFAULT_GOOGLE_DRIVE_FILE_NAME
+      if (nextFileName.includes('/') || !nextFileName.toLowerCase().endsWith('.md')) {
+        setSyncStatus('Google Drive file name must be a Markdown file name without folders.')
+        return
+      }
+      await updateGoogleDriveFileName(nextFileName)
+      setGoogleDriveFileNameDraft(null)
+    }
+    await loadProviderStates()
     await loadSyncState()
   }
 
-  const { handleConnectDropbox, handleDisconnectDropbox, handlePull, handlePush } =
-    useDropboxSyncActions({
+  const { handleConnect, handleDisconnect, handleActivate, handlePull, handlePush } =
+    useSyncProviderActions({
+      provider: selectedSyncProvider,
+      activeProvider,
+      connected: selectedSummary.connected,
+      localDirty: selectedSummary.dirty,
       online,
-      dropboxConnected,
-      localDirty,
-      setDropboxStatus,
-      loadDropboxState,
+      setStatus: setSyncStatus,
+      loadProviderStates,
       loadSyncState,
+      setActiveProvider: setActiveSyncProvider,
     })
 
   return (
@@ -269,25 +341,33 @@ export default function Settings() {
       />
 
 
-      <DropboxSyncSection
-        dropboxSummary={dropboxSummary}
-        filePath={filePath}
+      <SyncSection
+        activeProvider={activeProvider}
+        provider={selectedSyncProvider}
+        summary={selectedSummary}
         online={online}
-        dropboxPath={dropboxPath}
-        isDropboxPathDirty={isDropboxPathDirty}
+        targetDraft={selectedTarget}
+        targetDirty={selectedTargetDirty}
         syncBusy={syncing}
-        dropboxStatus={dropboxStatus}
-        placeholderPath={DEFAULT_DROPBOX_PATH}
-        onConnectDropbox={handleConnectDropbox}
-        onDisconnectDropbox={handleDisconnectDropbox}
-        onDropboxPathChange={(value) => setDropboxPathDraft(value)}
-        onSavePath={handleSaveDropboxPath}
+        status={syncStatus}
+        onProviderChange={(nextProvider) => {
+          setSyncProviderDraft(nextProvider)
+          setSyncStatus(null)
+        }}
+        onConnect={handleConnect}
+        onDisconnect={handleDisconnect}
+        onActivate={handleActivate}
+        onTargetChange={(value) => {
+          if (selectedSyncProvider === 'dropbox') setDropboxPathDraft(value)
+          else setGoogleDriveFileNameDraft(value)
+        }}
+        onSaveTarget={handleSaveSyncTarget}
         onPull={handlePull}
         onPush={handlePush}
       />
 
       <ImportExportSection
-        savedDropboxPath={savedDropboxPath}
+        exportFileName={(activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'}
         importStatus={importStatus}
         onImport={handleImport}
         onExport={handleExport}

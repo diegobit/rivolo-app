@@ -1,14 +1,14 @@
 import { buttonPrimary, buttonSecondary } from '../../lib/ui'
 
 type ImportExportSectionProps = {
-  savedDropboxPath: string
+  exportFileName: string
   importStatus: string | null
   onImport: (event: React.ChangeEvent<HTMLInputElement>) => void | Promise<void>
   onExport: () => void | Promise<void>
 }
 
 export default function ImportExportSection({
-  savedDropboxPath,
+  exportFileName,
   importStatus,
   onImport,
   onExport,
@@ -25,9 +25,9 @@ export default function ImportExportSection({
           className={`${buttonPrimary} flex min-w-0 items-center justify-center overflow-hidden`}
           type="button"
           onClick={onExport}
-          title={`Export ${savedDropboxPath}`}
+          title={`Export ${exportFileName}`}
         >
-          <span className="truncate">Export {savedDropboxPath}</span>
+          <span className="truncate">Export {exportFileName}</span>
         </button>
       </div>
       {importStatus && <p className="mt-3 text-xs text-slate-500">{importStatus}</p>}

@@ -1,0 +1,3 @@
+GOOGLE_CLIENT_ID=your-google-oauth-web-client-id
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+GOOGLE_TOKEN_ENCRYPTION_KEY=replace-with-a-high-entropy-random-secret

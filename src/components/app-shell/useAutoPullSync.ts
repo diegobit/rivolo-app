@@ -3,7 +3,7 @@ import { pullFromSyncAndRefresh } from '../../store/syncActions'
 
 type AutoPullStatus = {
   connected: boolean
-  filePath: string | null
+  targetName: string | null
   localDirty: boolean
 }
 
@@ -14,7 +14,7 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
   const maybeAutoPull = useCallback(
     (reason: 'start' | 'reconnect' | 'visibility') => {
       if (!navigator.onLine) return
-      if (!status.connected || !status.filePath) return
+      if (!status.connected || !status.targetName) return
       if (status.localDirty) return
       if (autoPullInFlight.current) return
 
@@ -32,7 +32,7 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
           autoPullInFlight.current = false
         })
     },
-    [status.connected, status.filePath, status.localDirty],
+    [status.connected, status.targetName, status.localDirty],
   )
 
   useEffect(() => {

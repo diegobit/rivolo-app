@@ -81,7 +81,7 @@ export const updateDropboxFilePath = async (filePath: string) => {
   })
 }
 
-export const markLocalDirty = async () => {
+export const markDropboxLocalDirty = async () => {
   await enqueueDropboxStateWrite((current) => {
     const next = {
       ...current,
