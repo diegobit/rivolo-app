@@ -51,6 +51,11 @@ describe('Google OAuth backend boundary', () => {
       env.GOOGLE_TOKEN_ENCRYPTION_KEY,
     )
     const cookiePair = cookie.split(';', 1)[0]
+    expect(cookie).toContain('Max-Age=34560000')
+    expect(cookie).toContain('Path=/api/google-drive')
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('SameSite=Strict')
+    expect(cookie).toContain('Secure')
     const googleFetch = vi.fn(async () =>
       Response.json({ access_token: 'access-token', expires_in: 3600 }),
     )

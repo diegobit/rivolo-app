@@ -62,7 +62,37 @@ export default function Privacy() {
         </div>
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          4) Purposes and legal bases (GDPR Art. 6)
+          4) Cookies and browser storage
+        </h2>
+        <p className="mt-2">
+          Rivolo does not use analytics, advertising, or profiling cookies. It uses one first-party technical cookie
+          only when you explicitly connect Google Drive:
+        </p>
+        <div className="mt-2 space-y-2">
+          <p>
+            <span className="font-semibold text-slate-700">Google Drive refresh cookie</span>
+            <br />
+            Name: <code className="break-all text-xs">rivolo_gdrive_refresh</code>. Purpose: keep the Google Drive
+            sync connection working by obtaining new short-lived access tokens without repeatedly asking you to sign
+            in. Contents: an OAuth refresh credential encrypted by Rivolo before storage. Duration: up to 400 days
+            from its latest refresh, or earlier if you disconnect Google Drive, revoke access, the credential expires,
+            or you clear browser data. Scope and protections: first-party, limited to{' '}
+            <code className="break-all text-xs">/api/google-drive</code>, HttpOnly, Secure on HTTPS, and
+            SameSite=Strict. It is not available to browser JavaScript and is not used for tracking or profiling.
+          </p>
+          <p>
+            <span className="font-semibold text-slate-700">Other technical browser storage</span>
+            <br />
+            IndexedDB stores the local notes database, chat history, settings, optional AI API keys, Dropbox
+            credentials, and sync metadata. Session storage temporarily holds Dropbox OAuth validation data and the
+            timeline scroll position. Local storage holds only the optional debug-logging preference. The PWA service
+            worker uses browser cache storage for app files needed for offline use. These mechanisms are used only to
+            provide requested app features and are not used to track you across websites.
+          </p>
+        </div>
+
+        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          5) Purposes and legal bases (GDPR Art. 6)
         </h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>
@@ -73,7 +103,7 @@ export default function Privacy() {
         </ul>
         <p className="mt-2">You can use Rivolo without configuring an AI provider or cloud sync.</p>
 
-        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">5) Recipients</h2>
+        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">6) Recipients</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>Cloudflare (hosting/CDN/security and Google OAuth credential exchange)</li>
           <li>Google (Gemini API), Anthropic, or OpenAI, only when selected for an AI request</li>
@@ -82,14 +112,14 @@ export default function Privacy() {
           <li>Google Drive (sync provider)</li>
         </ul>
 
-        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">6) International transfers</h2>
+        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">7) International transfers</h2>
         <p className="mt-2">
           These providers may process data outside the EU/EEA/UK. Where applicable, transfers rely on appropriate
           safeguards under GDPR (for example, adequacy decisions and/or standard contractual clauses as provided by the
           vendor).
         </p>
 
-        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">7) Retention</h2>
+        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">8) Retention</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>
             Local app data, including AI provider keys and configuration: kept on your device until you remove it or
@@ -104,7 +134,7 @@ export default function Privacy() {
           </li>
         </ul>
 
-        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">8) Your GDPR rights</h2>
+        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">9) Your GDPR rights</h2>
         <p className="mt-2">
           You may have rights to access, rectify, erase, restrict, and port your data, and to object to processing
           based on legitimate interests.
@@ -124,15 +154,15 @@ export default function Privacy() {
           .
         </p>
 
-        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">9) Right to complain</h2>
+        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">10) Right to complain</h2>
         <p className="mt-2">You can lodge a complaint with your local data protection supervisory authority.</p>
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          10) Automated decision-making
+          11) Automated decision-making
         </h2>
         <p className="mt-2">We do not use automated decision-making that produces legal or similarly significant effects.</p>
 
-        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">11) Changes</h2>
+        <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">12) Changes</h2>
         <p className="mt-2">We may update this notice from time to time and will update the effective date above.</p>
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Third-party privacy links</h2>
