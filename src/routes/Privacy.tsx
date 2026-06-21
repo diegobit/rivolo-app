@@ -4,7 +4,7 @@ export default function Privacy() {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div>
           <h1 className="text-base font-semibold text-slate-700">Privacy Notice (GDPR)</h1>
-          <p className="mt-1 text-xs text-slate-500">Effective date: June 19, 2026</p>
+          <p className="mt-1 text-xs text-slate-500">Effective date: June 21, 2026</p>
         </div>
       </section>
 
@@ -52,10 +52,12 @@ export default function Privacy() {
             direct-browser access opt-in header.
           </p>
           <p>
-            <span className="font-semibold text-slate-700">D) Optional Dropbox sync</span>
+            <span className="font-semibold text-slate-700">D) Optional cloud sync</span>
             <br />
-            If you connect Dropbox, we process Dropbox auth/session data (tokens and basic account metadata) and notes
-            data you choose to sync.
+            If you connect Dropbox or Google Drive, the selected provider processes the notes data you choose to
+            sync. Dropbox credentials remain in browser storage. For Google Drive, a Cloudflare Pages Function
+            exchanges and refreshes OAuth credentials using an encrypted HttpOnly cookie; note contents are
+            transferred directly between your browser and Google Drive and do not pass through that function.
           </p>
         </div>
 
@@ -67,16 +69,17 @@ export default function Privacy() {
             Provide and secure the app (including hosting/CDN via Cloudflare): Art. 6(1)(f) legitimate interests.
           </li>
           <li>Selected AI provider feature (optional): Art. 6(1)(a) consent.</li>
-          <li>Dropbox sync (optional): Art. 6(1)(a) consent.</li>
+          <li>Dropbox or Google Drive sync (optional): Art. 6(1)(a) consent.</li>
         </ul>
-        <p className="mt-2">You can use Rivolo without configuring an AI provider or Dropbox.</p>
+        <p className="mt-2">You can use Rivolo without configuring an AI provider or cloud sync.</p>
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">5) Recipients</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Cloudflare (hosting/CDN/security)</li>
+          <li>Cloudflare (hosting/CDN/security and Google OAuth credential exchange)</li>
           <li>Google (Gemini API), Anthropic, or OpenAI, only when selected for an AI request</li>
           <li>The operator of an OpenAI-compatible endpoint you choose, only when that endpoint is selected</li>
           <li>Dropbox (sync provider)</li>
+          <li>Google Drive (sync provider)</li>
         </ul>
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">6) International transfers</h2>
@@ -90,13 +93,14 @@ export default function Privacy() {
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>
             Local app data, including AI provider keys and configuration: kept on your device until you remove it or
-            clear site/browser storage. AI keys and configuration are not synced through Dropbox or included in notes
-            export.
+            clear site/browser storage. AI keys and configuration are not synced through cloud providers or included
+            in notes export.
           </li>
           <li>Cloudflare technical/security data: retained per operational/security configuration.</li>
           <li>
-            AI provider, custom endpoint, and Dropbox data: subject to the selected operator's retention practices and
-            your account settings.
+            AI provider, custom endpoint, Dropbox, and Google Drive data: subject to the selected operator's retention
+            practices and your account settings. Disconnecting Google Drive clears Rivolo's refresh credential cookie
+            and requests revocation from Google.
           </li>
         </ul>
 
@@ -106,8 +110,8 @@ export default function Privacy() {
           based on legitimate interests.
         </p>
         <p className="mt-2">
-          Where processing is based on consent (optional AI/Dropbox features), you can withdraw consent at any time by
-          no longer using the feature and by removing its locally stored credentials.
+          Where processing is based on consent (optional AI/cloud-sync features), you can withdraw consent at any time
+          by no longer using the feature and disconnecting or removing its credentials.
         </p>
         <p className="mt-2">
           To exercise rights, contact:{' '}
