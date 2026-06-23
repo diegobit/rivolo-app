@@ -60,3 +60,7 @@ GOOGLE_TOKEN_ENCRYPTION_KEY=...
 Allowed origins are environment-specific non-secret configuration in `wrangler.toml`: local development accepts `http://localhost:8788`, while production accepts `https://rivolo.app`.
 
 `GOOGLE_TOKEN_ENCRYPTION_KEY` should be a high-entropy random secret. Neither the client secret nor the encryption key may use a `VITE_` prefix. If the OAuth consent screen remains in External/Testing mode, Google refresh grants can expire after seven days; publish the consent configuration before relying on long-lived production sync.
+
+## Credits
+
+UI icons are from Phosphor Icons: https://phosphoricons.com/
