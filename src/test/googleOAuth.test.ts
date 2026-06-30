@@ -17,6 +17,33 @@ const env: GoogleOAuthEnv = {
   GOOGLE_TOKEN_ENCRYPTION_KEY: 'a-long-test-encryption-key',
 }
 
+const bytesToBase64Url = (bytes: Uint8Array) => {
+  let binary = ''
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+const base64UrlToBytes = (value: string) => {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padding = '='.repeat((4 - (normalized.length % 4)) % 4)
+  const binary = atob(`${normalized}${padding}`)
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+}
+
+const tamperEncryptedPayload = (value: string) => {
+  const [iv, encryptedPayload, extra] = value.split('.')
+  if (!iv || !encryptedPayload || extra) throw new Error('Expected an iv and encrypted payload.')
+
+  const payloadBytes = base64UrlToBytes(encryptedPayload)
+  const lastByte = payloadBytes.at(-1)
+  if (lastByte === undefined) throw new Error('Expected a non-empty encrypted payload.')
+
+  payloadBytes[payloadBytes.length - 1] = lastByte ^ 0x01
+  return `${iv}.${bytesToBase64Url(payloadBytes)}`
+}
+
 afterEach(() => vi.unstubAllGlobals())
 
 describe('Google OAuth backend boundary', () => {
@@ -26,7 +53,7 @@ describe('Google OAuth backend boundary', () => {
     expect(encrypted).not.toContain('refresh-secret')
     expect(await decryptRefreshCookie(encrypted, env.GOOGLE_TOKEN_ENCRYPTION_KEY)).toBe('refresh-secret')
     expect(
-      await decryptRefreshCookie(`${encrypted.slice(0, -1)}x`, env.GOOGLE_TOKEN_ENCRYPTION_KEY),
+      await decryptRefreshCookie(tamperEncryptedPayload(encrypted), env.GOOGLE_TOKEN_ENCRYPTION_KEY),
     ).toBeNull()
   })
 
