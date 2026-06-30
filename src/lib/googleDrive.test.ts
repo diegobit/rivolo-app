@@ -141,6 +141,7 @@ describe('Google Drive sync provider', () => {
     expect(importMarkdownToDb).toHaveBeenCalledWith('# 2026-06-21\n\nremote text', {
       replace: true,
       markDirty: false,
+      allowDestructiveReplace: undefined,
     })
     expect(await getGoogleDriveState()).toMatchObject({ lastRemoteVersion: '2', localDirty: false })
     expect(await getDropboxState()).toMatchObject({ localDirty: true })
@@ -181,7 +182,7 @@ describe('Google Drive sync provider', () => {
     const { pullFromGoogleDrive } = await import('./googleDrive')
     const { getGoogleDriveState } = await import('./googleDriveState')
 
-    expect(await pullFromGoogleDrive(true)).toEqual({ status: 'pulled' })
+    expect(await pullFromGoogleDrive({ force: true })).toEqual({ status: 'pulled' })
     expect(importMarkdownToDb).toHaveBeenCalledWith('# 2026-06-21\n\nremote text', {
       replace: true,
       markDirty: false,

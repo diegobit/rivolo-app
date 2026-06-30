@@ -19,6 +19,11 @@ export type SyncPullResult = {
   status: 'noop' | 'pulled'
 }
 
+export type SyncPullOptions = {
+  force?: boolean
+  allowDestructiveReplace?: boolean
+}
+
 export type SyncPushResult =
   | {
       status: 'clean'
@@ -34,7 +39,7 @@ export type SyncPushResult =
 export type SyncProvider = {
   id: SyncProviderId
   getStatus: () => Promise<SyncStatus>
-  pull: (force?: boolean) => Promise<SyncPullResult>
+  pull: (options?: SyncPullOptions) => Promise<SyncPullResult>
   push: (force?: boolean) => Promise<SyncPushResult>
   disconnect: () => Promise<void>
 }
@@ -80,12 +85,12 @@ export const getActiveProviderStatus = async () => {
   return provider.getStatus()
 }
 
-export const pullFromSync = async (force = false) => {
+export const pullFromSync = async (options: SyncPullOptions = {}) => {
   const provider = await getActiveProvider()
   if (!provider) {
     throw new Error('No sync provider connected.')
   }
-  return provider.pull(force)
+  return provider.pull(options)
 }
 
 export const pushToSync = async (force = false) => {

@@ -50,9 +50,12 @@ describe('useSyncProviderActions', () => {
     await handlePull()
 
     expect(confirm).toHaveBeenCalledWith(
-      'Pull from Dropbox and replace local notes? Unpushed local changes will be overwritten.',
+      'Pull from Dropbox and replace local notes? Unpushed local changes and local-only days missing from Dropbox will be overwritten. A rollback backup will be saved first.',
     )
-    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledWith({ force: true })
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledWith({
+      force: true,
+      allowDestructiveReplace: true,
+    })
     expect(loadProviderStates).toHaveBeenCalledOnce()
     expect(setStatus).toHaveBeenLastCalledWith('Pulled and imported.')
   })

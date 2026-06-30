@@ -62,7 +62,7 @@ describe('Dropbox sync provider', () => {
     const { pullFromDropbox } = await import('./dropbox')
     const { getDropboxState } = await import('./dropboxState')
 
-    expect(await pullFromDropbox(true)).toMatchObject({ status: 'pulled' })
+    expect(await pullFromDropbox({ force: true })).toMatchObject({ status: 'pulled' })
     expect(importMarkdownToDb).toHaveBeenCalledWith('# 2026-06-21\n\nremote text', {
       replace: true,
       markDirty: false,

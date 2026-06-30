@@ -2,7 +2,7 @@ import { exportMarkdownFromDb, importMarkdownToDb } from './importExport'
 import { finalizeDropboxPushState, getDropboxState, updateDropboxState } from './dropboxState'
 import { markSyncLocalDirty } from './syncDirty'
 import type { DropboxState } from './dropboxState'
-import type { SyncProvider, SyncStatus } from './sync'
+import type { SyncProvider, SyncPullOptions, SyncStatus } from './sync'
 
 const DROPBOX_API = 'https://api.dropboxapi.com/2'
 const DROPBOX_CONTENT = 'https://content.dropboxapi.com/2'
@@ -384,9 +384,10 @@ export const getDropboxStatus = async (): Promise<SyncStatus> => {
   }
 }
 
-export const pullFromDropbox = async (force = false) => {
+export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
   const state = await getDropboxState()
   const path = await resolveDropboxPath(state)
+  const force = options.force ?? false
 
   if (state.localDirty && !force) {
     console.info('[Dropbox] pull:dirty-noop', { filePath: path })
@@ -404,7 +405,11 @@ export const pullFromDropbox = async (force = false) => {
   }
 
   const content = await downloadFile(path)
-  const result = await importMarkdownToDb(content, { replace: true, markDirty: false })
+  const result = await importMarkdownToDb(content, {
+    replace: true,
+    markDirty: false,
+    allowDestructiveReplace: options.allowDestructiveReplace,
+  })
   const hasNoMarkersWarning =
     result.imported === 0 &&
     result.warnings.some((warning) => warning.toLowerCase().includes('no day markers'))

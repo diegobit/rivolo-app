@@ -9,7 +9,7 @@ import {
   updateGoogleDriveState,
 } from './googleDriveState'
 import { markSyncLocalDirty } from './syncDirty'
-import type { SyncProvider, SyncStatus } from './sync'
+import type { SyncProvider, SyncPullOptions, SyncStatus } from './sync'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3'
@@ -213,8 +213,9 @@ export const getGoogleDriveStatus = async (): Promise<SyncStatus> => {
   }
 }
 
-export const pullFromGoogleDrive = async (force = false) => {
+export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
   const state = await getGoogleDriveState()
+  const force = options.force ?? false
   if (!state.connected) throw new Error('Google Drive not connected.')
   if (state.localDirty && !force) {
     return { status: 'noop' as const }
@@ -228,7 +229,11 @@ export const pullFromGoogleDrive = async (force = false) => {
   }
 
   const content = await downloadDriveFile(metadata.id)
-  const result = await importMarkdownToDb(content, { replace: true, markDirty: false })
+  const result = await importMarkdownToDb(content, {
+    replace: true,
+    markDirty: false,
+    allowDestructiveReplace: options.allowDestructiveReplace,
+  })
   const hasNoMarkersWarning =
     result.imported === 0 &&
     result.warnings.some((warning) => warning.toLowerCase().includes('no day markers'))

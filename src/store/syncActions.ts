@@ -29,7 +29,10 @@ const enqueueSyncOperation = async <T>(operation: SyncQueueOperation, runner: ()
   return queuedRun
 }
 
-export const pullFromSyncAndRefresh = async (options?: { force?: boolean }) =>
+export const pullFromSyncAndRefresh = async (options?: {
+  force?: boolean
+  allowDestructiveReplace?: boolean
+}) =>
   enqueueSyncOperation('pull', async () => {
     const force = options?.force ?? false
     if (!force) {
@@ -40,7 +43,10 @@ export const pullFromSyncAndRefresh = async (options?: { force?: boolean }) =>
       }
     }
 
-    const result = await pullFromSync(force)
+    const result = await pullFromSync({
+      force,
+      allowDestructiveReplace: options?.allowDestructiveReplace,
+    })
     if (result.status === 'pulled') {
       await useDaysStore.getState().loadTimeline()
     }

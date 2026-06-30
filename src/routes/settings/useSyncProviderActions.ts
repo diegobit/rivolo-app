@@ -1,5 +1,6 @@
 import { startDropboxAuth } from '../../lib/dropbox'
 import { prepareGoogleDriveAuth, startGoogleDriveAuth } from '../../lib/googleDriveAuth'
+import { isImportSafetyError } from '../../lib/importExport'
 import { disconnectProvider, type SyncProviderId } from '../../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../../lib/syncState'
 import { pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../../store/syncActions'
@@ -97,19 +98,41 @@ export const useSyncProviderActions = ({
     setStatus(null)
     if (!requireActive()) return
     let force = false
+    let allowDestructiveReplace = false
     if (localDirty) {
       const confirmed = window.confirm(
-        `Pull from ${label} and replace local notes? Unpushed local changes will be overwritten.`,
+        `Pull from ${label} and replace local notes? Unpushed local changes and local-only days missing from ${label} will be overwritten. A rollback backup will be saved first.`,
       )
       if (!confirmed) return
       force = true
+      allowDestructiveReplace = true
     }
 
     try {
-      const result = await pullFromSyncAndRefresh({ force })
+      const result = await pullFromSyncAndRefresh({ force, allowDestructiveReplace })
       await loadProviderStates()
       setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
     } catch (error) {
+      if (isImportSafetyError(error) && error.reason === 'would-delete-local-days') {
+        const deletedCount = error.deletedDayIds.length
+        const confirmed = window.confirm(
+          `${label} is missing ${deletedCount} local day(s). Replace local notes anyway? A rollback backup will be saved first.`,
+        )
+        if (!confirmed) {
+          setStatus('Pull canceled. Local notes were not changed.')
+          return
+        }
+
+        try {
+          const result = await pullFromSyncAndRefresh({ allowDestructiveReplace: true })
+          await loadProviderStates()
+          setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
+        } catch (retryError) {
+          setStatus(retryError instanceof Error ? retryError.message : `${label} pull failed.`)
+        }
+        return
+      }
+
       setStatus(error instanceof Error ? error.message : `${label} pull failed.`)
     }
   }
