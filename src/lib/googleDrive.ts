@@ -22,6 +22,7 @@ type DriveFile = {
   name: string
   mimeType: string
   version: string
+  etag?: string
   modifiedTime?: string
   trashed?: boolean
   parents?: string[]
@@ -38,9 +39,28 @@ type DriveError = {
 
 const FILE_FIELDS = 'id,name,mimeType,version,modifiedTime,trashed,parents,capabilities(canDownload,canEdit,canModifyContent)'
 
+class DrivePreconditionFailedError extends Error {
+  constructor() {
+    super('Google Drive file changed before upload.')
+  }
+}
+
 const driveError = async (response: Response, fallback: string) => {
   const payload = (await response.json().catch(() => null)) as DriveError | null
   return new Error(payload?.error?.message || fallback)
+}
+
+const withDriveEtag = (file: DriveFile, response: Response) => {
+  const etag = response.headers.get('ETag')
+  return etag ? { ...file, etag } : file
+}
+
+const getDrivePreconditionHeaders = (file: DriveFile, force: boolean): Record<string, string> | undefined => {
+  if (force) return undefined
+  if (!file.etag) {
+    throw new Error('Google Drive did not return an ETag for a conditional upload.')
+  }
+  return { 'If-Match': file.etag }
 }
 
 const validateDriveFile = (file: DriveFile) => {
@@ -58,13 +78,19 @@ const validateDriveFile = (file: DriveFile) => {
   return file
 }
 
+const parseDriveMutationResponse = async (response: Response, fallback: string) => {
+  if (response.status === 412) throw new DrivePreconditionFailedError()
+  if (!response.ok) throw await driveError(response, fallback)
+  return validateDriveFile(withDriveEtag((await response.json()) as DriveFile, response))
+}
+
 const fetchDriveFile = async (fileId: string) => {
   const response = await authorizedGoogleDriveFetch(
     `${DRIVE_API}/files/${encodeURIComponent(fileId)}?fields=${encodeURIComponent(FILE_FIELDS)}`,
   )
   if (response.status === 404) return null
   if (!response.ok) throw await driveError(response, 'Failed to fetch Google Drive metadata.')
-  return validateDriveFile((await response.json()) as DriveFile)
+  return validateDriveFile(withDriveEtag((await response.json()) as DriveFile, response))
 }
 
 const escapeDriveQueryValue = (value: string) => value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
@@ -112,7 +138,7 @@ const discoverDriveFile = async (fileName: string, folderId: string) => {
   if (!response.ok) throw await driveError(response, 'Failed to find the Rivolo file in Google Drive.')
   const payload = (await response.json()) as { files?: DriveFile[] }
   const file = payload.files?.[0]
-  return file ? validateDriveFile(file) : null
+  return file ? fetchDriveFile(file.id) : null
 }
 
 const resolveDriveFile = async (fileId: string | null, fileName: string, folderId: string) => {
@@ -158,33 +184,34 @@ const createDriveFile = async (fileName: string, folderId: string, content: stri
     body,
   })
   if (!response.ok) throw await driveError(response, 'Failed to create the Google Drive file.')
-  return validateDriveFile((await response.json()) as DriveFile)
+  return validateDriveFile(withDriveEtag((await response.json()) as DriveFile, response))
 }
 
-const moveDriveFile = async (file: DriveFile, folderId: string) => {
+const moveDriveFile = async (file: DriveFile, folderId: string, force = false) => {
   if (file.parents?.includes(folderId)) return file
   const params = new URLSearchParams({ addParents: folderId, fields: FILE_FIELDS })
   if (file.parents?.length) params.set('removeParents', file.parents.join(','))
   const response = await authorizedGoogleDriveFetch(
     `${DRIVE_API}/files/${encodeURIComponent(file.id)}?${params}`,
-    { method: 'PATCH' },
+    { method: 'PATCH', headers: getDrivePreconditionHeaders(file, force) },
   )
-  if (!response.ok) throw await driveError(response, 'Failed to move the Google Drive file into the Rivolo folder.')
-  return validateDriveFile((await response.json()) as DriveFile)
+  return parseDriveMutationResponse(response, 'Failed to move the Google Drive file into the Rivolo folder.')
 }
 
-const updateDriveFile = async (fileId: string, content: string) => {
+const updateDriveFile = async (file: DriveFile, content: string, force = false) => {
   const params = new URLSearchParams({ uploadType: 'media', fields: FILE_FIELDS })
   const response = await authorizedGoogleDriveFetch(
-    `${DRIVE_UPLOAD_API}/files/${encodeURIComponent(fileId)}?${params}`,
+    `${DRIVE_UPLOAD_API}/files/${encodeURIComponent(file.id)}?${params}`,
     {
       method: 'PATCH',
-      headers: { 'Content-Type': 'text/markdown; charset=UTF-8' },
+      headers: {
+        'Content-Type': 'text/markdown; charset=UTF-8',
+        ...getDrivePreconditionHeaders(file, force),
+      },
       body: content,
     },
   )
-  if (!response.ok) throw await driveError(response, 'Failed to upload the Google Drive file.')
-  return validateDriveFile((await response.json()) as DriveFile)
+  return parseDriveMutationResponse(response, 'Failed to upload the Google Drive file.')
 }
 
 export const disconnectGoogleDrive = async () => {
@@ -273,17 +300,32 @@ export const pushToGoogleDrive = async (force = false) => {
   }
   if (!state.localDirty && !force) {
     if (metadata && !metadata.parents?.includes(folder.id)) {
-      const moved = await moveDriveFile(metadata, folder.id)
-      await finalizeGoogleDrivePushState(moved.id, moved.version, state.localRevision)
-      return { status: 'pushed' as const }
+      try {
+        const moved = await moveDriveFile(metadata, folder.id)
+        await finalizeGoogleDrivePushState(moved.id, moved.version, state.localRevision)
+        return { status: 'pushed' as const }
+      } catch (error) {
+        if (error instanceof DrivePreconditionFailedError) {
+          return { status: 'blocked' as const, reason: 'remote_changed' as const }
+        }
+        throw error
+      }
     }
     return { status: 'clean' as const }
   }
 
   const content = await exportMarkdownFromDb()
-  const uploaded = metadata
-    ? await updateDriveFile((await moveDriveFile(metadata, folder.id)).id, content)
-    : await createDriveFile(state.fileName || DEFAULT_GOOGLE_DRIVE_FILE_NAME, folder.id, content)
+  let uploaded: DriveFile
+  try {
+    uploaded = metadata
+      ? await updateDriveFile(await moveDriveFile(metadata, folder.id, force), content, force)
+      : await createDriveFile(state.fileName || DEFAULT_GOOGLE_DRIVE_FILE_NAME, folder.id, content)
+  } catch (error) {
+    if (error instanceof DrivePreconditionFailedError) {
+      return { status: 'blocked' as const, reason: 'remote_changed' as const }
+    }
+    throw error
+  }
   await finalizeGoogleDrivePushState(uploaded.id, uploaded.version, state.localRevision)
   return { status: 'pushed' as const }
 }
