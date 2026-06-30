@@ -3,6 +3,7 @@ import { prepareGoogleDriveAuth, startGoogleDriveAuth } from '../../lib/googleDr
 import { isImportSafetyError } from '../../lib/importExport'
 import { disconnectProvider, type SyncProviderId } from '../../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../../lib/syncState'
+import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
 import { pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../../store/syncActions'
 
 type UseSyncProviderActionsParams = {
@@ -31,12 +32,19 @@ export const useSyncProviderActions = ({
   const label = SYNC_PROVIDER_LABELS[provider]
   const isActive = activeProvider === provider
 
+  const requireSafeSyncTab = () => {
+    const reason = getTabSyncBlockReason()
+    if (reason) setStatus(reason)
+    return !reason
+  }
+
   const handleConnect = () => {
     setStatus(null)
     if (!online) {
       setStatus(`Connect to the internet to link ${label}.`)
       return
     }
+    if (!requireSafeSyncTab()) return
 
     if (provider === 'dropbox') {
       void startDropboxAuth().catch((error) => {
@@ -63,6 +71,7 @@ export const useSyncProviderActions = ({
 
   const handleDisconnect = async () => {
     setStatus(null)
+    if (!requireSafeSyncTab()) return
     try {
       await disconnectProvider(provider)
       await loadProviderStates()
@@ -74,6 +83,8 @@ export const useSyncProviderActions = ({
   }
 
   const handleActivate = async () => {
+    setStatus(null)
+    if (!requireSafeSyncTab()) return
     if (!connected) {
       setStatus(`Connect ${label} first.`)
       return
@@ -97,6 +108,7 @@ export const useSyncProviderActions = ({
   const handlePull = async () => {
     setStatus(null)
     if (!requireActive()) return
+    if (!requireSafeSyncTab()) return
     let force = false
     let allowDestructiveReplace = false
     if (localDirty) {
@@ -140,6 +152,7 @@ export const useSyncProviderActions = ({
   const handlePush = async (force = false) => {
     setStatus(null)
     if (!requireActive()) return
+    if (!requireSafeSyncTab()) return
     if (force) {
       const confirmed = window.confirm(
         `Restore ${label} from local copy? This overwrites the remote file contents.`,

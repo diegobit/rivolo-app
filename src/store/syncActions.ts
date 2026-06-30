@@ -1,4 +1,5 @@
 import { getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
+import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import { useDaysStore } from './useDaysStore'
 import { useSyncStore } from './useSyncStore'
 
@@ -29,11 +30,19 @@ const enqueueSyncOperation = async <T>(operation: SyncQueueOperation, runner: ()
   return queuedRun
 }
 
+const requirePrimarySyncTab = () => {
+  const reason = getTabSyncBlockReason()
+  if (reason) throw new Error(reason)
+}
+
+const canRunAutoSync = () => getTabSyncBlockReason() === null
+
 export const pullFromSyncAndRefresh = async (options?: {
   force?: boolean
   allowDestructiveReplace?: boolean
 }) =>
   enqueueSyncOperation('pull', async () => {
+    requirePrimarySyncTab()
     const force = options?.force ?? false
     if (!force) {
       const status = await getActiveProviderStatus()
@@ -56,12 +65,17 @@ export const pullFromSyncAndRefresh = async (options?: {
 
 export const pushToSyncAndRefresh = async (force = false) =>
   enqueueSyncOperation('push', async () => {
+    requirePrimarySyncTab()
     const result = await pushToSync(force)
     await useSyncStore.getState().loadState()
     return result
   })
 
 const runAutoPush = () => {
+  if (!canRunAutoSync()) {
+    return Promise.resolve()
+  }
+
   if (autoPushInFlight) {
     autoPushRequestedWhileRunning = true
     return autoPushInFlight
@@ -89,6 +103,10 @@ const runAutoPush = () => {
 }
 
 export const scheduleAutoPushToSync = () => {
+  if (!canRunAutoSync()) {
+    return
+  }
+
   if (autoPushTimer !== null) {
     window.clearTimeout(autoPushTimer)
   }
@@ -100,6 +118,10 @@ export const scheduleAutoPushToSync = () => {
 }
 
 export const flushAutoPushToSync = async () => {
+  if (!canRunAutoSync()) {
+    return
+  }
+
   if (autoPushTimer === null) {
     if (autoPushInFlight) {
       await autoPushInFlight

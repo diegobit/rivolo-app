@@ -2,6 +2,11 @@ import initSqlJs from 'sql.js'
 import type { Database, SqlJsStatic } from 'sql.js'
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 import { get, set } from 'idb-keyval'
+import {
+  assertDatabaseWritable,
+  beginDatabaseSnapshotLoad,
+  broadcastDatabasePersisted,
+} from './tabSyncCoordinator'
 
 const DB_KEY = 'single-note-db'
 
@@ -62,8 +67,11 @@ const ensureSchema = (db: Database) => {
 }
 
 const persistDatabase = (db: Database) => {
+  assertDatabaseWritable()
   const data = db.export()
-  const savePromise = set(DB_KEY, data)
+  const savePromise = set(DB_KEY, data).then(() => {
+    broadcastDatabasePersisted()
+  })
   pendingSavePromise = savePromise
 
   savePromise.catch((error: unknown) => {
@@ -84,7 +92,11 @@ const scheduleSave = (db: Database) => {
 
   saveTimer = window.setTimeout(() => {
     saveTimer = null
-    void persistDatabase(db)
+    try {
+      void persistDatabase(db)
+    } catch (error) {
+      console.error('[DB] persist:blocked', { error })
+    }
   }, 400)
 }
 
@@ -116,6 +128,7 @@ export const getDatabase = async () => {
   if (!dbPromise) {
     dbPromise = (async () => {
       const SQL = await ensureSql()
+      beginDatabaseSnapshotLoad()
       const stored = await get(DB_KEY)
       const db = stored ? new SQL.Database(new Uint8Array(stored)) : new SQL.Database()
       ensureSchema(db)
@@ -127,12 +140,14 @@ export const getDatabase = async () => {
 }
 
 export const run = async (sql: string, params: (string | number | null)[] = []) => {
+  assertDatabaseWritable()
   const db = await getDatabase()
   db.run(sql, params)
   markDatabaseChanged(db)
 }
 
 export const runBulkDatabaseMutation = async <T>(callback: () => Promise<T>) => {
+  assertDatabaseWritable()
   const isOutermostBulk = bulkMutationDepth === 0
   bulkMutationDepth += 1
   let result: T
@@ -158,6 +173,7 @@ export const runBulkDatabaseMutation = async <T>(callback: () => Promise<T>) => 
 }
 
 export const runDatabaseTransaction = async <T>(callback: () => Promise<T>) => {
+  assertDatabaseWritable()
   const db = await getDatabase()
   db.run('BEGIN TRANSACTION')
 
@@ -214,6 +230,7 @@ export const upsertFts = async (
   humanTitle: string,
   content: string,
 ) => {
+  assertDatabaseWritable()
   if (!(await isFtsAvailable())) {
     return
   }

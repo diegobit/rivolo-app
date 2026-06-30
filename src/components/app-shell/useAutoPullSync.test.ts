@@ -1,0 +1,38 @@
+import { renderHook } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAutoPullSync } from './useAutoPullSync'
+
+const coordinator = vi.hoisted(() => ({
+  getTabSyncBlockReason: vi.fn(),
+}))
+const syncActions = vi.hoisted(() => ({
+  pullFromSyncAndRefresh: vi.fn(),
+}))
+
+vi.mock('../../lib/tabSyncCoordinator', () => coordinator)
+vi.mock('../../store/syncActions', () => syncActions)
+
+describe('useAutoPullSync tab coordination', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    coordinator.getTabSyncBlockReason.mockReturnValue(null)
+    syncActions.pullFromSyncAndRefresh.mockResolvedValue({ status: 'noop' })
+  })
+
+  it('does not auto-pull when another tab owns the lease', () => {
+    coordinator.getTabSyncBlockReason.mockReturnValue(
+      'Sync is paused in this tab because another Rivolo tab is active.',
+    )
+
+    renderHook(() =>
+      useAutoPullSync({
+        connected: true,
+        targetName: '/inbox.md',
+        localDirty: false,
+      }),
+    )
+
+    expect(coordinator.getTabSyncBlockReason).toHaveBeenCalled()
+    expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+  })
+})

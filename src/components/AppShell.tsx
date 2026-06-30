@@ -5,6 +5,7 @@ import ShortcutsPopover from './app-shell/ShortcutsPopover'
 import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
 import { isPrimaryModifierPressed } from '../lib/device'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
+import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
 import { useAutoPullSync } from './app-shell/useAutoPullSync'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -35,6 +36,7 @@ export default function AppShell() {
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
   const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
+  const tabSync = useTabSyncState()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
@@ -308,6 +310,16 @@ export default function AppShell() {
           <img src="/logo.png" alt="Rivolo" className="app-logo h-10 w-auto" />
         </NavLink>
         <div className="relative z-10 flex items-center justify-end gap-2">
+          {tabSync.databaseStale ? (
+            <button
+              className="flex h-11 items-center rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-100 sm:h-9"
+              type="button"
+              aria-label="Reload stale tab"
+              onClick={() => window.location.reload()}
+            >
+              Reload
+            </button>
+          ) : null}
           {syncing && (
             <div
               className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200/70 bg-white/80 text-slate-500 shadow-sm"
@@ -339,6 +351,7 @@ export default function AppShell() {
       </header>
 
       <main
+        inert={tabSync.databaseStale}
         className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 pt-0 sm:w-[min(96%,720px)] sm:pt-20 ${
           showTrayRow ? 'pb-40' : 'pb-12'
         }`}

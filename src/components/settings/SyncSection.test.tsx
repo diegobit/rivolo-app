@@ -21,6 +21,7 @@ describe('SyncSection', () => {
         provider="google-drive"
         summary={summary}
         online
+        syncPaused={false}
         targetDraft="inbox.md"
         targetDirty={false}
         syncBusy={false}
@@ -48,6 +49,7 @@ describe('SyncSection', () => {
         provider="google-drive"
         summary={summary}
         online
+        syncPaused={false}
         targetDraft="inbox.md"
         targetDirty={false}
         syncBusy={false}
@@ -67,4 +69,34 @@ describe('SyncSection', () => {
     expect(screen.getByRole('option', { name: 'Google Drive' })).toBeInTheDocument()
     expect(screen.getByText('Google Drive', { selector: 'div' })).toBeInTheDocument()
   })
+
+  it('disables sync settings in a secondary tab', () => {
+    render(
+      <SyncSection
+        activeProvider="dropbox"
+        provider="dropbox"
+        summary={summary}
+        online
+        syncPaused
+        targetDraft="inbox.md"
+        targetDirty
+        syncBusy={false}
+        status={null}
+        onProviderChange={vi.fn()}
+        onConnect={vi.fn()}
+        onDisconnect={vi.fn()}
+        onActivate={vi.fn()}
+        onTargetChange={vi.fn()}
+        onSaveTarget={vi.fn()}
+        onPull={vi.fn()}
+        onPush={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText(/Tab sync: Paused in this tab/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Disconnect Dropbox' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
 })

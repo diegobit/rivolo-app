@@ -36,6 +36,7 @@ const useActions = (localDirty: boolean) => {
 
 describe('useSyncProviderActions', () => {
   beforeEach(() => {
+    localStorage.removeItem('rivolo.sync.primary-tab')
     syncActions.pullFromSyncAndRefresh.mockReset()
     syncActions.pushToSyncAndRefresh.mockReset()
     syncActions.pullFromSyncAndRefresh.mockResolvedValue({ status: 'pulled' })
@@ -67,5 +68,24 @@ describe('useSyncProviderActions', () => {
     await handlePull()
 
     expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+  })
+
+  it('blocks manual pull when another tab owns the primary lease', async () => {
+    localStorage.setItem(
+      'rivolo.sync.primary-tab',
+      JSON.stringify({
+        ownerId: 'another-tab',
+        heartbeatAt: Date.now(),
+        expiresAt: Date.now() + 20_000,
+      }),
+    )
+    const { handlePull, setStatus } = useActions(false)
+
+    await handlePull()
+
+    expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+    expect(setStatus).toHaveBeenLastCalledWith(
+      'Sync is paused in this tab because another Rivolo tab is active.',
+    )
   })
 })

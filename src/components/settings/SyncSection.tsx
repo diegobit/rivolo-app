@@ -15,6 +15,7 @@ type SyncSectionProps = {
   provider: SyncProviderId
   summary: SyncProviderSummary
   online: boolean
+  syncPaused: boolean
   targetDraft: string
   targetDirty: boolean
   syncBusy: boolean
@@ -37,6 +38,7 @@ export default function SyncSection({
   provider,
   summary,
   online,
+  syncPaused,
   targetDraft,
   targetDirty,
   syncBusy,
@@ -58,6 +60,8 @@ export default function SyncSection({
     provider === 'dropbox'
       ? 'Rivolo reads and writes this Markdown path in Dropbox.'
       : 'Rivolo creates this visible Markdown file in the /rivolo folder in My Drive and tracks it by file ID.'
+  const syncControlsDisabled = syncBusy || syncPaused
+  const syncTabStatus = syncPaused ? 'Paused in this tab' : 'Primary tab'
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -107,20 +111,27 @@ export default function SyncSection({
           <div>Remote version: {summary.remoteVersion}</div>
           <div>Local changes: {summary.dirty ? 'Not synced' : 'Synced'}</div>
           <div>Network: {online ? 'Online' : 'Offline'}</div>
+          <div>Tab sync: {syncTabStatus}</div>
         </div>
+
+        {syncPaused && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Auto-sync and sync settings are paused here because another Rivolo tab is primary.
+          </div>
+        )}
 
         <div className="mt-4 flex flex-wrap gap-2">
           {summary.connected ? (
-            <button className={`${buttonDanger} min-h-11`} type="button" onClick={onDisconnect} disabled={syncBusy}>
+            <button className={`${buttonDanger} min-h-11`} type="button" onClick={onDisconnect} disabled={syncControlsDisabled}>
               Disconnect {label}
             </button>
           ) : (
-            <button className={`${buttonPrimary} min-h-11`} type="button" onClick={onConnect} disabled={syncBusy || !online}>
+            <button className={`${buttonPrimary} min-h-11`} type="button" onClick={onConnect} disabled={syncControlsDisabled || !online}>
               Connect {label}
             </button>
           )}
           {summary.connected && !isActive && (
-            <button className={`${buttonPrimary} min-h-11`} type="button" onClick={onActivate} disabled={syncBusy}>
+            <button className={`${buttonPrimary} min-h-11`} type="button" onClick={onActivate} disabled={syncControlsDisabled}>
               Use {label} for sync
             </button>
           )}
@@ -136,22 +147,23 @@ export default function SyncSection({
               autoComplete="off"
               className={inputClass}
               value={targetDraft}
+              disabled={syncPaused}
               onChange={(event) => onTargetChange(event.target.value)}
             />
-            <button className={`${buttonPrimary} min-h-11 shrink-0`} type="button" disabled={syncBusy || !targetDirty} onClick={onSaveTarget}>
+            <button className={`${buttonPrimary} min-h-11 shrink-0`} type="button" disabled={syncControlsDisabled || !targetDirty} onClick={onSaveTarget}>
               Save
             </button>
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <button className={`${buttonSecondary} min-h-11`} type="button" onClick={onPull} disabled={syncBusy || !online || !summary.connected || !isActive}>
+          <button className={`${buttonSecondary} min-h-11`} type="button" onClick={onPull} disabled={syncControlsDisabled || !online || !summary.connected || !isActive}>
             Pull from {label}
           </button>
-          <button className={`${buttonPrimary} min-h-11`} type="button" onClick={() => onPush(false)} disabled={syncBusy || !online || !summary.connected || !isActive}>
+          <button className={`${buttonPrimary} min-h-11`} type="button" onClick={() => onPush(false)} disabled={syncControlsDisabled || !online || !summary.connected || !isActive}>
             Push to {label}
           </button>
-          <button className={`${buttonDanger} min-h-11`} type="button" onClick={() => onPush(true)} disabled={syncBusy || !online || !summary.connected || !isActive}>
+          <button className={`${buttonDanger} min-h-11`} type="button" onClick={() => onPush(true)} disabled={syncControlsDisabled || !online || !summary.connected || !isActive}>
             Restore from local copy
           </button>
         </div>

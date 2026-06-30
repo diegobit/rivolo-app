@@ -19,8 +19,10 @@ import { shareOrDownload } from '../lib/share'
 import { DEFAULT_DROPBOX_PATH } from '../lib/dropbox'
 import { prepareGoogleDriveAuth } from '../lib/googleDriveAuth'
 import { DEFAULT_GOOGLE_DRIVE_FILE_NAME, getGoogleDrivePath } from '../lib/googleDriveState'
+import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import type { SyncProviderId } from '../lib/sync'
 import { buttonSecondary } from '../lib/ui'
+import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useSyncProviderActions } from './settings/useSyncProviderActions'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
@@ -115,6 +117,7 @@ export default function Settings() {
   const loadSyncState = useSyncStore((state) => state.loadState)
   const setActiveSyncProvider = useSyncStore((state) => state.setActiveProvider)
   const syncing = useSyncStore((state) => state.syncing)
+  const tabSync = useTabSyncState()
 
   const [importStatus, setImportStatus] = useState<string | null>(null)
 
@@ -246,6 +249,12 @@ export default function Settings() {
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+    const blockedReason = getTabSyncBlockReason()
+    if (blockedReason) {
+      setImportStatus(blockedReason)
+      event.target.value = ''
+      return
+    }
 
     const content = await file.text()
     const result = await importMarkdownToDb(content)
@@ -263,6 +272,12 @@ export default function Settings() {
 
   const handleSaveSyncTarget = async () => {
     setSyncStatus(null)
+    const blockedReason = getTabSyncBlockReason()
+    if (blockedReason) {
+      setSyncStatus(blockedReason)
+      return
+    }
+
     if (selectedSyncProvider === 'dropbox') {
       await updateFilePath(dropboxPath.trim() || DEFAULT_DROPBOX_PATH)
       setDropboxPathDraft(null)
@@ -350,6 +365,7 @@ export default function Settings() {
         provider={selectedSyncProvider}
         summary={selectedSummary}
         online={online}
+        syncPaused={!tabSync.isPrimary}
         targetDraft={selectedTarget}
         targetDirty={selectedTargetDirty}
         syncBusy={syncing}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
 import { pullFromSyncAndRefresh } from '../../store/syncActions'
 
 type AutoPullStatus = {
@@ -16,6 +17,7 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
       if (!navigator.onLine) return
       if (!status.connected || !status.targetName) return
       if (status.localDirty) return
+      if (getTabSyncBlockReason()) return
       if (autoPullInFlight.current) return
 
       const now = Date.now()
