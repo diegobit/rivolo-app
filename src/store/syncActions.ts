@@ -29,10 +29,10 @@ const enqueueSyncOperation = async <T>(operation: SyncQueueOperation, runner: ()
   return queuedRun
 }
 
-export const pullFromSyncAndRefresh = async (options?: { allowDirty?: boolean }) =>
+export const pullFromSyncAndRefresh = async (options?: { force?: boolean }) =>
   enqueueSyncOperation('pull', async () => {
-    const allowDirty = options?.allowDirty ?? true
-    if (!allowDirty) {
+    const force = options?.force ?? false
+    if (!force) {
       const status = await getActiveProviderStatus()
       if (status.localDirty) {
         await useSyncStore.getState().loadState()
@@ -40,7 +40,7 @@ export const pullFromSyncAndRefresh = async (options?: { allowDirty?: boolean })
       }
     }
 
-    const result = await pullFromSync()
+    const result = await pullFromSync(force)
     if (result.status === 'pulled') {
       await useDaysStore.getState().loadTimeline()
     }

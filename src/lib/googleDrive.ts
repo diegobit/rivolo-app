@@ -213,14 +213,17 @@ export const getGoogleDriveStatus = async (): Promise<SyncStatus> => {
   }
 }
 
-export const pullFromGoogleDrive = async () => {
+export const pullFromGoogleDrive = async (force = false) => {
   const state = await getGoogleDriveState()
   if (!state.connected) throw new Error('Google Drive not connected.')
+  if (state.localDirty && !force) {
+    return { status: 'noop' as const }
+  }
   const folder = await ensureDriveFolder()
   const metadata = await resolveDriveFile(state.fileId, state.fileName, folder.id)
   if (!metadata) throw new Error('Google Drive file not found. Push to create it first.')
 
-  if (metadata.version === state.lastRemoteVersion) {
+  if (metadata.version === state.lastRemoteVersion && !(force && state.localDirty)) {
     return { status: 'noop' as const }
   }
 

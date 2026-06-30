@@ -146,6 +146,49 @@ describe('Google Drive sync provider', () => {
     expect(await getDropboxState()).toMatchObject({ localDirty: true })
   })
 
+  it('does not pull over dirty local notes without force', async () => {
+    settings.set('google-drive.state', {
+      ...connectedState,
+      fileId: 'file-1',
+      lastRemoteVersion: '1',
+      localDirty: true,
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { pullFromGoogleDrive } = await import('./googleDrive')
+    const { getGoogleDriveState } = await import('./googleDriveState')
+
+    expect(await pullFromGoogleDrive()).toEqual({ status: 'noop' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(importMarkdownToDb).not.toHaveBeenCalled()
+    expect(await getGoogleDriveState()).toMatchObject({ localDirty: true, lastRemoteVersion: '1' })
+  })
+
+  it('pulls over dirty local notes when forced', async () => {
+    settings.set('google-drive.state', {
+      ...connectedState,
+      fileId: 'file-1',
+      lastRemoteVersion: '1',
+      localDirty: true,
+    })
+    importMarkdownToDb.mockResolvedValue({ imported: 1, warnings: [] })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ files: [driveFolder] }))
+      .mockResolvedValueOnce(json(driveFile('1')))
+      .mockResolvedValueOnce(new Response('# 2026-06-21\n\nremote text'))
+    vi.stubGlobal('fetch', fetchMock)
+    const { pullFromGoogleDrive } = await import('./googleDrive')
+    const { getGoogleDriveState } = await import('./googleDriveState')
+
+    expect(await pullFromGoogleDrive(true)).toEqual({ status: 'pulled' })
+    expect(importMarkdownToDb).toHaveBeenCalledWith('# 2026-06-21\n\nremote text', {
+      replace: true,
+      markDirty: false,
+    })
+    expect(await getGoogleDriveState()).toMatchObject({ localDirty: false, lastRemoteVersion: '1' })
+  })
+
   it('moves a previously tracked root file into the managed folder before uploading', async () => {
     settings.set('google-drive.state', {
       ...connectedState,

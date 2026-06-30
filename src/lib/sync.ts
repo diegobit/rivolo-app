@@ -34,7 +34,7 @@ export type SyncPushResult =
 export type SyncProvider = {
   id: SyncProviderId
   getStatus: () => Promise<SyncStatus>
-  pull: () => Promise<SyncPullResult>
+  pull: (force?: boolean) => Promise<SyncPullResult>
   push: (force?: boolean) => Promise<SyncPushResult>
   disconnect: () => Promise<void>
 }
@@ -80,12 +80,12 @@ export const getActiveProviderStatus = async () => {
   return provider.getStatus()
 }
 
-export const pullFromSync = async () => {
+export const pullFromSync = async (force = false) => {
   const provider = await getActiveProvider()
   if (!provider) {
     throw new Error('No sync provider connected.')
   }
-  return provider.pull()
+  return provider.pull(force)
 }
 
 export const pushToSync = async (force = false) => {

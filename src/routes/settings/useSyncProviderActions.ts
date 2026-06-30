@@ -96,15 +96,17 @@ export const useSyncProviderActions = ({
   const handlePull = async () => {
     setStatus(null)
     if (!requireActive()) return
+    let force = false
     if (localDirty) {
       const confirmed = window.confirm(
         `Pull from ${label} and replace local notes? Unpushed local changes will be overwritten.`,
       )
       if (!confirmed) return
+      force = true
     }
 
     try {
-      const result = await pullFromSyncAndRefresh()
+      const result = await pullFromSyncAndRefresh({ force })
       await loadProviderStates()
       setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
     } catch (error) {

@@ -384,16 +384,21 @@ export const getDropboxStatus = async (): Promise<SyncStatus> => {
   }
 }
 
-export const pullFromDropbox = async () => {
+export const pullFromDropbox = async (force = false) => {
   const state = await getDropboxState()
   const path = await resolveDropboxPath(state)
+
+  if (state.localDirty && !force) {
+    console.info('[Dropbox] pull:dirty-noop', { filePath: path })
+    return { status: 'noop' as const }
+  }
 
   const metadata = await fetchMetadata(path)
   if (!metadata) {
     throw new Error('Dropbox file not found. Push to create it first.')
   }
 
-  if (metadata.rev === state.lastRemoteRev) {
+  if (metadata.rev === state.lastRemoteRev && !(force && state.localDirty)) {
     console.info('[Dropbox] pull:noop', { filePath: path, rev: metadata.rev })
     return { status: 'noop' as const, metadata }
   }
