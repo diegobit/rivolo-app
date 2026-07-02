@@ -81,6 +81,28 @@ ${markdownDay('2026-06-29', 'second')}`
     expect(mocks.set).not.toHaveBeenCalled()
   })
 
+  it('imports duplicate day markers when explicitly allowed, keeping the last block', async () => {
+    mocks.listDays.mockResolvedValue([localDay('2026-06-29', 'current')])
+    const { importMarkdownToDb } = await import('./importExport')
+    const source = `${markdownDay('2026-06-29', 'first')}
+
+${markdownDay('2026-06-29', 'second')}`
+
+    const result = await importMarkdownToDb(source, {
+      replace: true,
+      allowDuplicateDayMarkers: true,
+    })
+
+    expect(result.imported).toBe(1)
+    expect(result.warnings).toEqual([
+      expect.stringContaining('Duplicate day marker for 2026-06-29'),
+    ])
+    expect(mocks.replaceDays).toHaveBeenCalledWith(
+      [expect.objectContaining({ dayId: '2026-06-29', contentMd: 'second' })],
+      { markDirty: true },
+    )
+  })
+
   it('blocks replacement that would delete local days unless explicitly allowed', async () => {
     mocks.listDays.mockResolvedValue([
       localDay('2026-06-30', 'keep me'),

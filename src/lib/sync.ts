@@ -23,6 +23,7 @@ export type SyncPullResult = {
 export type SyncPullOptions = {
   force?: boolean
   allowDestructiveReplace?: boolean
+  allowDuplicateDayMarkers?: boolean
   backupReason?: ImportBackupReason
 }
 

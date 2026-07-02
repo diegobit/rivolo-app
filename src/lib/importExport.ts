@@ -104,6 +104,7 @@ export const importMarkdownToDb = async (
     replace?: boolean
     markDirty?: boolean
     allowDestructiveReplace?: boolean
+    allowDuplicateDayMarkers?: boolean
     backupReason?: ImportBackupReason
   } = {},
 ) => {
@@ -120,7 +121,9 @@ export const importMarkdownToDb = async (
     return { imported: 0, warnings }
   }
 
-  if (hasDuplicateDayMarkersWarning) {
+  // parseMarkdown resolves duplicates deterministically (last block wins), so a
+  // confirmed import may proceed; unattended imports must not.
+  if (hasDuplicateDayMarkersWarning && !options.allowDuplicateDayMarkers) {
     throw new ImportSafetyError('Import aborted because the Markdown file contains duplicate day markers.', {
       reason: 'duplicate-day-markers',
       warnings,

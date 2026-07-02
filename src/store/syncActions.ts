@@ -64,6 +64,7 @@ const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') => {
 export const pullFromSyncAndRefresh = async (options?: {
   force?: boolean
   allowDestructiveReplace?: boolean
+  allowDuplicateDayMarkers?: boolean
   backupReason?: ImportBackupReason
 }) =>
   enqueueSyncOperation('pull', async () => {
@@ -80,6 +81,7 @@ export const pullFromSyncAndRefresh = async (options?: {
     const result = await pullFromSync({
       force,
       allowDestructiveReplace: options?.allowDestructiveReplace,
+      allowDuplicateDayMarkers: options?.allowDuplicateDayMarkers,
       backupReason: options?.backupReason,
     })
     if (result.status === 'pulled') {

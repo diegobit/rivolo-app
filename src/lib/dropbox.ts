@@ -409,6 +409,7 @@ export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
     replace: true,
     markDirty: false,
     allowDestructiveReplace: options.allowDestructiveReplace,
+    allowDuplicateDayMarkers: options.allowDuplicateDayMarkers,
     backupReason: options.backupReason,
   })
   const hasNoMarkersWarning =

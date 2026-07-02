@@ -109,51 +109,68 @@ export const useSyncProviderActions = ({
     setStatus(null)
     if (!requireActive()) return
     if (!requireSafeSyncTab()) return
-    let force = false
-    let allowDestructiveReplace = false
+
+    const pullOptions = {
+      force: false,
+      allowDestructiveReplace: false,
+      allowDuplicateDayMarkers: false,
+      backupReason: 'manual-pull' as const,
+    }
     if (localDirty) {
       const confirmed = window.confirm(
         `Pull from ${label} and replace local notes? Unpushed local changes and local-only days missing from ${label} will be overwritten. A rollback backup will be saved first.`,
       )
       if (!confirmed) return
-      force = true
-      allowDestructiveReplace = true
+      pullOptions.force = true
+      pullOptions.allowDestructiveReplace = true
     }
 
-    try {
-      const result = await pullFromSyncAndRefresh({
-        force,
-        allowDestructiveReplace,
-        backupReason: 'manual-pull',
-      })
-      await loadProviderStates()
-      setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
-    } catch (error) {
-      if (isImportSafetyError(error) && error.reason === 'would-delete-local-days') {
-        const deletedCount = error.deletedDayIds.length
-        const confirmed = window.confirm(
-          `${label} is missing ${deletedCount} local day(s). Replace local notes anyway? A rollback backup will be saved first.`,
-        )
-        if (!confirmed) {
-          setStatus('Pull canceled. Local notes were not changed.')
-          return
+    // Each import safety block gets one explicit confirmation, then the pull
+    // retries with that single override added. One file can trip both blocks.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const result = await pullFromSyncAndRefresh(pullOptions)
+        await loadProviderStates()
+        setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
+        return
+      } catch (error) {
+        if (
+          isImportSafetyError(error) &&
+          error.reason === 'would-delete-local-days' &&
+          !pullOptions.allowDestructiveReplace
+        ) {
+          const confirmed = window.confirm(
+            `${label} is missing ${error.deletedDayIds.length} local day(s). Replace local notes anyway? A rollback backup will be saved first.`,
+          )
+          if (!confirmed) {
+            setStatus('Pull canceled. Local notes were not changed.')
+            return
+          }
+          pullOptions.allowDestructiveReplace = true
+          continue
         }
 
-        try {
-          const result = await pullFromSyncAndRefresh({
-            allowDestructiveReplace: true,
-            backupReason: 'manual-pull',
-          })
-          await loadProviderStates()
-          setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
-        } catch (retryError) {
-          setStatus(retryError instanceof Error ? retryError.message : `${label} pull failed.`)
+        if (
+          isImportSafetyError(error) &&
+          error.reason === 'duplicate-day-markers' &&
+          !pullOptions.allowDuplicateDayMarkers
+        ) {
+          const confirmed = window.confirm(
+            `The ${label} file contains duplicate day markers. Import anyway? The last block for each day is kept, and a rollback backup will be saved first.`,
+          )
+          if (!confirmed) {
+            setStatus('Pull canceled. Local notes were not changed.')
+            return
+          }
+          pullOptions.allowDuplicateDayMarkers = true
+          continue
         }
+
+        setStatus(error instanceof Error ? error.message : `${label} pull failed.`)
         return
       }
-
-      setStatus(error instanceof Error ? error.message : `${label} pull failed.`)
     }
+    setStatus(`${label} pull failed.`)
   }
 
   const handlePush = async (force = false) => {

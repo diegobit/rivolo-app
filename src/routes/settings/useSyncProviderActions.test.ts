@@ -56,6 +56,7 @@ describe('useSyncProviderActions', () => {
     expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledWith({
       force: true,
       allowDestructiveReplace: true,
+      allowDuplicateDayMarkers: false,
       backupReason: 'manual-pull',
     })
     expect(loadProviderStates).toHaveBeenCalledOnce()
@@ -69,6 +70,51 @@ describe('useSyncProviderActions', () => {
     await handlePull()
 
     expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+  })
+
+  it('confirms past duplicate day markers and retries the pull', async () => {
+    const duplicateError = Object.assign(new Error('Import aborted because of duplicates.'), {
+      name: 'ImportSafetyError',
+      reason: 'duplicate-day-markers',
+      warnings: [],
+      deletedDayIds: [],
+    })
+    syncActions.pullFromSyncAndRefresh
+      .mockRejectedValueOnce(duplicateError)
+      .mockResolvedValueOnce({ status: 'pulled' })
+    const confirm = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirm)
+    const { handlePull, setStatus } = useActions(false)
+
+    await handlePull()
+
+    expect(confirm).toHaveBeenCalledWith(
+      'The Dropbox file contains duplicate day markers. Import anyway? The last block for each day is kept, and a rollback backup will be saved first.',
+    )
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenLastCalledWith({
+      force: false,
+      allowDestructiveReplace: false,
+      allowDuplicateDayMarkers: true,
+      backupReason: 'manual-pull',
+    })
+    expect(setStatus).toHaveBeenLastCalledWith('Pulled and imported.')
+  })
+
+  it('cancels the duplicate day marker override without importing', async () => {
+    const duplicateError = Object.assign(new Error('Import aborted because of duplicates.'), {
+      name: 'ImportSafetyError',
+      reason: 'duplicate-day-markers',
+      warnings: [],
+      deletedDayIds: [],
+    })
+    syncActions.pullFromSyncAndRefresh.mockRejectedValueOnce(duplicateError)
+    vi.stubGlobal('confirm', vi.fn(() => false))
+    const { handlePull, setStatus } = useActions(false)
+
+    await handlePull()
+
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+    expect(setStatus).toHaveBeenLastCalledWith('Pull canceled. Local notes were not changed.')
   })
 
   it('blocks manual pull when another tab owns the primary lease', async () => {
