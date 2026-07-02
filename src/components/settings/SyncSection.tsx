@@ -16,6 +16,7 @@ type SyncSectionProps = {
   summary: SyncProviderSummary
   online: boolean
   syncPaused: boolean
+  attention: string | null
   targetDraft: string
   targetDirty: boolean
   syncBusy: boolean
@@ -39,6 +40,7 @@ export default function SyncSection({
   summary,
   online,
   syncPaused,
+  attention,
   targetDraft,
   targetDirty,
   syncBusy,
@@ -117,6 +119,12 @@ export default function SyncSection({
         {syncPaused && (
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             Auto-sync and sync settings are paused here because another Rivolo tab is primary.
+          </div>
+        )}
+
+        {attention && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">
+            Automatic sync needs attention: {attention}
           </div>
         )}
 

@@ -22,6 +22,7 @@ describe('SyncSection', () => {
         summary={summary}
         online
         syncPaused={false}
+        attention={null}
         targetDraft="inbox.md"
         targetDirty={false}
         syncBusy={false}
@@ -50,6 +51,7 @@ describe('SyncSection', () => {
         summary={summary}
         online
         syncPaused={false}
+        attention={null}
         targetDraft="inbox.md"
         targetDirty={false}
         syncBusy={false}
@@ -78,6 +80,7 @@ describe('SyncSection', () => {
         summary={summary}
         online
         syncPaused
+        attention={null}
         targetDraft="inbox.md"
         targetDirty
         syncBusy={false}
@@ -99,4 +102,30 @@ describe('SyncSection', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 
+  it('shows the automatic sync attention message', () => {
+    render(
+      <SyncSection
+        activeProvider="dropbox"
+        provider="dropbox"
+        summary={summary}
+        online
+        syncPaused={false}
+        attention="Dropbox changed remotely. Pull first, or use “Restore from local copy” to overwrite it."
+        targetDraft="inbox.md"
+        targetDirty={false}
+        syncBusy={false}
+        status={null}
+        onProviderChange={vi.fn()}
+        onConnect={vi.fn()}
+        onDisconnect={vi.fn()}
+        onActivate={vi.fn()}
+        onTargetChange={vi.fn()}
+        onSaveTarget={vi.fn()}
+        onPull={vi.fn()}
+        onPush={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Dropbox changed remotely.')
+  })
 })

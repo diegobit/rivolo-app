@@ -12,6 +12,8 @@ const stores = vi.hoisted(() => ({
   loadTimeline: vi.fn(),
   loadSyncState: vi.fn(),
   setSyncing: vi.fn(),
+  setSyncAttention: vi.fn(),
+  syncAttention: null as { operation: string; message: string; at: number } | null,
 }))
 
 vi.mock('../lib/sync', () => sync)
@@ -26,6 +28,9 @@ vi.mock('./useSyncStore', () => ({
     getState: () => ({
       loadState: stores.loadSyncState,
       setSyncing: stores.setSyncing,
+      setSyncAttention: stores.setSyncAttention,
+      syncAttention: stores.syncAttention,
+      activeProvider: 'google-drive',
     }),
   },
 }))
@@ -39,6 +44,7 @@ describe('sync action tab coordination', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    stores.syncAttention = null
     coordinator.getTabSyncBlockReason.mockReturnValue(null)
     sync.pullFromSync.mockResolvedValue({ status: 'noop' })
     sync.pushToSync.mockResolvedValue({ status: 'pushed' })
@@ -69,5 +75,29 @@ describe('sync action tab coordination', () => {
     vi.advanceTimersByTime(10_000)
 
     expect(sync.pushToSync).not.toHaveBeenCalled()
+  })
+
+  it('records attention when an automatic push is blocked', async () => {
+    sync.pushToSync.mockResolvedValue({ status: 'blocked', reason: 'remote_changed' })
+
+    scheduleAutoPushToSync()
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(stores.setSyncAttention).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'push',
+        message: expect.stringContaining('Google Drive changed remotely'),
+      }),
+    )
+  })
+
+  it('clears attention after a successful automatic push', async () => {
+    stores.syncAttention = { operation: 'push', message: 'Old failure.', at: 0 }
+
+    scheduleAutoPushToSync()
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(sync.pushToSync).toHaveBeenCalled()
+    expect(stores.setSyncAttention).toHaveBeenCalledWith(null)
   })
 })

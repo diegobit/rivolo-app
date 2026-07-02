@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
-import { pullFromSyncAndRefresh } from '../../store/syncActions'
+import { pullFromSyncAndRefresh, recordSyncAttention } from '../../store/syncActions'
 
 type AutoPullStatus = {
   connected: boolean
@@ -27,8 +27,11 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
       lastAutoPullAt.current = now
       console.info('[Sync] auto-pull:trigger', { reason })
       void pullFromSyncAndRefresh({ force: false })
-        .catch(() => {
-          // Auto-pull failures are handled by manual sync.
+        .catch((error: unknown) => {
+          recordSyncAttention(
+            'pull',
+            error instanceof Error ? error.message : 'Automatic pull failed.',
+          )
         })
         .finally(() => {
           autoPullInFlight.current = false

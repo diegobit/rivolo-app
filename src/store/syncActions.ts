@@ -1,4 +1,5 @@
 import { getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
+import { SYNC_PROVIDER_LABELS } from '../lib/syncState'
 import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import { useDaysStore } from './useDaysStore'
 import { useSyncStore } from './useSyncStore'
@@ -37,6 +38,28 @@ const requirePrimarySyncTab = () => {
 
 const canRunAutoSync = () => getTabSyncBlockReason() === null
 
+const activeProviderLabel = () => {
+  const providerId = useSyncStore.getState().activeProvider
+  return providerId ? SYNC_PROVIDER_LABELS[providerId] : 'Sync provider'
+}
+
+export const recordSyncAttention = (operation: 'pull' | 'push', message: string) => {
+  useSyncStore.getState().setSyncAttention({ operation, message, at: Date.now() })
+}
+
+const clearSyncAttention = () => {
+  if (useSyncStore.getState().syncAttention) {
+    useSyncStore.getState().setSyncAttention(null)
+  }
+}
+
+const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') => {
+  const label = activeProviderLabel()
+  return reason === 'remote_missing'
+    ? `${label} file is missing. Local data is safe. Use “Restore from local copy” to recreate it.`
+    : `${label} changed remotely. Pull first, or use “Restore from local copy” to overwrite it.`
+}
+
 export const pullFromSyncAndRefresh = async (options?: {
   force?: boolean
   allowDestructiveReplace?: boolean
@@ -60,6 +83,7 @@ export const pullFromSyncAndRefresh = async (options?: {
       await useDaysStore.getState().loadTimeline()
     }
     await useSyncStore.getState().loadState()
+    clearSyncAttention()
     return result
   })
 
@@ -68,6 +92,9 @@ export const pushToSyncAndRefresh = async (force = false) =>
     requirePrimarySyncTab()
     const result = await pushToSync(force)
     await useSyncStore.getState().loadState()
+    if (result.status !== 'blocked') {
+      clearSyncAttention()
+    }
     return result
   })
 
@@ -83,8 +110,17 @@ const runAutoPush = () => {
 
   autoPushRequestedWhileRunning = false
   const run = pushToSyncAndRefresh().then(
-    () => undefined,
-    () => undefined,
+    (result) => {
+      if (result.status === 'blocked') {
+        recordSyncAttention('push', blockedPushMessage(result.reason))
+      }
+    },
+    (error: unknown) => {
+      recordSyncAttention(
+        'push',
+        error instanceof Error ? error.message : 'Automatic push failed.',
+      )
+    },
   )
   autoPushInFlight = run
   run.then(

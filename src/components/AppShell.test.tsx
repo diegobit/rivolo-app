@@ -18,7 +18,9 @@ const stores = vi.hoisted(() => ({
     },
     syncing: false,
     syncOperation: null,
+    syncAttention: null as { operation: string; message: string; at: number } | null,
   },
+  tabSync: { isPrimary: false, databaseStale: true },
   ui: {
     mode: 'timeline',
     setMode: vi.fn(),
@@ -42,7 +44,7 @@ vi.mock('../store/useUIStore', () => ({
 vi.mock('../hooks/useIsNarrowViewport', () => ({ useIsNarrowViewport: () => false }))
 vi.mock('../hooks/useKeyboardOffsetCssVar', () => ({ useKeyboardOffsetCssVar: vi.fn() }))
 vi.mock('../hooks/useTabSyncState', () => ({
-  useTabSyncState: () => ({ isPrimary: false, databaseStale: true }),
+  useTabSyncState: () => stores.tabSync,
 }))
 vi.mock('./app-shell/useAutoPullSync', () => ({ useAutoPullSync: vi.fn() }))
 vi.mock('./app-shell/BottomTrayRow', () => ({ default: () => null }))
@@ -50,6 +52,8 @@ vi.mock('./app-shell/ShortcutsPopover', () => ({ default: () => null }))
 
 describe('AppShell stale tab guard', () => {
   it('makes the main surface inert and keeps reload available', () => {
+    stores.tabSync = { isPrimary: false, databaseStale: true }
+    stores.sync.syncAttention = null
     const { container } = render(
       <MemoryRouter initialEntries={['/settings']}>
         <Routes>
@@ -62,5 +66,25 @@ describe('AppShell stale tab guard', () => {
 
     expect(container.querySelector('main')).toHaveAttribute('inert')
     expect(screen.getByRole('button', { name: 'Reload stale tab' })).toBeVisible()
+  })
+
+  it('shows a sync attention indicator that links to settings', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.sync.syncAttention = {
+      operation: 'push',
+      message: 'Google Drive changed remotely.',
+      at: 0,
+    }
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const indicator = screen.getByRole('link', { name: 'Sync needs attention' })
+    expect(indicator).toBeVisible()
+    expect(indicator).toHaveAttribute('href', '/settings')
   })
 })

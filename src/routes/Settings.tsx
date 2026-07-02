@@ -117,6 +117,7 @@ export default function Settings() {
   const loadSyncState = useSyncStore((state) => state.loadState)
   const setActiveSyncProvider = useSyncStore((state) => state.setActiveProvider)
   const syncing = useSyncStore((state) => state.syncing)
+  const syncAttention = useSyncStore((state) => state.syncAttention)
   const tabSync = useTabSyncState()
 
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -366,6 +367,7 @@ export default function Settings() {
         summary={selectedSummary}
         online={online}
         syncPaused={!tabSync.isPrimary}
+        attention={activeProvider === selectedSyncProvider ? syncAttention?.message ?? null : null}
         targetDraft={selectedTarget}
         targetDirty={selectedTargetDirty}
         syncBusy={syncing}

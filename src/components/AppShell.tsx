@@ -29,6 +29,7 @@ export default function AppShell() {
   const syncStatus = useSyncStore((state) => state.status)
   const syncing = useSyncStore((state) => state.syncing)
   const syncOperation = useSyncStore((state) => state.syncOperation)
+  const syncAttention = useSyncStore((state) => state.syncAttention)
   const mode = useUIStore((state) => state.mode)
   const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
@@ -320,6 +321,16 @@ export default function AppShell() {
               Reload
             </button>
           ) : null}
+          {!tabSync.databaseStale && syncAttention && (
+            <NavLink
+              to="/settings"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-xs font-bold text-amber-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-100"
+              aria-label="Sync needs attention"
+              title={syncAttention.message}
+            >
+              !
+            </NavLink>
+          )}
           {syncing && (
             <div
               className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200/70 bg-white/80 text-slate-500 shadow-sm"
