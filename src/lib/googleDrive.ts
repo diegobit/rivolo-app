@@ -56,10 +56,7 @@ const withDriveEtag = (file: DriveFile, response: Response) => {
 }
 
 const getDrivePreconditionHeaders = (file: DriveFile, force: boolean): Record<string, string> | undefined => {
-  if (force) return undefined
-  if (!file.etag) {
-    throw new Error('Google Drive did not return an ETag for a conditional upload.')
-  }
+  if (force || !file.etag) return undefined
   return { 'If-Match': file.etag }
 }
 
@@ -76,6 +73,18 @@ const validateDriveFile = (file: DriveFile) => {
     throw new Error('Google Drive file cannot be edited.')
   }
   return file
+}
+
+// Without an ETag there is no server-enforced precondition, so re-check the
+// remote version just before mutating. This narrows the race window to the
+// re-check→upload gap but cannot close it.
+const guardDriveFileForMutation = async (file: DriveFile, force: boolean) => {
+  if (force || file.etag) return file
+  const current = await fetchDriveFile(file.id)
+  if (!current || current.version !== file.version) {
+    throw new DrivePreconditionFailedError()
+  }
+  return current
 }
 
 const parseDriveMutationResponse = async (response: Response, fallback: string) => {
@@ -301,7 +310,7 @@ export const pushToGoogleDrive = async (force = false) => {
   if (!state.localDirty && !force) {
     if (metadata && !metadata.parents?.includes(folder.id)) {
       try {
-        const moved = await moveDriveFile(metadata, folder.id)
+        const moved = await moveDriveFile(await guardDriveFileForMutation(metadata, false), folder.id)
         await finalizeGoogleDrivePushState(moved.id, moved.version, state.localRevision)
         return { status: 'pushed' as const }
       } catch (error) {
@@ -318,7 +327,11 @@ export const pushToGoogleDrive = async (force = false) => {
   let uploaded: DriveFile
   try {
     uploaded = metadata
-      ? await updateDriveFile(await moveDriveFile(metadata, folder.id, force), content, force)
+      ? await updateDriveFile(
+          await moveDriveFile(await guardDriveFileForMutation(metadata, force), folder.id, force),
+          content,
+          force,
+        )
       : await createDriveFile(state.fileName || DEFAULT_GOOGLE_DRIVE_FILE_NAME, folder.id, content)
   } catch (error) {
     if (error instanceof DrivePreconditionFailedError) {

@@ -289,6 +289,70 @@ describe('Google Drive sync provider', () => {
     })
   })
 
+  it('falls back to a version re-check when metadata has no ETag', async () => {
+    settings.set('google-drive.state', {
+      ...connectedState,
+      fileId: 'file-1',
+      lastRemoteVersion: '1',
+    })
+    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nlocal edit')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ files: [driveFolder] }))
+      .mockResolvedValueOnce(json(driveFile('1')))
+      .mockResolvedValueOnce(json(driveFile('1')))
+      .mockResolvedValueOnce(json(driveFile('2')))
+    vi.stubGlobal('fetch', fetchMock)
+    const { pushToGoogleDrive } = await import('./googleDrive')
+
+    expect(await pushToGoogleDrive()).toEqual({ status: 'pushed' })
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('/files/file-1?fields=')
+    expect(String(fetchMock.mock.calls[3]?.[0])).toContain('uploadType=media')
+    expect(requestHeader(fetchMock.mock.calls[3]?.[1], 'If-Match')).toBeNull()
+  })
+
+  it('blocks a no-ETag push when the version re-check detects a remote change', async () => {
+    settings.set('google-drive.state', {
+      ...connectedState,
+      fileId: 'file-1',
+      lastRemoteVersion: '1',
+    })
+    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nlocal edit')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ files: [driveFolder] }))
+      .mockResolvedValueOnce(json(driveFile('1')))
+      .mockResolvedValueOnce(json(driveFile('2')))
+    vi.stubGlobal('fetch', fetchMock)
+    const { pushToGoogleDrive } = await import('./googleDrive')
+    const { getGoogleDriveState } = await import('./googleDriveState')
+
+    expect(await pushToGoogleDrive()).toEqual({ status: 'blocked', reason: 'remote_changed' })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(await getGoogleDriveState()).toMatchObject({ lastRemoteVersion: '1', localDirty: true })
+  })
+
+  it('skips the version re-check on force uploads without an ETag', async () => {
+    settings.set('google-drive.state', {
+      ...connectedState,
+      fileId: 'file-1',
+      lastRemoteVersion: '1',
+      localDirty: false,
+    })
+    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nrestored local copy')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ files: [driveFolder] }))
+      .mockResolvedValueOnce(json(driveFile('2')))
+      .mockResolvedValueOnce(json(driveFile('3')))
+    vi.stubGlobal('fetch', fetchMock)
+    const { pushToGoogleDrive } = await import('./googleDrive')
+
+    expect(await pushToGoogleDrive(true)).toEqual({ status: 'pushed' })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('uploadType=media')
+  })
+
   it('omits If-Match on force uploads', async () => {
     settings.set('google-drive.state', {
       ...connectedState,
