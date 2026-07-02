@@ -121,7 +121,11 @@ export const useSyncProviderActions = ({
     }
 
     try {
-      const result = await pullFromSyncAndRefresh({ force, allowDestructiveReplace })
+      const result = await pullFromSyncAndRefresh({
+        force,
+        allowDestructiveReplace,
+        backupReason: 'manual-pull',
+      })
       await loadProviderStates()
       setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
     } catch (error) {
@@ -136,7 +140,10 @@ export const useSyncProviderActions = ({
         }
 
         try {
-          const result = await pullFromSyncAndRefresh({ allowDestructiveReplace: true })
+          const result = await pullFromSyncAndRefresh({
+            allowDestructiveReplace: true,
+            backupReason: 'manual-pull',
+          })
           await loadProviderStates()
           setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
         } catch (retryError) {

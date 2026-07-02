@@ -1,6 +1,7 @@
 import { dropboxProvider } from './dropbox'
 import { googleDriveProvider } from './googleDrive'
 import { getSyncState, updateSyncState } from './syncState'
+import type { ImportBackupReason } from './importExport'
 import type { SyncProviderId } from './syncState'
 
 export type { SyncProviderId } from './syncState'
@@ -22,6 +23,7 @@ export type SyncPullResult = {
 export type SyncPullOptions = {
   force?: boolean
   allowDestructiveReplace?: boolean
+  backupReason?: ImportBackupReason
 }
 
 export type SyncPushResult =

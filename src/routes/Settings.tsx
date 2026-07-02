@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppearanceSection from '../components/settings/AppearanceSection'
+import BackupsSection from '../components/settings/BackupsSection'
 import ImportExportSection from '../components/settings/ImportExportSection'
 import LlmSection from '../components/settings/LlmSection'
 import SyncSection from '../components/settings/SyncSection'
@@ -393,6 +394,14 @@ export default function Settings() {
         importStatus={importStatus}
         onImport={handleImport}
         onExport={handleExport}
+      />
+
+      <BackupsSection
+        onRestored={async () => {
+          await loadTimeline()
+          await loadProviderStates()
+          await loadSyncState()
+        }}
       />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

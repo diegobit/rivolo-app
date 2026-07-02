@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   saveDay: vi.fn(),
   runBulkDatabaseMutation: vi.fn(async (callback: () => Promise<unknown>) => callback()),
   set: vi.fn(),
+  get: vi.fn(),
+  del: vi.fn(),
 }))
 
 vi.mock('./dayRepository', () => ({
@@ -20,6 +22,8 @@ vi.mock('./db', () => ({
 
 vi.mock('idb-keyval', () => ({
   set: mocks.set,
+  get: mocks.get,
+  del: mocks.del,
 }))
 
 const localDay = (dayId: string, contentMd: string) => ({
@@ -43,6 +47,8 @@ describe('importMarkdownToDb safety checks', () => {
     mocks.saveDay.mockReset()
     mocks.runBulkDatabaseMutation.mockClear()
     mocks.set.mockReset()
+    mocks.get.mockReset()
+    mocks.del.mockReset()
   })
 
   it('blocks zero-marker replacement without changing local days', async () => {
@@ -105,7 +111,7 @@ ${markdownDay('2026-06-29', 'second')}`
     mocks.replaceDays.mockImplementation(async () => {
       events.push('replace')
     })
-    const { IMPORT_ROLLBACK_BACKUP_KEY, importMarkdownToDb } = await import('./importExport')
+    const { IMPORT_ROLLBACK_BACKUPS_KEY, importMarkdownToDb } = await import('./importExport')
 
     await expect(
       importMarkdownToDb(markdownDay('2026-06-30', 'remote'), {
@@ -114,13 +120,13 @@ ${markdownDay('2026-06-29', 'second')}`
       }),
     ).resolves.toEqual({ imported: 1, warnings: [] })
 
-    expect(mocks.set).toHaveBeenCalledWith(
-      IMPORT_ROLLBACK_BACKUP_KEY,
+    expect(mocks.set).toHaveBeenCalledWith(IMPORT_ROLLBACK_BACKUPS_KEY, [
       expect.objectContaining({
         dayCount: 2,
         contentMd: expect.stringContaining('local only'),
+        reason: 'destructive-replace',
       }),
-    )
+    ])
     expect(mocks.replaceDays).toHaveBeenCalledWith(
       [
         {
@@ -132,5 +138,59 @@ ${markdownDay('2026-06-29', 'second')}`
       { markDirty: true },
     )
     expect(events).toEqual(['backup', 'replace'])
+  })
+
+  it('prunes rollback backups but keeps the newest destructive backup', async () => {
+    mocks.listDays.mockResolvedValue([localDay('2026-06-30', 'current')])
+    const backup = (createdAt: number, reason: string) => ({
+      createdAt,
+      contentMd: `# backup ${createdAt}`,
+      dayCount: 1,
+      reason,
+    })
+    const existing = [backup(300, 'auto-pull'), backup(200, 'auto-pull'), backup(100, 'destructive-replace')]
+    mocks.get.mockImplementation(async (key: string) =>
+      key === 'rivolo.import.rollbackBackups' ? existing : undefined,
+    )
+    const { IMPORT_ROLLBACK_BACKUPS_KEY, importMarkdownToDb } = await import('./importExport')
+
+    await importMarkdownToDb(markdownDay('2026-06-30', 'remote'), {
+      replace: true,
+      backupReason: 'auto-pull',
+    })
+
+    const [key, saved] = mocks.set.mock.calls[0] as [string, { createdAt: number; reason: string }[]]
+    expect(key).toBe(IMPORT_ROLLBACK_BACKUPS_KEY)
+    expect(saved).toHaveLength(4)
+    expect(saved[0]).toMatchObject({ reason: 'auto-pull' })
+    expect(saved.slice(1).map((entry) => entry.createdAt)).toEqual([300, 200, 100])
+    expect(saved[3]).toMatchObject({ createdAt: 100, reason: 'destructive-replace' })
+    expect(mocks.del).toHaveBeenCalledWith('rivolo.import.latestRollbackBackup')
+  })
+
+  it('migrates the legacy single backup into the retention list', async () => {
+    mocks.listDays.mockResolvedValue([localDay('2026-06-30', 'current')])
+    mocks.get.mockImplementation(async (key: string) =>
+      key === 'rivolo.import.latestRollbackBackup'
+        ? { createdAt: 50, contentMd: '# legacy backup', dayCount: 4 }
+        : undefined,
+    )
+    const { IMPORT_ROLLBACK_BACKUPS_KEY, importMarkdownToDb } = await import('./importExport')
+
+    await importMarkdownToDb(markdownDay('2026-06-30', 'remote'), {
+      replace: true,
+      backupReason: 'auto-pull',
+    })
+
+    expect(mocks.set).toHaveBeenCalledWith(IMPORT_ROLLBACK_BACKUPS_KEY, [
+      expect.objectContaining({ reason: 'auto-pull' }),
+      expect.objectContaining({
+        createdAt: 50,
+        contentMd: '# legacy backup',
+        dayCount: 4,
+        reason: 'destructive-replace',
+      }),
+    ])
+    expect(mocks.del).toHaveBeenCalledWith('rivolo.import.latestRollbackBackup')
   })
 })

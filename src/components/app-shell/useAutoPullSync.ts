@@ -26,7 +26,7 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
       autoPullInFlight.current = true
       lastAutoPullAt.current = now
       console.info('[Sync] auto-pull:trigger', { reason })
-      void pullFromSyncAndRefresh({ force: false })
+      void pullFromSyncAndRefresh({ force: false, backupReason: 'auto-pull' })
         .catch((error: unknown) => {
           recordSyncAttention(
             'pull',

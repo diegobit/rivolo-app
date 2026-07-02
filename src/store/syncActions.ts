@@ -1,5 +1,6 @@
 import { getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../lib/syncState'
+import type { ImportBackupReason } from '../lib/importExport'
 import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import { useDaysStore } from './useDaysStore'
 import { useSyncStore } from './useSyncStore'
@@ -63,6 +64,7 @@ const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') => {
 export const pullFromSyncAndRefresh = async (options?: {
   force?: boolean
   allowDestructiveReplace?: boolean
+  backupReason?: ImportBackupReason
 }) =>
   enqueueSyncOperation('pull', async () => {
     requirePrimarySyncTab()
@@ -78,6 +80,7 @@ export const pullFromSyncAndRefresh = async (options?: {
     const result = await pullFromSync({
       force,
       allowDestructiveReplace: options?.allowDestructiveReplace,
+      backupReason: options?.backupReason,
     })
     if (result.status === 'pulled') {
       await useDaysStore.getState().loadTimeline()

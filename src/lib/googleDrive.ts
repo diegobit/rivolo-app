@@ -269,6 +269,7 @@ export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
     replace: true,
     markDirty: false,
     allowDestructiveReplace: options.allowDestructiveReplace,
+    backupReason: options.backupReason,
   })
   const hasNoMarkersWarning =
     result.imported === 0 &&

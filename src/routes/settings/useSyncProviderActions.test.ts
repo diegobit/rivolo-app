@@ -56,6 +56,7 @@ describe('useSyncProviderActions', () => {
     expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledWith({
       force: true,
       allowDestructiveReplace: true,
+      backupReason: 'manual-pull',
     })
     expect(loadProviderStates).toHaveBeenCalledOnce()
     expect(setStatus).toHaveBeenLastCalledWith('Pulled and imported.')
