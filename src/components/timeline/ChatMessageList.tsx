@@ -49,17 +49,32 @@ export default function ChatMessageList({
               </div>
             ) : null}
 
-            {message.role === 'assistant' && message.meta?.insertText && !message.meta?.isStreaming ? (
-              <button
-                className={
-                  mobile
-                    ? 'rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition'
-                    : 'rounded-full border border-[#22B3FF]/40 px-3 py-1 text-xs font-semibold text-[#22B3FF] shadow-sm transition hover:-translate-y-[1px] hover:shadow-md'
-                }
-                onClick={() => onChatInsert(message)}
-              >
-                {message.meta.insertTargetDay ? `Insert into ${message.meta.insertTargetDay}` : 'Insert summary'}
-              </button>
+            {message.role === 'assistant' &&
+            message.meta?.insertText &&
+            message.meta.insertStatus &&
+            !message.meta.isStreaming ? (
+              message.meta.insertStatus === 'applied' ? (
+                <p className="text-xs font-semibold text-[#0b84c6]" role="status" aria-live="polite">
+                  {message.meta.insertTargetDay ? `Added to ${message.meta.insertTargetDay}` : 'Added to notes'}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className={`min-h-11 rounded-full border border-[#22B3FF]/40 px-3 py-2 text-xs font-semibold text-[#22B3FF] shadow-sm transition disabled:cursor-wait disabled:opacity-60 ${
+                    mobile ? '' : 'hover:-translate-y-[1px] hover:shadow-md'
+                  }`}
+                  disabled={message.meta.insertStatus === 'applying'}
+                  onClick={() => onChatInsert(message)}
+                >
+                  {message.meta.insertStatus === 'applying'
+                    ? message.meta.insertTargetDay
+                      ? `Adding to ${message.meta.insertTargetDay}`
+                      : 'Adding to notes'
+                    : message.meta.insertTargetDay
+                      ? `Retry insert into ${message.meta.insertTargetDay}`
+                      : 'Retry insert'}
+                </button>
+              )
             ) : null}
           </div>
         </div>

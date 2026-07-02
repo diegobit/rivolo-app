@@ -44,8 +44,7 @@ export type StreamTagParseResult = {
 export type ParsedTaggedAssistantResponse = {
   answer: string
   citations: { day: string; quote: string }[]
-  insertText: string | null
-  insertTargetDay: string | null
+  inserts: { text: string; targetDay: string | null }[]
 }
 
 const MAX_TAG_LENGTH = 1024
@@ -315,8 +314,7 @@ export const parseTaggedAssistantResponse = (value: string): ParsedTaggedAssista
   const answerParts: string[] = []
   const citations: { day: string; quote: string }[] = []
   const citationIndexes = new Map<string, number>()
-  let insertText: string | null = null
-  let insertTargetDay: string | null = null
+  const inserts: { text: string; targetDay: string | null }[] = []
 
   for (const piece of pieces) {
     if (piece.type === 'text') {
@@ -337,14 +335,12 @@ export const parseTaggedAssistantResponse = (value: string): ParsedTaggedAssista
       continue
     }
 
-    insertText = piece.text
-    insertTargetDay = piece.targetDay
+    inserts.push({ text: piece.text, targetDay: piece.targetDay })
   }
 
   return {
     answer: answerParts.join('').trim(),
     citations,
-    insertText,
-    insertTargetDay,
+    inserts,
   }
 }

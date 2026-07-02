@@ -29,6 +29,8 @@ When the user asks to append content into notes, optionally include one self-clo
 Rules:
 - Only use these tags: <ref .../> and <insert .../>.
 - Keep tags self-closing; do not use closing tags or nesting.
+- Never emit more than one <insert .../> tag in a response.
+- Never place a <ref .../> tag or any other tag inside <insert .../> or its attributes.
 - Keep normal prose outside tags.
 - Escape literal < and > in prose as &lt; and &gt;.
 - Quotes in attributes must be exact substrings from the cited day. If unsure, omit the citation tag.`

@@ -97,8 +97,7 @@ export const useTimelineChat = ({
       })) as LlmMessage[]
       const streamedCitations: Citation[] = []
       const streamedCitationIndexes = new Map<string, number>()
-      let streamedInsertText: string | null = null
-      let streamedInsertTargetDay: string | null = null
+      const streamedInserts: AssistantPayload['inserts'] = []
       let streamedAnswer = ''
       let pendingStreamText = ''
       let pendingStreamMetaChanged = false
@@ -122,8 +121,6 @@ export const useTimelineChat = ({
                   content: textDelta ? `${message.content}${textDelta}` : message.content,
                   meta: {
                     citations: [...streamedCitations],
-                    insertText: streamedInsertText,
-                    insertTargetDay: streamedInsertTargetDay,
                     isStreaming: true,
                   },
                 }
@@ -223,13 +220,7 @@ export const useTimelineChat = ({
               continue
             }
 
-            const changedInsert =
-              streamedInsertText !== piece.text || streamedInsertTargetDay !== piece.targetDay
-            streamedInsertText = piece.text
-            streamedInsertTargetDay = piece.targetDay
-            if (changedInsert) {
-              metaChanged = true
-            }
+            streamedInserts.push({ text: piece.text, targetDay: piece.targetDay })
           }
 
           if (textDelta) {
@@ -263,12 +254,11 @@ export const useTimelineChat = ({
         let finalResponseText = responseText
         let payload: AssistantPayload | null = null
 
-        if (streamedAnswer.trim() || streamedCitations.length || streamedInsertText) {
+        if (streamedAnswer.trim() || streamedCitations.length || streamedInserts.length) {
           payload = {
             answer: streamedAnswer.trim(),
             citations: streamedCitations,
-            insertText: streamedInsertText,
-            insertTargetDay: streamedInsertTargetDay,
+            inserts: streamedInserts,
           }
         }
 
@@ -329,17 +319,34 @@ export const useTimelineChat = ({
 
         const parsedFallback = parseAssistantPayload(finalResponseText || responseText)
         const fallbackAnswer = parsedFallback?.answer ?? stripCodeFences(finalResponseText || responseText)
+        const inserts = payload?.inserts ?? []
+        const insert = inserts.length === 1 ? inserts[0] : null
+        const insertTargetDay = insert ? (insert.targetDay ?? getTodayId()) : null
+        let insertStatus: 'applied' | 'failed' | undefined
+
+        if (inserts.length > 1) {
+          setChatError('The assistant returned multiple insert actions, so nothing was added.')
+        } else if (insert && insertTargetDay) {
+          try {
+            await onInsertNote(insertTargetDay, insert.text.trim())
+            insertStatus = 'applied'
+          } catch (insertError) {
+            insertStatus = 'failed'
+            setChatError(insertError instanceof Error ? insertError.message : 'The note could not be updated.')
+          }
+        }
 
         setMessages((state) =>
           state.map((message) =>
             message.id === assistantId
               ? {
                   ...message,
-                  content: payload?.answer || fallbackAnswer || responseText,
+                  content: payload?.answer ?? fallbackAnswer ?? responseText,
                   meta: {
                     citations,
-                    insertText: payload?.insertText ?? null,
-                    insertTargetDay: payload?.insertTargetDay ?? null,
+                    insertText: insert?.text ?? null,
+                    insertTargetDay,
+                    insertStatus,
                     isStreaming: false,
                   },
                 }
@@ -376,6 +383,7 @@ export const useTimelineChat = ({
       chatPanelOpen,
       desktopChatPanelOpen,
       isNarrowViewport,
+      onInsertNote,
       setDesktopChatPanelOpen,
       setChatPanelOpen,
       setMessages,
@@ -385,13 +393,39 @@ export const useTimelineChat = ({
   const handleChatInsert = useCallback(
     async (message: ChatUiMessage) => {
       const insertText = message.meta?.insertText
-      if (!insertText) return
+      if (!insertText || message.meta?.insertStatus !== 'failed') return
 
       const targetDay = message.meta?.insertTargetDay ?? getTodayId()
-      const payload = `${insertText.trim()}`
-      await onInsertNote(targetDay, payload)
+      setChatError(null)
+      setMessages((state) =>
+        state.map((item) =>
+          item.id === message.id
+            ? { ...item, meta: { ...item.meta!, insertStatus: 'applying' } }
+            : item,
+        ),
+      )
+
+      try {
+        await onInsertNote(targetDay, insertText.trim())
+        setMessages((state) =>
+          state.map((item) =>
+            item.id === message.id
+              ? { ...item, meta: { ...item.meta!, insertStatus: 'applied' } }
+              : item,
+          ),
+        )
+      } catch (insertError) {
+        setMessages((state) =>
+          state.map((item) =>
+            item.id === message.id
+              ? { ...item, meta: { ...item.meta!, insertStatus: 'failed' } }
+              : item,
+          ),
+        )
+        setChatError(insertError instanceof Error ? insertError.message : 'The note could not be updated.')
+      }
     },
-    [onInsertNote],
+    [onInsertNote, setMessages],
   )
 
   const handleNewChat = useCallback(() => {
