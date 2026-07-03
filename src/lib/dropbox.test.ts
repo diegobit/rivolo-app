@@ -69,4 +69,31 @@ describe('Dropbox sync provider', () => {
     })
     expect(await getDropboxState()).toMatchObject({ localDirty: false, lastRemoteRev: 'rev-1' })
   })
+
+  it('blocks a dirty first push onto an existing remote file', async () => {
+    settings.set('dropbox.state', { ...structuredClone(connectedState), lastRemoteRev: null })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ rev: 'rev-9', server_modified: '2026-06-21T10:00:00Z' }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { pushToDropbox } = await import('./dropbox')
+
+    expect(await pushToDropbox()).toMatchObject({ status: 'blocked', reason: 'remote_changed' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(exportMarkdownFromDb).not.toHaveBeenCalled()
+  })
+
+  it('maps a Dropbox upload conflict to remote_changed', async () => {
+    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nlocal edit')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ rev: 'rev-1', server_modified: '2026-06-21T10:00:00Z' }))
+      .mockResolvedValueOnce(json({ error_summary: 'path/conflict/file/..' }, { status: 409 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { pushToDropbox } = await import('./dropbox')
+    const { getDropboxState } = await import('./dropboxState')
+
+    expect(await pushToDropbox()).toEqual({ status: 'blocked', reason: 'remote_changed' })
+    expect(await getDropboxState()).toMatchObject({ localDirty: true, lastRemoteRev: 'rev-1' })
+  })
 })

@@ -277,6 +277,12 @@ const downloadFile = async (path: string) => {
   return response.text()
 }
 
+class DropboxUploadConflictError extends Error {
+  constructor() {
+    super('Dropbox file changed before upload.')
+  }
+}
+
 const uploadFile = async (
   path: string,
   content: string,
@@ -297,6 +303,12 @@ const uploadFile = async (
   })
 
   if (!response.ok) {
+    if (response.status === 409) {
+      const payload = (await response.json().catch(() => null)) as DropboxError | null
+      if (payload?.error_summary?.startsWith('path/conflict')) {
+        throw new DropboxUploadConflictError()
+      }
+    }
     throw new Error('Failed to upload Dropbox file.')
   }
 
@@ -443,6 +455,15 @@ export const pushToDropbox = async (force = false) => {
     })
     return { status: 'blocked' as const, reason, metadata }
   }
+  if (!force && !state.lastRemoteRev && metadata && state.localDirty) {
+    console.warn('[Dropbox] push:blocked', {
+      filePath: path,
+      localRev: 'untracked',
+      remoteRev: metadata.rev,
+      reason: 'remote_changed',
+    })
+    return { status: 'blocked' as const, reason: 'remote_changed' as const, metadata }
+  }
 
   if (!state.localDirty && !force) {
     console.info('[Dropbox] push:clean', { filePath: path })
@@ -450,7 +471,16 @@ export const pushToDropbox = async (force = false) => {
   }
 
   const content = await exportMarkdownFromDb()
-  const upload = await uploadFile(path, content, resolveUploadMode(state.lastRemoteRev, force))
+  let upload: DropboxMetadata
+  try {
+    upload = await uploadFile(path, content, resolveUploadMode(state.lastRemoteRev, force))
+  } catch (error) {
+    if (error instanceof DropboxUploadConflictError) {
+      console.warn('[Dropbox] push:conflict', { filePath: path })
+      return { status: 'blocked' as const, reason: 'remote_changed' as const }
+    }
+    throw error
+  }
 
   await finalizeDropboxPushState(upload.rev, state.localRevision)
 
