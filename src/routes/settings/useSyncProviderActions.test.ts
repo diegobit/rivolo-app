@@ -4,6 +4,7 @@ import { useSyncProviderActions } from './useSyncProviderActions'
 const syncActions = vi.hoisted(() => ({
   pullFromSyncAndRefresh: vi.fn(),
   pushToSyncAndRefresh: vi.fn(),
+  blockedPushMessage: vi.fn((reason: string) => `blocked: ${reason}`),
 }))
 
 vi.mock('../../store/syncActions', () => syncActions)
@@ -55,9 +56,7 @@ describe('useSyncProviderActions', () => {
     )
     expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledWith({
       force: true,
-      allowDestructiveReplace: true,
-      allowDuplicateDayMarkers: false,
-      backupReason: 'manual-pull',
+      allowUnsafeImport: true,
     })
     expect(loadProviderStates).toHaveBeenCalledOnce()
     expect(setStatus).toHaveBeenLastCalledWith('Pulled and imported.')
@@ -72,15 +71,18 @@ describe('useSyncProviderActions', () => {
     expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
   })
 
-  it('confirms past duplicate day markers and retries the pull', async () => {
-    const duplicateError = Object.assign(new Error('Import aborted because of duplicates.'), {
-      name: 'ImportSafetyError',
-      reason: 'duplicate-day-markers',
-      warnings: [],
-      deletedDayIds: [],
-    })
+  it('confirms past an import safety block and retries the pull once', async () => {
+    const safetyError = Object.assign(
+      new Error('Import blocked: it would delete 2 local day(s).'),
+      {
+        name: 'ImportSafetyError',
+        reasons: ['duplicate-day-markers', 'would-delete-local-days'],
+        warnings: [],
+        deletedDayIds: ['2026-06-28', '2026-06-27'],
+      },
+    )
     syncActions.pullFromSyncAndRefresh
-      .mockRejectedValueOnce(duplicateError)
+      .mockRejectedValueOnce(safetyError)
       .mockResolvedValueOnce({ status: 'pulled' })
     const confirm = vi.fn(() => true)
     vi.stubGlobal('confirm', confirm)
@@ -89,25 +91,23 @@ describe('useSyncProviderActions', () => {
     await handlePull()
 
     expect(confirm).toHaveBeenCalledWith(
-      'The Dropbox file contains duplicate day markers. Import anyway? The last block for each day is kept, and a rollback backup will be saved first.',
+      'Import blocked: it would delete 2 local day(s). Replace local notes anyway? A rollback backup will be saved first.',
     )
     expect(syncActions.pullFromSyncAndRefresh).toHaveBeenLastCalledWith({
       force: false,
-      allowDestructiveReplace: false,
-      allowDuplicateDayMarkers: true,
-      backupReason: 'manual-pull',
+      allowUnsafeImport: true,
     })
     expect(setStatus).toHaveBeenLastCalledWith('Pulled and imported.')
   })
 
-  it('cancels the duplicate day marker override without importing', async () => {
-    const duplicateError = Object.assign(new Error('Import aborted because of duplicates.'), {
+  it('cancels the import safety override without importing', async () => {
+    const safetyError = Object.assign(new Error('Import blocked: duplicates.'), {
       name: 'ImportSafetyError',
-      reason: 'duplicate-day-markers',
+      reasons: ['duplicate-day-markers'],
       warnings: [],
       deletedDayIds: [],
     })
-    syncActions.pullFromSyncAndRefresh.mockRejectedValueOnce(duplicateError)
+    syncActions.pullFromSyncAndRefresh.mockRejectedValueOnce(safetyError)
     vi.stubGlobal('confirm', vi.fn(() => false))
     const { handlePull, setStatus } = useActions(false)
 
@@ -115,6 +115,28 @@ describe('useSyncProviderActions', () => {
 
     expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
     expect(setStatus).toHaveBeenLastCalledWith('Pull canceled. Local notes were not changed.')
+  })
+
+  it('does not offer an override for a zero-marker remote file', async () => {
+    const safetyError = Object.assign(
+      new Error('Import aborted: the file contains no day markers.'),
+      {
+        name: 'ImportSafetyError',
+        reasons: ['no-day-markers'],
+        warnings: [],
+        deletedDayIds: [],
+      },
+    )
+    syncActions.pullFromSyncAndRefresh.mockRejectedValueOnce(safetyError)
+    const confirm = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirm)
+    const { handlePull, setStatus } = useActions(false)
+
+    await handlePull()
+
+    expect(confirm).not.toHaveBeenCalled()
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+    expect(setStatus).toHaveBeenLastCalledWith('Import aborted: the file contains no day markers.')
   })
 
   it('blocks manual pull when another tab owns the primary lease', async () => {

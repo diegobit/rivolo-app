@@ -4,7 +4,7 @@ import { isImportSafetyError } from '../../lib/importExport'
 import { disconnectProvider, type SyncProviderId } from '../../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../../lib/syncState'
 import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
-import { pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../../store/syncActions'
+import { blockedPushMessage, pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../../store/syncActions'
 
 type UseSyncProviderActionsParams = {
   provider: SyncProviderId
@@ -110,67 +110,47 @@ export const useSyncProviderActions = ({
     if (!requireActive()) return
     if (!requireSafeSyncTab()) return
 
-    const pullOptions = {
-      force: false,
-      allowDestructiveReplace: false,
-      allowDuplicateDayMarkers: false,
-      backupReason: 'manual-pull' as const,
-    }
+    const pullOptions = { force: false, allowUnsafeImport: false }
     if (localDirty) {
       const confirmed = window.confirm(
         `Pull from ${label} and replace local notes? Unpushed local changes and local-only days missing from ${label} will be overwritten. A rollback backup will be saved first.`,
       )
       if (!confirmed) return
       pullOptions.force = true
-      pullOptions.allowDestructiveReplace = true
+      pullOptions.allowUnsafeImport = true
     }
 
-    // Each import safety block gets one explicit confirmation, then the pull
-    // retries with that single override added. One file can trip both blocks.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        const result = await pullFromSyncAndRefresh(pullOptions)
-        await loadProviderStates()
-        setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
-        return
-      } catch (error) {
-        if (
-          isImportSafetyError(error) &&
-          error.reason === 'would-delete-local-days' &&
-          !pullOptions.allowDestructiveReplace
-        ) {
-          const confirmed = window.confirm(
-            `${label} is missing ${error.deletedDayIds.length} local day(s). Replace local notes anyway? A rollback backup will be saved first.`,
-          )
-          if (!confirmed) {
-            setStatus('Pull canceled. Local notes were not changed.')
-            return
-          }
-          pullOptions.allowDestructiveReplace = true
-          continue
-        }
+    const runPull = async (options: typeof pullOptions) => {
+      const result = await pullFromSyncAndRefresh(options)
+      await loadProviderStates()
+      setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
+    }
 
-        if (
-          isImportSafetyError(error) &&
-          error.reason === 'duplicate-day-markers' &&
-          !pullOptions.allowDuplicateDayMarkers
-        ) {
-          const confirmed = window.confirm(
-            `The ${label} file contains duplicate day markers. Import anyway? The last block for each day is kept, and a rollback backup will be saved first.`,
-          )
-          if (!confirmed) {
-            setStatus('Pull canceled. Local notes were not changed.')
-            return
-          }
-          pullOptions.allowDuplicateDayMarkers = true
-          continue
+    try {
+      await runPull(pullOptions)
+    } catch (error) {
+      if (
+        isImportSafetyError(error) &&
+        !pullOptions.allowUnsafeImport &&
+        !error.reasons.includes('no-day-markers')
+      ) {
+        const confirmed = window.confirm(
+          `${error.message} Replace local notes anyway? A rollback backup will be saved first.`,
+        )
+        if (!confirmed) {
+          setStatus('Pull canceled. Local notes were not changed.')
+          return
         }
-
-        setStatus(error instanceof Error ? error.message : `${label} pull failed.`)
+        try {
+          await runPull({ ...pullOptions, allowUnsafeImport: true })
+        } catch (retryError) {
+          setStatus(retryError instanceof Error ? retryError.message : `${label} pull failed.`)
+        }
         return
       }
+
+      setStatus(error instanceof Error ? error.message : `${label} pull failed.`)
     }
-    setStatus(`${label} pull failed.`)
   }
 
   const handlePush = async (force = false) => {
@@ -190,11 +170,7 @@ export const useSyncProviderActions = ({
       if (result.status === 'clean') {
         setStatus('No local changes to push.')
       } else if (result.status === 'blocked') {
-        setStatus(
-          result.reason === 'remote_missing'
-            ? `${label} file is missing. Local data is safe. Use “Restore from local copy” to recreate it.`
-            : `${label} changed remotely. Pull first, or use “Restore from local copy” to overwrite it.`,
-        )
+        setStatus(blockedPushMessage(result.reason))
       } else {
         setStatus(`Uploaded to ${label}.`)
       }

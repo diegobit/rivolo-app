@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   importMarkdownToDb,
   listRollbackBackups,
-  type ImportBackupReason,
   type ImportRollbackBackup,
 } from '../../lib/importExport'
 import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
@@ -10,12 +9,6 @@ import { buttonSecondary } from '../../lib/ui'
 
 type BackupsSectionProps = {
   onRestored: () => Promise<void> | void
-}
-
-const REASON_LABELS: Record<ImportBackupReason, string> = {
-  'auto-pull': 'Before automatic pull',
-  'manual-pull': 'Before manual pull',
-  'destructive-replace': 'Before destructive replace',
 }
 
 const formatBackupTime = (timestamp: number) => {
@@ -57,7 +50,7 @@ export default function BackupsSection({ onRestored }: BackupsSectionProps) {
       await importMarkdownToDb(backup.contentMd, {
         replace: true,
         markDirty: true,
-        allowDestructiveReplace: true,
+        allowUnsafeImport: true,
       })
       await onRestored()
       await loadBackups()
@@ -81,16 +74,14 @@ export default function BackupsSection({ onRestored }: BackupsSectionProps) {
         <p className="mt-3 text-xs text-slate-400">No backups yet.</p>
       ) : (
         <ul className="mt-3 space-y-2">
-          {backups.map((backup) => (
+          {backups.map((backup, index) => (
             <li
-              key={`${backup.createdAt}-${backup.reason}`}
+              key={`${backup.createdAt}-${index}`}
               className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
             >
               <div className="min-w-0 text-xs text-slate-600">
                 <div className="font-semibold">{formatBackupTime(backup.createdAt)}</div>
-                <div className="text-slate-500">
-                  {REASON_LABELS[backup.reason]} • {backup.dayCount} day(s)
-                </div>
+                <div className="text-slate-500">{backup.dayCount} day(s)</div>
               </div>
               <button
                 className={`${buttonSecondary} min-h-11 shrink-0`}

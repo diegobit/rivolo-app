@@ -259,10 +259,14 @@ export default function Settings() {
     }
 
     const content = await file.text()
-    const result = await importMarkdownToDb(content)
-    await loadTimeline()
-    const warningText = result.warnings.length ? ` Warnings: ${result.warnings.join(' ')}` : ''
-    setImportStatus(`Imported ${result.imported} day(s).${warningText}`)
+    try {
+      const result = await importMarkdownToDb(content)
+      await loadTimeline()
+      const warningText = result.warnings.length ? ` Warnings: ${result.warnings.join(' ')}` : ''
+      setImportStatus(`Imported ${result.imported} day(s).${warningText}`)
+    } catch (error) {
+      setImportStatus(error instanceof Error ? error.message : 'Import failed.')
+    }
     event.target.value = ''
   }
 

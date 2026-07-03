@@ -141,7 +141,7 @@ describe('Google Drive sync provider', () => {
     expect(importMarkdownToDb).toHaveBeenCalledWith('# 2026-06-21\n\nremote text', {
       replace: true,
       markDirty: false,
-      allowDestructiveReplace: undefined,
+      allowUnsafeImport: undefined,
     })
     expect(await getGoogleDriveState()).toMatchObject({ lastRemoteVersion: '2', localDirty: false })
     expect(await getDropboxState()).toMatchObject({ localDirty: true })

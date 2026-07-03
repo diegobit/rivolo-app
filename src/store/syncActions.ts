@@ -1,6 +1,5 @@
 import { getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../lib/syncState'
-import type { ImportBackupReason } from '../lib/importExport'
 import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import { useDaysStore } from './useDaysStore'
 import { useSyncStore } from './useSyncStore'
@@ -54,7 +53,7 @@ const clearSyncAttention = () => {
   }
 }
 
-const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') => {
+export const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') => {
   const label = activeProviderLabel()
   return reason === 'remote_missing'
     ? `${label} file is missing. Local data is safe. Use “Restore from local copy” to recreate it.`
@@ -63,9 +62,7 @@ const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') => {
 
 export const pullFromSyncAndRefresh = async (options?: {
   force?: boolean
-  allowDestructiveReplace?: boolean
-  allowDuplicateDayMarkers?: boolean
-  backupReason?: ImportBackupReason
+  allowUnsafeImport?: boolean
 }) =>
   enqueueSyncOperation('pull', async () => {
     requirePrimarySyncTab()
@@ -80,9 +77,7 @@ export const pullFromSyncAndRefresh = async (options?: {
 
     const result = await pullFromSync({
       force,
-      allowDestructiveReplace: options?.allowDestructiveReplace,
-      allowDuplicateDayMarkers: options?.allowDuplicateDayMarkers,
-      backupReason: options?.backupReason,
+      allowUnsafeImport: options?.allowUnsafeImport,
     })
     if (result.status === 'pulled') {
       await useDaysStore.getState().loadTimeline()

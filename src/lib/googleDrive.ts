@@ -250,19 +250,11 @@ export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
   }
 
   const content = await downloadDriveFile(metadata.id)
-  const result = await importMarkdownToDb(content, {
+  await importMarkdownToDb(content, {
     replace: true,
     markDirty: false,
-    allowDestructiveReplace: options.allowDestructiveReplace,
-    allowDuplicateDayMarkers: options.allowDuplicateDayMarkers,
-    backupReason: options.backupReason,
+    allowUnsafeImport: options.allowUnsafeImport,
   })
-  const hasNoMarkersWarning =
-    result.imported === 0 &&
-    result.warnings.some((warning) => warning.toLowerCase().includes('no day markers'))
-  if (hasNoMarkersWarning) {
-    throw new Error('Google Drive file has no day markers. Import aborted to avoid data loss.')
-  }
 
   await markSyncLocalDirty()
   await updateGoogleDriveState({

@@ -18,7 +18,6 @@ const backup = {
   createdAt: 1_780_000_000_000,
   contentMd: '# 2026-06-29\n\nbacked up note',
   dayCount: 2,
-  reason: 'destructive-replace' as const,
 }
 
 describe('BackupsSection', () => {
@@ -51,7 +50,7 @@ describe('BackupsSection', () => {
       expect(importExport.importMarkdownToDb).toHaveBeenCalledWith(backup.contentMd, {
         replace: true,
         markDirty: true,
-        allowDestructiveReplace: true,
+        allowUnsafeImport: true,
       })
     })
     expect(onRestored).toHaveBeenCalled()

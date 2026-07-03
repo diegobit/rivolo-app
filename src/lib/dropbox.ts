@@ -408,17 +408,8 @@ export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
   const result = await importMarkdownToDb(content, {
     replace: true,
     markDirty: false,
-    allowDestructiveReplace: options.allowDestructiveReplace,
-    allowDuplicateDayMarkers: options.allowDuplicateDayMarkers,
-    backupReason: options.backupReason,
+    allowUnsafeImport: options.allowUnsafeImport,
   })
-  const hasNoMarkersWarning =
-    result.imported === 0 &&
-    result.warnings.some((warning) => warning.toLowerCase().includes('no day markers'))
-
-  if (hasNoMarkersWarning) {
-    throw new Error('Dropbox file has no day markers. Import aborted to avoid data loss.')
-  }
 
   await markSyncLocalDirty()
   await updateDropboxState({
