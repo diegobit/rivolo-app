@@ -4,7 +4,7 @@ export default function Privacy() {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div>
           <h1 className="text-base font-semibold text-slate-700">Privacy Notice (GDPR)</h1>
-          <p className="mt-1 text-xs text-slate-500">Effective date: June 21, 2026</p>
+          <p className="mt-1 text-xs text-slate-500">Effective date: July 4, 2026</p>
         </div>
       </section>
 
@@ -55,9 +55,9 @@ export default function Privacy() {
             <span className="font-semibold text-slate-700">D) Optional cloud sync</span>
             <br />
             If you connect Dropbox or Google Drive, the selected provider processes the notes data you choose to
-            sync. Dropbox credentials remain in browser storage. For Google Drive, a Cloudflare Pages Function
-            exchanges and refreshes OAuth credentials using an encrypted HttpOnly cookie; note contents are
-            transferred directly between your browser and Google Drive and do not pass through that function.
+            sync. For both providers, a Cloudflare Pages Function exchanges and refreshes OAuth credentials using an
+            encrypted HttpOnly cookie; note contents are transferred directly between your browser and the selected
+            provider and do not pass through those functions.
           </p>
         </div>
 
@@ -66,26 +66,30 @@ export default function Privacy() {
         </h2>
         <p className="mt-2">
           Rivolo does not use analytics, advertising, or profiling cookies. It uses one first-party technical cookie
-          only when you explicitly connect Google Drive:
+          per provider, only when you explicitly connect Google Drive or Dropbox:
         </p>
         <div className="mt-2 space-y-2">
           <p>
-            <span className="font-semibold text-slate-700">Google Drive refresh cookie</span>
+            <span className="font-semibold text-slate-700">Cloud sync refresh cookies</span>
             <br />
-            Name: <code className="break-all text-xs">rivolo_gdrive_refresh</code>. Purpose: keep the Google Drive
-            sync connection working by obtaining new short-lived access tokens without repeatedly asking you to sign
+            Names: <code className="break-all text-xs">rivolo_gdrive_refresh</code> (Google Drive) and{' '}
+            <code className="break-all text-xs">rivolo_dropbox_refresh</code> (Dropbox). Purpose: keep the sync
+            connection working by obtaining new short-lived access tokens without repeatedly asking you to sign
             in. Contents: an OAuth refresh credential encrypted by Rivolo before storage. Duration: up to 400 days
-            from its latest refresh, or earlier if you disconnect Google Drive, revoke access, the credential expires,
+            from its latest refresh, or earlier if you disconnect the provider, revoke access, the credential expires,
             or you clear browser data. Scope and protections: first-party, limited to{' '}
-            <code className="break-all text-xs">/api/google-drive</code>, HttpOnly, Secure on HTTPS, and
-            SameSite=Strict. It is not available to browser JavaScript and is not used for tracking or profiling.
+            <code className="break-all text-xs">/api/google-drive</code> or{' '}
+            <code className="break-all text-xs">/api/dropbox</code> respectively, HttpOnly, Secure on HTTPS, and
+            SameSite=Strict. They are not available to browser JavaScript and are not used for tracking or profiling.
           </p>
           <p>
             <span className="font-semibold text-slate-700">Other technical browser storage</span>
             <br />
-            IndexedDB stores the local notes database, chat history, settings, optional AI API keys, Dropbox
-            credentials, and sync metadata. Session storage temporarily holds Dropbox OAuth validation data and the
-            timeline scroll position. Local storage holds only the optional debug-logging preference. The PWA service
+            IndexedDB stores the local notes database, chat history, settings, optional AI API keys, and sync
+            metadata. Session storage temporarily holds Dropbox OAuth validation data and the timeline scroll
+            position. Local storage holds the optional debug-logging preference and technical tab-coordination
+            entries (a random per-tab identifier and a data-revision counter, with no notes content or personal
+            data) that let multiple open Rivolo tabs agree which one runs sync. The PWA service
             worker uses browser cache storage for app files needed for offline use. These mechanisms are used only to
             provide requested app features and are not used to track you across websites.
           </p>
@@ -105,7 +109,7 @@ export default function Privacy() {
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">6) Recipients</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Cloudflare (hosting/CDN/security and Google OAuth credential exchange)</li>
+          <li>Cloudflare (hosting/CDN/security and Google Drive/Dropbox OAuth credential exchange)</li>
           <li>Google (Gemini API), Anthropic, or OpenAI, only when selected for an AI request</li>
           <li>The operator of an OpenAI-compatible endpoint you choose, only when that endpoint is selected</li>
           <li>Dropbox (sync provider)</li>
@@ -129,8 +133,8 @@ export default function Privacy() {
           <li>Cloudflare technical/security data: retained per operational/security configuration.</li>
           <li>
             AI provider, custom endpoint, Dropbox, and Google Drive data: subject to the selected operator's retention
-            practices and your account settings. Disconnecting Google Drive clears Rivolo's refresh credential cookie
-            and requests revocation from Google.
+            practices and your account settings. Disconnecting Google Drive or Dropbox clears that provider's refresh
+            credential cookie and requests revocation from the provider.
           </li>
         </ul>
 
