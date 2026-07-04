@@ -87,7 +87,7 @@ export default function AppearanceSection({
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold text-slate-700">Appearance</h2>
       <div className="mt-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Wallpaper</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wallpaper</h3>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             className={wallpaper === 'white' ? buttonPillActive : buttonPill}
@@ -117,7 +117,7 @@ export default function AppearanceSection({
       </div>
 
       <div className="mt-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Editor behavior
         </h3>
         <div className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
@@ -135,7 +135,7 @@ export default function AppearanceSection({
       </div>
 
       <div className="mt-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Title Font</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Title Font</h3>
         <div className="mt-3 flex flex-wrap gap-2">
           {titleFontOptions.map((option) => (
             <button
@@ -152,7 +152,7 @@ export default function AppearanceSection({
       </div>
 
       <div className="mt-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Body Font</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Body Font</h3>
         <div className="mt-3 flex flex-wrap gap-2">
           {bodyFontOptions.map((option) => (
             <button

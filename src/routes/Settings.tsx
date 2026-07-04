@@ -22,7 +22,7 @@ import { prepareGoogleDriveAuth } from '../lib/googleDriveAuth'
 import { DEFAULT_GOOGLE_DRIVE_FILE_NAME, getGoogleDrivePath } from '../lib/googleDriveState'
 import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import type { SyncProviderId } from '../lib/sync'
-import { buttonSecondary } from '../lib/ui'
+import { buttonPill, buttonSecondary } from '../lib/ui'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useSyncProviderActions } from './settings/useSyncProviderActions'
 import { useDaysStore } from '../store/useDaysStore'
@@ -65,6 +65,18 @@ def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
 0123456789 ~ !  @  #  $  %  ^  &  *  (  )  _  +  - =
 12*34=56 \${var} (a && b) == True
 `
+
+const SETTINGS_NAV_ITEMS = [
+  { id: 'settings-ai', label: 'AI' },
+  { id: 'settings-appearance', label: 'Appearance' },
+  { id: 'settings-sync', label: 'Sync' },
+  { id: 'settings-data', label: 'Data' },
+  { id: 'settings-legal', label: 'Legal' },
+] as const
+
+const scrollToSection = (id: string) => {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 export default function Settings() {
   const loadTimeline = useDaysStore((state) => state.loadTimeline)
@@ -315,100 +327,122 @@ export default function Settings() {
 
   return (
     <div className="space-y-4">
-      <LlmSection
-        key={provider}
-        provider={provider}
-        providerSettings={providerSettings}
-        llmSecrets={llmSecrets}
-        aiLanguage={aiLanguage}
-        allowWebSearch={allowWebSearch}
-        settingsError={settingsError}
-        onSelectProvider={selectProvider}
-        onSaveProviderSettings={saveProviderSettings}
-        onSaveProviderKey={saveProviderKey}
-        onClearProviderKey={clearProviderKey}
-        onFollowLanguage={() => {
-          void updateAiLanguage('follow')
-        }}
-        onAiLanguageChange={(value) => {
-          const nextValue = value.trim()
-          void updateAiLanguage(nextValue || 'follow')
-        }}
-        onAllowWebSearchChange={updateAllowWebSearch}
-      />
+      <nav
+        className="sticky top-0 z-20 -mx-2 flex gap-2 overflow-x-auto rounded-full bg-white/80 px-2 py-2 backdrop-blur [-ms-overflow-style:none] [scrollbar-width:none] sm:top-16 sm:mx-0 [&::-webkit-scrollbar]:hidden"
+        aria-label="Settings sections"
+      >
+        {SETTINGS_NAV_ITEMS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`${buttonPill} shrink-0`}
+            onClick={() => scrollToSection(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
 
-      <AppearanceSection
-        wallpaper={wallpaper}
-        highlightInputMode={highlightInputMode}
-        autocorrection={autocorrection}
-        fontPreference={fontPreference}
-        bodyFont={bodyFont}
-        monospaceFont={monospaceFont}
-        titleFont={titleFont}
-        showFontPreview={showFontPreview}
-        previewText={previewText}
-        titlePreviewFontFamily={titlePreviewFontFamily}
-        bodyPreviewFontFamily={bodyPreviewFontFamily}
-        bodyPreviewFontSize={bodyPreviewFontSize}
-        onWallpaperChange={(value) => {
-          void updateWallpaper(value)
-        }}
-        onHighlightInputModeChange={(enabled) => {
-          void updateHighlightInputMode(enabled)
-        }}
-        onAutocorrectionChange={(enabled) => {
-          void updateAutocorrection(enabled)
-        }}
-        onTitleFontChange={handleTitleFont}
-        onBodyFontChange={handleBodyFont}
-        onMonospaceFontChange={handleMonospaceFont}
-        onFontPreviewToggle={handleFontPreviewToggle}
-      />
+      <div id="settings-ai" className="scroll-mt-14 sm:scroll-mt-32">
+        <LlmSection
+          provider={provider}
+          providerSettings={providerSettings}
+          llmSecrets={llmSecrets}
+          aiLanguage={aiLanguage}
+          allowWebSearch={allowWebSearch}
+          settingsError={settingsError}
+          onSelectProvider={selectProvider}
+          onSaveProviderSettings={saveProviderSettings}
+          onSaveProviderKey={saveProviderKey}
+          onClearProviderKey={clearProviderKey}
+          onFollowLanguage={() => {
+            void updateAiLanguage('follow')
+          }}
+          onAiLanguageChange={(value) => {
+            const nextValue = value.trim()
+            void updateAiLanguage(nextValue || 'follow')
+          }}
+          onAllowWebSearchChange={updateAllowWebSearch}
+        />
+      </div>
 
+      <div id="settings-appearance" className="scroll-mt-14 sm:scroll-mt-32">
+        <AppearanceSection
+          wallpaper={wallpaper}
+          highlightInputMode={highlightInputMode}
+          autocorrection={autocorrection}
+          fontPreference={fontPreference}
+          bodyFont={bodyFont}
+          monospaceFont={monospaceFont}
+          titleFont={titleFont}
+          showFontPreview={showFontPreview}
+          previewText={previewText}
+          titlePreviewFontFamily={titlePreviewFontFamily}
+          bodyPreviewFontFamily={bodyPreviewFontFamily}
+          bodyPreviewFontSize={bodyPreviewFontSize}
+          onWallpaperChange={(value) => {
+            void updateWallpaper(value)
+          }}
+          onHighlightInputModeChange={(enabled) => {
+            void updateHighlightInputMode(enabled)
+          }}
+          onAutocorrectionChange={(enabled) => {
+            void updateAutocorrection(enabled)
+          }}
+          onTitleFontChange={handleTitleFont}
+          onBodyFontChange={handleBodyFont}
+          onMonospaceFontChange={handleMonospaceFont}
+          onFontPreviewToggle={handleFontPreviewToggle}
+        />
+      </div>
 
-      <SyncSection
-        activeProvider={activeProvider}
-        provider={selectedSyncProvider}
-        summary={selectedSummary}
-        online={online}
-        syncPaused={!tabSync.isPrimary}
-        attention={activeProvider === selectedSyncProvider ? syncAttention?.message ?? null : null}
-        targetDraft={selectedTarget}
-        targetDirty={selectedTargetDirty}
-        syncBusy={syncing}
-        status={syncStatus}
-        onProviderChange={(nextProvider) => {
-          setSyncProviderDraft(nextProvider)
-          setSyncStatus(null)
-        }}
-        onConnect={handleConnect}
-        onDisconnect={handleDisconnect}
-        onActivate={handleActivate}
-        onTargetChange={(value) => {
-          if (selectedSyncProvider === 'dropbox') setDropboxPathDraft(value)
-          else setGoogleDriveFileNameDraft(value)
-        }}
-        onSaveTarget={handleSaveSyncTarget}
-        onPull={handlePull}
-        onPush={handlePush}
-      />
+      <div id="settings-sync" className="scroll-mt-14 sm:scroll-mt-32">
+        <SyncSection
+          activeProvider={activeProvider}
+          provider={selectedSyncProvider}
+          summary={selectedSummary}
+          online={online}
+          syncPaused={!tabSync.isPrimary}
+          attention={activeProvider === selectedSyncProvider ? syncAttention?.message ?? null : null}
+          targetDraft={selectedTarget}
+          targetDirty={selectedTargetDirty}
+          syncBusy={syncing}
+          status={syncStatus}
+          onProviderChange={(nextProvider) => {
+            setSyncProviderDraft(nextProvider)
+            setSyncStatus(null)
+          }}
+          onConnect={handleConnect}
+          onDisconnect={handleDisconnect}
+          onActivate={handleActivate}
+          onTargetChange={(value) => {
+            if (selectedSyncProvider === 'dropbox') setDropboxPathDraft(value)
+            else setGoogleDriveFileNameDraft(value)
+          }}
+          onSaveTarget={handleSaveSyncTarget}
+          onPull={handlePull}
+          onPush={handlePush}
+        />
+      </div>
 
-      <ImportExportSection
-        exportFileName={(activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'}
-        importStatus={importStatus}
-        onImport={handleImport}
-        onExport={handleExport}
-      />
+      <div id="settings-data" className="scroll-mt-14 sm:scroll-mt-32 space-y-4">
+        <ImportExportSection
+          exportFileName={(activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'}
+          importStatus={importStatus}
+          onImport={handleImport}
+          onExport={handleExport}
+        />
 
-      <BackupsSection
-        onRestored={async () => {
-          await loadTimeline()
-          await loadProviderStates()
-          await loadSyncState()
-        }}
-      />
+        <BackupsSection
+          onRestored={async () => {
+            await loadTimeline()
+            await loadProviderStates()
+            await loadSyncState()
+          }}
+        />
+      </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section id="settings-legal" className="scroll-mt-14 sm:scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-600">Legal</h2>
         <p className="mt-1 text-xs text-slate-500">Review the GDPR privacy notice for Rivolo and connected services.</p>
         <div className="mt-3">

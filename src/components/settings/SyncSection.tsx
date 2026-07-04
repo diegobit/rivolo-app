@@ -1,5 +1,11 @@
+import { useEffect, useRef, useState } from 'react'
 import { SYNC_PROVIDER_IDS, SYNC_PROVIDER_LABELS, type SyncProviderId } from '../../lib/syncState'
 import { buttonDanger, buttonPrimary, buttonSecondary } from '../../lib/ui'
+
+const OVERWRITE_ARM_TIMEOUT_MS = 4000
+
+const buttonDangerFilled =
+  'inline-flex h-10 cursor-pointer items-center justify-center rounded-xl px-4 text-sm font-semibold shadow-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#22B3FF]/40 focus-visible:ring-offset-2 bg-rose-600 text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none'
 
 export type SyncProviderSummary = {
   connected: boolean
@@ -65,6 +71,49 @@ export default function SyncSection({
   const syncControlsDisabled = syncBusy || syncPaused
   const syncTabStatus = syncPaused ? 'Paused in this tab' : 'Primary tab'
 
+  const [overwriteArmed, setOverwriteArmed] = useState(false)
+  const overwriteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const disarmOverwrite = () => {
+    if (overwriteTimeoutRef.current) clearTimeout(overwriteTimeoutRef.current)
+    overwriteTimeoutRef.current = null
+    setOverwriteArmed(false)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (overwriteTimeoutRef.current) clearTimeout(overwriteTimeoutRef.current)
+    }
+  }, [])
+
+  // Disarm whenever the provider or its selected target changes (adjusting state during
+  // render, per https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes).
+  const selectionKey = `${provider}:${summary.target}`
+  const [armedForKey, setArmedForKey] = useState(selectionKey)
+  if (selectionKey !== armedForKey) {
+    setArmedForKey(selectionKey)
+    if (overwriteArmed) setOverwriteArmed(false)
+  }
+
+  const handleOverwriteClick = () => {
+    if (!overwriteArmed) {
+      setOverwriteArmed(true)
+      overwriteTimeoutRef.current = setTimeout(disarmOverwrite, OVERWRITE_ARM_TIMEOUT_MS)
+      return
+    }
+    disarmOverwrite()
+    void onPush(true)
+  }
+
+  const syncActionsDisabled = syncControlsDisabled || !online || !summary.connected || !isActive
+  const disabledReason = !online
+    ? "You're offline — sync actions are unavailable."
+    : !summary.connected
+      ? `Connect ${label} to enable sync actions.`
+      : !isActive
+        ? `Activate ${label} to pull or push.`
+        : null
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div>
@@ -74,25 +123,32 @@ export default function SyncSection({
         </p>
       </div>
 
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="shrink-0">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Active provider</span>
-          <div className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Active provider</span>
+          <div className="mt-1 flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700">
             <span className={`h-2 w-2 rounded-full ${activeProvider ? 'bg-[#22B3FF]' : 'bg-slate-300'}`} />
             {activeLabel}
           </div>
         </div>
-        <label htmlFor="sync-provider" className="sr-only">Provider to configure</label>
-        <select
-          id="sync-provider"
-          className={`${inputClass} flex-1`}
-          value={provider}
-          onChange={(event) => onProviderChange(event.target.value as SyncProviderId)}
-        >
-          {SYNC_PROVIDER_IDS.map((id) => (
-            <option key={id} value={id}>{SYNC_PROVIDER_LABELS[id]}</option>
-          ))}
-        </select>
+        <div className="min-w-0 flex-1">
+          <label
+            htmlFor="sync-provider"
+            className="text-xs font-semibold uppercase tracking-wide text-slate-500"
+          >
+            Configure
+          </label>
+          <select
+            id="sync-provider"
+            className={`${inputClass} mt-1`}
+            value={provider}
+            onChange={(event) => onProviderChange(event.target.value as SyncProviderId)}
+          >
+            {SYNC_PROVIDER_IDS.map((id) => (
+              <option key={id} value={id}>{SYNC_PROVIDER_LABELS[id]}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
@@ -146,7 +202,7 @@ export default function SyncSection({
         </div>
 
         <div className="mt-4">
-          <label htmlFor="sync-target" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <label htmlFor="sync-target" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {targetLabel}
           </label>
           <div className="mt-1 flex flex-col gap-2 sm:flex-row">
@@ -165,16 +221,24 @@ export default function SyncSection({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <button className={`${buttonSecondary} min-h-11`} type="button" onClick={onPull} disabled={syncControlsDisabled || !online || !summary.connected || !isActive}>
+          <button className={`${buttonSecondary} min-h-11`} type="button" onClick={onPull} disabled={syncActionsDisabled}>
             Pull from {label}
           </button>
-          <button className={`${buttonPrimary} min-h-11`} type="button" onClick={() => onPush(false)} disabled={syncControlsDisabled || !online || !summary.connected || !isActive}>
+          <button className={`${buttonPrimary} min-h-11`} type="button" onClick={() => onPush(false)} disabled={syncActionsDisabled}>
             Push to {label}
           </button>
-          <button className={`${buttonDanger} min-h-11`} type="button" onClick={() => onPush(true)} disabled={syncControlsDisabled || !online || !summary.connected || !isActive}>
-            Restore from local copy
+          <button
+            className={`${overwriteArmed ? buttonDangerFilled : buttonDanger} min-h-11`}
+            type="button"
+            onClick={handleOverwriteClick}
+            disabled={syncActionsDisabled}
+          >
+            {overwriteArmed ? 'Confirm overwrite' : 'Restore from local copy'}
           </button>
         </div>
+        {syncActionsDisabled && disabledReason && (
+          <p className="mt-3 text-xs text-slate-500">{disabledReason}</p>
+        )}
         {status && <p className="mt-3 text-xs text-slate-500" role="status">{status}</p>}
       </div>
     </section>

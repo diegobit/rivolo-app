@@ -71,7 +71,7 @@ export default function BackupsSection({ onRestored }: BackupsSectionProps) {
       </p>
 
       {backups.length === 0 ? (
-        <p className="mt-3 text-xs text-slate-400">No backups yet.</p>
+        <p className="mt-3 text-xs text-slate-500">No backups yet.</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {backups.map((backup, index) => (

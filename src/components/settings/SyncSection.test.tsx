@@ -3,6 +3,34 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import SyncSection from './SyncSection'
 
+const baseProps = {
+  activeProvider: 'dropbox' as const,
+  provider: 'dropbox' as const,
+  summary: {
+    connected: true,
+    lastSync: 'Jun 21, 2026',
+    remoteVersion: '42',
+    dirty: true,
+    account: 'A Person With A Long Name (person@example.com)',
+    target: 'inbox.md',
+  },
+  online: true,
+  syncPaused: false,
+  attention: null,
+  targetDraft: 'inbox.md',
+  targetDirty: false,
+  syncBusy: false,
+  status: null,
+  onProviderChange: vi.fn(),
+  onConnect: vi.fn(),
+  onDisconnect: vi.fn(),
+  onActivate: vi.fn(),
+  onTargetChange: vi.fn(),
+  onSaveTarget: vi.fn(),
+  onPull: vi.fn(),
+  onPush: vi.fn(),
+}
+
 const summary = {
   connected: true,
   lastSync: 'Jun 21, 2026',
@@ -127,5 +155,39 @@ describe('SyncSection', () => {
     )
 
     expect(screen.getByRole('alert')).toHaveTextContent('Dropbox changed remotely.')
+  })
+
+  it('requires two clicks to overwrite: first arms, second confirms with force=true', async () => {
+    const onPush = vi.fn()
+    render(<SyncSection {...baseProps} onPush={onPush} />)
+
+    const overwriteButton = screen.getByRole('button', { name: 'Restore from local copy' })
+    await userEvent.click(overwriteButton)
+
+    expect(onPush).not.toHaveBeenCalled()
+    const confirmButton = screen.getByRole('button', { name: 'Confirm overwrite' })
+    await userEvent.click(confirmButton)
+
+    expect(onPush).toHaveBeenCalledExactlyOnceWith(true)
+    expect(screen.getByRole('button', { name: 'Restore from local copy' })).toBeInTheDocument()
+  })
+
+  it('shows the offline disabled-hint under the action buttons', () => {
+    render(<SyncSection {...baseProps} online={false} />)
+
+    expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeDisabled()
+    expect(screen.getByText("You're offline — sync actions are unavailable.")).toBeInTheDocument()
+  })
+
+  it('shows the not-connected disabled-hint under the action buttons', () => {
+    render(
+      <SyncSection
+        {...baseProps}
+        summary={{ ...baseProps.summary, connected: false }}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeDisabled()
+    expect(screen.getByText('Connect Dropbox to enable sync actions.')).toBeInTheDocument()
   })
 })

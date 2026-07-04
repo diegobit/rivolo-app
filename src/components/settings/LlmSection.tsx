@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import {
   ANTHROPIC_EFFORT_LEVELS,
   GEMINI_THINKING_LEVELS,
@@ -13,13 +13,7 @@ import {
   type LlmSecrets,
   type OpenAIReasoningEffort,
 } from '../../lib/llm/types'
-import {
-  buttonDanger,
-  buttonPill,
-  buttonPillActive,
-  buttonPrimary,
-  buttonSecondary,
-} from '../../lib/ui'
+import { buttonDanger, buttonPill, buttonPillActive, buttonPrimary, buttonSecondary } from '../../lib/ui'
 import SettingsToggle from './SettingsToggle'
 
 type LlmSectionProps = {
@@ -44,6 +38,33 @@ type LlmSectionProps = {
 const inputClass =
   'min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base outline-none transition focus:border-slate-400'
 
+const fieldLabelClass = 'text-xs font-semibold uppercase tracking-wide text-slate-500'
+
+const webSearchMessages: Record<LlmProviderId, string> = {
+  gemini: 'Gemini can use its native Google Search tool when web search is enabled.',
+  anthropic:
+    'Claude can use Anthropic web search when enabled. Direct requests use Anthropic’s required browser opt-in header.',
+  openai: 'OpenAI can use its Responses API web-search tool when web search is enabled.',
+  'openai-compatible': 'Uses the configured OpenAI-compatible chat endpoint.',
+}
+
+const isProviderReady = (
+  id: LlmProviderId,
+  providerSettings: LlmProviderSettings,
+  llmSecrets: LlmSecrets,
+): boolean => {
+  if (llmSecrets[id]?.apiKey) return true
+  if (id === 'openai-compatible') {
+    const settings = providerSettings['openai-compatible']
+    return Boolean(settings.model && settings.baseUrl)
+  }
+  return false
+}
+
+const capitalize = (value: string) => value[0].toUpperCase() + value.slice(1)
+
+type Status = { kind: 'ok' | 'error'; message: string } | null
+
 export default function LlmSection({
   provider,
   providerSettings,
@@ -59,237 +80,57 @@ export default function LlmSection({
   onAiLanguageChange,
   onAllowWebSearchChange,
 }: LlmSectionProps) {
-  const [providerDraft, setProviderDraft] = useState<LlmProviderId>(provider)
-  const selectedSettings = providerSettings[providerDraft]
-  const [modelDraft, setModelDraft] = useState<string | null>(null)
-  const [baseUrlDraft, setBaseUrlDraft] = useState<string | null>(null)
-  const [geminiThinkingDraft, setGeminiThinkingDraft] = useState<GeminiThinkingLevel | null>(null)
-  const [anthropicModeDraft, setAnthropicModeDraft] = useState<'default' | 'adaptive' | null>(null)
-  const [anthropicEffortDraft, setAnthropicEffortDraft] = useState<AnthropicEffort | null>(null)
-  const [openaiEffortDraft, setOpenaiEffortDraft] = useState<OpenAIReasoningEffort | null>(null)
-  const [allowWebSearchDraft, setAllowWebSearchDraft] = useState<boolean | null>(null)
-  const [apiKeyDraft, setApiKeyDraft] = useState('')
-  const [showLanguageInput, setShowLanguageInput] = useState(aiLanguage !== 'follow')
-  const [status, setStatus] = useState<string | null>(null)
-  const modelValue = modelDraft ?? selectedSettings.model
-  const baseUrlValue =
-    baseUrlDraft ?? (providerDraft === 'openai-compatible' ? providerSettings['openai-compatible'].baseUrl : '')
-  const geminiThinkingValue = geminiThinkingDraft ?? providerSettings.gemini.reasoning.thinkingLevel
-  const anthropicModeValue = anthropicModeDraft ?? providerSettings.anthropic.reasoning.mode
-  const anthropicEffortValue =
-    anthropicEffortDraft ??
-    (providerSettings.anthropic.reasoning.mode === 'adaptive'
-      ? providerSettings.anthropic.reasoning.effort
-      : 'high')
-  const openaiEffortValue = openaiEffortDraft ?? providerSettings.openai.reasoning.effort
-  const allowWebSearchValue = allowWebSearchDraft ?? allowWebSearch
-  const webSearchUnavailable = LLM_PROVIDER_REGISTRY[providerDraft].webSearch === 'unsupported'
+  const [expanded, setExpanded] = useState<LlmProviderId | null>(provider)
+  const [customLanguageOpen, setCustomLanguageOpen] = useState(false)
+  const [languageDraft, setLanguageDraft] = useState<string | null>(null)
+  const [status, setStatus] = useState<Status>(null)
 
-  const isConfigDirty = useMemo(() => {
-    if (modelValue.trim() !== selectedSettings.model) return true
-    if (!webSearchUnavailable && allowWebSearchValue !== allowWebSearch) return true
-    if (providerDraft === 'openai-compatible') {
-      return baseUrlValue.trim().replace(/\/+$/, '') !== providerSettings['openai-compatible'].baseUrl
-    }
-    if (providerDraft === 'gemini') {
-      return geminiThinkingValue !== providerSettings.gemini.reasoning.thinkingLevel
-    }
-    if (providerDraft === 'anthropic') {
-      if (anthropicModeValue !== providerSettings.anthropic.reasoning.mode) return true
-      return (
-        anthropicModeValue === 'adaptive' &&
-        (providerSettings.anthropic.reasoning.mode !== 'adaptive' ||
-          anthropicEffortValue !== providerSettings.anthropic.reasoning.effort)
-      )
-    }
-    return openaiEffortValue !== providerSettings.openai.reasoning.effort
-  }, [
-    anthropicEffortValue,
-    anthropicModeValue,
-    allowWebSearch,
-    allowWebSearchValue,
-    baseUrlValue,
-    geminiThinkingValue,
-    modelValue,
-    openaiEffortValue,
-    providerDraft,
-    providerSettings,
-    selectedSettings.model,
-    webSearchUnavailable,
-  ])
-
-  const hasPendingConfigurationChanges = providerDraft !== provider || isConfigDirty
-  const hasUnsavedChanges = hasPendingConfigurationChanges || Boolean(apiKeyDraft.trim())
-
-  const hasSavedKey = Boolean(llmSecrets[providerDraft]?.apiKey)
-  const activeRegistry = LLM_PROVIDER_REGISTRY[provider]
-  const registry = LLM_PROVIDER_REGISTRY[providerDraft]
-  const isCustomReady =
-    providerDraft === 'openai-compatible' &&
-    Boolean(providerSettings['openai-compatible'].model && providerSettings['openai-compatible'].baseUrl)
-  const providerStatus = hasSavedKey
-    ? 'Ready'
-    : providerDraft === 'openai-compatible' && isCustomReady
-      ? 'Ready without key'
-      : registry.requiresApiKey
-        ? 'No key'
-        : 'Needs configuration'
-  const providerStatusClass =
-    hasSavedKey || (providerDraft === 'openai-compatible' && isCustomReady)
-      ? 'bg-green-200 text-green-800'
-      : 'bg-rose-100 text-rose-700'
-
-  const handleProviderChange = (nextProvider: LlmProviderId) => {
-    if (
-      (isConfigDirty || apiKeyDraft.trim()) &&
-      !window.confirm('Discard unsaved AI provider changes and switch provider?')
-    ) {
-      return
-    }
-    setProviderDraft(nextProvider)
-    setModelDraft(null)
-    setBaseUrlDraft(null)
-    setGeminiThinkingDraft(null)
-    setAnthropicModeDraft(null)
-    setAnthropicEffortDraft(null)
-    setOpenaiEffortDraft(null)
-    setAllowWebSearchDraft(null)
-    setApiKeyDraft('')
-    setStatus(null)
+  // Settings load asynchronously; keep the active provider's row expanded when it arrives.
+  const [prevProvider, setPrevProvider] = useState(provider)
+  if (provider !== prevProvider) {
+    setPrevProvider(provider)
+    if (expanded === prevProvider || expanded === null) setExpanded(provider)
   }
 
-  const handleDiscardChanges = () => {
-    setProviderDraft(provider)
-    setModelDraft(null)
-    setBaseUrlDraft(null)
-    setGeminiThinkingDraft(null)
-    setAnthropicModeDraft(null)
-    setAnthropicEffortDraft(null)
-    setOpenaiEffortDraft(null)
-    setAllowWebSearchDraft(null)
-    setApiKeyDraft('')
-    setStatus(null)
+  const showLanguageInput = customLanguageOpen || aiLanguage !== 'follow'
+  const languageValue = languageDraft ?? (aiLanguage === 'follow' ? '' : aiLanguage)
+
+  const commitLanguage = () => {
+    if (languageDraft === null) return
+    onAiLanguageChange(languageDraft)
+    setLanguageDraft(null)
   }
 
-  const handleSaveConfig = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setStatus(null)
-    const model = modelValue.trim()
-    if (!model) {
-      setStatus('Model ID is required.')
-      return
-    }
-
-    try {
-      if (providerDraft === 'gemini') {
-        await onSaveProviderSettings(providerDraft, {
-          model,
-          reasoning: { thinkingLevel: geminiThinkingValue },
-          allowThinking: geminiThinkingValue !== 'minimal',
-        })
-      } else if (providerDraft === 'anthropic') {
-        await onSaveProviderSettings(providerDraft, {
-          model,
-          reasoning:
-            anthropicModeValue === 'adaptive'
-              ? { mode: 'adaptive', effort: anthropicEffortValue }
-              : { mode: 'default' },
-        })
-      } else if (providerDraft === 'openai') {
-        await onSaveProviderSettings(providerDraft, {
-          model,
-          reasoning: { effort: openaiEffortValue },
-        })
-      } else if (providerDraft === 'openai-compatible') {
-        const baseUrl = normalizeBaseUrl(baseUrlValue)
-        if (!baseUrl) {
-          setStatus('Endpoint URL is required.')
-          return
-        }
-        await onSaveProviderSettings(providerDraft, { model, baseUrl })
-        setBaseUrlDraft(null)
-      }
-      if (!webSearchUnavailable && allowWebSearchValue !== allowWebSearch) {
-        await onAllowWebSearchChange(allowWebSearchValue)
-      }
-      if (providerDraft !== provider) {
-        await onSelectProvider(providerDraft)
-      }
-      setModelDraft(null)
-      setGeminiThinkingDraft(null)
-      setAnthropicModeDraft(null)
-      setAnthropicEffortDraft(null)
-      setOpenaiEffortDraft(null)
-      setAllowWebSearchDraft(null)
-      setStatus(`${registry.label} configuration applied.`)
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Could not apply provider configuration.')
-    }
-  }
-
-  const handleSaveKey = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const apiKey = apiKeyDraft.trim()
-    if (!apiKey) {
-      setStatus('Enter an API key to save it.')
-      return
-    }
-    try {
-      await onSaveProviderKey(providerDraft, apiKey)
-      setApiKeyDraft('')
-      setStatus(`${registry.label} key saved.`)
-    } catch {
-      setStatus('Could not save the API key.')
-    }
-  }
-
-  const handleClearKey = async () => {
-    try {
-      await onClearProviderKey(providerDraft)
-      setApiKeyDraft('')
-      setStatus(`${registry.label} key removed.`)
-    } catch {
-      setStatus('Could not remove the API key.')
-    }
-  }
-
-  const webSearchMessage =
-    providerDraft === 'gemini'
-      ? 'Gemini can use its native Google Search tool when web search is enabled.'
-      : providerDraft === 'anthropic'
-        ? 'Claude can use Anthropic web search when enabled. Direct requests use Anthropic’s required browser opt-in header.'
-        : providerDraft === 'openai'
-          ? 'OpenAI can use its Responses API web-search tool when web search is enabled.'
-          : 'Uses the configured OpenAI-compatible chat endpoint.'
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div>
         <h2 className="text-lg font-bold text-slate-700">AI assistant</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Requests go only to the active provider. Choose another provider and apply its configuration to activate it.
+          Requests go only to the active provider. Changes save automatically.
         </p>
       </div>
 
       <div className="mt-5 space-y-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reply language</span>
+        <span className={fieldLabelClass}>Reply language</span>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <button
             className={`${aiLanguage === 'follow' ? buttonPillActive : buttonPill} shrink-0`}
             type="button"
             aria-pressed={aiLanguage === 'follow'}
             onClick={() => {
-              setShowLanguageInput(false)
+              setCustomLanguageOpen(false)
+              setLanguageDraft(null)
               onFollowLanguage()
             }}
           >
-            Follow User
+            Match my language
           </button>
           <button
             className={`${aiLanguage !== 'follow' ? buttonPillActive : buttonPill} shrink-0`}
             type="button"
             aria-pressed={aiLanguage !== 'follow'}
             aria-expanded={showLanguageInput}
-            onClick={() => setShowLanguageInput(true)}
+            onClick={() => setCustomLanguageOpen(true)}
           >
             Custom
           </button>
@@ -301,86 +142,341 @@ export default function LlmSection({
               autoFocus
               className="min-h-7 w-full min-w-0 rounded-full border border-slate-200 bg-white px-3 text-xs outline-none transition focus:border-slate-400 sm:w-48"
               placeholder="e.g. Italian, English..."
-              value={aiLanguage === 'follow' ? '' : aiLanguage}
-              onChange={(event) => onAiLanguageChange(event.target.value)}
+              value={languageValue}
+              onChange={(event) => setLanguageDraft(event.target.value)}
+              onBlur={commitLanguage}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  commitLanguage()
+                }
+              }}
             />
           )}
         </div>
       </div>
 
-      <div className="mt-5 flex items-center gap-3">
-        <div className="shrink-0">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Active provider
-          </span>
-          <div className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <span className="h-2 w-2 rounded-full bg-[#22B3FF]" aria-hidden="true" />
-            {activeRegistry.label}
-          </div>
-        </div>
-        <label htmlFor="llm-provider" className="sr-only">Provider to configure</label>
-        <select
-          id="llm-provider"
-          className={`${inputClass} flex-1`}
-          value={providerDraft}
-          onChange={(event) => handleProviderChange(event.target.value as LlmProviderId)}
-        >
+      <div className="mt-5 space-y-2">
+        <span className={fieldLabelClass}>Providers</span>
+        <div className="overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">
           {LLM_PROVIDER_IDS.map((id) => (
-            <option key={id} value={id}>
-              {LLM_PROVIDER_REGISTRY[id].label}
-            </option>
+            <ProviderRow
+              key={id}
+              id={id}
+              isActive={id === provider}
+              isOpen={expanded === id}
+              onToggle={() => {
+                setExpanded((current) => (current === id ? null : id))
+                setStatus(null)
+              }}
+              providerSettings={providerSettings}
+              llmSecrets={llmSecrets}
+              allowWebSearch={allowWebSearch}
+              status={status}
+              setStatus={setStatus}
+              onSelectProvider={onSelectProvider}
+              onSaveProviderSettings={onSaveProviderSettings}
+              onSaveProviderKey={onSaveProviderKey}
+              onClearProviderKey={onClearProviderKey}
+              onAllowWebSearchChange={onAllowWebSearchChange}
+            />
           ))}
-        </select>
+        </div>
       </div>
 
-      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-slate-700">{registry.label}</h3>
-            <p className="mt-1 break-words text-xs text-slate-500">{webSearchMessage}</p>
-          </div>
-          <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${providerStatusClass}`}>
-            {providerStatus}
-          </span>
-        </div>
+      {settingsError && (
+        <p className="mt-3 break-words text-xs text-rose-600" role="status" aria-live="polite">
+          {settingsError}
+        </p>
+      )}
+    </section>
+  )
+}
 
-        {!webSearchUnavailable && (
-          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-            <SettingsToggle
-              checked={allowWebSearchValue}
-              label="Web search"
-              onChange={setAllowWebSearchDraft}
-            />
-          </div>
-        )}
+type ProviderRowProps = {
+  id: LlmProviderId
+  isActive: boolean
+  isOpen: boolean
+  onToggle: () => void
+  providerSettings: LlmProviderSettings
+  llmSecrets: LlmSecrets
+  allowWebSearch: boolean
+  status: Status
+  setStatus: (status: Status) => void
+  onSelectProvider: (provider: LlmProviderId) => void | Promise<void>
+  onSaveProviderSettings: (
+    provider: LlmProviderId,
+    settings: LlmProviderSettings[LlmProviderId],
+  ) => void | Promise<void>
+  onSaveProviderKey: (provider: LlmProviderId, apiKey: string) => void | Promise<void>
+  onClearProviderKey: (provider: LlmProviderId) => void | Promise<void>
+  onAllowWebSearchChange: (enabled: boolean) => void | Promise<void>
+}
 
-        <form id="llm-provider-config" className="mt-4 space-y-4" onSubmit={handleSaveConfig}>
-          {providerDraft === 'openai-compatible' && (
+function ProviderRow({
+  id,
+  isActive,
+  isOpen,
+  onToggle,
+  providerSettings,
+  llmSecrets,
+  allowWebSearch,
+  status,
+  setStatus,
+  onSelectProvider,
+  onSaveProviderSettings,
+  onSaveProviderKey,
+  onClearProviderKey,
+  onAllowWebSearchChange,
+}: ProviderRowProps) {
+  const registry = LLM_PROVIDER_REGISTRY[id]
+  const settings = providerSettings[id]
+  const hasSavedKey = Boolean(llmSecrets[id]?.apiKey)
+  const ready = isProviderReady(id, providerSettings, llmSecrets)
+  const webSearchSupported = registry.webSearch !== 'unsupported'
+
+  // Drafts are null until the user types, so displayed values follow async-loaded settings.
+  const [modelDraft, setModelDraft] = useState<string | null>(null)
+  const [baseUrlDraft, setBaseUrlDraft] = useState<string | null>(null)
+  const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [replacingKey, setReplacingKey] = useState(false)
+
+  const modelValue = modelDraft ?? settings.model
+  const baseUrlValue =
+    baseUrlDraft ?? (id === 'openai-compatible' ? providerSettings['openai-compatible'].baseUrl : '')
+
+  const badge = hasSavedKey
+    ? 'Ready'
+    : id === 'openai-compatible' && ready
+      ? 'Ready without key'
+      : 'No key'
+  const badgeClass =
+    hasSavedKey || (id === 'openai-compatible' && ready)
+      ? 'bg-green-200 text-green-800'
+      : 'bg-rose-100 text-rose-700'
+
+  // Build the merged settings object for the provider, applying one changed field.
+  const buildSettings = (
+    overrides: Partial<{
+      model: string
+      baseUrl: string
+      geminiThinking: GeminiThinkingLevel
+      anthropicMode: 'default' | 'adaptive'
+      anthropicEffort: AnthropicEffort
+      openaiEffort: OpenAIReasoningEffort
+    }>,
+  ): LlmProviderSettings[LlmProviderId] => {
+    const model = overrides.model ?? settings.model
+    if (id === 'gemini') {
+      const thinkingLevel = overrides.geminiThinking ?? providerSettings.gemini.reasoning.thinkingLevel
+      return {
+        model,
+        reasoning: { thinkingLevel },
+        allowThinking: thinkingLevel !== 'minimal',
+      }
+    }
+    if (id === 'anthropic') {
+      const current = providerSettings.anthropic.reasoning
+      const mode = overrides.anthropicMode ?? current.mode
+      if (mode === 'adaptive') {
+        const effort =
+          overrides.anthropicEffort ?? (current.mode === 'adaptive' ? current.effort : 'high')
+        return { model, reasoning: { mode: 'adaptive', effort } }
+      }
+      return { model, reasoning: { mode: 'default' } }
+    }
+    if (id === 'openai') {
+      const effort = overrides.openaiEffort ?? providerSettings.openai.reasoning.effort
+      return { model, reasoning: { effort } }
+    }
+    const baseUrl = overrides.baseUrl ?? providerSettings['openai-compatible'].baseUrl
+    return { model, baseUrl }
+  }
+
+  const save = async (
+    settingsToSave: LlmProviderSettings[LlmProviderId],
+    successMessage?: string,
+  ) => {
+    try {
+      await onSaveProviderSettings(id, settingsToSave)
+      if (successMessage) setStatus({ kind: 'ok', message: successMessage })
+    } catch (error) {
+      setStatus({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Could not save settings.',
+      })
+    }
+  }
+
+  const commitModel = () => {
+    if (modelDraft === null) return
+    const model = modelDraft.trim()
+    setModelDraft(null)
+    if (!model) {
+      setStatus({ kind: 'error', message: 'Model ID is required.' })
+      return
+    }
+    if (model === settings.model) return
+    void save(buildSettings({ model }))
+  }
+
+  const commitBaseUrl = () => {
+    if (baseUrlDraft === null) return
+    try {
+      const baseUrl = normalizeBaseUrl(baseUrlDraft)
+      setBaseUrlDraft(null)
+      if (!baseUrl) {
+        setStatus({ kind: 'error', message: 'Endpoint URL is required.' })
+        return
+      }
+      if (baseUrl === providerSettings['openai-compatible'].baseUrl) return
+      void save(buildSettings({ baseUrl }))
+    } catch (error) {
+      setBaseUrlDraft(null)
+      setStatus({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Enter a valid endpoint URL.',
+      })
+    }
+  }
+
+  const handleWebSearch = (enabled: boolean) => {
+    setStatus(null)
+    void (async () => {
+      try {
+        await onAllowWebSearchChange(enabled)
+      } catch {
+        setStatus({ kind: 'error', message: 'Could not update web search.' })
+      }
+    })()
+  }
+
+  const handleSaveKey = async () => {
+    const apiKey = apiKeyDraft.trim()
+    if (!apiKey) return
+    try {
+      await onSaveProviderKey(id, apiKey)
+      setApiKeyDraft('')
+      setReplacingKey(false)
+      setStatus({ kind: 'ok', message: `${registry.label} key saved.` })
+    } catch {
+      setStatus({ kind: 'error', message: 'Could not save the API key.' })
+    }
+  }
+
+  const handleRemoveKey = async () => {
+    try {
+      await onClearProviderKey(id)
+      setApiKeyDraft('')
+      setReplacingKey(false)
+      setStatus({ kind: 'ok', message: `${registry.label} key removed.` })
+    } catch {
+      setStatus({ kind: 'error', message: 'Could not remove the API key.' })
+    }
+  }
+
+  const handleActivate = async () => {
+    setStatus(null)
+    try {
+      await onSelectProvider(id)
+      setStatus({ kind: 'ok', message: `${registry.label} is now the active provider.` })
+    } catch (error) {
+      setStatus({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Could not activate provider.',
+      })
+    }
+  }
+
+  const panelId = `llm-panel-${id}`
+  const activationHint =
+    id === 'openai-compatible' ? 'Set a model and base URL to activate.' : 'Add an API key to activate.'
+
+  return (
+    <div>
+      <button
+        type="button"
+        className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left outline-none transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#22B3FF]/40"
+        aria-expanded={isOpen}
+        aria-controls={panelId}
+        onClick={onToggle}
+      >
+        <svg
+          className={`h-4 w-4 shrink-0 text-[#22B3FF] ${isActive ? '' : 'invisible'}`}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            fillRule="evenodd"
+            d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.3 3.29 6.8-6.79a1 1 0 0 1 1.4 0Z"
+            clipRule="evenodd"
+          />
+        </svg>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-700">
+          {registry.label}
+        </span>
+        <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${badgeClass}`}>
+          {badge}
+        </span>
+        <svg
+          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.58l3.3-3.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.42Z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div id={panelId} className="space-y-4 bg-slate-50 px-3 pb-4 sm:px-4">
+          <p className="break-words pt-3 text-xs text-slate-500">{webSearchMessages[id]}</p>
+
+          {webSearchSupported && (
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <SettingsToggle checked={allowWebSearch} label="Web search" onChange={handleWebSearch} />
+            </div>
+          )}
+
+          {id === 'openai-compatible' && (
             <div className="space-y-2">
-              <label htmlFor="llm-base-url" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <label htmlFor={`${id}-base-url`} className={fieldLabelClass}>
                 Base URL
               </label>
               <input
-                id="llm-base-url"
+                id={`${id}-base-url`}
                 autoComplete="url"
                 type="url"
                 className={inputClass}
                 placeholder="https://example.com/v1"
                 value={baseUrlValue}
                 onChange={(event) => setBaseUrlDraft(event.target.value)}
+                onBlur={commitBaseUrl}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    commitBaseUrl()
+                  }
+                }}
               />
               <p className="break-words text-xs text-slate-500">
-                Direct browser requests require endpoint CORS support and a trusted HTTPS connection outside local development.
+                Direct browser requests require endpoint CORS support and a trusted HTTPS connection
+                outside local development.
               </p>
             </div>
           )}
 
           <div className="space-y-2">
-            <label htmlFor="llm-model" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <label htmlFor={`${id}-model`} className={fieldLabelClass}>
               Model
             </label>
             <input
-              id="llm-model"
+              id={`${id}-model`}
               autoComplete="off"
               type="text"
               inputMode="text"
@@ -388,57 +484,76 @@ export default function LlmSection({
               placeholder={registry.defaultModel ?? 'Required model ID'}
               value={modelValue}
               onChange={(event) => setModelDraft(event.target.value)}
+              onBlur={commitModel}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  commitModel()
+                }
+              }}
             />
           </div>
 
-          {providerDraft === 'gemini' && (
+          {id === 'gemini' && (
             <div className="space-y-2">
-              <label htmlFor="gemini-thinking-level" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <label htmlFor="gemini-thinking-level" className={fieldLabelClass}>
                 Thinking level
               </label>
               <select
                 id="gemini-thinking-level"
                 className={inputClass}
-                value={geminiThinkingValue}
-                onChange={(event) => setGeminiThinkingDraft(event.target.value as GeminiThinkingLevel)}
+                value={providerSettings.gemini.reasoning.thinkingLevel}
+                onChange={(event) =>
+                  void save(buildSettings({ geminiThinking: event.target.value as GeminiThinkingLevel }))
+                }
               >
                 {GEMINI_THINKING_LEVELS.map((level) => (
-                  <option key={level} value={level}>{level[0].toUpperCase() + level.slice(1)}</option>
+                  <option key={level} value={level}>
+                    {capitalize(level)}
+                  </option>
                 ))}
               </select>
               <p className="text-xs text-slate-500">Sent as Gemini 3’s native thinking level.</p>
             </div>
           )}
 
-          {providerDraft === 'anthropic' && (
+          {id === 'anthropic' && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <label htmlFor="anthropic-reasoning-mode" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <label htmlFor="anthropic-reasoning-mode" className={fieldLabelClass}>
                   Reasoning
                 </label>
                 <select
                   id="anthropic-reasoning-mode"
                   className={inputClass}
-                  value={anthropicModeValue}
-                  onChange={(event) => setAnthropicModeDraft(event.target.value as 'default' | 'adaptive')}
+                  value={providerSettings.anthropic.reasoning.mode}
+                  onChange={(event) =>
+                    void save(
+                      buildSettings({ anthropicMode: event.target.value as 'default' | 'adaptive' }),
+                    )
+                  }
                 >
                   <option value="default">Model default</option>
                   <option value="adaptive">Adaptive</option>
                 </select>
               </div>
-              {anthropicModeValue === 'adaptive' && (
+              {providerSettings.anthropic.reasoning.mode === 'adaptive' && (
                 <div className="space-y-2">
-                  <label htmlFor="anthropic-effort" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  <label htmlFor="anthropic-effort" className={fieldLabelClass}>
                     Adaptive effort
                   </label>
                   <select
                     id="anthropic-effort"
                     className={inputClass}
-                    value={anthropicEffortValue}
-                    onChange={(event) => setAnthropicEffortDraft(event.target.value as AnthropicEffort)}
+                    value={providerSettings.anthropic.reasoning.effort}
+                    onChange={(event) =>
+                      void save(buildSettings({ anthropicEffort: event.target.value as AnthropicEffort }))
+                    }
                   >
                     {ANTHROPIC_EFFORT_LEVELS.map((effort) => (
-                      <option key={effort} value={effort}>{effort[0].toUpperCase() + effort.slice(1)}</option>
+                      <option key={effort} value={effort}>
+                        {capitalize(effort)}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -446,20 +561,22 @@ export default function LlmSection({
             </div>
           )}
 
-          {providerDraft === 'openai' && (
+          {id === 'openai' && (
             <div className="space-y-2">
-              <label htmlFor="openai-reasoning-effort" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <label htmlFor="openai-reasoning-effort" className={fieldLabelClass}>
                 Reasoning effort
               </label>
               <select
                 id="openai-reasoning-effort"
                 className={inputClass}
-                value={openaiEffortValue}
-                onChange={(event) => setOpenaiEffortDraft(event.target.value as OpenAIReasoningEffort)}
+                value={providerSettings.openai.reasoning.effort}
+                onChange={(event) =>
+                  void save(buildSettings({ openaiEffort: event.target.value as OpenAIReasoningEffort }))
+                }
               >
                 {OPENAI_REASONING_EFFORTS.map((effort) => (
                   <option key={effort} value={effort}>
-                    {effort === 'default' ? 'Model default' : effort[0].toUpperCase() + effort.slice(1)}
+                    {effort === 'default' ? 'Model default' : capitalize(effort)}
                   </option>
                 ))}
               </select>
@@ -467,64 +584,100 @@ export default function LlmSection({
             </div>
           )}
 
-        </form>
-
-        <form className="mt-5 border-t border-slate-200 pt-4" onSubmit={handleSaveKey}>
-          <label htmlFor="llm-api-key" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            API key{providerDraft === 'openai-compatible' ? ' (optional)' : ''}
-          </label>
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              id="llm-api-key"
-              autoComplete="off"
-              type="password"
-              inputMode="text"
-              className={inputClass}
-              placeholder={hasSavedKey ? 'Saved key is hidden; enter a replacement' : 'Enter API key'}
-              value={apiKeyDraft}
-              onChange={(event) => setApiKeyDraft(event.target.value)}
-            />
-            <button
-              className={`${buttonPrimary} shrink-0`}
-              type="submit"
-              disabled={!apiKeyDraft.trim()}
-            >
-              {hasSavedKey ? 'Replace key' : 'Save key'}
-            </button>
-            {hasSavedKey && (
-              <button className={`${buttonDanger} shrink-0`} type="button" onClick={handleClearKey}>
-                Remove key
-              </button>
+          <div className="space-y-2 border-t border-slate-200 pt-4">
+            <span className={fieldLabelClass}>
+              API key{id === 'openai-compatible' ? ' (optional)' : ''}
+            </span>
+            {hasSavedKey && !replacingKey ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <span className="flex items-center gap-1.5 text-xs text-green-700">
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path
+                      fillRule="evenodd"
+                      d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.3 3.29 6.8-6.79a1 1 0 0 1 1.4 0Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  API key saved
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    className={`${buttonSecondary} shrink-0`}
+                    type="button"
+                    onClick={() => setReplacingKey(true)}
+                  >
+                    Replace key…
+                  </button>
+                  <button
+                    className={`${buttonDanger} shrink-0`}
+                    type="button"
+                    onClick={handleRemoveKey}
+                  >
+                    Remove key
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  id={`${id}-api-key`}
+                  autoComplete="off"
+                  type="password"
+                  inputMode="text"
+                  className={inputClass}
+                  placeholder="Enter API key"
+                  value={apiKeyDraft}
+                  onChange={(event) => setApiKeyDraft(event.target.value)}
+                />
+                <button
+                  className={`${buttonPrimary} shrink-0`}
+                  type="button"
+                  disabled={!apiKeyDraft.trim()}
+                  onClick={handleSaveKey}
+                >
+                  Save key
+                </button>
+                {replacingKey && (
+                  <button
+                    className={`${buttonSecondary} shrink-0`}
+                    type="button"
+                    onClick={() => {
+                      setReplacingKey(false)
+                      setApiKeyDraft('')
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
             )}
           </div>
-        </form>
 
-        <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-          <button
-            className={`${buttonPrimary} w-full min-w-48 sm:w-auto`}
-            type="submit"
-            form="llm-provider-config"
-            disabled={!hasPendingConfigurationChanges}
-          >
-            Apply provider configuration
-          </button>
-          {hasUnsavedChanges && (
-            <button
-              className={`${buttonSecondary} w-full sm:w-auto`}
-              type="button"
-              onClick={handleDiscardChanges}
+          {!isActive && (
+            <div className="flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center">
+              <button
+                className={`${buttonPrimary} w-full sm:w-auto`}
+                type="button"
+                disabled={!ready}
+                onClick={handleActivate}
+              >
+                Use {registry.label}
+              </button>
+              {!ready && <span className="text-xs text-slate-500">{activationHint}</span>}
+            </div>
+          )}
+
+          {status && (
+            <p
+              className={`break-words text-xs ${status.kind === 'ok' ? 'text-green-700' : 'text-rose-600'}`}
+              role="status"
+              aria-live="polite"
             >
-              Discard changes
-            </button>
+              {status.message}
+            </p>
           )}
         </div>
-      </div>
-
-      {(status || settingsError) && (
-        <p className="mt-3 break-words text-xs text-slate-600" role="status" aria-live="polite">
-          {status ?? settingsError}
-        </p>
       )}
-    </section>
+    </div>
   )
 }
