@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import AppearanceSection from '../components/settings/AppearanceSection'
 import BackupsSection from '../components/settings/BackupsSection'
 import ImportExportSection from '../components/settings/ImportExportSection'
-import LlmSection from '../components/settings/LlmSection'
+import LlmSection, { isProviderReady } from '../components/settings/LlmSection'
 import SyncSection from '../components/settings/SyncSection'
 import { isIOS } from '../lib/device'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
@@ -22,7 +22,7 @@ import { prepareGoogleDriveAuth } from '../lib/googleDriveAuth'
 import { DEFAULT_GOOGLE_DRIVE_FILE_NAME, getGoogleDrivePath } from '../lib/googleDriveState'
 import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import type { SyncProviderId } from '../lib/sync'
-import { buttonPill, buttonSecondary } from '../lib/ui'
+import { buttonSecondary } from '../lib/ui'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useSyncProviderActions } from './settings/useSyncProviderActions'
 import { useDaysStore } from '../store/useDaysStore'
@@ -65,18 +65,6 @@ def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
 0123456789 ~ !  @  #  $  %  ^  &  *  (  )  _  +  - =
 12*34=56 \${var} (a && b) == True
 `
-
-const SETTINGS_NAV_ITEMS = [
-  { id: 'settings-ai', label: 'AI' },
-  { id: 'settings-appearance', label: 'Appearance' },
-  { id: 'settings-sync', label: 'Sync' },
-  { id: 'settings-data', label: 'Data' },
-  { id: 'settings-legal', label: 'Legal' },
-] as const
-
-const scrollToSection = (id: string) => {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
 
 export default function Settings() {
   const loadTimeline = useDaysStore((state) => state.loadTimeline)
@@ -141,6 +129,7 @@ export default function Settings() {
   const [dropboxPathDraft, setDropboxPathDraft] = useState<string | null>(null)
   const [googleDriveFileNameDraft, setGoogleDriveFileNameDraft] = useState<string | null>(null)
   const [showFontPreview, setShowFontPreview] = useState(false)
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
 
   const selectedSyncProvider = syncProviderDraft ?? activeProvider ?? 'dropbox'
   const savedDropboxPath = dropboxFilePath || DEFAULT_DROPBOX_PATH
@@ -173,10 +162,12 @@ export default function Settings() {
   }, [])
 
   useEffect(() => {
-    void loadSettings()
-    void loadDropboxState()
-    void loadGoogleDriveState()
-    void loadSyncState()
+    void Promise.all([
+      loadSettings(),
+      loadDropboxState(),
+      loadGoogleDriveState(),
+      loadSyncState(),
+    ]).finally(() => setInitialLoadDone(true))
   }, [loadDropboxState, loadGoogleDriveState, loadSettings, loadSyncState])
 
   useEffect(() => {
@@ -222,7 +213,14 @@ export default function Settings() {
       account: dropboxAccount,
       target: savedDropboxPath,
     }),
-    [dropboxAccount, dropboxHasAuth, dropboxLastSyncAt, dropboxLocalDirty, dropboxRemoteRev, savedDropboxPath],
+    [
+      dropboxAccount,
+      dropboxHasAuth,
+      dropboxLastSyncAt,
+      dropboxLocalDirty,
+      dropboxRemoteRev,
+      savedDropboxPath,
+    ],
   )
 
   const googleDriveAccount = useMemo(() => {
@@ -284,7 +282,8 @@ export default function Settings() {
 
   const handleExport = async () => {
     const content = await exportMarkdownFromDb()
-    const filename = (activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'
+    const filename =
+      (activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'
     await shareOrDownload(filename, content)
   }
 
@@ -325,25 +324,60 @@ export default function Settings() {
       setActiveProvider: setActiveSyncProvider,
     })
 
+  const aiNeedsSetup = !isProviderReady(provider, providerSettings, llmSecrets)
+  const syncOff = activeProvider === null
+
+  const scrollToSection = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div className="space-y-4">
-      <nav
-        className="sticky top-0 z-20 -mx-2 flex gap-2 overflow-x-auto rounded-full bg-white/80 px-2 py-2 backdrop-blur [-ms-overflow-style:none] [scrollbar-width:none] sm:top-16 sm:mx-0 [&::-webkit-scrollbar]:hidden"
-        aria-label="Settings sections"
-      >
-        {SETTINGS_NAV_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`${buttonPill} shrink-0`}
-            onClick={() => scrollToSection(item.id)}
+      {initialLoadDone && aiNeedsSetup && (
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800"
+          onClick={() => scrollToSection('settings-ai')}
+        >
+          The AI assistant isn&apos;t set up — open a provider below and add an API key.
+          <svg
+            className="ml-auto h-4 w-4 shrink-0"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
           >
-            {item.label}
-          </button>
-        ))}
-      </nav>
+            <path
+              fillRule="evenodd"
+              d="M7.3 5.3a1 1 0 0 1 1.4 0l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.42-1.4L10.58 10 7.3 6.7a1 1 0 0 1 0-1.4Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      )}
 
-      <div id="settings-ai" className="scroll-mt-14 sm:scroll-mt-32">
+      {initialLoadDone && syncOff && (
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800"
+          onClick={() => scrollToSection('settings-sync')}
+        >
+          Cloud sync is off — your notes are stored only on this device.
+          <svg
+            className="ml-auto h-4 w-4 shrink-0"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M7.3 5.3a1 1 0 0 1 1.4 0l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.42-1.4L10.58 10 7.3 6.7a1 1 0 0 1 0-1.4Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      )}
+
+      <div id="settings-ai" className="scroll-mt-2 sm:scroll-mt-20">
         <LlmSection
           provider={provider}
           providerSettings={providerSettings}
@@ -366,7 +400,7 @@ export default function Settings() {
         />
       </div>
 
-      <div id="settings-appearance" className="scroll-mt-14 sm:scroll-mt-32">
+      <div>
         <AppearanceSection
           wallpaper={wallpaper}
           highlightInputMode={highlightInputMode}
@@ -396,14 +430,19 @@ export default function Settings() {
         />
       </div>
 
-      <div id="settings-sync" className="scroll-mt-14 sm:scroll-mt-32">
+      <div id="settings-sync" className="scroll-mt-2 sm:scroll-mt-20">
         <SyncSection
           activeProvider={activeProvider}
           provider={selectedSyncProvider}
-          summary={selectedSummary}
+          summaries={{
+            dropbox: dropboxSummary,
+            'google-drive': googleDriveSummary,
+          }}
           online={online}
           syncPaused={!tabSync.isPrimary}
-          attention={activeProvider === selectedSyncProvider ? syncAttention?.message ?? null : null}
+          attention={
+            activeProvider === selectedSyncProvider ? (syncAttention?.message ?? null) : null
+          }
           targetDraft={selectedTarget}
           targetDirty={selectedTargetDirty}
           syncBusy={syncing}
@@ -425,9 +464,11 @@ export default function Settings() {
         />
       </div>
 
-      <div id="settings-data" className="scroll-mt-14 sm:scroll-mt-32 space-y-4">
+      <div className="space-y-4">
         <ImportExportSection
-          exportFileName={(activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'}
+          exportFileName={
+            (activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'
+          }
           importStatus={importStatus}
           onImport={handleImport}
           onExport={handleExport}
@@ -442,9 +483,11 @@ export default function Settings() {
         />
       </div>
 
-      <section id="settings-legal" className="scroll-mt-14 sm:scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-600">Legal</h2>
-        <p className="mt-1 text-xs text-slate-500">Review the GDPR privacy notice for Rivolo and connected services.</p>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-lg font-bold text-slate-700">Legal</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Review the GDPR privacy notice for Rivolo and connected services.
+        </p>
         <div className="mt-3">
           <Link to="/privacy" className={buttonSecondary}>
             Privacy Policy

@@ -2,18 +2,31 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import SyncSection from './SyncSection'
+import type { SyncProviderSummary } from './SyncSection'
+
+const connectedSummary: SyncProviderSummary = {
+  connected: true,
+  lastSync: 'Jun 21, 2026',
+  remoteVersion: '42',
+  dirty: true,
+  account: 'A Person With A Long Name (person@example.com)',
+  target: 'inbox.md',
+}
+
+const notConnectedSummary: SyncProviderSummary = {
+  ...connectedSummary,
+  connected: false,
+}
+
+const bothConnected = {
+  dropbox: connectedSummary,
+  'google-drive': connectedSummary,
+}
 
 const baseProps = {
   activeProvider: 'dropbox' as const,
   provider: 'dropbox' as const,
-  summary: {
-    connected: true,
-    lastSync: 'Jun 21, 2026',
-    remoteVersion: '42',
-    dirty: true,
-    account: 'A Person With A Long Name (person@example.com)',
-    target: 'inbox.md',
-  },
+  summaries: bothConnected,
   online: true,
   syncPaused: false,
   attention: null,
@@ -31,38 +44,15 @@ const baseProps = {
   onPush: vi.fn(),
 }
 
-const summary = {
-  connected: true,
-  lastSync: 'Jun 21, 2026',
-  remoteVersion: '42',
-  dirty: true,
-  account: 'A Person With A Long Name (person@example.com)',
-  target: 'inbox.md',
-}
-
 describe('SyncSection', () => {
   it('shows an inactive connected provider without enabling sync actions', async () => {
     const activate = vi.fn()
     render(
       <SyncSection
+        {...baseProps}
         activeProvider="dropbox"
         provider="google-drive"
-        summary={summary}
-        online
-        syncPaused={false}
-        attention={null}
-        targetDraft="inbox.md"
-        targetDirty={false}
-        syncBusy={false}
-        status={null}
-        onProviderChange={vi.fn()}
-        onConnect={vi.fn()}
-        onDisconnect={vi.fn()}
         onActivate={activate}
-        onTargetChange={vi.fn()}
-        onSaveTarget={vi.fn()}
-        onPull={vi.fn()}
-        onPush={vi.fn()}
       />,
     )
 
@@ -71,56 +61,44 @@ describe('SyncSection', () => {
     expect(activate).toHaveBeenCalledOnce()
   })
 
-  it('lists both providers while keeping the active provider visible', () => {
-    render(
-      <SyncSection
-        activeProvider="google-drive"
-        provider="google-drive"
-        summary={summary}
-        online
-        syncPaused={false}
-        attention={null}
-        targetDraft="inbox.md"
-        targetDirty={false}
-        syncBusy={false}
-        status="Google Drive is ready."
-        onProviderChange={vi.fn()}
-        onConnect={vi.fn()}
-        onDisconnect={vi.fn()}
-        onActivate={vi.fn()}
-        onTargetChange={vi.fn()}
-        onSaveTarget={vi.fn()}
-        onPull={vi.fn()}
-        onPush={vi.fn()}
-      />,
-    )
+  it('lists both providers while keeping the active provider expanded', () => {
+    render(<SyncSection {...baseProps} activeProvider="google-drive" provider="google-drive" />)
 
-    expect(screen.getByRole('option', { name: 'Dropbox' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Google Drive' })).toBeInTheDocument()
-    expect(screen.getByText('Google Drive', { selector: 'div' })).toBeInTheDocument()
+    const dropboxRow = screen
+      .getAllByRole('button')
+      .find((button) => button.getAttribute('aria-controls') === 'sync-panel-dropbox')
+    const googleRow = screen
+      .getAllByRole('button')
+      .find((button) => button.getAttribute('aria-controls') === 'sync-panel-google-drive')
+
+    expect(dropboxRow).toBeInTheDocument()
+    expect(googleRow).toBeInTheDocument()
+    // The active provider's row is the expanded one.
+    expect(dropboxRow).toHaveAttribute('aria-expanded', 'false')
+    expect(googleRow).toHaveAttribute('aria-expanded', 'true')
+    // Both rows show a Connected badge.
+    expect(screen.getAllByText('Connected')).toHaveLength(2)
+  })
+
+  it('taps a non-selected row to configure that provider', async () => {
+    const onProviderChange = vi.fn()
+    render(<SyncSection {...baseProps} provider="dropbox" onProviderChange={onProviderChange} />)
+
+    const googleRow = screen
+      .getAllByRole('button')
+      .find((button) => button.getAttribute('aria-controls') === 'sync-panel-google-drive')
+    await userEvent.click(googleRow!)
+    expect(onProviderChange).toHaveBeenCalledExactlyOnceWith('google-drive')
   })
 
   it('disables sync settings in a secondary tab', () => {
     render(
       <SyncSection
+        {...baseProps}
         activeProvider="dropbox"
         provider="dropbox"
-        summary={summary}
-        online
         syncPaused
-        attention={null}
-        targetDraft="inbox.md"
         targetDirty
-        syncBusy={false}
-        status={null}
-        onProviderChange={vi.fn()}
-        onConnect={vi.fn()}
-        onDisconnect={vi.fn()}
-        onActivate={vi.fn()}
-        onTargetChange={vi.fn()}
-        onSaveTarget={vi.fn()}
-        onPull={vi.fn()}
-        onPush={vi.fn()}
       />,
     )
 
@@ -133,41 +111,30 @@ describe('SyncSection', () => {
   it('shows the automatic sync attention message', () => {
     render(
       <SyncSection
-        activeProvider="dropbox"
-        provider="dropbox"
-        summary={summary}
-        online
-        syncPaused={false}
+        {...baseProps}
         attention="Dropbox changed remotely. Pull first, or use “Restore from local copy” to overwrite it."
-        targetDraft="inbox.md"
-        targetDirty={false}
-        syncBusy={false}
-        status={null}
-        onProviderChange={vi.fn()}
-        onConnect={vi.fn()}
-        onDisconnect={vi.fn()}
-        onActivate={vi.fn()}
-        onTargetChange={vi.fn()}
-        onSaveTarget={vi.fn()}
-        onPull={vi.fn()}
-        onPush={vi.fn()}
       />,
     )
 
     expect(screen.getByRole('alert')).toHaveTextContent('Dropbox changed remotely.')
   })
 
-  it('requires two clicks to overwrite: first arms, second confirms with force=true', async () => {
+  it('requires two clicks to overwrite: first arms, second confirms with force=true (no window.confirm)', async () => {
     const onPush = vi.fn()
     render(<SyncSection {...baseProps} onPush={onPush} />)
 
-    const overwriteButton = screen.getByRole('button', { name: 'Restore from local copy' })
+    const overwriteButton = screen.getByRole('button', {
+      name: 'Restore from local copy',
+    })
     await userEvent.click(overwriteButton)
 
     expect(onPush).not.toHaveBeenCalled()
-    const confirmButton = screen.getByRole('button', { name: 'Confirm overwrite' })
+    const confirmButton = screen.getByRole('button', {
+      name: 'Confirm overwrite',
+    })
     await userEvent.click(confirmButton)
 
+    // A stray window.confirm (jsdom returns false by default) would block this call.
     expect(onPush).toHaveBeenCalledExactlyOnceWith(true)
     expect(screen.getByRole('button', { name: 'Restore from local copy' })).toBeInTheDocument()
   })
@@ -183,7 +150,10 @@ describe('SyncSection', () => {
     render(
       <SyncSection
         {...baseProps}
-        summary={{ ...baseProps.summary, connected: false }}
+        summaries={{
+          dropbox: notConnectedSummary,
+          'google-drive': notConnectedSummary,
+        }}
       />,
     )
 

@@ -13,7 +13,14 @@ import {
   type LlmSecrets,
   type OpenAIReasoningEffort,
 } from '../../lib/llm/types'
-import { buttonDanger, buttonPill, buttonPillActive, buttonPrimary, buttonSecondary } from '../../lib/ui'
+import {
+  buttonDanger,
+  buttonPill,
+  buttonPillActive,
+  buttonPrimary,
+  buttonSecondary,
+} from '../../lib/ui'
+import AccordionRow from './AccordionRow'
 import SettingsToggle from './SettingsToggle'
 
 type LlmSectionProps = {
@@ -48,7 +55,8 @@ const webSearchMessages: Record<LlmProviderId, string> = {
   'openai-compatible': 'Uses the configured OpenAI-compatible chat endpoint.',
 }
 
-const isProviderReady = (
+// eslint-disable-next-line react-refresh/only-export-components -- shared readiness check reused by Settings warnings
+export const isProviderReady = (
   id: LlmProviderId,
   providerSettings: LlmProviderSettings,
   llmSecrets: LlmSecrets,
@@ -243,7 +251,8 @@ function ProviderRow({
 
   const modelValue = modelDraft ?? settings.model
   const baseUrlValue =
-    baseUrlDraft ?? (id === 'openai-compatible' ? providerSettings['openai-compatible'].baseUrl : '')
+    baseUrlDraft ??
+    (id === 'openai-compatible' ? providerSettings['openai-compatible'].baseUrl : '')
 
   const badge = hasSavedKey
     ? 'Ready'
@@ -268,7 +277,8 @@ function ProviderRow({
   ): LlmProviderSettings[LlmProviderId] => {
     const model = overrides.model ?? settings.model
     if (id === 'gemini') {
-      const thinkingLevel = overrides.geminiThinking ?? providerSettings.gemini.reasoning.thinkingLevel
+      const thinkingLevel =
+        overrides.geminiThinking ?? providerSettings.gemini.reasoning.thinkingLevel
       return {
         model,
         reasoning: { thinkingLevel },
@@ -379,7 +389,10 @@ function ProviderRow({
     setStatus(null)
     try {
       await onSelectProvider(id)
-      setStatus({ kind: 'ok', message: `${registry.label} is now the active provider.` })
+      setStatus({
+        kind: 'ok',
+        message: `${registry.label} is now the active provider.`,
+      })
     } catch (error) {
       setStatus({
         kind: 'error',
@@ -390,294 +403,277 @@ function ProviderRow({
 
   const panelId = `llm-panel-${id}`
   const activationHint =
-    id === 'openai-compatible' ? 'Set a model and base URL to activate.' : 'Add an API key to activate.'
+    id === 'openai-compatible'
+      ? 'Set a model and base URL to activate.'
+      : 'Add an API key to activate.'
 
   return (
-    <div>
-      <button
-        type="button"
-        className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left outline-none transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#22B3FF]/40"
-        aria-expanded={isOpen}
-        aria-controls={panelId}
-        onClick={onToggle}
-      >
-        <svg
-          className={`h-4 w-4 shrink-0 text-[#22B3FF] ${isActive ? '' : 'invisible'}`}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.3 3.29 6.8-6.79a1 1 0 0 1 1.4 0Z"
-            clipRule="evenodd"
+    <AccordionRow
+      label={registry.label}
+      badgeText={badge}
+      badgeClass={badgeClass}
+      isActive={isActive}
+      isOpen={isOpen}
+      onToggle={onToggle}
+      panelId={panelId}
+    >
+      <p className="break-words pt-3 text-xs text-slate-500">{webSearchMessages[id]}</p>
+
+      {webSearchSupported && (
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          <SettingsToggle checked={allowWebSearch} label="Web search" onChange={handleWebSearch} />
+        </div>
+      )}
+
+      {id === 'openai-compatible' && (
+        <div className="space-y-2">
+          <label htmlFor={`${id}-base-url`} className={fieldLabelClass}>
+            Base URL
+          </label>
+          <input
+            id={`${id}-base-url`}
+            autoComplete="url"
+            type="url"
+            className={inputClass}
+            placeholder="https://example.com/v1"
+            value={baseUrlValue}
+            onChange={(event) => setBaseUrlDraft(event.target.value)}
+            onBlur={commitBaseUrl}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                commitBaseUrl()
+              }
+            }}
           />
-        </svg>
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-700">
-          {registry.label}
-        </span>
-        <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${badgeClass}`}>
-          {badge}
-        </span>
-        <svg
-          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.58l3.3-3.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.42Z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </button>
+          <p className="break-words text-xs text-slate-500">
+            Direct browser requests require endpoint CORS support and a trusted HTTPS connection
+            outside local development.
+          </p>
+        </div>
+      )}
 
-      {isOpen && (
-        <div id={panelId} className="space-y-4 bg-slate-50 px-3 pb-4 sm:px-4">
-          <p className="break-words pt-3 text-xs text-slate-500">{webSearchMessages[id]}</p>
+      <div className="space-y-2">
+        <label htmlFor={`${id}-model`} className={fieldLabelClass}>
+          Model
+        </label>
+        <input
+          id={`${id}-model`}
+          autoComplete="off"
+          type="text"
+          inputMode="text"
+          className={inputClass}
+          placeholder={registry.defaultModel ?? 'Required model ID'}
+          value={modelValue}
+          onChange={(event) => setModelDraft(event.target.value)}
+          onBlur={commitModel}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commitModel()
+            }
+          }}
+        />
+      </div>
 
-          {webSearchSupported && (
-            <div className="overflow-hidden rounded-xl border border-slate-200">
-              <SettingsToggle checked={allowWebSearch} label="Web search" onChange={handleWebSearch} />
-            </div>
-          )}
+      {id === 'gemini' && (
+        <div className="space-y-2">
+          <label htmlFor="gemini-thinking-level" className={fieldLabelClass}>
+            Thinking level
+          </label>
+          <select
+            id="gemini-thinking-level"
+            className={inputClass}
+            value={providerSettings.gemini.reasoning.thinkingLevel}
+            onChange={(event) =>
+              void save(
+                buildSettings({
+                  geminiThinking: event.target.value as GeminiThinkingLevel,
+                }),
+              )
+            }
+          >
+            {GEMINI_THINKING_LEVELS.map((level) => (
+              <option key={level} value={level}>
+                {capitalize(level)}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500">Sent as Gemini 3’s native thinking level.</p>
+        </div>
+      )}
 
-          {id === 'openai-compatible' && (
-            <div className="space-y-2">
-              <label htmlFor={`${id}-base-url`} className={fieldLabelClass}>
-                Base URL
-              </label>
-              <input
-                id={`${id}-base-url`}
-                autoComplete="url"
-                type="url"
-                className={inputClass}
-                placeholder="https://example.com/v1"
-                value={baseUrlValue}
-                onChange={(event) => setBaseUrlDraft(event.target.value)}
-                onBlur={commitBaseUrl}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    commitBaseUrl()
-                  }
-                }}
-              />
-              <p className="break-words text-xs text-slate-500">
-                Direct browser requests require endpoint CORS support and a trusted HTTPS connection
-                outside local development.
-              </p>
-            </div>
-          )}
-
+      {id === 'anthropic' && (
+        <div className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor={`${id}-model`} className={fieldLabelClass}>
-              Model
+            <label htmlFor="anthropic-reasoning-mode" className={fieldLabelClass}>
+              Reasoning
             </label>
-            <input
-              id={`${id}-model`}
-              autoComplete="off"
-              type="text"
-              inputMode="text"
+            <select
+              id="anthropic-reasoning-mode"
               className={inputClass}
-              placeholder={registry.defaultModel ?? 'Required model ID'}
-              value={modelValue}
-              onChange={(event) => setModelDraft(event.target.value)}
-              onBlur={commitModel}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  commitModel()
-                }
-              }}
-            />
-          </div>
-
-          {id === 'gemini' && (
-            <div className="space-y-2">
-              <label htmlFor="gemini-thinking-level" className={fieldLabelClass}>
-                Thinking level
-              </label>
-              <select
-                id="gemini-thinking-level"
-                className={inputClass}
-                value={providerSettings.gemini.reasoning.thinkingLevel}
-                onChange={(event) =>
-                  void save(buildSettings({ geminiThinking: event.target.value as GeminiThinkingLevel }))
-                }
-              >
-                {GEMINI_THINKING_LEVELS.map((level) => (
-                  <option key={level} value={level}>
-                    {capitalize(level)}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-500">Sent as Gemini 3’s native thinking level.</p>
-            </div>
-          )}
-
-          {id === 'anthropic' && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label htmlFor="anthropic-reasoning-mode" className={fieldLabelClass}>
-                  Reasoning
-                </label>
-                <select
-                  id="anthropic-reasoning-mode"
-                  className={inputClass}
-                  value={providerSettings.anthropic.reasoning.mode}
-                  onChange={(event) =>
-                    void save(
-                      buildSettings({ anthropicMode: event.target.value as 'default' | 'adaptive' }),
-                    )
-                  }
-                >
-                  <option value="default">Model default</option>
-                  <option value="adaptive">Adaptive</option>
-                </select>
-              </div>
-              {providerSettings.anthropic.reasoning.mode === 'adaptive' && (
-                <div className="space-y-2">
-                  <label htmlFor="anthropic-effort" className={fieldLabelClass}>
-                    Adaptive effort
-                  </label>
-                  <select
-                    id="anthropic-effort"
-                    className={inputClass}
-                    value={providerSettings.anthropic.reasoning.effort}
-                    onChange={(event) =>
-                      void save(buildSettings({ anthropicEffort: event.target.value as AnthropicEffort }))
-                    }
-                  >
-                    {ANTHROPIC_EFFORT_LEVELS.map((effort) => (
-                      <option key={effort} value={effort}>
-                        {capitalize(effort)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-          )}
-
-          {id === 'openai' && (
-            <div className="space-y-2">
-              <label htmlFor="openai-reasoning-effort" className={fieldLabelClass}>
-                Reasoning effort
-              </label>
-              <select
-                id="openai-reasoning-effort"
-                className={inputClass}
-                value={providerSettings.openai.reasoning.effort}
-                onChange={(event) =>
-                  void save(buildSettings({ openaiEffort: event.target.value as OpenAIReasoningEffort }))
-                }
-              >
-                {OPENAI_REASONING_EFFORTS.map((effort) => (
-                  <option key={effort} value={effort}>
-                    {effort === 'default' ? 'Model default' : capitalize(effort)}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-500">Model default sends no reasoning-effort override.</p>
-            </div>
-          )}
-
-          <div className="space-y-2 border-t border-slate-200 pt-4">
-            <span className={fieldLabelClass}>
-              API key{id === 'openai-compatible' ? ' (optional)' : ''}
-            </span>
-            {hasSavedKey && !replacingKey ? (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <span className="flex items-center gap-1.5 text-xs text-green-700">
-                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                    <path
-                      fillRule="evenodd"
-                      d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.3 3.29 6.8-6.79a1 1 0 0 1 1.4 0Z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  API key saved
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    className={`${buttonSecondary} shrink-0`}
-                    type="button"
-                    onClick={() => setReplacingKey(true)}
-                  >
-                    Replace key…
-                  </button>
-                  <button
-                    className={`${buttonDanger} shrink-0`}
-                    type="button"
-                    onClick={handleRemoveKey}
-                  >
-                    Remove key
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <input
-                  id={`${id}-api-key`}
-                  autoComplete="off"
-                  type="password"
-                  inputMode="text"
-                  className={inputClass}
-                  placeholder="Enter API key"
-                  value={apiKeyDraft}
-                  onChange={(event) => setApiKeyDraft(event.target.value)}
-                />
-                <button
-                  className={`${buttonPrimary} shrink-0`}
-                  type="button"
-                  disabled={!apiKeyDraft.trim()}
-                  onClick={handleSaveKey}
-                >
-                  Save key
-                </button>
-                {replacingKey && (
-                  <button
-                    className={`${buttonSecondary} shrink-0`}
-                    type="button"
-                    onClick={() => {
-                      setReplacingKey(false)
-                      setApiKeyDraft('')
-                    }}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {!isActive && (
-            <div className="flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center">
-              <button
-                className={`${buttonPrimary} w-full sm:w-auto`}
-                type="button"
-                disabled={!ready}
-                onClick={handleActivate}
-              >
-                Use {registry.label}
-              </button>
-              {!ready && <span className="text-xs text-slate-500">{activationHint}</span>}
-            </div>
-          )}
-
-          {status && (
-            <p
-              className={`break-words text-xs ${status.kind === 'ok' ? 'text-green-700' : 'text-rose-600'}`}
-              role="status"
-              aria-live="polite"
+              value={providerSettings.anthropic.reasoning.mode}
+              onChange={(event) =>
+                void save(
+                  buildSettings({
+                    anthropicMode: event.target.value as 'default' | 'adaptive',
+                  }),
+                )
+              }
             >
-              {status.message}
-            </p>
+              <option value="default">Model default</option>
+              <option value="adaptive">Adaptive</option>
+            </select>
+          </div>
+          {providerSettings.anthropic.reasoning.mode === 'adaptive' && (
+            <div className="space-y-2">
+              <label htmlFor="anthropic-effort" className={fieldLabelClass}>
+                Adaptive effort
+              </label>
+              <select
+                id="anthropic-effort"
+                className={inputClass}
+                value={providerSettings.anthropic.reasoning.effort}
+                onChange={(event) =>
+                  void save(
+                    buildSettings({
+                      anthropicEffort: event.target.value as AnthropicEffort,
+                    }),
+                  )
+                }
+              >
+                {ANTHROPIC_EFFORT_LEVELS.map((effort) => (
+                  <option key={effort} value={effort}>
+                    {capitalize(effort)}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
       )}
-    </div>
+
+      {id === 'openai' && (
+        <div className="space-y-2">
+          <label htmlFor="openai-reasoning-effort" className={fieldLabelClass}>
+            Reasoning effort
+          </label>
+          <select
+            id="openai-reasoning-effort"
+            className={inputClass}
+            value={providerSettings.openai.reasoning.effort}
+            onChange={(event) =>
+              void save(
+                buildSettings({
+                  openaiEffort: event.target.value as OpenAIReasoningEffort,
+                }),
+              )
+            }
+          >
+            {OPENAI_REASONING_EFFORTS.map((effort) => (
+              <option key={effort} value={effort}>
+                {effort === 'default' ? 'Model default' : capitalize(effort)}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500">
+            Model default sends no reasoning-effort override.
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-2 border-t border-slate-200 pt-4">
+        <span className={fieldLabelClass}>
+          API key{id === 'openai-compatible' ? ' (optional)' : ''}
+        </span>
+        {hasSavedKey && !replacingKey ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <span className="flex items-center gap-1.5 text-xs text-green-700">
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path
+                  fillRule="evenodd"
+                  d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.3 3.29 6.8-6.79a1 1 0 0 1 1.4 0Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              API key saved
+            </span>
+            <div className="flex gap-2">
+              <button
+                className={`${buttonSecondary} shrink-0`}
+                type="button"
+                onClick={() => setReplacingKey(true)}
+              >
+                Replace key…
+              </button>
+              <button
+                className={`${buttonDanger} shrink-0`}
+                type="button"
+                onClick={handleRemoveKey}
+              >
+                Remove key
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              id={`${id}-api-key`}
+              autoComplete="off"
+              type="password"
+              inputMode="text"
+              className={inputClass}
+              placeholder="Enter API key"
+              value={apiKeyDraft}
+              onChange={(event) => setApiKeyDraft(event.target.value)}
+            />
+            <button
+              className={`${buttonPrimary} shrink-0`}
+              type="button"
+              disabled={!apiKeyDraft.trim()}
+              onClick={handleSaveKey}
+            >
+              Save key
+            </button>
+            {replacingKey && (
+              <button
+                className={`${buttonSecondary} shrink-0`}
+                type="button"
+                onClick={() => {
+                  setReplacingKey(false)
+                  setApiKeyDraft('')
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {!isActive && (
+        <div className="flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center">
+          <button
+            className={`${buttonPrimary} w-full sm:w-auto`}
+            type="button"
+            disabled={!ready}
+            onClick={handleActivate}
+          >
+            Use {registry.label}
+          </button>
+          {!ready && <span className="text-xs text-slate-500">{activationHint}</span>}
+        </div>
+      )}
+
+      {status && (
+        <p
+          className={`break-words text-xs ${status.kind === 'ok' ? 'text-green-700' : 'text-rose-600'}`}
+          role="status"
+          aria-live="polite"
+        >
+          {status.message}
+        </p>
+      )}
+    </AccordionRow>
   )
 }

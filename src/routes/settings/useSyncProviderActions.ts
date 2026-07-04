@@ -157,12 +157,6 @@ export const useSyncProviderActions = ({
     setStatus(null)
     if (!requireActive()) return
     if (!requireSafeSyncTab()) return
-    if (force) {
-      const confirmed = window.confirm(
-        `Restore ${label} from local copy? This overwrites the remote file contents.`,
-      )
-      if (!confirmed) return
-    }
 
     try {
       const result = await pushToSyncAndRefresh(force)
