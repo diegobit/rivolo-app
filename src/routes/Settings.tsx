@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import AppearanceSection from '../components/settings/AppearanceSection'
-import BackupsSection from '../components/settings/BackupsSection'
+import BackupsSection, { type CloudVersionHistory } from '../components/settings/BackupsSection'
 import ImportExportSection from '../components/settings/ImportExportSection'
 import LlmSection from '../components/settings/LlmSection'
 import SetupNoticeBanner from '../components/settings/SetupNoticeBanner'
@@ -111,6 +111,7 @@ export default function Settings() {
   const loadDropboxState = useDropboxStore((state) => state.loadState)
   const updateFilePath = useDropboxStore((state) => state.updateFilePath)
   const googleDriveConnected = useGoogleDriveStore((state) => state.connected)
+  const googleDriveFolderId = useGoogleDriveStore((state) => state.folderId)
   const googleDriveFileName = useGoogleDriveStore((state) => state.fileName)
   const googleDriveRemoteVersion = useGoogleDriveStore((state) => state.lastRemoteVersion)
   const googleDriveLastSyncAt = useGoogleDriveStore((state) => state.lastSyncAt)
@@ -144,6 +145,23 @@ export default function Settings() {
   const savedGoogleDriveFileName = googleDriveFileName || DEFAULT_GOOGLE_DRIVE_FILE_NAME
   const googleFileName = googleDriveFileNameDraft ?? savedGoogleDriveFileName
   const isGoogleFileNameDirty = googleFileName.trim() !== savedGoogleDriveFileName
+
+  const cloudHistory: CloudVersionHistory | null =
+    activeProvider === 'dropbox' && dropboxHasAuth
+      ? {
+          provider: 'dropbox',
+          fileName: savedDropboxPath.split('/').pop() || DEFAULT_DROPBOX_PATH.slice(1),
+          url: 'https://www.dropbox.com/home',
+        }
+      : activeProvider === 'google-drive' && googleDriveConnected
+        ? {
+            provider: 'google-drive',
+            fileName: savedGoogleDriveFileName,
+            url: googleDriveFolderId
+              ? `https://drive.google.com/drive/folders/${googleDriveFolderId}`
+              : 'https://drive.google.com/drive/my-drive',
+          }
+        : null
 
   const handleMonospaceFont = (font: MonospaceFont) => {
     void updateMonospaceFont(font)
@@ -462,6 +480,7 @@ export default function Settings() {
         />
 
         <BackupsSection
+          cloudHistory={cloudHistory}
           onRestored={async () => {
             await loadTimeline()
             await loadProviderStates()

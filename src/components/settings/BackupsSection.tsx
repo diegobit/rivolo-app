@@ -6,9 +6,17 @@ import {
 } from '../../lib/importExport'
 import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
 import { buttonSecondary } from '../../lib/ui'
+import type { SyncProviderId } from '../../lib/syncState'
+
+export type CloudVersionHistory = {
+  provider: SyncProviderId
+  fileName: string
+  url: string
+}
 
 type BackupsSectionProps = {
   onRestored: () => Promise<void> | void
+  cloudHistory?: CloudVersionHistory | null
 }
 
 const formatBackupTime = (timestamp: number) => {
@@ -19,7 +27,7 @@ const formatBackupTime = (timestamp: number) => {
   }).format(new Date(timestamp))
 }
 
-export default function BackupsSection({ onRestored }: BackupsSectionProps) {
+export default function BackupsSection({ onRestored, cloudHistory }: BackupsSectionProps) {
   const [backups, setBackups] = useState<ImportRollbackBackup[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [restoring, setRestoring] = useState(false)
@@ -69,6 +77,37 @@ export default function BackupsSection({ onRestored }: BackupsSectionProps) {
         Rivolo saves a backup of your notes before every full replacement, such as a sync pull.
         Restoring replaces the current notes and marks them for upload.
       </p>
+      {cloudHistory && (
+        <p className="mt-1 text-xs text-slate-500">
+          {cloudHistory.provider === 'dropbox' ? (
+            <>
+              Dropbox also keeps older versions of {cloudHistory.fileName} for at least 30 days: on{' '}
+              <a
+                href={cloudHistory.url}
+                target="_blank"
+                rel="noreferrer"
+                className="underline hover:text-slate-700"
+              >
+                dropbox.com
+              </a>
+              , open the file&rsquo;s &ldquo;&hellip;&rdquo; menu and choose Version history.
+            </>
+          ) : (
+            <>
+              Google Drive also keeps older versions of {cloudHistory.fileName} for 30 days: in your{' '}
+              <a
+                href={cloudHistory.url}
+                target="_blank"
+                rel="noreferrer"
+                className="underline hover:text-slate-700"
+              >
+                Drive folder
+              </a>
+              , right-click the file and choose Manage versions.
+            </>
+          )}
+        </p>
+      )}
 
       {backups.length === 0 ? (
         <p className="mt-3 text-xs text-slate-500">No backups yet.</p>

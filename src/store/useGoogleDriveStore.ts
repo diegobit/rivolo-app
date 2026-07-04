@@ -8,6 +8,7 @@ import {
 export type GoogleDriveViewState = {
   connected: boolean
   fileId: string | null
+  folderId: string | null
   fileName: string
   lastRemoteVersion: string | null
   lastSyncAt: number | null
@@ -22,6 +23,7 @@ export type GoogleDriveViewState = {
 const stateToView = (state: Awaited<ReturnType<typeof getGoogleDriveState>>) => ({
   connected: state.connected,
   fileId: state.fileId,
+  folderId: state.folderId,
   fileName: state.fileName,
   lastRemoteVersion: state.lastRemoteVersion,
   lastSyncAt: state.lastSyncAt,
@@ -34,6 +36,7 @@ const stateToView = (state: Awaited<ReturnType<typeof getGoogleDriveState>>) => 
 export const useGoogleDriveStore = create<GoogleDriveViewState>((set) => ({
   connected: false,
   fileId: null,
+  folderId: null,
   fileName: DEFAULT_GOOGLE_DRIVE_FILE_NAME,
   lastRemoteVersion: null,
   lastSyncAt: null,

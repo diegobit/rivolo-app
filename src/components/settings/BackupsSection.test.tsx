@@ -65,4 +65,46 @@ describe('BackupsSection', () => {
 
     expect(importExport.importMarkdownToDb).not.toHaveBeenCalled()
   })
+
+  it('shows no cloud version history note when no provider is connected', async () => {
+    render(<BackupsSection onRestored={vi.fn()} />)
+
+    await screen.findByRole('button', { name: 'Restore' })
+    expect(screen.queryByText(/version history/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/manage versions/i)).not.toBeInTheDocument()
+  })
+
+  it('points to Dropbox version history when Dropbox is the active provider', async () => {
+    render(
+      <BackupsSection
+        onRestored={vi.fn()}
+        cloudHistory={{ provider: 'dropbox', fileName: 'inbox.md', url: 'https://www.dropbox.com/home' }}
+      />,
+    )
+
+    expect(await screen.findByText(/Dropbox also keeps older versions of inbox\.md/)).toBeVisible()
+    expect(screen.getByRole('link', { name: 'dropbox.com' })).toHaveAttribute(
+      'href',
+      'https://www.dropbox.com/home',
+    )
+  })
+
+  it('points to Google Drive manage versions when Drive is the active provider', async () => {
+    render(
+      <BackupsSection
+        onRestored={vi.fn()}
+        cloudHistory={{
+          provider: 'google-drive',
+          fileName: 'inbox.md',
+          url: 'https://drive.google.com/drive/folders/folder-1',
+        }}
+      />,
+    )
+
+    expect(await screen.findByText(/Google Drive also keeps older versions of inbox\.md/)).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Drive folder' })).toHaveAttribute(
+      'href',
+      'https://drive.google.com/drive/folders/folder-1',
+    )
+  })
 })
