@@ -8,7 +8,7 @@ Rivolo (REE-voh-loh) is the Italian word for "small stream". Every day, you writ
 
 Try it here: [rivolo.app](https://rivolo.app)
 
-Rivolo is a local-first PWA deployed on Cloudflare Pages. Notes, settings, AI requests, and cloud file transfers run in the browser. A small same-origin Pages Function is used only to exchange and refresh Google Drive OAuth credentials; it never receives note contents. AI prompts and relevant notes are sent only when you ask, directly to the provider you select: Gemini, Anthropic, OpenAI, or your own OpenAI-compatible endpoint. Dropbox or Google Drive receives notes only if you enable that sync provider. Custom endpoints must be reachable from the device and allow Rivolo's browser origin, headers, and HTTPS connection; on a phone, `localhost` refers to the phone itself.
+Rivolo is a local-first PWA deployed on Cloudflare Pages. Notes, settings, AI requests, and cloud file transfers run in the browser. A small same-origin Pages Function is used only to exchange and refresh Google Drive and Dropbox OAuth credentials; it never receives note contents. AI prompts and relevant notes are sent only when you ask, directly to the provider you select: Gemini, Anthropic, OpenAI, or your own OpenAI-compatible endpoint. Dropbox or Google Drive receives notes only if you enable that sync provider. Custom endpoints must be reachable from the device and allow Rivolo's browser origin, headers, and HTTPS connection; on a phone, `localhost` refers to the phone itself.
 
 > [!NOTE]
 > The app was completely developed with coding agents. I use it daily. I wrote about this [here](https://diegobit.com/post/rivolo).
@@ -24,7 +24,7 @@ npm install
 npm run dev
 ```
 
-The Vite server is sufficient unless you are testing Google Drive authentication. To run the built app and its Pages Functions together:
+The Vite server is sufficient unless you are testing Google Drive or Dropbox authentication. To run the built app and its Pages Functions together:
 
 ```bash
 npm run build
@@ -38,28 +38,39 @@ npm run build
 npm run preview
 ```
 
-## Optional env vars
+## Cloud sync setup
+
+> Only needed if you run your own copy of Rivolo and want Google Drive or Dropbox sync. The hosted app at [rivolo.app](https://rivolo.app) already has this configured — nothing to do.
+
+Both providers work the same way. Two kinds of values:
+
+- **Public** (client ids, allowed origins) — kept in `wrangler.toml`, already committed for `localhost` and `rivolo.app`. Swap in your own ids there.
+- **Secret** (client secrets, encryption keys) — never in the repo. Put them in a local `.dev.vars` file for development, and add them as encrypted secrets in the Cloudflare Pages dashboard for production. Start from `.dev.vars.example`. Any long random string works for the encryption keys.
+
+### Google Drive
+
+Create a Google Cloud OAuth web client, enable the Google Drive API, and list your app's origins (`localhost` and your domain) as authorized JavaScript origins. Rivolo asks only for the `drive.file` scope and manages a single `/rivolo/inbox.md` file.
+
+Secrets you'll need:
 
 ```bash
-VITE_DROPBOX_CLIENT_ID=...
-VITE_DEBUG_LOGS=true
-```
-
-## Google Drive sync configuration
-
-Create a Google Cloud OAuth web client, enable the Google Drive API, and add the production and local Pages origins as authorized JavaScript origins. Rivolo requests only the `drive.file` scope and manages a visible `/rivolo/inbox.md` file created by the app.
-
-The Pages Function requires these server-side credentials. For local development, copy `.dev.vars.example` to `.dev.vars`; upload the same names as encrypted Cloudflare Pages secrets in production.
-
-```bash
-GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 GOOGLE_TOKEN_ENCRYPTION_KEY=...
 ```
 
-Allowed origins are environment-specific non-secret configuration in `wrangler.toml`: local development accepts `http://localhost:8788`, while production accepts `https://rivolo.app`.
+One gotcha: if the Google consent screen stays in Testing mode, sign-ins expire after seven days. Publish it before relying on sync.
 
-`GOOGLE_TOKEN_ENCRYPTION_KEY` should be a high-entropy random secret. Neither the client secret nor the encryption key may use a `VITE_` prefix. If the OAuth consent screen remains in External/Testing mode, Google refresh grants can expire after seven days; publish the consent configuration before relying on long-lived production sync.
+### Dropbox
+
+Create a Dropbox app with `files.content.read` and `files.content.write` access, and add your callback URLs (`https://rivolo.app/auth/dropbox/callback` and the `localhost` equivalent). Dropbox needs no client secret — just one encryption key:
+
+```bash
+DROPBOX_TOKEN_ENCRYPTION_KEY=...
+```
+
+## Debugging
+
+Set `VITE_DEBUG_LOGS=true` to enable verbose logging.
 
 ## Credits
 
