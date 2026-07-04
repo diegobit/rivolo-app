@@ -15,7 +15,7 @@ export default function ImportExportSection({
 }: ImportExportSectionProps) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-600">Import / Export</h2>
+      <h2 className="text-lg font-bold text-slate-700">Import / Export</h2>
       <div className="mt-4 grid grid-cols-2 gap-3">
         <label className={`${buttonSecondary} flex cursor-pointer items-center justify-center text-center`}>
           <span>Import Markdown</span>

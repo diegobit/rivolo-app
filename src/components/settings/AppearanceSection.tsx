@@ -85,7 +85,7 @@ export default function AppearanceSection({
 }: AppearanceSectionProps) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-600">Appearance</h2>
+      <h2 className="text-lg font-bold text-slate-700">Appearance</h2>
       <div className="mt-4">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Wallpaper</h3>
         <div className="mt-3 flex flex-wrap gap-2">

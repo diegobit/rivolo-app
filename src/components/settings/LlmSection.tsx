@@ -263,7 +263,7 @@ export default function LlmSection({
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div>
-        <h2 className="text-sm font-semibold text-slate-600">AI assistant</h2>
+        <h2 className="text-lg font-bold text-slate-700">AI assistant</h2>
         <p className="mt-1 text-xs text-slate-500">
           Requests go only to the active provider. Choose another provider and apply its configuration to activate it.
         </p>
