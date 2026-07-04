@@ -117,7 +117,7 @@ describe('LlmSection', () => {
       .getAllByRole('button')
       .find((button) => button.getAttribute('aria-controls') === 'llm-panel-anthropic')
     await userEvent.click(anthropicHeader!)
-    const useButton = screen.getByRole('button', { name: 'Use Claude (Anthropic)' })
+    const useButton = screen.getByRole('button', { name: 'Use Claude' })
     expect(useButton).toBeEnabled()
     await userEvent.click(useButton)
     expect(onSelectProvider).toHaveBeenCalledExactlyOnceWith('anthropic')
