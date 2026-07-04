@@ -55,12 +55,12 @@ const createCodeChallenge = async (verifier: string) => {
   return toBase64Url(digest)
 }
 
-const getDropboxClientId = () => {
-  const clientId = import.meta.env.VITE_DROPBOX_CLIENT_ID as string | undefined
-  if (!clientId) {
-    throw new Error('Missing VITE_DROPBOX_CLIENT_ID.')
-  }
-  return clientId
+const getDropboxClientId = async () => {
+  const response = await fetch('/api/dropbox/config', { cache: 'no-store' })
+  if (!response.ok) throw await parseApiError(response, 'Dropbox sync is not configured.')
+  const payload = (await response.json()) as { clientId?: string }
+  if (!payload.clientId) throw new Error('Dropbox sync is not configured.')
+  return payload.clientId
 }
 
 const getDropboxRedirectUri = () => `${window.location.origin}/auth/dropbox/callback`
@@ -102,6 +102,7 @@ const fetchDropboxAccount = async (accessToken: string) => {
 }
 
 export const startDropboxAuth = async () => {
+  const clientId = await getDropboxClientId()
   const codeVerifier = createCodeVerifier()
   const codeChallenge = await createCodeChallenge(codeVerifier)
   const state = createRandomToken()
@@ -109,7 +110,7 @@ export const startDropboxAuth = async () => {
 
   const params = new URLSearchParams({
     response_type: 'code',
-    client_id: getDropboxClientId(),
+    client_id: clientId,
     redirect_uri: getDropboxRedirectUri(),
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
