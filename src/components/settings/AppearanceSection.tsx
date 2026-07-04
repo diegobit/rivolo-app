@@ -193,6 +193,7 @@ export default function AppearanceSection({
             isOpen={showFontPreview}
             onToggle={onFontPreviewToggle}
             panelId="font-preview-panel"
+            panelClassName="pt-4"
           >
             <div className="space-y-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
               <div

@@ -6,6 +6,7 @@ type AccordionRowProps = {
   isOpen: boolean
   onToggle: () => void
   panelId: string
+  panelClassName?: string
   children: React.ReactNode
 }
 
@@ -17,6 +18,7 @@ export default function AccordionRow({
   isOpen,
   onToggle,
   panelId,
+  panelClassName = '',
   children,
 }: AccordionRowProps) {
   return (
@@ -65,7 +67,10 @@ export default function AccordionRow({
       </button>
 
       {isOpen && (
-        <div id={panelId} className="space-y-4 bg-slate-50 px-3 pb-4 sm:px-4">
+        <div
+          id={panelId}
+          className={`space-y-4 bg-slate-50 px-3 pb-4 sm:px-4 ${panelClassName}`}
+        >
           {children}
         </div>
       )}
