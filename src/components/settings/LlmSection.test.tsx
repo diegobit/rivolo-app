@@ -23,7 +23,6 @@ const renderSection = (overrides: Overrides = {}) => {
   const props: React.ComponentProps<typeof LlmSection> = {
     provider: 'gemini',
     providerSettings: baseProviderSettings,
-    // The active provider is configured, so its row starts expanded.
     llmSecrets: { gemini: { apiKey: 'sk-test' } },
     aiLanguage: 'follow',
     allowWebSearch: true,
@@ -39,6 +38,13 @@ const renderSection = (overrides: Overrides = {}) => {
   }
   render(<LlmSection {...props} />)
   return props
+}
+
+const openLlmRow = async (id: string) => {
+  const header = screen
+    .getAllByRole('button')
+    .find((button) => button.getAttribute('aria-controls') === `llm-panel-${id}`)
+  await userEvent.click(header!)
 }
 
 describe('LlmSection', () => {
@@ -59,6 +65,7 @@ describe('LlmSection', () => {
     const onAllowWebSearchChange = vi.fn()
     renderSection({ onAllowWebSearchChange })
 
+    await openLlmRow('gemini')
     await userEvent.click(screen.getByRole('switch', { name: 'Web search' }))
     expect(onAllowWebSearchChange).toHaveBeenCalledExactlyOnceWith(false)
   })
@@ -67,6 +74,7 @@ describe('LlmSection', () => {
     const onSaveProviderSettings = vi.fn()
     renderSection({ onSaveProviderSettings })
 
+    await openLlmRow('gemini')
     await userEvent.selectOptions(screen.getByLabelText('Thinking level'), 'high')
     expect(onSaveProviderSettings).toHaveBeenCalledExactlyOnceWith('gemini', {
       model: 'gemini-3-flash-preview',
@@ -79,6 +87,7 @@ describe('LlmSection', () => {
     const onSaveProviderSettings = vi.fn()
     renderSection({ onSaveProviderSettings })
 
+    await openLlmRow('gemini')
     const input = screen.getByLabelText('Model')
     await userEvent.clear(input)
     await userEvent.type(input, 'gemini-3-pro-preview')
@@ -95,6 +104,7 @@ describe('LlmSection', () => {
     const onSaveProviderSettings = vi.fn()
     renderSection({ onSaveProviderSettings })
 
+    await openLlmRow('gemini')
     const input = screen.getByLabelText('Model') as HTMLInputElement
     await userEvent.clear(input)
     await userEvent.tab()
@@ -109,14 +119,11 @@ describe('LlmSection', () => {
     const llmSecrets: LlmSecrets = { anthropic: { apiKey: 'sk-test' } }
     renderSection({ provider: 'gemini', llmSecrets, onSelectProvider })
 
-    // The active provider (gemini, open by default) has no activation button.
+    // Gemini is active but collapsed; no activation button should be present.
     expect(screen.queryByRole('button', { name: 'Use Gemini' })).not.toBeInTheDocument()
 
     // Expand Anthropic, which has a saved key and is therefore ready.
-    const anthropicHeader = screen
-      .getAllByRole('button')
-      .find((button) => button.getAttribute('aria-controls') === 'llm-panel-anthropic')
-    await userEvent.click(anthropicHeader!)
+    await openLlmRow('anthropic')
     const useButton = screen.getByRole('button', { name: 'Use Claude' })
     expect(useButton).toBeEnabled()
     await userEvent.click(useButton)
@@ -134,10 +141,11 @@ describe('LlmSection', () => {
     expect(screen.getByText('Add an API key to activate.')).toBeInTheDocument()
   })
 
-  it('shows the saved-key state with Replace and Remove instead of an input', () => {
+  it('shows the saved-key state with Replace and Remove instead of an input', async () => {
     const llmSecrets: LlmSecrets = { gemini: { apiKey: 'sk-test' } }
     renderSection({ provider: 'gemini', llmSecrets })
 
+    await openLlmRow('gemini')
     expect(screen.getByText('API key saved')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Replace key…' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove key' })).toBeInTheDocument()

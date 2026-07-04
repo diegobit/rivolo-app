@@ -44,6 +44,13 @@ const baseProps = {
   onPush: vi.fn(),
 }
 
+const openSyncRow = async (id: string) => {
+  const header = screen
+    .getAllByRole('button')
+    .find((button) => button.getAttribute('aria-controls') === `sync-panel-${id}`)
+  await userEvent.click(header!)
+}
+
 describe('SyncSection', () => {
   it('starts with both provider rows collapsed when no sync provider is active', () => {
     render(<SyncSection {...baseProps} activeProvider={null} />)
@@ -68,12 +75,13 @@ describe('SyncSection', () => {
       />,
     )
 
+    await openSyncRow('google-drive')
     expect(screen.getByRole('button', { name: 'Pull from Google Drive' })).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: 'Use Google Drive for sync' }))
     expect(activate).toHaveBeenCalledOnce()
   })
 
-  it('lists both providers while keeping the active provider expanded', () => {
+  it('lists both providers with all rows collapsed on initial render', () => {
     render(<SyncSection {...baseProps} activeProvider="google-drive" provider="google-drive" />)
 
     const dropboxRow = screen
@@ -85,9 +93,8 @@ describe('SyncSection', () => {
 
     expect(dropboxRow).toBeInTheDocument()
     expect(googleRow).toBeInTheDocument()
-    // The active provider's row is the expanded one.
     expect(dropboxRow).toHaveAttribute('aria-expanded', 'false')
-    expect(googleRow).toHaveAttribute('aria-expanded', 'true')
+    expect(googleRow).toHaveAttribute('aria-expanded', 'false')
     // Both rows show a Connected badge.
     expect(screen.getAllByText('Connected')).toHaveLength(2)
   })
@@ -103,7 +110,7 @@ describe('SyncSection', () => {
     expect(onProviderChange).toHaveBeenCalledExactlyOnceWith('google-drive')
   })
 
-  it('disables sync settings in a secondary tab', () => {
+  it('disables sync settings in a secondary tab', async () => {
     render(
       <SyncSection
         {...baseProps}
@@ -114,13 +121,14 @@ describe('SyncSection', () => {
       />,
     )
 
+    await openSyncRow('dropbox')
     expect(screen.getByText(/Tab sync: Paused in this tab/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Disconnect Dropbox' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 
-  it('shows the automatic sync attention message', () => {
+  it('shows the automatic sync attention message', async () => {
     render(
       <SyncSection
         {...baseProps}
@@ -128,6 +136,7 @@ describe('SyncSection', () => {
       />,
     )
 
+    await openSyncRow('dropbox')
     expect(screen.getByRole('alert')).toHaveTextContent('Dropbox changed remotely.')
   })
 
@@ -135,6 +144,7 @@ describe('SyncSection', () => {
     const onPush = vi.fn()
     render(<SyncSection {...baseProps} onPush={onPush} />)
 
+    await openSyncRow('dropbox')
     const overwriteButton = screen.getByRole('button', {
       name: 'Restore from local copy',
     })
@@ -151,14 +161,15 @@ describe('SyncSection', () => {
     expect(screen.getByRole('button', { name: 'Restore from local copy' })).toBeInTheDocument()
   })
 
-  it('shows the offline disabled-hint under the action buttons', () => {
+  it('shows the offline disabled-hint under the action buttons', async () => {
     render(<SyncSection {...baseProps} online={false} />)
 
+    await openSyncRow('dropbox')
     expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeDisabled()
     expect(screen.getByText("You're offline — sync actions are unavailable.")).toBeInTheDocument()
   })
 
-  it('shows the not-connected disabled-hint under the action buttons', () => {
+  it('shows the not-connected disabled-hint under the action buttons', async () => {
     render(
       <SyncSection
         {...baseProps}
@@ -169,6 +180,7 @@ describe('SyncSection', () => {
       />,
     )
 
+    await openSyncRow('dropbox')
     expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeDisabled()
     expect(screen.getByText('Connect Dropbox to enable sync actions.')).toBeInTheDocument()
   })
