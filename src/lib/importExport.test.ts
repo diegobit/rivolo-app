@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate'
 
 const mocks = vi.hoisted(() => ({
   listDays: vi.fn(),
@@ -172,12 +173,12 @@ ${markdownDay('2026-06-30', 'second')}`
       }),
     ).resolves.toEqual({ imported: 1, warnings: [] })
 
-    expect(mocks.set).toHaveBeenCalledWith(IMPORT_ROLLBACK_BACKUPS_KEY, [
-      expect.objectContaining({
-        dayCount: 2,
-        contentMd: expect.stringContaining('local only'),
-      }),
-    ])
+    expect(mocks.set).toHaveBeenCalledWith(
+      IMPORT_ROLLBACK_BACKUPS_KEY,
+      expect.arrayContaining([expect.objectContaining({ dayCount: 2 })]),
+    )
+    const [, saved] = mocks.set.mock.calls[0] as [string, { contentMdGz: Uint8Array }[]]
+    expect(strFromU8(inflateSync(saved[0].contentMdGz))).toContain('local only')
     expect(mocks.replaceDays).toHaveBeenCalledWith(
       [
         {
@@ -191,14 +192,14 @@ ${markdownDay('2026-06-30', 'second')}`
     expect(events).toEqual(['backup', 'replace'])
   })
 
-  it('prunes rollback backups to the five most recent', async () => {
+  it('prunes rollback backups to the ten most recent', async () => {
     mocks.listDays.mockResolvedValue([localDay('2026-06-30', 'current')])
     const backup = (createdAt: number) => ({
       createdAt,
       contentMd: `# backup ${createdAt}`,
       dayCount: 1,
     })
-    const existing = [backup(500), backup(400), backup(300), backup(200), backup(100)]
+    const existing = Array.from({ length: 10 }, (_, index) => backup(1000 - index * 100))
     mocks.get.mockImplementation(async (key: string) =>
       key === 'rivolo.import.rollbackBackups' ? existing : undefined,
     )
@@ -208,8 +209,10 @@ ${markdownDay('2026-06-30', 'second')}`
 
     const [key, saved] = mocks.set.mock.calls[0] as [string, { createdAt: number }[]]
     expect(key).toBe(IMPORT_ROLLBACK_BACKUPS_KEY)
-    expect(saved).toHaveLength(5)
-    expect(saved.slice(1).map((entry) => entry.createdAt)).toEqual([500, 400, 300, 200])
+    expect(saved).toHaveLength(10)
+    expect(saved.slice(1).map((entry) => entry.createdAt)).toEqual(
+      existing.slice(0, 9).map((entry) => entry.createdAt),
+    )
     expect(mocks.del).toHaveBeenCalledWith('rivolo.import.latestRollbackBackup')
   })
 
@@ -224,14 +227,42 @@ ${markdownDay('2026-06-30', 'second')}`
 
     await importMarkdownToDb(markdownDay('2026-06-30', 'remote'), { replace: true })
 
-    expect(mocks.set).toHaveBeenCalledWith(IMPORT_ROLLBACK_BACKUPS_KEY, [
+    const [key, saved] = mocks.set.mock.calls[0] as [
+      string,
+      { createdAt: number; dayCount: number; contentMdGz: Uint8Array }[],
+    ]
+    expect(key).toBe(IMPORT_ROLLBACK_BACKUPS_KEY)
+    expect(saved).toEqual([
       expect.objectContaining({ dayCount: 1 }),
-      expect.objectContaining({
-        createdAt: 50,
-        contentMd: '# legacy backup',
-        dayCount: 4,
-      }),
+      expect.objectContaining({ createdAt: 50, dayCount: 4 }),
     ])
+    expect(strFromU8(inflateSync(saved[1].contentMdGz))).toBe('# legacy backup')
     expect(mocks.del).toHaveBeenCalledWith('rivolo.import.latestRollbackBackup')
+  })
+
+  it('drops backups that no longer decompress instead of failing the import', async () => {
+    mocks.listDays.mockResolvedValue([localDay('2026-06-30', 'current')])
+    const existing = [
+      { createdAt: 200, contentMdGz: deflateSync(strToU8('# intact backup')), dayCount: 1 },
+      { createdAt: 100, contentMdGz: new Uint8Array([1, 2, 3]), dayCount: 1 },
+    ]
+    mocks.get.mockImplementation(async (key: string) =>
+      key === 'rivolo.import.rollbackBackups' ? existing : undefined,
+    )
+    const { IMPORT_ROLLBACK_BACKUPS_KEY, importMarkdownToDb, listRollbackBackups } = await import(
+      './importExport'
+    )
+
+    await expect(listRollbackBackups()).resolves.toEqual([
+      expect.objectContaining({ createdAt: 200, contentMd: '# intact backup' }),
+    ])
+
+    await expect(
+      importMarkdownToDb(markdownDay('2026-06-30', 'remote'), { replace: true }),
+    ).resolves.toEqual({ imported: 1, warnings: [] })
+
+    const [key, saved] = mocks.set.mock.calls[0] as [string, { createdAt: number }[]]
+    expect(key).toBe(IMPORT_ROLLBACK_BACKUPS_KEY)
+    expect(saved.map((entry) => entry.createdAt)).toEqual([expect.any(Number), 200])
   })
 })

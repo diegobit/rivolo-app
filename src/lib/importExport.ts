@@ -3,6 +3,7 @@ import { listDays, replaceDays, saveDay } from './dayRepository'
 import { runBulkDatabaseMutation } from './db'
 import { formatDayTitle } from './dates'
 import { del, get, set } from 'idb-keyval'
+import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate'
 
 export const IMPORT_ROLLBACK_BACKUPS_KEY = 'rivolo.import.rollbackBackups'
 // Legacy single-entry key, folded into the retention list on the next backup write.
@@ -14,14 +15,42 @@ export type ImportRollbackBackup = {
   dayCount: number
 }
 
+// Stored form: contentMd is deflated to keep IndexedDB usage down. The plain
+// contentMd variant is kept readable so backups written before compression
+// was added still load correctly.
+type StoredRollbackBackup =
+  | { createdAt: number; dayCount: number; contentMd: string }
+  | { createdAt: number; dayCount: number; contentMdGz: Uint8Array }
+
 const MAX_ROLLBACK_BACKUPS = 10
 
-const isRollbackBackup = (value: unknown): value is ImportRollbackBackup =>
-  typeof value === 'object' &&
-  value !== null &&
-  typeof (value as ImportRollbackBackup).createdAt === 'number' &&
-  typeof (value as ImportRollbackBackup).contentMd === 'string' &&
-  typeof (value as ImportRollbackBackup).dayCount === 'number'
+const isStoredRollbackBackup = (value: unknown): value is StoredRollbackBackup => {
+  if (typeof value !== 'object' || value === null) return false
+  const entry = value as Record<string, unknown>
+  if (typeof entry.createdAt !== 'number' || typeof entry.dayCount !== 'number') return false
+  return typeof entry.contentMd === 'string' || entry.contentMdGz instanceof Uint8Array
+}
+
+const inflateBackup = (stored: StoredRollbackBackup): ImportRollbackBackup | null => {
+  if ('contentMd' in stored) return stored
+  try {
+    return {
+      createdAt: stored.createdAt,
+      dayCount: stored.dayCount,
+      contentMd: strFromU8(inflateSync(stored.contentMdGz)),
+    }
+  } catch {
+    // An entry that no longer decompresses is unrecoverable; drop it so the
+    // remaining backups and future imports keep working.
+    return null
+  }
+}
+
+const deflateBackup = (entry: ImportRollbackBackup): StoredRollbackBackup => ({
+  createdAt: entry.createdAt,
+  dayCount: entry.dayCount,
+  contentMdGz: deflateSync(strToU8(entry.contentMd)),
+})
 
 const readLegacyRollbackBackup = async (): Promise<ImportRollbackBackup | null> => {
   const legacy = (await get(IMPORT_ROLLBACK_BACKUP_KEY)) as Partial<ImportRollbackBackup> | undefined
@@ -35,7 +64,12 @@ const readLegacyRollbackBackup = async (): Promise<ImportRollbackBackup | null> 
 
 export const listRollbackBackups = async (): Promise<ImportRollbackBackup[]> => {
   const stored = await get(IMPORT_ROLLBACK_BACKUPS_KEY)
-  const backups = Array.isArray(stored) ? stored.filter(isRollbackBackup) : []
+  const backups = Array.isArray(stored)
+    ? stored
+        .filter(isStoredRollbackBackup)
+        .map(inflateBackup)
+        .filter((entry) => entry !== null)
+    : []
   const legacy = await readLegacyRollbackBackup()
   if (legacy) backups.push(legacy)
   return backups.sort((a, b) => b.createdAt - a.createdAt)
@@ -43,7 +77,7 @@ export const listRollbackBackups = async (): Promise<ImportRollbackBackup[]> => 
 
 const appendRollbackBackup = async (entry: ImportRollbackBackup) => {
   const backups = [entry, ...(await listRollbackBackups())].slice(0, MAX_ROLLBACK_BACKUPS)
-  await set(IMPORT_ROLLBACK_BACKUPS_KEY, backups)
+  await set(IMPORT_ROLLBACK_BACKUPS_KEY, backups.map(deflateBackup))
   await del(IMPORT_ROLLBACK_BACKUP_KEY)
 }
 
