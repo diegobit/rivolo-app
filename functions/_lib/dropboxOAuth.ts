@@ -18,6 +18,7 @@ export const DROPBOX_REFRESH_COOKIE = 'rivolo_dropbox_refresh'
 const DROPBOX_COOKIE_PATH = '/api/dropbox'
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 400
 const DROPBOX_TOKEN_ENDPOINT = 'https://api.dropboxapi.com/oauth2/token'
+const DROPBOX_REVOKE_ENDPOINT = 'https://api.dropboxapi.com/2/auth/token/revoke'
 
 export const dropboxCookieConfig = (env: DropboxOAuthEnv): CookieConfig => ({
   name: DROPBOX_REFRESH_COOKIE,
@@ -72,6 +73,20 @@ export const refreshDropboxAccessToken = async (refreshToken: string, env: Dropb
       client_id: env.DROPBOX_CLIENT_ID,
     }),
   )
+
+// Dropbox revocation needs an access token; revoking it also disables the paired
+// refresh token. Best-effort: a failure leaves an orphaned grant, never a stuck disconnect.
+export const revokeDropboxRefreshToken = async (refreshToken: string, env: DropboxOAuthEnv) => {
+  try {
+    const token = await refreshDropboxAccessToken(refreshToken, env)
+    await fetch(DROPBOX_REVOKE_ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token.access_token}` },
+    })
+  } catch {
+    // Cookie clearing in the caller proceeds regardless.
+  }
+}
 
 export const toPublicDropboxError = (error: unknown) => {
   const code = (error as { code?: string } | null)?.code

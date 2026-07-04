@@ -14,7 +14,7 @@ export type ImportRollbackBackup = {
   dayCount: number
 }
 
-const MAX_ROLLBACK_BACKUPS = 5
+const MAX_ROLLBACK_BACKUPS = 10
 
 const isRollbackBackup = (value: unknown): value is ImportRollbackBackup =>
   typeof value === 'object' &&
