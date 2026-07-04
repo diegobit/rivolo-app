@@ -69,6 +69,7 @@ export default function LlmSection({
   const [openaiEffortDraft, setOpenaiEffortDraft] = useState<OpenAIReasoningEffort | null>(null)
   const [allowWebSearchDraft, setAllowWebSearchDraft] = useState<boolean | null>(null)
   const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [showLanguageInput, setShowLanguageInput] = useState(aiLanguage !== 'follow')
   const [status, setStatus] = useState<string | null>(null)
   const modelValue = modelDraft ?? selectedSettings.model
   const baseUrlValue =
@@ -276,19 +277,34 @@ export default function LlmSection({
             className={`${aiLanguage === 'follow' ? buttonPillActive : buttonPill} shrink-0`}
             type="button"
             aria-pressed={aiLanguage === 'follow'}
-            onClick={onFollowLanguage}
+            onClick={() => {
+              setShowLanguageInput(false)
+              onFollowLanguage()
+            }}
           >
             Follow User
           </button>
-          <input
-            autoComplete="off"
-            type="text"
-            inputMode="text"
-            className={inputClass}
-            placeholder="or type: Italian, English..."
-            value={aiLanguage === 'follow' ? '' : aiLanguage}
-            onChange={(event) => onAiLanguageChange(event.target.value)}
-          />
+          <button
+            className={`${aiLanguage !== 'follow' ? buttonPillActive : buttonPill} shrink-0`}
+            type="button"
+            aria-pressed={aiLanguage !== 'follow'}
+            aria-expanded={showLanguageInput}
+            onClick={() => setShowLanguageInput(true)}
+          >
+            Custom
+          </button>
+          {showLanguageInput && (
+            <input
+              autoComplete="off"
+              type="text"
+              inputMode="text"
+              autoFocus
+              className="min-h-7 w-full min-w-0 rounded-full border border-slate-200 bg-white px-3 text-xs outline-none transition focus:border-slate-400 sm:w-48"
+              placeholder="e.g. Italian, English..."
+              value={aiLanguage === 'follow' ? '' : aiLanguage}
+              onChange={(event) => onAiLanguageChange(event.target.value)}
+            />
+          )}
         </div>
       </div>
 
