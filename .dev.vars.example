@@ -1,3 +1,6 @@
-GOOGLE_CLIENT_ID=your-google-oauth-web-client-id
+# Secrets only — public vars (GOOGLE_CLIENT_ID, DROPBOX_CLIENT_ID, allowed
+# origins) live in wrangler.toml. In production set these as encrypted Secrets
+# in the Cloudflare Pages dashboard, not in wrangler.toml.
 GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
 GOOGLE_TOKEN_ENCRYPTION_KEY=replace-with-a-high-entropy-random-secret
+DROPBOX_TOKEN_ENCRYPTION_KEY=replace-with-a-high-entropy-random-secret

@@ -8,8 +8,10 @@ export const getGoogleDrivePath = (fileName: string) =>
 export type GoogleDriveState = {
   connected: boolean
   fileId: string | null
+  folderId: string | null
   fileName: string
   lastRemoteVersion: string | null
+  lastPushedHash: string | null
   lastSyncAt: number | null
   localDirty: boolean
   localRevision: number
@@ -21,8 +23,10 @@ export type GoogleDriveState = {
 const DEFAULT_STATE: GoogleDriveState = {
   connected: false,
   fileId: null,
+  folderId: null,
   fileName: DEFAULT_GOOGLE_DRIVE_FILE_NAME,
   lastRemoteVersion: null,
+  lastPushedHash: null,
   lastSyncAt: null,
   localDirty: false,
   localRevision: 0,
@@ -76,6 +80,7 @@ export const updateGoogleDriveFileName = async (fileName: string) =>
       fileName: nextName,
       fileId: changed ? null : current.fileId,
       lastRemoteVersion: changed ? null : current.lastRemoteVersion,
+      lastPushedHash: changed ? null : current.lastPushedHash,
       lastSyncAt: changed ? null : current.lastSyncAt,
       localDirty: changed ? true : current.localDirty,
       localRevision: changed ? current.localRevision + 1 : current.localRevision,
@@ -98,12 +103,14 @@ export const finalizeGoogleDrivePushState = async (
   fileId: string,
   remoteVersion: string,
   sourceRevision: number,
+  pushedHash?: string | null,
 ) => {
   await enqueueGoogleDriveStateWrite((current) => {
     const next = {
       ...current,
       fileId,
       lastRemoteVersion: remoteVersion,
+      lastPushedHash: pushedHash === undefined ? current.lastPushedHash : pushedHash,
       lastSyncAt: Date.now(),
       localDirty: current.localRevision === sourceRevision ? false : current.localDirty,
     }

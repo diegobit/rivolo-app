@@ -8,7 +8,9 @@ import {
   getGoogleDrivePath,
   updateGoogleDriveState,
 } from './googleDriveState'
+import type { GoogleDriveState } from './googleDriveState'
 import { markSyncLocalDirty } from './syncDirty'
+import { hashSyncContent } from './syncHash'
 import type { SyncProvider, SyncPullOptions, SyncStatus } from './sync'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
@@ -38,12 +40,6 @@ type DriveError = {
 
 const FILE_FIELDS = 'id,name,mimeType,version,modifiedTime,trashed,parents,capabilities(canDownload,canEdit,canModifyContent)'
 
-class DrivePreconditionFailedError extends Error {
-  constructor() {
-    super('Google Drive file changed before upload.')
-  }
-}
-
 const driveError = async (response: Response, fallback: string) => {
   const payload = (await response.json().catch(() => null)) as DriveError | null
   return new Error(payload?.error?.message || fallback)
@@ -62,18 +58,6 @@ const validateDriveFile = (file: DriveFile) => {
     throw new Error('Google Drive file cannot be edited.')
   }
   return file
-}
-
-// Drive has no documented server-enforced precondition for uploads, so
-// re-check the remote version just before mutating. This narrows the race
-// window to the re-check→upload gap but cannot close it.
-const guardDriveFileForMutation = async (file: DriveFile, force: boolean) => {
-  if (force) return file
-  const current = await fetchDriveFile(file.id)
-  if (!current || current.version !== file.version) {
-    throw new DrivePreconditionFailedError()
-  }
-  return current
 }
 
 const parseDriveMutationResponse = async (response: Response, fallback: string) => {
@@ -121,7 +105,14 @@ const createDriveFolder = async () => {
   return (await response.json()) as DriveFile
 }
 
-const ensureDriveFolder = async () => (await discoverDriveFolder()) ?? createDriveFolder()
+// Resolve the Rivolo folder id, reusing the cached id when we have one so the
+// common push/pull path never spends a round trip rediscovering it.
+const resolveFolderId = async (state: GoogleDriveState) => {
+  if (state.folderId) return state.folderId
+  const folder = (await discoverDriveFolder()) ?? (await createDriveFolder())
+  await updateGoogleDriveState({ folderId: folder.id })
+  return folder.id
+}
 
 const discoverDriveFile = async (fileName: string, folderId: string) => {
   const params = new URLSearchParams({
@@ -138,12 +129,32 @@ const discoverDriveFile = async (fileName: string, folderId: string) => {
   return file ? validateDriveFile(file) : null
 }
 
-const resolveDriveFile = async (fileId: string | null, fileName: string, folderId: string) => {
-  if (fileId) {
-    const file = await fetchDriveFile(fileId)
-    if (file) return file
+// Resolve the sync target. When we already know the file id we fetch it
+// directly and never touch the folder — that is the steady-state hot path.
+// Only when the file must be discovered by name (or created) do we pay for
+// folder resolution, and we report the folder id so callers can reuse it.
+const resolveDriveTarget = async (state: GoogleDriveState) => {
+  if (state.fileId) {
+    const file = await fetchDriveFile(state.fileId)
+    if (file) return { metadata: file, folderId: state.folderId }
   }
-  return discoverDriveFile(fileName, folderId)
+  const folderId = await resolveFolderId(state)
+  const metadata = await discoverDriveFile(state.fileName, folderId)
+  return { metadata, folderId }
+}
+
+// Ensure the file lives inside the Rivolo folder, moving it only when it is
+// not already there. When the folder id is cached this membership check costs
+// no round trip; a move happens only for files a user relocated in Drive.
+const ensureInRivoloFolder = async (
+  file: DriveFile,
+  state: GoogleDriveState,
+  knownFolderId: string | null,
+) => {
+  const folderId = knownFolderId ?? (await resolveFolderId(state))
+  if (file.parents?.includes(folderId)) return { file, moved: false }
+  const moved = await moveDriveFile(file, folderId)
+  return { file: moved, moved: true }
 }
 
 const downloadDriveFile = async (fileId: string) => {
@@ -213,7 +224,9 @@ export const disconnectGoogleDrive = async () => {
   await updateGoogleDriveState({
     connected: false,
     fileId: null,
+    folderId: null,
     lastRemoteVersion: null,
+    lastPushedHash: null,
     lastSyncAt: null,
     accountId: null,
     accountEmail: null,
@@ -241,8 +254,7 @@ export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
   if (state.localDirty && !force) {
     return { status: 'noop' as const }
   }
-  const folder = await ensureDriveFolder()
-  const metadata = await resolveDriveFile(state.fileId, state.fileName, folder.id)
+  const { metadata } = await resolveDriveTarget(state)
   if (!metadata) throw new Error('Google Drive file not found. Push to create it first.')
 
   if (metadata.version === state.lastRemoteVersion && !(force && state.localDirty)) {
@@ -261,6 +273,9 @@ export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
     fileId: metadata.id,
     fileName: metadata.name,
     lastRemoteVersion: metadata.version,
+    // Remote content now equals local, so record its hash to suppress an
+    // immediate redundant push of what we just pulled.
+    lastPushedHash: await hashSyncContent(content),
     lastSyncAt: Date.now(),
     localDirty: false,
   })
@@ -274,8 +289,9 @@ export const pushToGoogleDrive = async (force = false) => {
     return { status: 'clean' as const }
   }
 
-  const folder = await ensureDriveFolder()
-  const metadata = await resolveDriveFile(state.fileId, state.fileName, folder.id)
+  const wantUpload = state.localDirty || force
+
+  const { metadata, folderId } = await resolveDriveTarget(state)
   if (!force && state.lastRemoteVersion && (!metadata || metadata.version !== state.lastRemoteVersion)) {
     return {
       status: 'blocked' as const,
@@ -286,38 +302,46 @@ export const pushToGoogleDrive = async (force = false) => {
     await updateGoogleDriveState({ fileId: metadata.id, fileName: metadata.name })
     return { status: 'blocked' as const, reason: 'remote_changed' as const }
   }
-  if (!state.localDirty && !force) {
-    if (metadata && !metadata.parents?.includes(folder.id)) {
-      try {
-        const moved = await moveDriveFile(await guardDriveFileForMutation(metadata, false), folder.id)
+
+  // Not dirty and not forced: the only work left is relocating a file the user
+  // moved out of the Rivolo folder in Drive.
+  if (!wantUpload) {
+    if (metadata) {
+      const { file: moved, moved: didMove } = await ensureInRivoloFolder(metadata, state, folderId)
+      if (didMove) {
         await finalizeGoogleDrivePushState(moved.id, moved.version, state.localRevision)
         return { status: 'pushed' as const }
-      } catch (error) {
-        if (error instanceof DrivePreconditionFailedError) {
-          return { status: 'blocked' as const, reason: 'remote_changed' as const }
-        }
-        throw error
       }
     }
     return { status: 'clean' as const }
   }
 
+  // Short-circuit the upload if the exported content is byte-identical to what
+  // we last pushed and the remote is still at that version — nothing to send.
   const content = await exportMarkdownFromDb()
-  let uploaded: DriveFile
-  try {
-    uploaded = metadata
-      ? await updateDriveFile(
-          await moveDriveFile(await guardDriveFileForMutation(metadata, force), folder.id),
-          content,
-        )
-      : await createDriveFile(state.fileName || DEFAULT_GOOGLE_DRIVE_FILE_NAME, folder.id, content)
-  } catch (error) {
-    if (error instanceof DrivePreconditionFailedError) {
-      return { status: 'blocked' as const, reason: 'remote_changed' as const }
-    }
-    throw error
+  const contentHash = await hashSyncContent(content)
+  if (
+    !force &&
+    metadata &&
+    contentHash === state.lastPushedHash &&
+    metadata.version === state.lastRemoteVersion
+  ) {
+    await finalizeGoogleDrivePushState(metadata.id, metadata.version, state.localRevision, contentHash)
+    return { status: 'clean' as const }
   }
-  await finalizeGoogleDrivePushState(uploaded.id, uploaded.version, state.localRevision)
+
+  let uploaded: DriveFile
+  if (metadata) {
+    const { file } = await ensureInRivoloFolder(metadata, state, folderId)
+    uploaded = await updateDriveFile(file, content)
+  } else {
+    uploaded = await createDriveFile(
+      state.fileName || DEFAULT_GOOGLE_DRIVE_FILE_NAME,
+      folderId ?? (await resolveFolderId(state)),
+      content,
+    )
+  }
+  await finalizeGoogleDrivePushState(uploaded.id, uploaded.version, state.localRevision, contentHash)
   return { status: 'pushed' as const }
 }
 

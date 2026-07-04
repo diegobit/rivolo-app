@@ -12,16 +12,19 @@ vi.mock('./settingsRepository', () => ({
 }))
 
 vi.mock('./importExport', () => ({ importMarkdownToDb, exportMarkdownFromDb }))
+vi.mock('./dropboxAuth', () => ({
+  authorizedDropboxFetch: (input: string, init?: RequestInit) => fetch(input, init),
+  disconnectDropboxAuth: vi.fn(),
+  startDropboxAuth: vi.fn(),
+  completeDropboxAuth: vi.fn(),
+}))
 
 const json = (body: unknown, init: ResponseInit = {}) => Response.json(body, init)
 const connectedState = {
-  auth: {
-    accessToken: 'access-token',
-    refreshToken: 'refresh-token',
-    expiresAt: Date.now() + 60 * 60 * 1000,
-  },
+  connected: true,
   filePath: '/inbox.md',
   lastRemoteRev: 'rev-1',
+  lastPushedHash: null,
   lastSyncAt: null,
   localDirty: true,
   localRevision: 1,
@@ -66,6 +69,7 @@ describe('Dropbox sync provider', () => {
     expect(importMarkdownToDb).toHaveBeenCalledWith('# 2026-06-21\n\nremote text', {
       replace: true,
       markDirty: false,
+      allowUnsafeImport: undefined,
     })
     expect(await getDropboxState()).toMatchObject({ localDirty: false, lastRemoteRev: 'rev-1' })
   })
@@ -95,5 +99,26 @@ describe('Dropbox sync provider', () => {
 
     expect(await pushToDropbox()).toEqual({ status: 'blocked', reason: 'remote_changed' })
     expect(await getDropboxState()).toMatchObject({ localDirty: true, lastRemoteRev: 'rev-1' })
+  })
+
+  it('skips the upload when the content matches the last push', async () => {
+    const { hashSyncContent } = await import('./syncHash')
+    const content = '# 2026-06-21\n\nunchanged'
+    settings.set('dropbox.state', {
+      ...structuredClone(connectedState),
+      lastPushedHash: await hashSyncContent(content),
+    })
+    exportMarkdownFromDb.mockResolvedValue(content)
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ rev: 'rev-1', server_modified: '2026-06-21T10:00:00Z' }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { pushToDropbox } = await import('./dropbox')
+    const { getDropboxState } = await import('./dropboxState')
+
+    expect(await pushToDropbox()).toEqual({ status: 'clean' })
+    // Only the metadata fetch happens; the upload is skipped.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(await getDropboxState()).toMatchObject({ localDirty: false, lastRemoteRev: 'rev-1' })
   })
 })

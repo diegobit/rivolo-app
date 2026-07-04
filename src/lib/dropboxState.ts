@@ -1,15 +1,10 @@
 import { getJsonSetting, setJsonSetting } from './settingsRepository'
 
-type DropboxAuth = {
-  accessToken: string
-  refreshToken: string
-  expiresAt: number
-}
-
 export type DropboxState = {
-  auth: DropboxAuth | null
+  connected: boolean
   filePath: string | null
   lastRemoteRev: string | null
+  lastPushedHash: string | null
   lastSyncAt: number | null
   localDirty: boolean
   localRevision: number
@@ -19,9 +14,10 @@ export type DropboxState = {
 }
 
 const DEFAULT_STATE: DropboxState = {
-  auth: null,
+  connected: false,
   filePath: null,
   lastRemoteRev: null,
+  lastPushedHash: null,
   lastSyncAt: null,
   localDirty: false,
   localRevision: 0,
@@ -32,9 +28,16 @@ const DEFAULT_STATE: DropboxState = {
 
 let writeQueue: Promise<void> = Promise.resolve()
 
+// Legacy state kept the refresh token in `auth`. That token now lives only in
+// an HttpOnly cookie, so strip any leftover copy from client storage; users
+// with a legacy token simply reconnect once.
 const readDropboxState = async () => {
-  const stored = await getJsonSetting<DropboxState>('dropbox.state')
-  return { ...DEFAULT_STATE, ...stored }
+  const stored = await getJsonSetting<DropboxState & { auth?: unknown }>('dropbox.state')
+  const merged = { ...DEFAULT_STATE, ...stored }
+  if ('auth' in merged) {
+    delete (merged as { auth?: unknown }).auth
+  }
+  return merged as DropboxState
 }
 
 const enqueueDropboxStateWrite = async <T>(
@@ -74,6 +77,7 @@ export const updateDropboxFilePath = async (filePath: string) => {
       ...current,
       filePath,
       lastRemoteRev: pathChanged ? null : current.lastRemoteRev,
+      lastPushedHash: pathChanged ? null : current.lastPushedHash,
       lastSyncAt: pathChanged ? null : current.lastSyncAt,
     }
 
@@ -93,11 +97,16 @@ export const markDropboxLocalDirty = async () => {
   })
 }
 
-export const finalizeDropboxPushState = async (remoteRev: string, sourceRevision: number) => {
+export const finalizeDropboxPushState = async (
+  remoteRev: string,
+  sourceRevision: number,
+  pushedHash?: string | null,
+) => {
   await enqueueDropboxStateWrite((current) => {
     const next = {
       ...current,
       lastRemoteRev: remoteRev,
+      lastPushedHash: pushedHash === undefined ? current.lastPushedHash : pushedHash,
       lastSyncAt: Date.now(),
       localDirty: current.localRevision === sourceRevision ? false : current.localDirty,
     }

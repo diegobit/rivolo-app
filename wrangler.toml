@@ -2,8 +2,16 @@ name = "rivolo-app"
 pages_build_output_dir = "./dist"
 compatibility_date = "2026-06-21"
 
+# Public identifiers only. Secrets (client secrets, token encryption keys)
+# must NOT go here — set them as encrypted Secrets in the Cloudflare dashboard.
 [vars]
+GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"
 GOOGLE_ALLOWED_ORIGINS = "http://localhost:8788"
+DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
+DROPBOX_ALLOWED_ORIGINS = "http://localhost:8788"
 
 [env.production.vars]
+GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"
 GOOGLE_ALLOWED_ORIGINS = "https://rivolo.app"
+DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
+DROPBOX_ALLOWED_ORIGINS = "https://rivolo.app"
