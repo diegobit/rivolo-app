@@ -72,8 +72,16 @@ export default function SyncSection({
   const syncControlsDisabled = syncBusy || syncPaused
   const syncTabStatus = syncPaused ? 'Paused in this tab' : 'Primary tab'
 
-  const [collapsed, setCollapsed] = useState(false)
+  // Start collapsed until a provider is actually active, so first-time users see a compact list.
+  const [collapsed, setCollapsed] = useState(activeProvider === null)
   const [overwriteArmed, setOverwriteArmed] = useState(false)
+
+  // Sync state loads asynchronously; expand the active provider's row when it arrives.
+  const [prevActive, setPrevActive] = useState(activeProvider)
+  if (activeProvider !== prevActive) {
+    setPrevActive(activeProvider)
+    if (activeProvider === provider && collapsed) setCollapsed(false)
+  }
   const overwriteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const disarmOverwrite = () => {

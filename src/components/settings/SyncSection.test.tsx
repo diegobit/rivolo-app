@@ -45,6 +45,18 @@ const baseProps = {
 }
 
 describe('SyncSection', () => {
+  it('starts with both provider rows collapsed when no sync provider is active', () => {
+    render(<SyncSection {...baseProps} activeProvider={null} />)
+
+    const rowHeaders = screen
+      .getAllByRole('button')
+      .filter((button) => button.getAttribute('aria-controls')?.startsWith('sync-panel-'))
+    expect(rowHeaders).toHaveLength(2)
+    for (const header of rowHeaders) {
+      expect(header).toHaveAttribute('aria-expanded', 'false')
+    }
+  })
+
   it('shows an inactive connected provider without enabling sync actions', async () => {
     const activate = vi.fn()
     render(

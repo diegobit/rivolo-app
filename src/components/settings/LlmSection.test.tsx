@@ -23,7 +23,8 @@ const renderSection = (overrides: Overrides = {}) => {
   const props: React.ComponentProps<typeof LlmSection> = {
     provider: 'gemini',
     providerSettings: baseProviderSettings,
-    llmSecrets: {},
+    // The active provider is configured, so its row starts expanded.
+    llmSecrets: { gemini: { apiKey: 'sk-test' } },
     aiLanguage: 'follow',
     allowWebSearch: true,
     settingsError: null,
@@ -41,6 +42,19 @@ const renderSection = (overrides: Overrides = {}) => {
 }
 
 describe('LlmSection', () => {
+  it('starts with every provider row collapsed when the active provider is not configured', () => {
+    renderSection({ llmSecrets: {} })
+
+    expect(screen.queryByRole('switch', { name: 'Web search' })).not.toBeInTheDocument()
+    const rowHeaders = screen
+      .getAllByRole('button')
+      .filter((button) => button.getAttribute('aria-controls')?.startsWith('llm-panel-'))
+    expect(rowHeaders).toHaveLength(4)
+    for (const header of rowHeaders) {
+      expect(header).toHaveAttribute('aria-expanded', 'false')
+    }
+  })
+
   it('toggles web search immediately', async () => {
     const onAllowWebSearchChange = vi.fn()
     renderSection({ onAllowWebSearchChange })

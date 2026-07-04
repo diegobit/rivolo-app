@@ -88,16 +88,19 @@ export default function LlmSection({
   onAiLanguageChange,
   onAllowWebSearchChange,
 }: LlmSectionProps) {
-  const [expanded, setExpanded] = useState<LlmProviderId | null>(provider)
+  // Start collapsed until a configured provider is known, so first-time users see a compact list.
+  const activeReady = isProviderReady(provider, providerSettings, llmSecrets)
+  const [expanded, setExpanded] = useState<LlmProviderId | null>(activeReady ? provider : null)
   const [customLanguageOpen, setCustomLanguageOpen] = useState(false)
   const [languageDraft, setLanguageDraft] = useState<string | null>(null)
   const [status, setStatus] = useState<Status>(null)
 
-  // Settings load asynchronously; keep the active provider's row expanded when it arrives.
-  const [prevProvider, setPrevProvider] = useState(provider)
-  if (provider !== prevProvider) {
-    setPrevProvider(provider)
-    if (expanded === prevProvider || expanded === null) setExpanded(provider)
+  // Settings load asynchronously; expand the active provider's row when it arrives ready.
+  const readyKey = `${provider}|${activeReady}`
+  const [prevReadyKey, setPrevReadyKey] = useState(readyKey)
+  if (readyKey !== prevReadyKey) {
+    setPrevReadyKey(readyKey)
+    if (activeReady && expanded === null) setExpanded(provider)
   }
 
   const showLanguageInput = customLanguageOpen || aiLanguage !== 'follow'
