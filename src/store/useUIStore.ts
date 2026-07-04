@@ -8,10 +8,12 @@ type UIState = {
   chatPanelOpen: boolean
   desktopChatPanelOpen: boolean
   chatMessageCount: number
+  timelineEmpty: boolean | null
   setMode: (mode: Mode) => void
   setChatPanelOpen: (open: boolean) => void
   setDesktopChatPanelOpen: (open: boolean) => void
   setChatMessageCount: (count: number) => void
+  setTimelineEmpty: (empty: boolean | null) => void
 }
 
 const getDefaultChatPanelsOpen = () => {
@@ -24,6 +26,7 @@ export const useUIStore = create<UIState>((set) => ({
   chatPanelOpen: getDefaultChatPanelsOpen(),
   desktopChatPanelOpen: getDefaultChatPanelsOpen(),
   chatMessageCount: 0,
+  timelineEmpty: null,
   setMode: (mode) =>
     set((state) => ({
       mode,
@@ -33,4 +36,5 @@ export const useUIStore = create<UIState>((set) => ({
   setChatPanelOpen: (open) => set({ chatPanelOpen: open }),
   setDesktopChatPanelOpen: (open) => set({ desktopChatPanelOpen: open }),
   setChatMessageCount: (count) => set({ chatMessageCount: count }),
+  setTimelineEmpty: (empty) => set({ timelineEmpty: empty }),
 }))

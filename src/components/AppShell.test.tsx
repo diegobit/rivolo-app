@@ -41,6 +41,8 @@ const stores = vi.hoisted(() => ({
     desktopChatPanelOpen: false,
     setDesktopChatPanelOpen: vi.fn(),
     chatMessageCount: 0,
+    timelineEmpty: null as boolean | null,
+    setTimelineEmpty: vi.fn(),
   },
 }))
 
@@ -74,6 +76,7 @@ describe('AppShell attention and stale tab states', () => {
     stores.days = { loaded: true, loading: false, days: [{}] }
     stores.sync.activeProvider = null
     stores.sync.syncAttention = null
+    stores.ui.timelineEmpty = null
   })
 
   afterEach(() => {
@@ -173,7 +176,7 @@ describe('AppShell attention and stale tab states', () => {
     expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
   })
 
-  it('hides attention on welcome and reveals it five seconds after the first note', async () => {
+  it('delays attention after welcome and hides it immediately when welcome returns', async () => {
     vi.useFakeTimers()
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.days = { loaded: false, loading: true, days: [] }
@@ -197,10 +200,14 @@ describe('AppShell attention and stale tab states', () => {
     rerender(renderHome())
     expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
 
-    act(() => vi.advanceTimersByTime(4999))
+    act(() => vi.advanceTimersByTime(2999))
     expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
 
     act(() => vi.advanceTimersByTime(1))
     expect(screen.getByRole('button', { name: '2 items need attention' })).toBeVisible()
+
+    stores.ui.timelineEmpty = true
+    rerender(renderHome())
+    expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
   })
 })

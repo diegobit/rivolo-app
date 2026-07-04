@@ -756,6 +756,7 @@ export default function Timeline() {
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
   const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const setChatMessageCount = useUIStore((state) => state.setChatMessageCount)
+  const setTimelineEmpty = useUIStore((state) => state.setTimelineEmpty)
   const messages = useChatStore((state) => state.messages)
   const setMessages = useChatStore((state) => state.setMessages)
 
@@ -1073,6 +1074,8 @@ export default function Timeline() {
   }, [heroFadeDuration])
 
   useLayoutEffect(() => {
+    setTimelineEmpty(hasNoNotes)
+
     if (hasNoNotes || isLogoAnimating) {
       document.body.dataset.emptyState = 'true'
     } else {
@@ -1087,7 +1090,7 @@ export default function Timeline() {
 
     delete document.body.dataset.heroWallpaper
     delete document.body.dataset.heroUi
-  }, [hasNoNotes, isLogoAnimating])
+  }, [hasNoNotes, isLogoAnimating, setTimelineEmpty])
 
   useLayoutEffect(() => {
     if (hasNoNotes) return
@@ -1109,12 +1112,13 @@ export default function Timeline() {
 
   useEffect(() => {
     return () => {
+      setTimelineEmpty(null)
       delete document.body.dataset.emptyState
       delete document.body.dataset.heroWallpaper
       delete document.body.dataset.heroUi
       delete document.body.dataset.heroReveal
     }
-  }, [])
+  }, [setTimelineEmpty])
 
   // Restore scroll position when returning to Timeline
   useEffect(() => {

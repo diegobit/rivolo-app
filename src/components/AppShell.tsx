@@ -23,7 +23,7 @@ const trayIconButton =
 const backButtonClass =
   'flex h-11 w-11 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90 sm:h-9 sm:w-9'
 const MIN_BOTTOM_TRAY_HEIGHT_PX = 56
-const ATTENTION_AFTER_WELCOME_DELAY_MS = 5000
+const ATTENTION_AFTER_WELCOME_DELAY_MS = 3000
 
 export default function AppShell() {
   const location = useLocation()
@@ -51,6 +51,7 @@ export default function AppShell() {
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
   const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
+  const timelineEmpty = useUIStore((state) => state.timelineEmpty)
   const tabSync = useTabSyncState()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
@@ -98,8 +99,9 @@ export default function AppShell() {
       dismissibleSetupNoticeId: notice.id,
     })),
   ]
-  const isWelcomeVisible = timelineLoaded && !timelineLoading && !timelineHasNotes
-  const isRealTimelineVisible = timelineLoaded && !timelineLoading && timelineHasNotes
+  const isTimelineEmpty = timelineEmpty ?? !timelineHasNotes
+  const isWelcomeVisible = timelineLoaded && !timelineLoading && isTimelineEmpty
+  const isRealTimelineVisible = timelineLoaded && !timelineLoading && !isTimelineEmpty
   const timelineAttentionReady =
     isRealTimelineVisible && (!sawWelcome || postWelcomeAttentionReady)
   const showAttention =
