@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AppShell from './AppShell'
 
 const stores = vi.hoisted(() => ({
@@ -14,6 +14,11 @@ const stores = vi.hoisted(() => ({
     dismissSetupNotice: vi.fn().mockResolvedValue(undefined),
     wallpaper: 'rivolo-light',
     highlightInputMode: false,
+  },
+  days: {
+    loaded: true,
+    loading: false,
+    days: [{}],
   },
   sync: {
     loadState: vi.fn().mockResolvedValue(undefined),
@@ -42,6 +47,9 @@ const stores = vi.hoisted(() => ({
 vi.mock('../store/useSettingsStore', () => ({
   useSettingsStore: (selector: (state: typeof stores.settings) => unknown) => selector(stores.settings),
 }))
+vi.mock('../store/useDaysStore', () => ({
+  useDaysStore: (selector: (state: typeof stores.days) => unknown) => selector(stores.days),
+}))
 vi.mock('../store/useSyncStore', () => ({
   useSyncStore: (selector: (state: typeof stores.sync) => unknown) => selector(stores.sync),
 }))
@@ -63,8 +71,13 @@ describe('AppShell attention and stale tab states', () => {
     stores.settings.llmSecrets = {}
     stores.settings.dismissedSetupNotices = { ai: false, sync: false }
     stores.settings.dismissSetupNotice.mockClear()
+    stores.days = { loaded: true, loading: false, days: [{}] }
     stores.sync.activeProvider = null
     stores.sync.syncAttention = null
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('makes the main surface inert and keeps reload available', () => {
@@ -158,5 +171,36 @@ describe('AppShell attention and stale tab states', () => {
 
     expect(await screen.findByText('Settings content')).toBeVisible()
     expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
+  })
+
+  it('hides attention on welcome and reveals it five seconds after the first note', async () => {
+    vi.useFakeTimers()
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.days = { loaded: false, loading: true, days: [] }
+    const renderHome = () => (
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    const { rerender } = render(renderHome())
+
+    await act(async () => undefined)
+    expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
+
+    stores.days = { loaded: true, loading: false, days: [] }
+    rerender(renderHome())
+    expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
+
+    stores.days = { loaded: true, loading: false, days: [{}] }
+    rerender(renderHome())
+    expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
+
+    act(() => vi.advanceTimersByTime(4999))
+    expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
+
+    act(() => vi.advanceTimersByTime(1))
+    expect(screen.getByRole('button', { name: '2 items need attention' })).toBeVisible()
   })
 })

@@ -17,6 +17,7 @@ import type { Day } from '../lib/dayRepository'
 type DaysState = {
   days: Day[]
   activeDay: Day | null
+  loaded: boolean
   loading: boolean
   loadingMore: boolean
   hasMorePast: boolean
@@ -73,6 +74,7 @@ const mergeDays = (days: Day[], incoming: Day[]) => {
 export const useDaysStore = create<DaysState>((set, get) => ({
   days: [],
   activeDay: null,
+  loaded: false,
   loading: false,
   loadingMore: false,
   hasMorePast: false,
@@ -138,6 +140,7 @@ export const useDaysStore = create<DaysState>((set, get) => ({
 
       set({
         days: nextDays,
+        loaded: true,
         loading: false,
         loadingMore: false,
         hasMorePast,
@@ -154,7 +157,7 @@ export const useDaysStore = create<DaysState>((set, get) => ({
         error: getErrorMessage(error),
       })
 
-      set({ loading: false, loadingMore: false })
+      set({ loaded: true, loading: false, loadingMore: false })
     }
   },
 

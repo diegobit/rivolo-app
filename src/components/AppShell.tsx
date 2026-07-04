@@ -12,6 +12,7 @@ import { useAutoPullSync } from './app-shell/useAutoPullSync'
 import { isProviderReady } from '../lib/llm/readiness'
 import { getSetupNotices } from '../lib/setupAttention'
 import { useSettingsStore } from '../store/useSettingsStore'
+import { useDaysStore } from '../store/useDaysStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useUIStore } from '../store/useUIStore'
 
@@ -22,10 +23,14 @@ const trayIconButton =
 const backButtonClass =
   'flex h-11 w-11 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90 sm:h-9 sm:w-9'
 const MIN_BOTTOM_TRAY_HEIGHT_PX = 56
+const ATTENTION_AFTER_WELCOME_DELAY_MS = 5000
 
 export default function AppShell() {
   const location = useLocation()
   const loadSettings = useSettingsStore((state) => state.loadSettings)
+  const timelineLoaded = useDaysStore((state) => state.loaded)
+  const timelineLoading = useDaysStore((state) => state.loading)
+  const timelineHasNotes = useDaysStore((state) => state.days.length > 0)
   const provider = useSettingsStore((state) => state.provider)
   const providerSettings = useSettingsStore((state) => state.providerSettings)
   const llmSecrets = useSettingsStore((state) => state.llmSecrets)
@@ -51,6 +56,8 @@ export default function AppShell() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
   const [attentionLoaded, setAttentionLoaded] = useState(false)
+  const [sawWelcome, setSawWelcome] = useState(false)
+  const [postWelcomeAttentionReady, setPostWelcomeAttentionReady] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const focusModeInputAfterSwitchRef = useRef(false)
@@ -91,6 +98,14 @@ export default function AppShell() {
       dismissibleSetupNoticeId: notice.id,
     })),
   ]
+  const isWelcomeVisible = timelineLoaded && !timelineLoading && !timelineHasNotes
+  const isRealTimelineVisible = timelineLoaded && !timelineLoading && timelineHasNotes
+  const timelineAttentionReady =
+    isRealTimelineVisible && (!sawWelcome || postWelcomeAttentionReady)
+  const showAttention =
+    !tabSync.databaseStale && isHome && timelineAttentionReady && attentionItems.length > 0
+
+  if (isHome && isWelcomeVisible && !sawWelcome) setSawWelcome(true)
 
   const chatButton = (
     <button
@@ -147,6 +162,16 @@ export default function AppShell() {
       active = false
     }
   }, [loadSettings, loadSyncState])
+
+  useEffect(() => {
+    if (!isHome || !timelineLoaded) return
+    if (!isRealTimelineVisible || !sawWelcome || postWelcomeAttentionReady) return
+
+    const timeout = window.setTimeout(() => {
+      setPostWelcomeAttentionReady(true)
+    }, ATTENTION_AFTER_WELCOME_DELAY_MS)
+    return () => window.clearTimeout(timeout)
+  }, [isHome, isRealTimelineVisible, postWelcomeAttentionReady, sawWelcome, timelineLoaded])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -359,7 +384,7 @@ export default function AppShell() {
               Reload
             </button>
           ) : null}
-          {!tabSync.databaseStale && isHome && attentionItems.length > 0 && (
+          {showAttention && (
             <AttentionPopover
               items={attentionItems}
               onDismissSetupNotice={(noticeId) => {
@@ -374,7 +399,7 @@ export default function AppShell() {
           )}
           {syncing && (
             <div
-              className={`${attentionItems.length > 0 ? 'hidden sm:flex' : 'flex'} h-7 w-7 items-center justify-center rounded-full border border-slate-200/70 bg-white/80 text-slate-500 shadow-sm`}
+              className={`${showAttention ? 'hidden sm:flex' : 'flex'} h-7 w-7 items-center justify-center rounded-full border border-slate-200/70 bg-white/80 text-slate-500 shadow-sm`}
               role="status"
               aria-live="polite"
               aria-label={syncDirection === 'down' ? 'Pulling from sync provider' : 'Pushing to sync provider'}
