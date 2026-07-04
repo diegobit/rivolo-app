@@ -74,7 +74,7 @@ export const LLM_PROVIDER_REGISTRY: Record<LlmProviderId, ProviderRegistryEntry>
     webSearch: 'supported',
   },
   anthropic: {
-    label: 'Claude (Anthropic)',
+    label: 'Claude',
     defaultModel: 'claude-sonnet-4-6',
     requiresApiKey: true,
     requiresBaseUrl: false,
