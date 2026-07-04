@@ -11,6 +11,7 @@ import {
 } from '../../lib/fonts'
 import { editorHighlights } from '../../lib/editorHighlights'
 import { buttonPill, buttonPillActive } from '../../lib/ui'
+import AccordionRow from './AccordionRow'
 import SettingsToggle from './SettingsToggle'
 
 const previewMarkdownExtension = markdown({ base: markdownLanguage })
@@ -59,7 +60,7 @@ type AppearanceSectionProps = {
   onTitleFontChange: (font: TitleFont) => void
   onBodyFontChange: (font: BodyFont) => void
   onMonospaceFontChange: (font: MonospaceFont) => void
-  onFontPreviewToggle: (event: React.SyntheticEvent<HTMLDetailsElement>) => void
+  onFontPreviewToggle: () => void
 }
 
 export default function AppearanceSection({
@@ -186,15 +187,14 @@ export default function AppearanceSection({
           ))}
         </div>
 
-        <details
-          className="mt-4 rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-3"
-          onToggle={onFontPreviewToggle}
-        >
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Font Preview
-          </summary>
-          {showFontPreview && (
-            <div className="mt-3 space-y-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
+        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+          <AccordionRow
+            label="Font Preview"
+            isOpen={showFontPreview}
+            onToggle={onFontPreviewToggle}
+            panelId="font-preview-panel"
+          >
+            <div className="space-y-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
               <div
                 className="flex flex-wrap items-baseline gap-2 text-3xl text-slate-900"
                 style={{ fontFamily: titlePreviewFontFamily }}
@@ -220,8 +220,8 @@ export default function AppearanceSection({
                 />
               </div>
             </div>
-          )}
-        </details>
+          </AccordionRow>
+        </div>
       </div>
     </section>
   )

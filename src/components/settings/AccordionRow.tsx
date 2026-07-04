@@ -1,8 +1,8 @@
 type AccordionRowProps = {
   label: string
-  badgeText: string
-  badgeClass: string
-  isActive: boolean
+  badgeText?: string
+  badgeClass?: string
+  isActive?: boolean
   isOpen: boolean
   onToggle: () => void
   panelId: string
@@ -28,24 +28,28 @@ export default function AccordionRow({
         aria-controls={panelId}
         onClick={onToggle}
       >
-        <svg
-          className={`h-4 w-4 shrink-0 text-[#22B3FF] ${isActive ? '' : 'invisible'}`}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.3 3.29 6.8-6.79a1 1 0 0 1 1.4 0Z"
-            clipRule="evenodd"
-          />
-        </svg>
+        {isActive !== undefined && (
+          <svg
+            className={`h-4 w-4 shrink-0 text-[#22B3FF] ${isActive ? '' : 'invisible'}`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.3 3.29 6.8-6.79a1 1 0 0 1 1.4 0Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        )}
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-700">
           {label}
         </span>
-        <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${badgeClass}`}>
-          {badgeText}
-        </span>
+        {badgeText && (
+          <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${badgeClass}`}>
+            {badgeText}
+          </span>
+        )}
         <svg
           className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
           viewBox="0 0 20 20"

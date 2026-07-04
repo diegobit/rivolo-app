@@ -153,9 +153,7 @@ export default function Settings() {
     void updateTitleFont(font)
   }
 
-  const handleFontPreviewToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
-    setShowFontPreview(event.currentTarget.open)
-  }
+  const handleFontPreviewToggle = () => setShowFontPreview((current) => !current)
 
   useEffect(() => {
     window.scrollTo(0, 0)
