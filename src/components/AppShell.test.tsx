@@ -1,16 +1,23 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AppShell from './AppShell'
 
 const stores = vi.hoisted(() => ({
   settings: {
-    loadSettings: vi.fn(),
+    loadSettings: vi.fn().mockResolvedValue(undefined),
+    provider: 'gemini',
+    providerSettings: {},
+    llmSecrets: {} as Record<string, { apiKey?: string }>,
+    dismissedSetupNotices: { ai: false, sync: false },
+    dismissSetupNotice: vi.fn().mockResolvedValue(undefined),
     wallpaper: 'rivolo-light',
     highlightInputMode: false,
   },
   sync: {
-    loadState: vi.fn(),
+    loadState: vi.fn().mockResolvedValue(undefined),
+    activeProvider: null as string | null,
     status: {
       connected: false,
       targetName: null,
@@ -50,7 +57,16 @@ vi.mock('./app-shell/useAutoPullSync', () => ({ useAutoPullSync: vi.fn() }))
 vi.mock('./app-shell/BottomTrayRow', () => ({ default: () => null }))
 vi.mock('./app-shell/ShortcutsPopover', () => ({ default: () => null }))
 
-describe('AppShell stale tab guard', () => {
+describe('AppShell attention and stale tab states', () => {
+  beforeEach(() => {
+    stores.tabSync = { isPrimary: false, databaseStale: true }
+    stores.settings.llmSecrets = {}
+    stores.settings.dismissedSetupNotices = { ai: false, sync: false }
+    stores.settings.dismissSetupNotice.mockClear()
+    stores.sync.activeProvider = null
+    stores.sync.syncAttention = null
+  })
+
   it('makes the main surface inert and keeps reload available', () => {
     stores.tabSync = { isPrimary: false, databaseStale: true }
     stores.sync.syncAttention = null
@@ -68,8 +84,10 @@ describe('AppShell stale tab guard', () => {
     expect(screen.getByRole('button', { name: 'Reload stale tab' })).toBeVisible()
   })
 
-  it('shows a sync attention indicator that links to settings', () => {
+  it('puts a sync issue in the unified attention popover', async () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
+    stores.sync.activeProvider = 'google-drive'
     stores.sync.syncAttention = {
       operation: 'push',
       message: 'Google Drive changed remotely.',
@@ -83,8 +101,62 @@ describe('AppShell stale tab guard', () => {
       </MemoryRouter>,
     )
 
-    const indicator = screen.getByRole('link', { name: 'Sync needs attention' })
+    const indicator = screen.getByRole('button', { name: '1 item needs attention' })
     expect(indicator).toBeVisible()
-    expect(indicator).toHaveAttribute('href', '/settings')
+    await userEvent.click(indicator)
+    expect(screen.getByRole('dialog', { name: 'Items needing attention' })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Sync needs attention/ })).toHaveAttribute(
+      'href',
+      '/settings#settings-sync',
+    )
+  })
+
+  it('shows and individually dismisses both new-user setup notices on Timeline', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const indicator = await screen.findByRole('button', { name: '2 items need attention' })
+    await userEvent.click(indicator)
+
+    expect(screen.getByRole('link', { name: /AI assistant isn't set up/ })).toHaveAttribute(
+      'href',
+      '/settings#settings-ai',
+    )
+    expect(screen.getByRole('link', { name: /Cloud sync is off/ })).toHaveAttribute(
+      'href',
+      '/settings#settings-sync',
+    )
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Items needing attention' })).not.toBeInTheDocument()
+    expect(indicator).toHaveFocus()
+
+    await userEvent.click(indicator)
+    await userEvent.click(screen.getByRole('button', { name: "Dismiss AI assistant isn't set up" }))
+    expect(stores.settings.dismissSetupNotice).toHaveBeenCalledExactlyOnceWith('ai')
+  })
+
+  it('does not show setup attention on the Settings page', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route path="settings" element={<div>Settings content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Settings content')).toBeVisible()
+    expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
   })
 })

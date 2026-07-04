@@ -13,6 +13,7 @@ import {
   type LlmSecrets,
   type OpenAIReasoningEffort,
 } from '../../lib/llm/types'
+import { isProviderReady } from '../../lib/llm/readiness'
 import {
   buttonDanger,
   buttonPill,
@@ -53,20 +54,6 @@ const webSearchMessages: Record<LlmProviderId, string> = {
     'Claude can use Anthropic web search when enabled. Direct requests use Anthropic’s required browser opt-in header.',
   openai: 'OpenAI can use its Responses API web-search tool when web search is enabled.',
   'openai-compatible': 'Uses the configured OpenAI-compatible chat endpoint.',
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- shared readiness check reused by Settings warnings
-export const isProviderReady = (
-  id: LlmProviderId,
-  providerSettings: LlmProviderSettings,
-  llmSecrets: LlmSecrets,
-): boolean => {
-  if (llmSecrets[id]?.apiKey) return true
-  if (id === 'openai-compatible') {
-    const settings = providerSettings['openai-compatible']
-    return Boolean(settings.model && settings.baseUrl)
-  }
-  return false
 }
 
 const capitalize = (value: string) => value[0].toUpperCase() + value.slice(1)

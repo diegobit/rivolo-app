@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import BottomTrayRow from './app-shell/BottomTrayRow'
+import AttentionPopover, { type AttentionItem } from './app-shell/AttentionPopover'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
 import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
 import { isPrimaryModifierPressed } from '../lib/device'
@@ -8,6 +9,8 @@ import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
 import { useAutoPullSync } from './app-shell/useAutoPullSync'
+import { isProviderReady } from '../lib/llm/readiness'
+import { getSetupNotices } from '../lib/setupAttention'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useUIStore } from '../store/useUIStore'
@@ -23,6 +26,11 @@ const MIN_BOTTOM_TRAY_HEIGHT_PX = 56
 export default function AppShell() {
   const location = useLocation()
   const loadSettings = useSettingsStore((state) => state.loadSettings)
+  const provider = useSettingsStore((state) => state.provider)
+  const providerSettings = useSettingsStore((state) => state.providerSettings)
+  const llmSecrets = useSettingsStore((state) => state.llmSecrets)
+  const dismissedSetupNotices = useSettingsStore((state) => state.dismissedSetupNotices)
+  const dismissSetupNotice = useSettingsStore((state) => state.dismissSetupNotice)
   const wallpaper = useSettingsStore((state) => state.wallpaper)
   const highlightInputMode = useSettingsStore((state) => state.highlightInputMode)
   const loadSyncState = useSyncStore((state) => state.loadState)
@@ -30,6 +38,7 @@ export default function AppShell() {
   const syncing = useSyncStore((state) => state.syncing)
   const syncOperation = useSyncStore((state) => state.syncOperation)
   const syncAttention = useSyncStore((state) => state.syncAttention)
+  const activeProvider = useSyncStore((state) => state.activeProvider)
   const mode = useUIStore((state) => state.mode)
   const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
@@ -41,6 +50,7 @@ export default function AppShell() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
+  const [attentionLoaded, setAttentionLoaded] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const focusModeInputAfterSwitchRef = useRef(false)
@@ -58,6 +68,29 @@ export default function AppShell() {
   const showMobileNewChatButton =
     isHome && mode === 'chat' && isNarrowViewportMode && chatMessageCount > 0
   const syncDirection = syncOperation === 'push' ? 'up' : 'down'
+  const setupNotices = attentionLoaded
+    ? getSetupNotices({
+        aiNeedsSetup: !isProviderReady(provider, providerSettings, llmSecrets),
+        syncNeedsSetup: activeProvider === null,
+        dismissed: dismissedSetupNotices,
+      })
+    : []
+  const attentionItems: AttentionItem[] = [
+    ...(syncAttention
+      ? [
+          {
+            id: 'sync-attention',
+            title: 'Sync needs attention',
+            description: syncAttention.message,
+            settingsSectionId: 'settings-sync' as const,
+          },
+        ]
+      : []),
+    ...setupNotices.map((notice) => ({
+      ...notice,
+      dismissibleSetupNoticeId: notice.id,
+    })),
+  ]
 
   const chatButton = (
     <button
@@ -106,8 +139,13 @@ export default function AppShell() {
   )
 
   useEffect(() => {
-    void loadSettings()
-    void loadSyncState()
+    let active = true
+    void Promise.all([loadSettings(), loadSyncState()]).finally(() => {
+      if (active) setAttentionLoaded(true)
+    })
+    return () => {
+      active = false
+    }
   }, [loadSettings, loadSyncState])
 
   useEffect(() => {
@@ -310,7 +348,7 @@ export default function AppShell() {
         <NavLink to="/" className="relative z-10 justify-self-center" aria-label="Home">
           <img src="/logo.png" alt="Rivolo" className="app-logo h-10 w-auto" />
         </NavLink>
-        <div className="relative z-10 flex items-center justify-end gap-2">
+        <div className="relative z-10 flex items-center justify-end gap-1 sm:gap-2">
           {tabSync.databaseStale ? (
             <button
               className="flex h-11 items-center rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-100 sm:h-9"
@@ -321,19 +359,22 @@ export default function AppShell() {
               Reload
             </button>
           ) : null}
-          {!tabSync.databaseStale && syncAttention && (
-            <NavLink
-              to="/settings"
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-xs font-bold text-amber-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-100"
-              aria-label="Sync needs attention"
-              title={syncAttention.message}
-            >
-              !
-            </NavLink>
+          {!tabSync.databaseStale && isHome && attentionItems.length > 0 && (
+            <AttentionPopover
+              items={attentionItems}
+              onDismissSetupNotice={(noticeId) => {
+                void dismissSetupNotice(noticeId).catch((error) => {
+                  console.error('[Setup reminder dismissal failed]', error)
+                })
+              }}
+              onNavigate={() => {
+                sessionStorage.setItem('timeline-scroll', String(window.scrollY))
+              }}
+            />
           )}
           {syncing && (
             <div
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200/70 bg-white/80 text-slate-500 shadow-sm"
+              className={`${attentionItems.length > 0 ? 'hidden sm:flex' : 'flex'} h-7 w-7 items-center justify-center rounded-full border border-slate-200/70 bg-white/80 text-slate-500 shadow-sm`}
               role="status"
               aria-live="polite"
               aria-label={syncDirection === 'down' ? 'Pulling from sync provider' : 'Pushing to sync provider'}

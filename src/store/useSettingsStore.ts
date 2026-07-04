@@ -11,6 +11,11 @@ import {
   type LlmProviderSettings,
   type LlmSecrets,
 } from '../lib/llm/types'
+import {
+  DEFAULT_DISMISSED_SETUP_NOTICES,
+  type DismissedSetupNotices,
+  type SetupNoticeId,
+} from '../lib/setupAttention'
 import { getJsonSetting, getSetting, setJsonSetting, setSetting } from '../lib/settingsRepository'
 
 type Wallpaper = 'white' | 'thoughts-light' | 'thoughts-high'
@@ -27,6 +32,7 @@ type SettingsState = {
   aiLanguage: AiLanguage
   settingsError: string | null
   loading: boolean
+  dismissedSetupNotices: DismissedSetupNotices
   wallpaper: Wallpaper
   highlightInputMode: boolean
   autocorrection: boolean
@@ -51,6 +57,7 @@ type SettingsState = {
   updateBodyFont: (bodyFont: BodyFont) => Promise<void>
   updateMonospaceFont: (monospaceFont: MonospaceFont) => Promise<void>
   updateTitleFont: (titleFont: TitleFont) => Promise<void>
+  dismissSetupNotice: (noticeId: SetupNoticeId) => Promise<void>
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -64,6 +71,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   aiLanguage: 'follow',
   settingsError: null,
   loading: false,
+  dismissedSetupNotices: DEFAULT_DISMISSED_SETUP_NOTICES,
   wallpaper: isIOS() ? 'white' : 'thoughts-light',
   highlightInputMode: false,
   autocorrection: true,
@@ -92,6 +100,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         storedBodyFont,
         storedMonospaceFont,
         storedTitleFont,
+        storedDismissedAiSetup,
+        storedDismissedSyncSetup,
       ] = await Promise.all([
         getSetting('llm.provider'),
         getJsonSetting<unknown>('llm.providers'),
@@ -108,6 +118,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         getSetting('appearance.bodyFont'),
         getSetting('appearance.monospaceFont'),
         getSetting('appearance.titleFont'),
+        getSetting('setup.dismissedAi'),
+        getSetting('setup.dismissedSync'),
       ])
 
       const provider = isLlmProviderId(storedProvider) ? storedProvider : 'gemini'
@@ -136,6 +148,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const bodyFont = isBodyFont(storedBodyFont) ? storedBodyFont : 'system'
       const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
       const titleFont = isTitleFont(storedTitleFont) ? storedTitleFont : 'handlee'
+      const dismissedSetupNotices: DismissedSetupNotices = {
+        ai: storedDismissedAiSetup === 'true',
+        sync: storedDismissedSyncSetup === 'true',
+      }
 
       const persistedProviders = mergePersistedProviderSettings(storedProviders, providerSettings)
       const secretsRoot = isRecord(storedSecrets) ? storedSecrets : {}
@@ -189,6 +205,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         bodyFont,
         monospaceFont,
         titleFont,
+        dismissedSetupNotices,
         loading: false,
       })
     } catch (error) {
@@ -309,5 +326,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   updateTitleFont: async (titleFont) => {
     await setSetting('appearance.titleFont', titleFont)
     set({ titleFont })
+  },
+
+  dismissSetupNotice: async (noticeId) => {
+    const previous = get().dismissedSetupNotices
+    const next = { ...previous, [noticeId]: true }
+    set({ dismissedSetupNotices: next })
+    try {
+      await setSetting(`setup.dismissed${noticeId === 'ai' ? 'Ai' : 'Sync'}`, 'true')
+    } catch (error) {
+      set({ dismissedSetupNotices: previous })
+      throw error
+    }
   },
 }))

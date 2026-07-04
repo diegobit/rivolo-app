@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import AppearanceSection from '../components/settings/AppearanceSection'
 import BackupsSection from '../components/settings/BackupsSection'
 import ImportExportSection from '../components/settings/ImportExportSection'
-import LlmSection, { isProviderReady } from '../components/settings/LlmSection'
+import LlmSection from '../components/settings/LlmSection'
+import SetupNoticeBanner from '../components/settings/SetupNoticeBanner'
 import SyncSection from '../components/settings/SyncSection'
 import { isIOS } from '../lib/device'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
@@ -19,6 +20,8 @@ import {
 import { shareOrDownload } from '../lib/share'
 import { DEFAULT_DROPBOX_PATH } from '../lib/dropbox'
 import { prepareGoogleDriveAuth } from '../lib/googleDriveAuth'
+import { isProviderReady } from '../lib/llm/readiness'
+import { getSetupNotices } from '../lib/setupAttention'
 import { DEFAULT_GOOGLE_DRIVE_FILE_NAME, getGoogleDrivePath } from '../lib/googleDriveState'
 import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import type { SyncProviderId } from '../lib/sync'
@@ -67,6 +70,7 @@ def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
 `
 
 export default function Settings() {
+  const location = useLocation()
   const loadTimeline = useDaysStore((state) => state.loadTimeline)
   const loadSettings = useSettingsStore((state) => state.loadSettings)
   const selectProvider = useSettingsStore((state) => state.selectProvider)
@@ -82,6 +86,7 @@ export default function Settings() {
   const updateBodyFont = useSettingsStore((state) => state.updateBodyFont)
   const updateMonospaceFont = useSettingsStore((state) => state.updateMonospaceFont)
   const updateTitleFont = useSettingsStore((state) => state.updateTitleFont)
+  const dismissSetupNotice = useSettingsStore((state) => state.dismissSetupNotice)
   const provider = useSettingsStore((state) => state.provider)
   const providerSettings = useSettingsStore((state) => state.providerSettings)
   const llmSecrets = useSettingsStore((state) => state.llmSecrets)
@@ -95,6 +100,7 @@ export default function Settings() {
   const bodyFont = useSettingsStore((state) => state.bodyFont)
   const monospaceFont = useSettingsStore((state) => state.monospaceFont)
   const titleFont = useSettingsStore((state) => state.titleFont)
+  const dismissedSetupNotices = useSettingsStore((state) => state.dismissedSetupNotices)
   const dropboxFilePath = useDropboxStore((state) => state.filePath)
   const dropboxRemoteRev = useDropboxStore((state) => state.lastRemoteRev)
   const dropboxLastSyncAt = useDropboxStore((state) => state.lastSyncAt)
@@ -322,58 +328,41 @@ export default function Settings() {
       setActiveProvider: setActiveSyncProvider,
     })
 
-  const aiNeedsSetup = !isProviderReady(provider, providerSettings, llmSecrets)
-  const syncOff = activeProvider === null
+  const setupNotices = getSetupNotices({
+    aiNeedsSetup: !isProviderReady(provider, providerSettings, llmSecrets),
+    syncNeedsSetup: activeProvider === null,
+    dismissed: dismissedSetupNotices,
+  })
 
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  useEffect(() => {
+    if (!initialLoadDone) return
+    const sectionId = location.hash.slice(1)
+    if (sectionId !== 'settings-ai' && sectionId !== 'settings-sync') return
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [initialLoadDone, location.hash])
+
   return (
     <div className="space-y-4">
-      {initialLoadDone && aiNeedsSetup && (
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800"
-          onClick={() => scrollToSection('settings-ai')}
-        >
-          The AI assistant isn&apos;t set up — open a provider below and add an API key.
-          <svg
-            className="ml-auto h-4 w-4 shrink-0"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              fillRule="evenodd"
-              d="M7.3 5.3a1 1 0 0 1 1.4 0l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.42-1.4L10.58 10 7.3 6.7a1 1 0 0 1 0-1.4Z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </button>
-      )}
-
-      {initialLoadDone && syncOff && (
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800"
-          onClick={() => scrollToSection('settings-sync')}
-        >
-          Cloud sync is off — your notes are stored only on this device.
-          <svg
-            className="ml-auto h-4 w-4 shrink-0"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              fillRule="evenodd"
-              d="M7.3 5.3a1 1 0 0 1 1.4 0l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.42-1.4L10.58 10 7.3 6.7a1 1 0 0 1 0-1.4Z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </button>
-      )}
+      {initialLoadDone &&
+        setupNotices.map((notice) => (
+          <SetupNoticeBanner
+            key={notice.id}
+            notice={notice}
+            onOpen={() => scrollToSection(notice.settingsSectionId)}
+            onDismiss={() => {
+              void dismissSetupNotice(notice.id).catch((error) => {
+                console.error('[Setup reminder dismissal failed]', error)
+              })
+            }}
+          />
+        ))}
 
       <div id="settings-ai" className="scroll-mt-2 sm:scroll-mt-20">
         <LlmSection
