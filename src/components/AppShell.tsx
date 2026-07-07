@@ -22,7 +22,7 @@ const topIconButton =
 const trayIconButton =
   'flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:h-10 sm:w-10'
 const backButtonClass =
-  'flex h-11 w-11 items-center justify-center rounded-full bg-[var(--theme-accent)] shadow-sm transition hover:bg-[var(--theme-accent-hover)] sm:h-9 sm:w-9'
+  'flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:h-9 sm:w-9'
 const MIN_BOTTOM_TRAY_HEIGHT_PX = 56
 const ATTENTION_AFTER_WELCOME_DELAY_MS = 3000
 
@@ -382,11 +382,9 @@ export default function AppShell() {
         <div className="relative z-10 flex items-center gap-2">
           {showBackButton && (
             <NavLink to={backTarget} className={backButtonClass} aria-label="Back">
-              <img
-                src="/caret-left.svg"
-                alt=""
-                className="h-5 w-5"
-                style={{ filter: 'brightness(0) invert(1)' }}
+              <span
+                aria-hidden="true"
+                className="h-5 w-5 bg-current [mask-image:url('/caret-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/caret-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
               />
             </NavLink>
           )}
