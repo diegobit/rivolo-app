@@ -25,6 +25,7 @@ const backButtonClass =
   'flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:h-9 sm:w-9'
 const MIN_BOTTOM_TRAY_HEIGHT_PX = 56
 const ATTENTION_AFTER_WELCOME_DELAY_MS = 3000
+const LOGO_FAST_CURRENT_RESET_MS = 900
 
 export default function AppShell() {
   const location = useLocation()
@@ -62,8 +63,26 @@ export default function AppShell() {
   const [attentionLoaded, setAttentionLoaded] = useState(false)
   const [sawWelcome, setSawWelcome] = useState(false)
   const [postWelcomeAttentionReady, setPostWelcomeAttentionReady] = useState(false)
+  const [isLogoCurrentFast, setIsLogoCurrentFast] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
+  const logoCurrentTimerRef = useRef<number | null>(null)
+
+  // When already home, clicking the logo glides the page back to the top.
+  const handleLogoClick = () => {
+    setIsLogoCurrentFast(true)
+    if (logoCurrentTimerRef.current !== null) {
+      window.clearTimeout(logoCurrentTimerRef.current)
+    }
+    logoCurrentTimerRef.current = window.setTimeout(() => {
+      setIsLogoCurrentFast(false)
+      logoCurrentTimerRef.current = null
+    }, LOGO_FAST_CURRENT_RESET_MS)
+
+    if (location.pathname === '/') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
   const focusModeInputAfterSwitchRef = useRef(false)
   const showBackButton = location.pathname === '/settings' || location.pathname === '/privacy'
   const backTarget = location.pathname === '/privacy' ? '/settings' : '/'
@@ -185,6 +204,14 @@ export default function AppShell() {
       active = false
     }
   }, [loadSettings, loadSyncState])
+
+  useEffect(() => {
+    return () => {
+      if (logoCurrentTimerRef.current !== null) {
+        window.clearTimeout(logoCurrentTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!isHome || !timelineLoaded) return
@@ -410,8 +437,32 @@ export default function AppShell() {
             </button>
           )}
         </div>
-        <NavLink to="/" className="relative z-10 justify-self-center" aria-label="Home">
+        <NavLink
+          to="/"
+          className={`app-logo-link relative z-10 justify-self-center ${
+            isLogoCurrentFast ? 'logo-current-fast' : ''
+          }`}
+          aria-label="Home"
+          onClick={handleLogoClick}
+        >
           <img src="/logo.png" alt="Rivolo" className="app-logo h-10 w-auto" />
+          <svg
+            className="logo-current"
+            viewBox="0 0 120 12"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <g className="logo-current-back">
+              <g className="logo-current-boost">
+                <path d="M0 6 Q6 3,12 6 T24 6 T36 6 T48 6 T60 6 T72 6 T84 6 T96 6 T108 6 T120 6 T132 6 T144 6" />
+              </g>
+            </g>
+            <g className="logo-current-front">
+              <g className="logo-current-boost">
+                <path d="M0 6 Q6 2.5,12 6 T24 6 T36 6 T48 6 T60 6 T72 6 T84 6 T96 6 T108 6 T120 6 T132 6 T144 6" />
+              </g>
+            </g>
+          </svg>
         </NavLink>
         <div className="relative z-10 flex items-center justify-end gap-1 sm:gap-2">
           {tabSync.databaseStale ? (

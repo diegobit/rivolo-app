@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -105,6 +105,36 @@ describe('AppShell attention and stale tab states', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('briefly speeds up the logo current on logo click', () => {
+    vi.useFakeTimers()
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    const scrollTo = vi.fn()
+    vi.stubGlobal('scrollTo', scrollTo)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const homeLink = screen.getByRole('link', { name: 'Home' })
+    expect(homeLink).not.toHaveClass('logo-current-fast')
+
+    fireEvent.click(homeLink)
+
+    expect(homeLink).toHaveClass('logo-current-fast')
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 0, behavior: 'smooth' })
+
+    act(() => vi.advanceTimersByTime(899))
+    expect(homeLink).toHaveClass('logo-current-fast')
+
+    act(() => vi.advanceTimersByTime(1))
+    expect(homeLink).not.toHaveClass('logo-current-fast')
   })
 
   it('makes the main surface inert and keeps reload available', () => {

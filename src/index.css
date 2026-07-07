@@ -435,8 +435,85 @@
     font-family: system-ui, sans-serif;
   }
 
-  body[data-empty-state='true'] .app-logo {
+  body[data-empty-state='true'] .app-logo,
+  body[data-empty-state='true'] .logo-current {
     opacity: 0;
+  }
+
+  /* Logo hover effect: a flowing "current" wave beneath the wordmark. */
+  .app-logo-link {
+    display: inline-flex;
+  }
+
+  .logo-current {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -3px;
+    width: 100%;
+    height: 8px;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 300ms ease;
+    pointer-events: none;
+    /* Fixed edge fade so waves dissolve at the sides instead of popping in. */
+    -webkit-mask: linear-gradient(to right, transparent 0, #000 20%, #000 80%, transparent 100%);
+            mask: linear-gradient(to right, transparent 0, #000 20%, #000 80%, transparent 100%);
+  }
+
+  .app-logo-link:hover .logo-current,
+  .app-logo-link:focus-visible .logo-current,
+  .app-logo-link.logo-current-fast .logo-current {
+    opacity: 1;
+  }
+
+  .logo-current path {
+    fill: none;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .logo-current-back {
+    stroke: #7dd3fc;
+    opacity: 0.45;
+    animation: logo-current-flow 3.6s linear infinite;
+  }
+
+  .logo-current-front {
+    animation: logo-current-flow 2.3s linear infinite;
+  }
+
+  .app-logo-link.logo-current-fast .logo-current-boost {
+    animation: logo-current-boost-phase 800ms cubic-bezier(0.18, 0, 0.22, 1) both;
+  }
+
+  .logo-current-back path {
+    stroke: #7dd3fc;
+    stroke-width: 2;
+  }
+
+  .logo-current-front path {
+    stroke: #38bdf8;
+    stroke-width: 2.25;
+  }
+
+  /* Draw one extra wavelength (24 user units) so the loop wraps seamlessly. */
+  @keyframes logo-current-flow {
+    from { transform: translateX(0); }
+    to { transform: translateX(-24px); }
+  }
+
+  @keyframes logo-current-boost-phase {
+    from { transform: translateX(0); }
+    to { transform: translateX(-24px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .logo-current-back,
+    .logo-current-front,
+    .logo-current-boost {
+      animation: none;
+    }
   }
 
   .hero-ui-fade-up,
