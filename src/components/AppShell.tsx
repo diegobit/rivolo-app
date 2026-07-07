@@ -68,6 +68,7 @@ export default function AppShell() {
   const showBackButton = location.pathname === '/settings' || location.pathname === '/privacy'
   const backTarget = location.pathname === '/privacy' ? '/settings' : '/'
   const isHome = location.pathname === '/'
+  const showSettingsButton = isHome
   const isDesktopChatModeWithMessages =
     isHome && mode === 'chat' && !isNarrowViewportMode && chatMessageCount > 0
   const isDesktopChatSidebarOpen = isDesktopChatModeWithMessages && desktopChatPanelOpen
@@ -452,18 +453,18 @@ export default function AppShell() {
             </div>
           )}
           {themeButton}
-          <NavLink
-            to="/settings"
-            className={`${topIconButton} hero-ui-fade-up`}
-            aria-label="Settings"
-            onClick={() => {
-              if (isHome) {
+          {showSettingsButton && (
+            <NavLink
+              to="/settings"
+              className={`${topIconButton} hero-ui-fade-up`}
+              aria-label="Settings"
+              onClick={() => {
                 sessionStorage.setItem('timeline-scroll', String(window.scrollY))
-              }
-            }}
-          >
-            <img src="/gear.svg" alt="" className="h-5 w-5" />
-          </NavLink>
+              }}
+            >
+              <img src="/gear.svg" alt="" className="h-5 w-5" />
+            </NavLink>
+          )}
         </div>
       </header>
 

@@ -253,6 +253,35 @@ describe('AppShell attention and stale tab states', () => {
     expect(stores.settings.updateThemePreference).toHaveBeenCalledExactlyOnceWith('system')
   })
 
+  it('keeps theme in the header and hides the settings shortcut away from the timeline', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    const renderShell = (initialEntry: string) => (
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+            <Route path="settings" element={<div>Settings content</div>} />
+            <Route path="privacy" element={<div>Privacy content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    )
+    let view = render(renderShell('/'))
+
+    expect(screen.getByRole('button', { name: 'Theme: System' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Settings' })).toBeVisible()
+
+    view.unmount()
+    view = render(renderShell('/settings'))
+    expect(screen.getByRole('button', { name: 'Theme: System' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
+
+    view.unmount()
+    render(renderShell('/privacy'))
+    expect(screen.getByRole('button', { name: 'Theme: System' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
+  })
+
   it('delays attention after welcome and hides it immediately when welcome returns', async () => {
     vi.useFakeTimers()
     stores.tabSync = { isPrimary: true, databaseStale: false }
