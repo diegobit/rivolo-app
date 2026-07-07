@@ -370,6 +370,10 @@ export default function Settings() {
 
   return (
     <div className="space-y-4">
+      <header className="px-1 pt-1">
+        <h1 className="text-2xl font-bold tracking-normal text-slate-700">Settings</h1>
+      </header>
+
       {initialLoadDone &&
         setupNotices.map((notice) => (
           <SetupNoticeBanner
