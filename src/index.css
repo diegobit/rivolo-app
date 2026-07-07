@@ -412,7 +412,7 @@
   }
 
   html[data-theme='dark'] body[data-wallpaper='thoughts-light']::after {
-    opacity: 0.12;
+    opacity: 0.04;
   }
 
   html[data-theme='dark'] body[data-wallpaper='thoughts-medium']::after {
