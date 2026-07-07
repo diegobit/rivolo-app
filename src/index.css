@@ -213,6 +213,8 @@
     --theme-accent-soft-rgb: 235 244 255;
     --theme-accent-border: #bfd9ff;
     --theme-accent-muted-text: #0f5580;
+    --theme-add-day-label: #22b3ff;
+    --theme-add-day-label-hover: #169fe6;
     --theme-tag: #c779da;
     --theme-mention: #0098e5;
     --theme-danger-soft: #fff1f2;
@@ -279,6 +281,8 @@
     --theme-accent-soft-rgb: 16 43 58;
     --theme-accent-border: #1a4d67;
     --theme-accent-muted-text: #acd4e7;
+    --theme-add-day-label: #1584b8;
+    --theme-add-day-label-hover: #22b3ff;
     --theme-tag: #9f62aa;
     --theme-mention: #579fc2;
     --theme-danger-soft: #31151d;
@@ -796,6 +800,14 @@
       animation: none;
       opacity: 0.55;
     }
+  }
+
+  .add-day-label-button {
+    color: var(--theme-add-day-label);
+  }
+
+  .add-day-label-button:hover {
+    color: var(--theme-add-day-label-hover);
   }
 
   .app-shell-fixed-right-aware {

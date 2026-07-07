@@ -2051,7 +2051,7 @@ export default function Timeline() {
                   className="scroll-anchor flex justify-center"
                 >
                   <button
-                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[var(--theme-accent-text)] transition hover:text-[var(--theme-accent)]"
+                    className="add-day-label-button group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold transition-colors"
                     type="button"
                     onClick={() => void handleCreateDay(item.dayId)}
                   >
@@ -2080,7 +2080,7 @@ export default function Timeline() {
                   }`}
                 >
                   <button
-                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[var(--theme-accent-text)] opacity-70 transition hover:text-[var(--theme-accent)]"
+                    className="add-day-label-button group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold opacity-70 transition-colors"
                     type="button"
                     onClick={() => void handleCreateDay(item.dayId)}
                   >
