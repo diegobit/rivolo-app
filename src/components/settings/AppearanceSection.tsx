@@ -11,11 +11,15 @@ import {
 } from '../../lib/fonts'
 import { editorHighlights } from '../../lib/editorHighlights'
 import { buttonPill, buttonPillActive } from '../../lib/ui'
+import { themePreferenceLabels, type ThemePreference } from '../../lib/theme'
 import AccordionRow from './AccordionRow'
 import SettingsToggle from './SettingsToggle'
 
 const previewMarkdownExtension = markdown({ base: markdownLanguage })
 const previewEditorTheme = EditorView.theme({
+  '&.cm-editor': {
+    backgroundColor: 'transparent',
+  },
   '&': {
     backgroundColor: 'transparent',
   },
@@ -42,7 +46,8 @@ const previewEditorTheme = EditorView.theme({
 })
 
 type AppearanceSectionProps = {
-  wallpaper: 'white' | 'thoughts-light' | 'thoughts-high'
+  themePreference: ThemePreference
+  wallpaper: 'none' | 'thoughts-light' | 'thoughts-high'
   highlightInputMode: boolean
   autocorrection: boolean
   fontPreference: 'proportional' | 'monospace'
@@ -54,7 +59,8 @@ type AppearanceSectionProps = {
   titlePreviewFontFamily: string
   bodyPreviewFontFamily: string
   bodyPreviewFontSize: string
-  onWallpaperChange: (value: 'white' | 'thoughts-light' | 'thoughts-high') => void
+  onThemePreferenceChange: (value: ThemePreference) => void
+  onWallpaperChange: (value: 'none' | 'thoughts-light' | 'thoughts-high') => void
   onHighlightInputModeChange: (enabled: boolean) => void
   onAutocorrectionChange: (enabled: boolean) => void
   onTitleFontChange: (font: TitleFont) => void
@@ -64,6 +70,7 @@ type AppearanceSectionProps = {
 }
 
 export default function AppearanceSection({
+  themePreference,
   wallpaper,
   highlightInputMode,
   autocorrection,
@@ -76,6 +83,7 @@ export default function AppearanceSection({
   titlePreviewFontFamily,
   bodyPreviewFontFamily,
   bodyPreviewFontSize,
+  onThemePreferenceChange,
   onWallpaperChange,
   onHighlightInputModeChange,
   onAutocorrectionChange,
@@ -88,15 +96,32 @@ export default function AppearanceSection({
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold text-slate-700">Appearance</h2>
       <div className="mt-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Theme</h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(['system', 'light', 'dark'] as const).map((option) => (
+            <button
+              key={option}
+              className={themePreference === option ? buttonPillActive : buttonPill}
+              type="button"
+              aria-pressed={themePreference === option}
+              onClick={() => onThemePreferenceChange(option)}
+            >
+              {themePreferenceLabels[option]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wallpaper</h3>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
-            className={wallpaper === 'white' ? buttonPillActive : buttonPill}
+            className={wallpaper === 'none' ? buttonPillActive : buttonPill}
             type="button"
-            aria-pressed={wallpaper === 'white'}
-            onClick={() => onWallpaperChange('white')}
+            aria-pressed={wallpaper === 'none'}
+            onClick={() => onWallpaperChange('none')}
           >
-            White
+            No background
           </button>
           <button
             className={wallpaper === 'thoughts-light' ? buttonPillActive : buttonPill}
@@ -195,16 +220,16 @@ export default function AppearanceSection({
             panelId="font-preview-panel"
             panelClassName="pt-4"
           >
-            <div className="space-y-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)]">
+            <div className="space-y-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[var(--theme-card-shadow)]">
               <div
-                className="flex flex-wrap items-baseline gap-2 text-3xl text-slate-900"
+                className="flex flex-wrap items-baseline gap-2 text-3xl text-[var(--theme-title)]"
                 style={{ fontFamily: titlePreviewFontFamily }}
               >
                 <span className="font-bold">Today</span>
-                <span className="font-normal text-slate-500">24, Saturday</span>
+                <span className="font-normal text-[var(--theme-title-muted)]">24, Saturday</span>
               </div>
               <div
-                className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm font-normal text-slate-900"
+                className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm font-normal text-[var(--theme-editor-text)]"
                 style={{ fontFamily: bodyPreviewFontFamily, fontSize: bodyPreviewFontSize }}
               >
                 <CodeMirror

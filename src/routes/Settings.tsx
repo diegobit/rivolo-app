@@ -79,6 +79,7 @@ export default function Settings() {
   const clearProviderKey = useSettingsStore((state) => state.clearProviderKey)
   const updateAllowWebSearch = useSettingsStore((state) => state.updateAllowWebSearch)
   const updateAiLanguage = useSettingsStore((state) => state.updateAiLanguage)
+  const updateThemePreference = useSettingsStore((state) => state.updateThemePreference)
   const updateWallpaper = useSettingsStore((state) => state.updateWallpaper)
   const updateHighlightInputMode = useSettingsStore((state) => state.updateHighlightInputMode)
   const updateAutocorrection = useSettingsStore((state) => state.updateAutocorrection)
@@ -93,6 +94,7 @@ export default function Settings() {
   const settingsError = useSettingsStore((state) => state.settingsError)
   const allowWebSearch = useSettingsStore((state) => state.allowWebSearch)
   const aiLanguage = useSettingsStore((state) => state.aiLanguage)
+  const themePreference = useSettingsStore((state) => state.themePreference)
   const wallpaper = useSettingsStore((state) => state.wallpaper)
   const highlightInputMode = useSettingsStore((state) => state.highlightInputMode)
   const autocorrection = useSettingsStore((state) => state.autocorrection)
@@ -407,6 +409,7 @@ export default function Settings() {
 
       <div>
         <AppearanceSection
+          themePreference={themePreference}
           wallpaper={wallpaper}
           highlightInputMode={highlightInputMode}
           autocorrection={autocorrection}
@@ -419,6 +422,9 @@ export default function Settings() {
           titlePreviewFontFamily={titlePreviewFontFamily}
           bodyPreviewFontFamily={bodyPreviewFontFamily}
           bodyPreviewFontSize={bodyPreviewFontSize}
+          onThemePreferenceChange={(value) => {
+            void updateThemePreference(value)
+          }}
           onWallpaperChange={(value) => {
             void updateWallpaper(value)
           }}

@@ -17,8 +17,14 @@ import {
   type SetupNoticeId,
 } from '../lib/setupAttention'
 import { getJsonSetting, getSetting, setJsonSetting, setSetting } from '../lib/settingsRepository'
+import {
+  getLocalThemePreference,
+  normalizeThemePreference,
+  syncThemePreference,
+  type ThemePreference,
+} from '../lib/theme'
 
-type Wallpaper = 'white' | 'thoughts-light' | 'thoughts-high'
+type Wallpaper = 'none' | 'thoughts-light' | 'thoughts-high'
 
 type FontPreference = 'proportional' | 'monospace'
 
@@ -33,6 +39,7 @@ type SettingsState = {
   settingsError: string | null
   loading: boolean
   dismissedSetupNotices: DismissedSetupNotices
+  themePreference: ThemePreference
   wallpaper: Wallpaper
   highlightInputMode: boolean
   autocorrection: boolean
@@ -50,6 +57,7 @@ type SettingsState = {
   clearProviderKey: (provider: LlmProviderId) => Promise<void>
   updateAllowWebSearch: (enabled: boolean) => Promise<void>
   updateAiLanguage: (language: AiLanguage) => Promise<void>
+  updateThemePreference: (themePreference: ThemePreference) => Promise<void>
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
   updateHighlightInputMode: (enabled: boolean) => Promise<void>
   updateAutocorrection: (enabled: boolean) => Promise<void>
@@ -72,7 +80,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   settingsError: null,
   loading: false,
   dismissedSetupNotices: DEFAULT_DISMISSED_SETUP_NOTICES,
-  wallpaper: isIOS() ? 'white' : 'thoughts-light',
+  themePreference: getLocalThemePreference() ?? 'system',
+  wallpaper: isIOS() ? 'none' : 'thoughts-light',
   highlightInputMode: false,
   autocorrection: true,
   fontPreference: 'monospace',
@@ -93,6 +102,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         storedAllowWebSearch,
         storedAiLanguage,
         storedSecrets,
+        storedTheme,
         storedWallpaper,
         storedHighlightInputMode,
         storedAutocorrection,
@@ -111,6 +121,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         getSetting('llm.allowWebSearch'),
         getSetting('ai.language'),
         getJsonSetting<unknown>('llm.secrets'),
+        getSetting('appearance.theme'),
         getSetting('appearance.wallpaper'),
         getSetting('appearance.highlightInputMode'),
         getSetting('appearance.autocorrection'),
@@ -133,12 +144,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const llmSecrets = normalizeSecrets(storedSecrets)
       const allowWebSearch = storedAllowWebSearch !== 'false'
       const aiLanguage = storedAiLanguage || 'follow'
-      const defaultWallpaper: Wallpaper = isIOS() ? 'white' : 'thoughts-light'
+      const themePreference = normalizeThemePreference(storedTheme)
+      const defaultWallpaper: Wallpaper = isIOS() ? 'none' : 'thoughts-light'
       const wallpaper: Wallpaper =
         storedWallpaper === 'thoughts-medium'
           ? 'thoughts-high'
-          : storedWallpaper === 'white' ||
-              storedWallpaper === 'thoughts-light' ||
+          : storedWallpaper === 'white' || storedWallpaper === 'none'
+            ? 'none'
+            : storedWallpaper === 'thoughts-light' ||
               storedWallpaper === 'thoughts-high'
             ? storedWallpaper
             : defaultWallpaper
@@ -175,6 +188,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         migrations.push(setSetting('llm.allowWebSearch', allowWebSearch ? 'true' : 'false'))
       }
       if (!storedAiLanguage) migrations.push(setSetting('ai.language', aiLanguage))
+      if (storedTheme !== themePreference) migrations.push(setSetting('appearance.theme', themePreference))
       if (storedWallpaper !== wallpaper) migrations.push(setSetting('appearance.wallpaper', wallpaper))
       if (storedHighlightInputMode !== 'true' && storedHighlightInputMode !== 'false') {
         migrations.push(setSetting('appearance.highlightInputMode', highlightInputMode ? 'true' : 'false'))
@@ -191,6 +205,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
       await Promise.all(migrations)
       await setSetting('llm.schemaVersion', '2')
+      syncThemePreference(themePreference)
 
       set({
         provider,
@@ -198,6 +213,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         llmSecrets,
         allowWebSearch,
         aiLanguage,
+        themePreference,
         wallpaper,
         highlightInputMode,
         autocorrection,
@@ -291,6 +307,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   updateAiLanguage: async (language) => {
     await setSetting('ai.language', language)
     set({ aiLanguage: language })
+  },
+
+  updateThemePreference: async (themePreference) => {
+    await setSetting('appearance.theme', themePreference)
+    syncThemePreference(themePreference)
+    set({ themePreference })
   },
 
   updateWallpaper: async (wallpaper) => {

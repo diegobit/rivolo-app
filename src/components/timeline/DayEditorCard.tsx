@@ -117,20 +117,20 @@ const DayEditorCardHeader = ({
   }
 
   const titleSizeClass = getDayTitleSizeClass(isToday, isYesterday, isTomorrow)
-  let titleContent = <span className="font-bold text-[#113355]">{title}</span>
+  let titleContent = <span className="font-bold text-[var(--theme-title)]">{title}</span>
   if (weekdayPart) {
     titleContent = (
       <>
-        <span className="font-bold text-[#113355]">{datePart}</span>
-        <span className="ml-2 font-normal text-[#8899aa]">{weekdayPart}</span>
+        <span className="font-bold text-[var(--theme-title)]">{datePart}</span>
+        <span className="ml-2 font-normal text-[var(--theme-title-muted)]">{weekdayPart}</span>
       </>
     )
   }
   if (relativeLabel) {
     titleContent = (
       <>
-        <span className="font-bold text-[#113355]">{relativeLabel}</span>
-        <span className="ml-2 font-normal text-[#8899aa]">{humanDate}</span>
+        <span className="font-bold text-[var(--theme-title)]">{relativeLabel}</span>
+        <span className="ml-2 font-normal text-[var(--theme-title-muted)]">{humanDate}</span>
       </>
     )
   }
@@ -394,7 +394,7 @@ const DayEditorCard = memo(({
           />
         ) : (
           <button
-            className="block min-h-[34px] w-full cursor-text rounded-xl border border-slate-100 bg-white px-2 py-1 text-left text-[0.98rem] leading-6 text-slate-700 transition hover:border-slate-200"
+            className="block min-h-[34px] w-full cursor-text rounded-xl border border-slate-100 bg-white px-2 py-1 text-left text-[0.98rem] leading-6 text-[var(--theme-editor-text)] transition hover:border-slate-200"
             type="button"
             aria-label={`Edit note for ${day.dayId}`}
             onClick={() => onRequestEditorMount(day.dayId, 'end')}

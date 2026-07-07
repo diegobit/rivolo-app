@@ -11,17 +11,18 @@ import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
 import { useAutoPullSync } from './app-shell/useAutoPullSync'
 import { isProviderReady } from '../lib/llm/readiness'
 import { getSetupNotices } from '../lib/setupAttention'
+import { applyThemePreference, getNextThemePreference, themePreferenceLabels } from '../lib/theme'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useDaysStore } from '../store/useDaysStore'
 import { useSyncStore } from '../store/useSyncStore'
 import { useUIStore } from '../store/useUIStore'
 
 const topIconButton =
-  'flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:h-9 sm:w-9'
+  'flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:h-9 sm:w-9'
 const trayIconButton =
-  'flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:h-10 sm:w-10'
+  'flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:h-10 sm:w-10'
 const backButtonClass =
-  'flex h-11 w-11 items-center justify-center rounded-full bg-[#22B3FF] shadow-sm transition hover:bg-[#22B3FF]/90 sm:h-9 sm:w-9'
+  'flex h-11 w-11 items-center justify-center rounded-full bg-[var(--theme-accent)] shadow-sm transition hover:bg-[var(--theme-accent-hover)] sm:h-9 sm:w-9'
 const MIN_BOTTOM_TRAY_HEIGHT_PX = 56
 const ATTENTION_AFTER_WELCOME_DELAY_MS = 3000
 
@@ -36,6 +37,8 @@ export default function AppShell() {
   const llmSecrets = useSettingsStore((state) => state.llmSecrets)
   const dismissedSetupNotices = useSettingsStore((state) => state.dismissedSetupNotices)
   const dismissSetupNotice = useSettingsStore((state) => state.dismissSetupNotice)
+  const themePreference = useSettingsStore((state) => state.themePreference)
+  const updateThemePreference = useSettingsStore((state) => state.updateThemePreference)
   const wallpaper = useSettingsStore((state) => state.wallpaper)
   const highlightInputMode = useSettingsStore((state) => state.highlightInputMode)
   const loadSyncState = useSyncStore((state) => state.loadState)
@@ -111,7 +114,7 @@ export default function AppShell() {
 
   const chatButton = (
     <button
-      className={`${trayIconButton} ${mode === 'chat' ? 'bg-slate-50' : ''}`}
+      className={`${trayIconButton} ${mode === 'chat' ? 'bg-[var(--theme-active)]' : ''}`}
       onClick={() => setMode('chat')}
       aria-label="Chat"
     >
@@ -121,7 +124,7 @@ export default function AppShell() {
 
   const searchButton = (
     <button
-      className={`${trayIconButton} ${mode === 'search' ? 'bg-slate-50' : ''}`}
+      className={`${trayIconButton} ${mode === 'search' ? 'bg-[var(--theme-active)]' : ''}`}
       onClick={() => setMode('search')}
       aria-label="Search"
     >
@@ -150,9 +153,26 @@ export default function AppShell() {
         id="bottom-tray"
         data-mode={mode}
         data-highlight-input={highlightInputMode}
-        className="bottom-tray-shell hero-ui-fade-down flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-2 shadow-[0_6px_18px_rgba(15,23,42,0.12)] transition duration-300 sm:p-3"
+        className="bottom-tray-shell hero-ui-fade-down flex-1 rounded-[2.5rem] border border-[var(--theme-border)] bg-[var(--theme-surface)] p-2 shadow-[0_6px_18px_rgb(var(--theme-shadow-color)/0.16)] transition duration-300 sm:p-3"
       />
     </div>
+  )
+
+  const themeButtonLabel = `Theme: ${themePreferenceLabels[themePreference]}`
+  const themeButtonIcon =
+    themePreference === 'system' ? '/sun-horizon.svg' : themePreference === 'light' ? '/sun.svg' : '/moon.svg'
+  const themeButton = (
+    <button
+      type="button"
+      className={`${topIconButton} hero-ui-fade-up`}
+      aria-label={themeButtonLabel}
+      title={themeButtonLabel}
+      onClick={() => {
+        void updateThemePreference(getNextThemePreference(themePreference))
+      }}
+    >
+      <img src={themeButtonIcon} alt="" className="h-5 w-5" />
+    </button>
   )
 
   useEffect(() => {
@@ -213,6 +233,25 @@ export default function AppShell() {
   useEffect(() => {
     document.body.dataset.wallpaper = wallpaper
   }, [wallpaper])
+
+  useEffect(() => {
+    applyThemePreference(themePreference)
+    if (themePreference !== 'system') return
+    if (typeof window.matchMedia !== 'function') return
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleThemeChange = () => {
+      applyThemePreference(themePreference)
+    }
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleThemeChange)
+      return () => mediaQuery.removeEventListener('change', handleThemeChange)
+    }
+
+    mediaQuery.addListener(handleThemeChange)
+    return () => mediaQuery.removeListener(handleThemeChange)
+  }, [themePreference])
 
   useEffect(() => {
     const rootStyle = document.documentElement.style
@@ -319,14 +358,14 @@ export default function AppShell() {
 
   return (
     <div
-      className="app-shell-root min-h-full text-slate-900"
+      className="app-shell-root min-h-full text-[var(--theme-text)]"
       data-desktop-chat-sidebar-open={isDesktopChatSidebarOpen ? 'true' : 'false'}
     >
       {/* Fixed header with blur */}
       <div
         className={`app-shell-fixed-right-aware pointer-events-none hidden left-0 z-20 h-16 transition-all sm:fixed sm:block ${
           isScrolled
-            ? 'bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md'
+            ? 'bg-[var(--theme-blur-surface)] shadow-[0_4px_12px_rgb(var(--theme-shadow-color)/0.10)] backdrop-blur-md'
             : ''
         }`}
       />
@@ -335,7 +374,7 @@ export default function AppShell() {
       >
         {showMobileChatHeaderBlur && (
           <div
-            className="pointer-events-none absolute inset-x-0 top-0 z-0 bg-white/30 shadow-[0_4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md sm:hidden"
+            className="pointer-events-none absolute inset-x-0 top-0 z-0 bg-[var(--theme-blur-surface)] shadow-[0_4px_12px_rgb(var(--theme-shadow-color)/0.10)] backdrop-blur-md sm:hidden"
             style={{ height: 'calc(env(safe-area-inset-top) + 4rem)' }}
             aria-hidden="true"
           />
@@ -401,7 +440,7 @@ export default function AppShell() {
           )}
           {syncing && (
             <div
-              className={`${showAttention ? 'hidden sm:flex' : 'flex'} h-7 w-7 items-center justify-center rounded-full border border-slate-200/70 bg-white/80 text-slate-500 shadow-sm`}
+              className={`${showAttention ? 'hidden sm:flex' : 'flex'} h-7 w-7 items-center justify-center rounded-full border border-[var(--theme-border-soft)] bg-[rgb(var(--theme-surface-rgb)/0.86)] text-[var(--theme-text-muted)] shadow-sm`}
               role="status"
               aria-live="polite"
               aria-label={syncDirection === 'down' ? 'Pulling from sync provider' : 'Pushing to sync provider'}
@@ -414,6 +453,7 @@ export default function AppShell() {
               />
             </div>
           )}
+          {themeButton}
           <NavLink
             to="/settings"
             className={`${topIconButton} hero-ui-fade-up`}

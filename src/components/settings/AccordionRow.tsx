@@ -25,14 +25,14 @@ export default function AccordionRow({
     <div>
       <button
         type="button"
-        className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left outline-none transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#22B3FF]/40"
+        className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left outline-none transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--theme-accent-rgb)/0.42)]"
         aria-expanded={isOpen}
         aria-controls={panelId}
         onClick={onToggle}
       >
         {isActive !== undefined && (
           <svg
-            className={`h-4 w-4 shrink-0 text-[#22B3FF] ${isActive ? '' : 'invisible'}`}
+            className={`h-4 w-4 shrink-0 text-[var(--theme-accent)] ${isActive ? '' : 'invisible'}`}
             viewBox="0 0 20 20"
             fill="currentColor"
             aria-hidden="true"

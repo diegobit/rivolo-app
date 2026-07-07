@@ -26,7 +26,7 @@ export default function ChatMessageList({
           <div
             className={`space-y-2 text-m ${
               message.role === 'user'
-                ? 'max-w-[85%] rounded-2xl bg-[#22B3FF] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
+                ? 'max-w-[85%] rounded-2xl bg-[var(--theme-accent)] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
                 : 'w-full max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
             }`}
           >
@@ -54,13 +54,13 @@ export default function ChatMessageList({
             message.meta.insertStatus &&
             !message.meta.isStreaming ? (
               message.meta.insertStatus === 'applied' ? (
-                <p className="text-xs font-semibold text-[#0b84c6]" role="status" aria-live="polite">
+                <p className="text-xs font-semibold text-[var(--theme-accent-text)]" role="status" aria-live="polite">
                   {message.meta.insertTargetDay ? `Added to ${message.meta.insertTargetDay}` : 'Added to notes'}
                 </p>
               ) : (
                 <button
                   type="button"
-                  className={`min-h-11 rounded-full border border-[#22B3FF]/40 px-3 py-2 text-xs font-semibold text-[#22B3FF] shadow-sm transition disabled:cursor-wait disabled:opacity-60 ${
+                  className={`min-h-11 rounded-full border border-[rgb(var(--theme-accent-rgb)/0.42)] px-3 py-2 text-xs font-semibold text-[var(--theme-accent-text)] shadow-sm transition disabled:cursor-wait disabled:opacity-60 ${
                     mobile ? '' : 'hover:-translate-y-[1px] hover:shadow-md'
                   }`}
                   disabled={message.meta.insertStatus === 'applying'}

@@ -24,7 +24,7 @@ const highlightStyle = HighlightStyle.define([
   },
   {
     tag: tags.strikethrough,
-    color: '#64748b',
+    color: 'var(--theme-text-muted)',
     textDecoration: 'line-through',
   },
 ])

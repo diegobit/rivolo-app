@@ -12,7 +12,9 @@ const stores = vi.hoisted(() => ({
     llmSecrets: {} as Record<string, { apiKey?: string }>,
     dismissedSetupNotices: { ai: false, sync: false },
     dismissSetupNotice: vi.fn().mockResolvedValue(undefined),
-    wallpaper: 'rivolo-light',
+    themePreference: 'system' as 'system' | 'light' | 'dark',
+    updateThemePreference: vi.fn().mockResolvedValue(undefined),
+    wallpaper: 'thoughts-light',
     highlightInputMode: false,
   },
   days: {
@@ -67,12 +69,34 @@ vi.mock('./app-shell/useAutoPullSync', () => ({ useAutoPullSync: vi.fn() }))
 vi.mock('./app-shell/BottomTrayRow', () => ({ default: () => null }))
 vi.mock('./app-shell/ShortcutsPopover', () => ({ default: () => null }))
 
+const installMatchMedia = (matches: boolean) => {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  })
+}
+
 describe('AppShell attention and stale tab states', () => {
   beforeEach(() => {
+    installMatchMedia(false)
+    document.head.innerHTML = '<meta name="theme-color" content="#ffffff" />'
+    document.documentElement.removeAttribute('data-theme')
+    document.documentElement.removeAttribute('data-theme-preference')
     stores.tabSync = { isPrimary: false, databaseStale: true }
     stores.settings.llmSecrets = {}
     stores.settings.dismissedSetupNotices = { ai: false, sync: false }
     stores.settings.dismissSetupNotice.mockClear()
+    stores.settings.themePreference = 'system'
+    stores.settings.updateThemePreference.mockClear()
     stores.days = { loaded: true, loading: false, days: [{}] }
     stores.sync.activeProvider = null
     stores.sync.syncAttention = null
@@ -174,6 +198,59 @@ describe('AppShell attention and stale tab states', () => {
 
     expect(await screen.findByText('Settings content')).toBeVisible()
     expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
+  })
+
+  it('applies the resolved system theme and runtime theme color', async () => {
+    installMatchMedia(true)
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.settings.themePreference = 'system'
+
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route path="settings" element={<div>Settings content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await act(async () => undefined)
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
+    expect(document.documentElement).toHaveAttribute('data-theme-preference', 'system')
+    expect(document.querySelector("meta[name='theme-color']")).toHaveAttribute('content', '#05070b')
+  })
+
+  it('shows the current theme state and cycles the header theme button', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    const renderSettingsShell = () => (
+      <MemoryRouter initialEntries={['/settings']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route path="settings" element={<div>Settings content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    )
+    const { rerender } = render(renderSettingsShell())
+
+    const systemThemeButton = screen.getByRole('button', { name: 'Theme: System' })
+    expect(systemThemeButton.querySelector('img')).toHaveAttribute('src', '/sun-horizon.svg')
+
+    await userEvent.click(systemThemeButton)
+    expect(stores.settings.updateThemePreference).toHaveBeenCalledExactlyOnceWith('light')
+
+    stores.settings.updateThemePreference.mockClear()
+    stores.settings.themePreference = 'light'
+    rerender(renderSettingsShell())
+    await userEvent.click(screen.getByRole('button', { name: 'Theme: Light' }))
+    expect(stores.settings.updateThemePreference).toHaveBeenCalledExactlyOnceWith('dark')
+
+    stores.settings.updateThemePreference.mockClear()
+    stores.settings.themePreference = 'dark'
+    rerender(renderSettingsShell())
+    await userEvent.click(screen.getByRole('button', { name: 'Theme: Dark' }))
+    expect(stores.settings.updateThemePreference).toHaveBeenCalledExactlyOnceWith('system')
   })
 
   it('delays attention after welcome and hides it immediately when welcome returns', async () => {

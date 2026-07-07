@@ -138,7 +138,7 @@ const highlightQueryText = (text: string, query: string, keyPrefix: string) => {
 
     const endIndex = nextIndex + trimmed.length
     parts.push(
-      <mark key={`${keyPrefix}-${nextIndex}-${endIndex}`} className="rounded bg-[#22B3FF]/15 text-inherit">
+      <mark key={`${keyPrefix}-${nextIndex}-${endIndex}`} className="rounded bg-[var(--theme-search-match)] text-inherit">
         {text.slice(nextIndex, endIndex)}
       </mark>,
     )
@@ -166,7 +166,7 @@ const renderInlineTokenHighlights = (text: string, query: string, keyPrefix: str
     nodes.push(
       <span
         key={`${keyPrefix}-token-${start}`}
-        className={token.startsWith('#') ? 'font-bold text-[#c779da]' : 'font-semibold text-[#0098e5]'}
+        className={token.startsWith('#') ? 'font-bold text-[var(--theme-tag)]' : 'font-semibold text-[var(--theme-mention)]'}
       >
         {highlightQueryText(token, query, `${keyPrefix}-token-inner-${start}`)}
       </span>,
@@ -207,7 +207,7 @@ const renderSyntaxLine = (line: string, query: string, keyPrefix: string, option
         </span>
         {options?.onToggleTodo ? (
           <button
-            className="-mx-0.5 inline-flex items-center rounded-[4px] px-1 py-0.5 font-semibold text-[#ed9b38] transition hover:bg-[#ed9b38]/15 active:bg-[#ed9b38]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#22B3FF]/40"
+            className="-mx-0.5 inline-flex items-center rounded-[4px] px-1 py-0.5 font-semibold text-[#ed9b38] transition hover:bg-[#ed9b38]/15 active:bg-[#ed9b38]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--theme-accent-rgb)/0.42)]"
             type="button"
             aria-label="Toggle todo"
             onClick={(event) => {
@@ -438,13 +438,13 @@ const MatchedLineResultCard = memo(({
         <img src="/arrow-square-in.svg" alt="" className="h-5 w-5" />
       </button>
       <div className="mb-1.5">
-        <p className="m-0" style={{ ...contentTextStyle, color: '#64748b' }}>
+        <p className="m-0" style={{ ...contentTextStyle, color: 'var(--theme-text-muted)' }}>
           {dayLabel}
         </p>
       </div>
       <div className="space-y-0" style={contentTextStyle}>
         {block.split('\n').map((line, lineIndex) => (
-          <p key={`${day.dayId}-${lineIndex}`} className="m-0 whitespace-pre-wrap break-words px-[2px] pl-[6px] text-slate-900">
+          <p key={`${day.dayId}-${lineIndex}`} className="m-0 whitespace-pre-wrap break-words px-[2px] pl-[6px] text-[var(--theme-editor-text)]">
             {line
               ? renderSyntaxLine(
                   line,
@@ -492,7 +492,7 @@ const TrayInput = memo(({
   const isChatMode = mode === 'chat'
   const hasSearchText = draftText.trim().length > 0
   const trayFieldClassName =
-    'block w-full h-10 rounded-full appearance-none bg-transparent py-2 pl-3 pr-3 text-base leading-6 outline-none placeholder:text-slate-400'
+    'block w-full h-10 rounded-full appearance-none bg-transparent py-2 pl-3 pr-3 text-base leading-6 text-[var(--theme-text)] outline-none placeholder:text-slate-400'
 
   const inputConfig = useMemo<TrayInputConfig>(() => {
     if (isChatMode) {
@@ -675,7 +675,7 @@ const TrayInput = memo(({
         {mode === 'chat' && (
           <button
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm transition ${
-              draftText.trim() && !sending ? 'bg-[#22B3FF] hover:bg-[#22B3FF]/90' : 'bg-slate-300'
+              draftText.trim() && !sending ? 'bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)]' : 'bg-slate-300'
             }`}
             type="submit"
             disabled={sending}
@@ -893,6 +893,9 @@ export default function Timeline() {
   const editorTheme = useMemo(
     () =>
       EditorView.theme({
+        '&.cm-editor': {
+          backgroundColor: 'transparent',
+        },
         '&': {
           backgroundColor: 'transparent',
         },
@@ -909,7 +912,7 @@ export default function Timeline() {
               ? getMonospaceFontFamily(monospaceFont)
               : getBodyFontFamily(bodyFont),
           fontSynthesis: 'weight style',
-          color: '#000000',
+          color: 'var(--theme-editor-text)',
         },
         '.cm-content': {
           minHeight: '30px',
@@ -919,20 +922,20 @@ export default function Timeline() {
           display: 'none',
         },
         '.cm-cursor, .cm-dropCursor': {
-          borderLeft: '2px solid #22B3FF',
+          borderLeft: '2px solid var(--theme-accent)',
           borderRadius: '2px',
         },
         '& .cm-selectionBackground': {
-          backgroundColor: 'rgba(0, 122, 255, 0.22)',
+          backgroundColor: 'var(--theme-selection)',
         },
         '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
-          backgroundColor: 'rgba(0, 122, 255, 0.32)',
+          backgroundColor: 'var(--theme-selection)',
         },
         '.cm-content ::selection': {
-          backgroundColor: 'rgba(0, 122, 255, 0.32)',
+          backgroundColor: 'var(--theme-selection)',
         },
         '.cm-line::selection, .cm-line > span::selection': {
-          backgroundColor: 'rgba(0, 122, 255, 0.32)',
+          backgroundColor: 'var(--theme-selection)',
         },
         '.cm-selectionMatch': {
           backgroundColor: 'rgba(148, 163, 184, 0.24)',
@@ -961,7 +964,7 @@ export default function Timeline() {
           ? getMonospaceFontFamily(monospaceFont)
           : getBodyFontFamily(bodyFont),
       fontSynthesis: 'weight style',
-      color: '#000000',
+      color: 'var(--theme-editor-text)',
     }),
     [bodyFont, fontPreference, isIosDevice, monospaceFont],
   )
@@ -2048,11 +2051,11 @@ export default function Timeline() {
                   className="scroll-anchor flex justify-center"
                 >
                   <button
-                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[#22B3FF] transition hover:text-[#22B3FF]/80"
+                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[var(--theme-accent-text)] transition hover:text-[var(--theme-accent)]"
                     type="button"
                     onClick={() => void handleCreateDay(item.dayId)}
                   >
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22B3FF] transition group-hover:bg-[#22B3FF]/90">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--theme-accent)] transition group-hover:bg-[var(--theme-accent-hover)]">
                       <img
                         src="/plus.svg"
                         alt=""
@@ -2077,11 +2080,11 @@ export default function Timeline() {
                   }`}
                 >
                   <button
-                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[#22B3FF] opacity-70 transition hover:text-[#22B3FF]/80"
+                    className="group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold text-[var(--theme-accent-text)] opacity-70 transition hover:text-[var(--theme-accent)]"
                     type="button"
                     onClick={() => void handleCreateDay(item.dayId)}
                   >
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#22B3FF] transition group-hover:bg-[#22B3FF]/90">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--theme-accent)] transition group-hover:bg-[var(--theme-accent-hover)]">
                       <img
                         src="/plus.svg"
                         alt=""
@@ -2223,7 +2226,7 @@ export default function Timeline() {
           >
             <span className="truncate text-sm font-medium text-slate-700">Day deleted</span>
             <button
-              className="group inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#d9efff] px-2 py-1 text-xs font-bold text-[#0b84c6] transition hover:bg-[#22B3FF] hover:text-white"
+              className="group inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-2 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white"
               type="button"
               onClick={handleUndoDelete}
             >

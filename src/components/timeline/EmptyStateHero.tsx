@@ -17,8 +17,8 @@ export default function EmptyStateHero({
 }: EmptyStateHeroProps) {
   return (
     <section className="hero-empty relative my-auto flex min-h-[60vh] flex-col items-center justify-center gap-8 px-6 py-16 text-center sm:px-12 sm:py-20">
-      <div className="absolute right-0 -top-20 h-44 w-44 rounded-full bg-[#22B3FF]/10 blur-3xl lg:-right-16" aria-hidden="true" />
-      <div className="absolute -bottom-24 left-0 h-36 w-36 rounded-full bg-[#22B3FF]/10 blur-3xl lg:-left-10" aria-hidden="true" />
+      <div className="absolute right-0 -top-20 h-44 w-44 rounded-full bg-[rgb(var(--theme-accent-rgb)/0.10)] blur-3xl lg:-right-16" aria-hidden="true" />
+      <div className="absolute -bottom-24 left-0 h-36 w-36 rounded-full bg-[rgb(var(--theme-accent-rgb)/0.10)] blur-3xl lg:-left-10" aria-hidden="true" />
       <div className="relative flex items-center justify-center">
         <span className="absolute -inset-6 rounded-full bg-white/70 blur-2xl" aria-hidden="true" />
         <img
