@@ -351,11 +351,11 @@ const DayEditorCard = memo(({
     <div
       ref={handleContainerRef}
       data-scroll-target={isToday ? 'today' : undefined}
-      className={`scroll-anchor group rounded-[4px] border p-4 transition ${
+      className={`day-editor-card scroll-anchor group rounded-[4px] border p-4 transition ${
         heroReveal ? 'hero-reveal' : ''
       } ${
         isFuture
-          ? 'border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.03)] hover:border-slate-300/60'
+          ? 'day-editor-card-future border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.03)] hover:border-slate-300/60'
           : 'border-slate-200/60 bg-white shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] hover:border-slate-300/60'
       }`}
     >
