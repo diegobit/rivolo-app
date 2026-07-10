@@ -1,6 +1,16 @@
 import { create } from 'zustand'
-import { isIOS } from '../lib/device'
-import { type BodyFont, type MonospaceFont, type TitleFont, isBodyFont, isMonospaceFont, isTitleFont } from '../lib/fonts'
+import {
+  getFontPresetSettings,
+  type BodyFont,
+  type BodyFontChoice,
+  type FontPreference,
+  type FontPreset,
+  type MonospaceFont,
+  type TitleFont,
+  isBodyFont,
+  isMonospaceFont,
+  isTitleFont,
+} from '../lib/fonts'
 import {
   DEFAULT_LLM_PROVIDER_SETTINGS,
   isLlmProviderId,
@@ -25,8 +35,6 @@ import {
 } from '../lib/theme'
 
 type Wallpaper = 'none' | 'thoughts-light' | 'thoughts-high'
-
-type FontPreference = 'proportional' | 'monospace'
 
 type AiLanguage = 'follow' | string
 
@@ -61,15 +69,108 @@ type SettingsState = {
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
   updateHighlightInputMode: (enabled: boolean) => Promise<void>
   updateAutocorrection: (enabled: boolean) => Promise<void>
-  updateFontPreference: (fontPreference: FontPreference) => Promise<void>
-  updateBodyFont: (bodyFont: BodyFont) => Promise<void>
-  updateMonospaceFont: (monospaceFont: MonospaceFont) => Promise<void>
+  updateFontPreset: (preset: FontPreset) => Promise<void>
   updateTitleFont: (titleFont: TitleFont) => Promise<void>
+  updateBodyFontChoice: (choice: BodyFontChoice) => Promise<void>
   dismissSetupNotice: (noticeId: SetupNoticeId) => Promise<void>
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+type NativeLlmProviderId = Exclude<LlmProviderId, 'openai-compatible'>
+type ModelSource = 'default' | 'custom'
+
+const nativeLlmProviderIds: NativeLlmProviderId[] = ['gemini', 'anthropic', 'openai']
+
+const knownNativeDefaultModels: Record<NativeLlmProviderId, string[]> = {
+  // When changing a native default model, keep the previous default here for one release.
+  gemini: [DEFAULT_LLM_PROVIDER_SETTINGS.gemini.model],
+  anthropic: [DEFAULT_LLM_PROVIDER_SETTINGS.anthropic.model],
+  openai: [DEFAULT_LLM_PROVIDER_SETTINGS.openai.model],
+}
+
+const readStoredString = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+
+const isModelSource = (value: unknown): value is ModelSource =>
+  value === 'default' || value === 'custom'
+
+const readProviderRecord = (root: Record<string, unknown>, provider: LlmProviderId) =>
+  isRecord(root[provider]) ? root[provider] : {}
+
+const readModelSource = (providerRecord: Record<string, unknown>) =>
+  isModelSource(providerRecord.modelSource) ? providerRecord.modelSource : null
+
+const inferModelSource = (
+  provider: NativeLlmProviderId,
+  providerRecord: Record<string, unknown>,
+  fallbackModel: string | null | undefined,
+): ModelSource => {
+  const storedSource = readModelSource(providerRecord)
+  if (storedSource) return storedSource
+
+  const storedModel = readStoredString(providerRecord.model) || readStoredString(fallbackModel)
+  return storedModel && !knownNativeDefaultModels[provider].includes(storedModel)
+    ? 'custom'
+    : 'default'
+}
+
+const applyNativeModelDefaults = (
+  storedProviders: unknown,
+  settings: LlmProviderSettings,
+  legacyGeminiModel: string | null,
+) => {
+  const root = isRecord(storedProviders) ? storedProviders : {}
+  const nextSettings = { ...settings } as LlmProviderSettings
+  const modelSources: Record<NativeLlmProviderId, ModelSource> = {
+    gemini: 'default',
+    anthropic: 'default',
+    openai: 'default',
+  }
+
+  for (const provider of nativeLlmProviderIds) {
+    const source = inferModelSource(
+      provider,
+      readProviderRecord(root, provider),
+      provider === 'gemini' ? legacyGeminiModel : null,
+    )
+    modelSources[provider] = source
+    if (source === 'default') {
+      if (provider === 'gemini') {
+        nextSettings.gemini = {
+          ...nextSettings.gemini,
+          model: DEFAULT_LLM_PROVIDER_SETTINGS.gemini.model,
+        }
+      } else if (provider === 'anthropic') {
+        nextSettings.anthropic = {
+          ...nextSettings.anthropic,
+          model: DEFAULT_LLM_PROVIDER_SETTINGS.anthropic.model,
+        }
+      } else {
+        nextSettings.openai = {
+          ...nextSettings.openai,
+          model: DEFAULT_LLM_PROVIDER_SETTINGS.openai.model,
+        }
+      }
+    }
+  }
+
+  return { settings: nextSettings, modelSources }
+}
+
+const addModelSourcesToPersistedProviders = (
+  persistedProviders: Record<string, unknown>,
+  modelSources: Record<NativeLlmProviderId, ModelSource>,
+) => {
+  for (const provider of nativeLlmProviderIds) {
+    const providerRecord = readProviderRecord(persistedProviders, provider)
+    persistedProviders[provider] = {
+      ...providerRecord,
+      modelSource: modelSources[provider],
+    }
+  }
+  return persistedProviders
+}
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   provider: 'gemini',
@@ -81,7 +182,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loading: false,
   dismissedSetupNotices: DEFAULT_DISMISSED_SETUP_NOTICES,
   themePreference: getLocalThemePreference() ?? 'system',
-  wallpaper: isIOS() ? 'none' : 'thoughts-light',
+  wallpaper: 'thoughts-light',
   highlightInputMode: false,
   autocorrection: true,
   fontPreference: 'monospace',
@@ -135,17 +236,25 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
       const provider = isLlmProviderId(storedProvider) ? storedProvider : 'gemini'
       const llmSchemaVersion = Number.parseInt(storedLlmSchemaVersion ?? '', 10)
-      const providerSettings = normalizeProviderSettings(
+      const normalizedProviderSettings = normalizeProviderSettings(
         storedProviders,
         legacyGeminiModel,
         legacyAllowThinking,
         !Number.isFinite(llmSchemaVersion) || llmSchemaVersion < 2,
       )
+      const {
+        settings: providerSettings,
+        modelSources,
+      } = applyNativeModelDefaults(
+        storedProviders,
+        normalizedProviderSettings,
+        legacyGeminiModel,
+      )
       const llmSecrets = normalizeSecrets(storedSecrets)
       const allowWebSearch = storedAllowWebSearch !== 'false'
       const aiLanguage = storedAiLanguage || 'follow'
       const themePreference = normalizeThemePreference(storedTheme)
-      const defaultWallpaper: Wallpaper = isIOS() ? 'none' : 'thoughts-light'
+      const defaultWallpaper: Wallpaper = 'thoughts-light'
       const wallpaper: Wallpaper =
         storedWallpaper === 'thoughts-medium'
           ? 'thoughts-high'
@@ -166,7 +275,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         sync: storedDismissedSyncSetup === 'true',
       }
 
-      const persistedProviders = mergePersistedProviderSettings(storedProviders, providerSettings)
+      const persistedProviders = addModelSourcesToPersistedProviders(
+        mergePersistedProviderSettings(storedProviders, providerSettings),
+        modelSources,
+      )
       const secretsRoot = isRecord(storedSecrets) ? storedSecrets : {}
       const storedGeminiSecret = isRecord(secretsRoot.gemini) ? secretsRoot.gemini : {}
       const shouldMigrateLegacyGeminiSecret =
@@ -240,6 +352,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   saveProviderSettings: async (provider, settings) => {
     const currentStored = await getJsonSetting<unknown>('llm.providers')
+    const currentRoot = isRecord(currentStored) ? currentStored : {}
     const normalizedSettings =
       provider === 'gemini'
         ? {
@@ -252,7 +365,26 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       ...get().providerSettings,
       [provider]: normalizedSettings,
     } as LlmProviderSettings
-    await setJsonSetting('llm.providers', mergePersistedProviderSettings(currentStored, nextSettings))
+    const persistedProviders = mergePersistedProviderSettings(currentStored, nextSettings)
+
+    if (provider !== 'openai-compatible') {
+      const providerRecord = readProviderRecord(currentRoot, provider)
+      const currentModel = get().providerSettings[provider].model
+      const nextModel = nextSettings[provider].model
+      const inferredSource = inferModelSource(provider, providerRecord, currentModel)
+      const nextSource: ModelSource =
+        nextModel !== currentModel
+          ? nextModel === DEFAULT_LLM_PROVIDER_SETTINGS[provider].model
+            ? 'default'
+            : 'custom'
+          : inferredSource
+      persistedProviders[provider] = {
+        ...readProviderRecord(persistedProviders, provider),
+        modelSource: nextSource,
+      }
+    }
+
+    await setJsonSetting('llm.providers', persistedProviders)
 
     if (provider === 'gemini') {
       const geminiSettings = normalizedSettings as LlmProviderSettings['gemini']
@@ -330,24 +462,33 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ autocorrection: enabled })
   },
 
-  updateFontPreference: async (fontPreference) => {
-    await setSetting('appearance.font', fontPreference)
-    set({ fontPreference })
-  },
-
-  updateBodyFont: async (bodyFont) => {
-    await setSetting('appearance.bodyFont', bodyFont)
-    set({ bodyFont })
-  },
-
-  updateMonospaceFont: async (monospaceFont) => {
-    await setSetting('appearance.monospaceFont', monospaceFont)
-    set({ monospaceFont })
+  updateFontPreset: async (preset) => {
+    const settings = getFontPresetSettings(preset)
+    await Promise.all([
+      setSetting('appearance.font', settings.fontPreference),
+      setSetting('appearance.bodyFont', settings.bodyFont),
+      setSetting('appearance.monospaceFont', settings.monospaceFont),
+      setSetting('appearance.titleFont', settings.titleFont),
+    ])
+    set(settings)
   },
 
   updateTitleFont: async (titleFont) => {
     await setSetting('appearance.titleFont', titleFont)
     set({ titleFont })
+  },
+
+  updateBodyFontChoice: async (choice) => {
+    if (choice === 'lato') {
+      await setSetting('appearance.font', 'proportional')
+      set({ fontPreference: 'proportional' })
+      return
+    }
+    await Promise.all([
+      setSetting('appearance.font', 'monospace'),
+      setSetting('appearance.monospaceFont', choice),
+    ])
+    set({ fontPreference: 'monospace', monospaceFont: choice })
   },
 
   dismissSetupNotice: async (noticeId) => {

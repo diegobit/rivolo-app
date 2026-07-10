@@ -11,23 +11,16 @@ const renderSection = (overrides: Overrides = {}) => {
     wallpaper: 'thoughts-light',
     highlightInputMode: false,
     autocorrection: true,
-    fontPreference: 'monospace',
-    bodyFont: 'system',
-    monospaceFont: 'iawriter',
+    fontPreset: 'monospace',
     titleFont: 'handlee',
-    showFontPreview: false,
-    previewText: 'Preview text',
-    titlePreviewFontFamily: 'system-ui',
-    bodyPreviewFontFamily: 'system-ui',
-    bodyPreviewFontSize: '1rem',
+    bodyFontChoice: 'iawriter',
     onThemePreferenceChange: vi.fn(),
     onWallpaperChange: vi.fn(),
     onHighlightInputModeChange: vi.fn(),
     onAutocorrectionChange: vi.fn(),
+    onFontPresetChange: vi.fn(),
     onTitleFontChange: vi.fn(),
-    onBodyFontChange: vi.fn(),
-    onMonospaceFontChange: vi.fn(),
-    onFontPreviewToggle: vi.fn(),
+    onBodyFontChoiceChange: vi.fn(),
     ...overrides,
   }
 
@@ -48,17 +41,68 @@ describe('AppearanceSection', () => {
     expect(onThemePreferenceChange).toHaveBeenCalledExactlyOnceWith('system')
   })
 
-  it('uses a theme-neutral no-background wallpaper label', async () => {
-    const onWallpaperChange = vi.fn()
-    renderSection({ wallpaper: 'none', onWallpaperChange })
+  it('shows font presets and autocorrection in the basic section', async () => {
+    const onFontPresetChange = vi.fn()
+    renderSection({ fontPreset: 'proportional', onFontPresetChange })
 
-    expect(screen.queryByRole('button', { name: 'White' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Monospace' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Proportional' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('switch', { name: 'Autocorrection' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'No background' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Highlight input mode' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bree Serif' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Inconsolata' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Monospace' }))
+    expect(onFontPresetChange).toHaveBeenCalledExactlyOnceWith('monospace')
+  })
+
+  it('adds background and editor controls alongside the basic controls in advanced mode', async () => {
+    const onWallpaperChange = vi.fn()
+    renderSection({ advanced: true, wallpaper: 'none', onWallpaperChange })
+
+    // Basic controls remain (superset).
+    expect(screen.getByRole('button', { name: 'Monospace' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'System' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Autocorrection' })).toBeInTheDocument()
+    // Advanced controls are added.
     expect(screen.getByRole('button', { name: 'No background' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
+    expect(screen.getByRole('switch', { name: 'Highlight input mode' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Rivolo Light' }))
     expect(onWallpaperChange).toHaveBeenCalledExactlyOnceWith('thoughts-light')
+  })
+
+  it('offers individual title and body font pickers in advanced mode', async () => {
+    const onTitleFontChange = vi.fn()
+    const onBodyFontChoiceChange = vi.fn()
+    renderSection({
+      advanced: true,
+      titleFont: 'handlee',
+      bodyFontChoice: 'iawriter',
+      onTitleFontChange,
+      onBodyFontChoiceChange,
+    })
+
+    expect(screen.getByRole('button', { name: 'Handlee' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Bree Serif' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(screen.getByRole('button', { name: 'iA Writer Mono' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    // 'Lato' appears in both pickers.
+    expect(screen.getAllByRole('button', { name: 'Lato' })).toHaveLength(2)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Bree Serif' }))
+    expect(onTitleFontChange).toHaveBeenCalledExactlyOnceWith('bree')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Inconsolata' }))
+    expect(onBodyFontChoiceChange).toHaveBeenCalledExactlyOnceWith('inconsolata')
   })
 })

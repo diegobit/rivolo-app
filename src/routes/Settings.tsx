@@ -1,22 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import AppearanceSection from '../components/settings/AppearanceSection'
-import BackupsSection, { type CloudVersionHistory } from '../components/settings/BackupsSection'
-import ImportExportSection from '../components/settings/ImportExportSection'
+import DataSection, { type CloudVersionHistory } from '../components/settings/DataSection'
 import LlmSection from '../components/settings/LlmSection'
 import SetupNoticeBanner from '../components/settings/SetupNoticeBanner'
 import SyncSection from '../components/settings/SyncSection'
-import { isIOS } from '../lib/device'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
-import {
-  getMonospaceFontFamily,
-  getMonospaceFontSize,
-  getBodyFontFamily,
-  getTitleFontFamily,
-  type BodyFont,
-  type MonospaceFont,
-  type TitleFont,
-} from '../lib/fonts'
+import { getBodyFontChoice, getFontPreset } from '../lib/fonts'
 import { shareOrDownload } from '../lib/share'
 import { DEFAULT_DROPBOX_PATH } from '../lib/dropbox'
 import { prepareGoogleDriveAuth } from '../lib/googleDriveAuth'
@@ -24,8 +14,8 @@ import { isProviderReady } from '../lib/llm/readiness'
 import { getSetupNotices } from '../lib/setupAttention'
 import { DEFAULT_GOOGLE_DRIVE_FILE_NAME, getGoogleDrivePath } from '../lib/googleDriveState'
 import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
+import { buttonPill, buttonPillActive } from '../lib/ui'
 import type { SyncProviderId } from '../lib/sync'
-import { buttonSecondary } from '../lib/ui'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useSyncProviderActions } from './settings/useSyncProviderActions'
 import { useDaysStore } from '../store/useDaysStore'
@@ -42,33 +32,6 @@ const formatSyncTime = (timestamp: number | null) => {
   }).format(new Date(timestamp))
 }
 
-const previewText = `The quick brown fox jumps over the lazy dog.
-
-Things to do:
-- [X] Buy milk
-- [ ] @Beppe prenotare parrucchiere
-
-### Note call con Marco
-
-Ha proposto di andare al cinema. Lista film:
-
-| Titolo     | Quando            |
-| ---------- | ----------------- |
-| Star Wars  | 15 gennaio, 15:30 |
-| The Matrix | 2 febbraio, 21:00 |
-
-Poi ha detto che dovremmo cucinare le lasagne come le faceva sua nonna.
-
-\`\`\`python
-def make_lasagna(layers: int, sauce: int, cheese: int) -> str:
-  total_ingredients = layers * 100 + sauce + cheese
-  return f"Lasagna prepared."
-\`\`\`
-
-0123456789 ~ !  @  #  $  %  ^  &  *  (  )  _  +  - =
-12*34=56 \${var} (a && b) == True
-`
-
 export default function Settings() {
   const location = useLocation()
   const loadTimeline = useDaysStore((state) => state.loadTimeline)
@@ -83,10 +46,9 @@ export default function Settings() {
   const updateWallpaper = useSettingsStore((state) => state.updateWallpaper)
   const updateHighlightInputMode = useSettingsStore((state) => state.updateHighlightInputMode)
   const updateAutocorrection = useSettingsStore((state) => state.updateAutocorrection)
-  const updateFontPreference = useSettingsStore((state) => state.updateFontPreference)
-  const updateBodyFont = useSettingsStore((state) => state.updateBodyFont)
-  const updateMonospaceFont = useSettingsStore((state) => state.updateMonospaceFont)
+  const updateFontPreset = useSettingsStore((state) => state.updateFontPreset)
   const updateTitleFont = useSettingsStore((state) => state.updateTitleFont)
+  const updateBodyFontChoice = useSettingsStore((state) => state.updateBodyFontChoice)
   const dismissSetupNotice = useSettingsStore((state) => state.dismissSetupNotice)
   const provider = useSettingsStore((state) => state.provider)
   const providerSettings = useSettingsStore((state) => state.providerSettings)
@@ -137,7 +99,7 @@ export default function Settings() {
   const [syncProviderDraft, setSyncProviderDraft] = useState<SyncProviderId | null>(null)
   const [dropboxPathDraft, setDropboxPathDraft] = useState<string | null>(null)
   const [googleDriveFileNameDraft, setGoogleDriveFileNameDraft] = useState<string | null>(null)
-  const [showFontPreview, setShowFontPreview] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [initialLoadDone, setInitialLoadDone] = useState(false)
 
   const selectedSyncProvider = syncProviderDraft ?? activeProvider ?? 'dropbox'
@@ -164,22 +126,6 @@ export default function Settings() {
               : 'https://drive.google.com/drive/my-drive',
           }
         : null
-
-  const handleMonospaceFont = (font: MonospaceFont) => {
-    void updateMonospaceFont(font)
-    void updateFontPreference('monospace')
-  }
-
-  const handleBodyFont = (font: BodyFont) => {
-    void updateBodyFont(font)
-    void updateFontPreference('proportional')
-  }
-
-  const handleTitleFont = (font: TitleFont) => {
-    void updateTitleFont(font)
-  }
-
-  const handleFontPreviewToggle = () => setShowFontPreview((current) => !current)
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -209,18 +155,8 @@ export default function Settings() {
     }
   }, [])
 
-  const bodyPreviewFontFamily =
-    fontPreference === 'monospace'
-      ? getMonospaceFontFamily(monospaceFont)
-      : getBodyFontFamily(bodyFont)
-  const isIosDevice = isIOS()
-  const bodyPreviewFontSize =
-    fontPreference === 'monospace'
-      ? isIosDevice && monospaceFont === 'iawriter'
-        ? '1rem'
-        : getMonospaceFontSize(monospaceFont)
-      : '1rem'
-  const titlePreviewFontFamily = getTitleFontFamily(titleFont)
+  const fontPreset = getFontPreset(fontPreference, bodyFont, monospaceFont, titleFont)
+  const bodyFontChoice = getBodyFontChoice(fontPreference, monospaceFont)
   const dropboxAccount = useMemo(() => {
     if (dropboxAccountName && dropboxAccountEmail) {
       return `${dropboxAccountName} (${dropboxAccountEmail})`
@@ -370,8 +306,26 @@ export default function Settings() {
 
   return (
     <div className="space-y-4">
-      <header className="px-1 pt-1">
+      <header className="flex items-center justify-between px-3 pt-1">
         <h1 className="text-2xl font-bold tracking-normal text-slate-700">Settings</h1>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className={!showAdvanced ? buttonPillActive : buttonPill}
+            aria-pressed={!showAdvanced}
+            onClick={() => setShowAdvanced(false)}
+          >
+            Basic
+          </button>
+          <button
+            type="button"
+            className={showAdvanced ? buttonPillActive : buttonPill}
+            aria-pressed={showAdvanced}
+            onClick={() => setShowAdvanced(true)}
+          >
+            Advanced
+          </button>
+        </div>
       </header>
 
       {initialLoadDone &&
@@ -396,6 +350,7 @@ export default function Settings() {
           aiLanguage={aiLanguage}
           allowWebSearch={allowWebSearch}
           settingsError={settingsError}
+          advanced={showAdvanced}
           onSelectProvider={selectProvider}
           onSaveProviderSettings={saveProviderSettings}
           onSaveProviderKey={saveProviderKey}
@@ -408,40 +363,6 @@ export default function Settings() {
             void updateAiLanguage(nextValue || 'follow')
           }}
           onAllowWebSearchChange={updateAllowWebSearch}
-        />
-      </div>
-
-      <div>
-        <AppearanceSection
-          themePreference={themePreference}
-          wallpaper={wallpaper}
-          highlightInputMode={highlightInputMode}
-          autocorrection={autocorrection}
-          fontPreference={fontPreference}
-          bodyFont={bodyFont}
-          monospaceFont={monospaceFont}
-          titleFont={titleFont}
-          showFontPreview={showFontPreview}
-          previewText={previewText}
-          titlePreviewFontFamily={titlePreviewFontFamily}
-          bodyPreviewFontFamily={bodyPreviewFontFamily}
-          bodyPreviewFontSize={bodyPreviewFontSize}
-          onThemePreferenceChange={(value) => {
-            void updateThemePreference(value)
-          }}
-          onWallpaperChange={(value) => {
-            void updateWallpaper(value)
-          }}
-          onHighlightInputModeChange={(enabled) => {
-            void updateHighlightInputMode(enabled)
-          }}
-          onAutocorrectionChange={(enabled) => {
-            void updateAutocorrection(enabled)
-          }}
-          onTitleFontChange={handleTitleFont}
-          onBodyFontChange={handleBodyFont}
-          onMonospaceFontChange={handleMonospaceFont}
-          onFontPreviewToggle={handleFontPreviewToggle}
         />
       </div>
 
@@ -462,6 +383,7 @@ export default function Settings() {
           targetDirty={selectedTargetDirty}
           syncBusy={syncing}
           status={syncStatus}
+          advanced={showAdvanced}
           onProviderChange={(nextProvider) => {
             setSyncProviderDraft(nextProvider)
             setSyncStatus(null)
@@ -479,40 +401,61 @@ export default function Settings() {
         />
       </div>
 
-      <div className="space-y-4">
-        <ImportExportSection
-          exportFileName={
-            (activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'
-          }
-          importStatus={importStatus}
-          onImport={handleImport}
-          onExport={handleExport}
-        />
-
-        <BackupsSection
-          cloudHistory={cloudHistory}
-          onRestored={async () => {
-            await loadTimeline()
-            await loadProviderStates()
-            await loadSyncState()
+      <div>
+        <AppearanceSection
+          advanced={showAdvanced}
+          themePreference={themePreference}
+          wallpaper={wallpaper}
+          highlightInputMode={highlightInputMode}
+          autocorrection={autocorrection}
+          fontPreset={fontPreset}
+          titleFont={titleFont}
+          bodyFontChoice={bodyFontChoice}
+          onThemePreferenceChange={(value) => {
+            void updateThemePreference(value)
+          }}
+          onWallpaperChange={(value) => {
+            void updateWallpaper(value)
+          }}
+          onHighlightInputModeChange={(enabled) => {
+            void updateHighlightInputMode(enabled)
+          }}
+          onAutocorrectionChange={(enabled) => {
+            void updateAutocorrection(enabled)
+          }}
+          onFontPresetChange={(value) => {
+            void updateFontPreset(value)
+          }}
+          onTitleFontChange={(value) => {
+            void updateTitleFont(value)
+          }}
+          onBodyFontChoiceChange={(value) => {
+            void updateBodyFontChoice(value)
           }}
         />
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-bold text-slate-700">Legal</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Review the GDPR privacy notice for Rivolo and connected services.
-        </p>
-        <div className="mt-3">
-          <Link to="/privacy" className={buttonSecondary}>
-            Privacy Policy
-          </Link>
-        </div>
-      </section>
+      <DataSection
+        exportFileName={
+          (activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'
+        }
+        importStatus={importStatus}
+        onImport={handleImport}
+        onExport={handleExport}
+        cloudHistory={cloudHistory}
+        onRestored={async () => {
+          await loadTimeline()
+          await loadProviderStates()
+          await loadSyncState()
+        }}
+      />
 
       <p className="text-center text-xs text-slate-400">
         Rivolo v{__APP_VERSION__} •{' '}
+        <Link to="/privacy" className="underline hover:text-slate-600">
+          Privacy Policy
+        </Link>{' '}
+        •{' '}
         <a
           href="https://github.com/diegobit/rivolo-app"
           target="_blank"

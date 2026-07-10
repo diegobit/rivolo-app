@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSettingsStore } from './useSettingsStore'
+import { DEFAULT_LLM_PROVIDER_SETTINGS } from '../lib/llm/types'
 import { THEME_STORAGE_KEY } from '../lib/theme'
 
 const settingsRepository = vi.hoisted(() => ({
@@ -27,11 +28,16 @@ const installMatchMedia = (matches: boolean) => {
   })
 }
 
-const mockLoadSettingsValues = (values: Record<string, string | null> = {}) => {
+const mockLoadSettingsValues = (
+  values: Record<string, string | null> = {},
+  jsonValues: Record<string, unknown> = {},
+) => {
   settingsRepository.getSetting.mockImplementation((key: string) =>
     Promise.resolve(values[key] ?? null),
   )
-  settingsRepository.getJsonSetting.mockImplementation(() => Promise.resolve(null))
+  settingsRepository.getJsonSetting.mockImplementation((key: string) =>
+    Promise.resolve(jsonValues[key] ?? null),
+  )
 }
 
 describe('useSettingsStore setup notice dismissal', () => {
@@ -80,7 +86,11 @@ describe('useSettingsStore theme preference', () => {
     await useSettingsStore.getState().loadSettings()
 
     expect(useSettingsStore.getState().themePreference).toBe('system')
+    expect(useSettingsStore.getState().aiLanguage).toBe('follow')
+    expect(useSettingsStore.getState().wallpaper).toBe('thoughts-light')
     expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.theme', 'system')
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith('ai.language', 'follow')
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.wallpaper', 'thoughts-light')
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe('system')
     expect(document.documentElement).toHaveAttribute('data-theme', 'light')
     expect(document.querySelector("meta[name='theme-color']")).toHaveAttribute('content', '#ffffff')
@@ -113,5 +123,126 @@ describe('useSettingsStore theme preference', () => {
 
     expect(useSettingsStore.getState().wallpaper).toBe('none')
     expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.wallpaper', 'none')
+  })
+
+  it('writes a font preset through the existing font setting keys', async () => {
+    await useSettingsStore.getState().updateFontPreset('proportional')
+
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.font', 'proportional')
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.bodyFont', 'system')
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.monospaceFont', 'iawriter')
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.titleFont', 'handlee')
+    expect(useSettingsStore.getState()).toMatchObject({
+      fontPreference: 'proportional',
+      bodyFont: 'system',
+      monospaceFont: 'iawriter',
+      titleFont: 'handlee',
+    })
+  })
+
+  it('persists an individual title font choice', async () => {
+    await useSettingsStore.getState().updateTitleFont('bree')
+
+    expect(settingsRepository.setSetting).toHaveBeenCalledExactlyOnceWith(
+      'appearance.titleFont',
+      'bree',
+    )
+    expect(useSettingsStore.getState().titleFont).toBe('bree')
+  })
+
+  it('maps body font choices onto font preference and monospace font', async () => {
+    await useSettingsStore.getState().updateBodyFontChoice('inconsolata')
+
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.font', 'monospace')
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith(
+      'appearance.monospaceFont',
+      'inconsolata',
+    )
+    expect(useSettingsStore.getState()).toMatchObject({
+      fontPreference: 'monospace',
+      monospaceFont: 'inconsolata',
+    })
+
+    await useSettingsStore.getState().updateBodyFontChoice('lato')
+
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.font', 'proportional')
+    expect(useSettingsStore.getState().fontPreference).toBe('proportional')
+  })
+
+  it('moves stored native default models to the current app default', async () => {
+    mockLoadSettingsValues({}, {
+      'llm.providers': {
+        gemini: {
+          model: 'removed-gemini-default',
+          modelSource: 'default',
+          reasoning: { thinkingLevel: 'high' },
+          allowThinking: true,
+        },
+      },
+    })
+
+    await useSettingsStore.getState().loadSettings()
+
+    expect(useSettingsStore.getState().providerSettings.gemini.model).toBe(
+      DEFAULT_LLM_PROVIDER_SETTINGS.gemini.model,
+    )
+    expect(settingsRepository.setJsonSetting).toHaveBeenCalledWith(
+      'llm.providers',
+      expect.objectContaining({
+        gemini: expect.objectContaining({
+          model: DEFAULT_LLM_PROVIDER_SETTINGS.gemini.model,
+          modelSource: 'default',
+        }),
+      }),
+    )
+  })
+
+  it('preserves stored custom native model values', async () => {
+    mockLoadSettingsValues({}, {
+      'llm.providers': {
+        anthropic: {
+          model: 'claude-custom-model',
+          reasoning: { mode: 'default' },
+        },
+      },
+    })
+
+    await useSettingsStore.getState().loadSettings()
+
+    expect(useSettingsStore.getState().providerSettings.anthropic.model).toBe('claude-custom-model')
+    expect(settingsRepository.setJsonSetting).toHaveBeenCalledWith(
+      'llm.providers',
+      expect.objectContaining({
+        anthropic: expect.objectContaining({
+          model: 'claude-custom-model',
+          modelSource: 'custom',
+        }),
+      }),
+    )
+  })
+
+  it('marks explicit native model edits as custom', async () => {
+    settingsRepository.getJsonSetting.mockResolvedValue({
+      gemini: {
+        model: DEFAULT_LLM_PROVIDER_SETTINGS.gemini.model,
+        modelSource: 'default',
+      },
+    })
+    useSettingsStore.setState({ providerSettings: DEFAULT_LLM_PROVIDER_SETTINGS })
+
+    await useSettingsStore.getState().saveProviderSettings('gemini', {
+      ...DEFAULT_LLM_PROVIDER_SETTINGS.gemini,
+      model: 'gemini-custom-model',
+    })
+
+    expect(settingsRepository.setJsonSetting).toHaveBeenCalledWith(
+      'llm.providers',
+      expect.objectContaining({
+        gemini: expect.objectContaining({
+          model: 'gemini-custom-model',
+          modelSource: 'custom',
+        }),
+      }),
+    )
   })
 })

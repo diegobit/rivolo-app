@@ -76,7 +76,7 @@ describe('SyncSection', () => {
     )
 
     await openSyncRow('google-drive')
-    expect(screen.getByRole('button', { name: 'Pull from Google Drive' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Pull from Google Drive' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Use Google Drive for sync' }))
     expect(activate).toHaveBeenCalledOnce()
   })
@@ -122,10 +122,10 @@ describe('SyncSection', () => {
     )
 
     await openSyncRow('dropbox')
-    expect(screen.getByText(/Tab sync: Paused in this tab/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeDisabled()
+    expect(screen.getByText(/Auto-sync and sync settings are paused/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pull from Dropbox' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Disconnect Dropbox' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 
   it('shows the automatic sync attention message', async () => {
@@ -140,9 +140,23 @@ describe('SyncSection', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Dropbox changed remotely.')
   })
 
-  it('requires two clicks to overwrite: first arms, second confirms with force=true (no window.confirm)', async () => {
+  it('adds advanced target and manual sync actions alongside the basic controls', async () => {
+    render(<SyncSection {...baseProps} advanced />)
+
+    await openSyncRow('dropbox')
+    // Basic controls remain (superset).
+    expect(screen.getByText(/Account:/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Disconnect Dropbox' })).toBeInTheDocument()
+    // Advanced controls are added.
+    expect(screen.getByText(/Tab sync: Primary tab/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Dropbox path')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Push to Dropbox' })).toBeEnabled()
+  })
+
+  it('requires two advanced clicks to overwrite: first arms, second confirms with force=true (no window.confirm)', async () => {
     const onPush = vi.fn()
-    render(<SyncSection {...baseProps} onPush={onPush} />)
+    render(<SyncSection {...baseProps} advanced onPush={onPush} />)
 
     await openSyncRow('dropbox')
     const overwriteButton = screen.getByRole('button', {
@@ -161,18 +175,19 @@ describe('SyncSection', () => {
     expect(screen.getByRole('button', { name: 'Restore from local copy' })).toBeInTheDocument()
   })
 
-  it('shows the offline disabled-hint under the action buttons', async () => {
-    render(<SyncSection {...baseProps} online={false} />)
+  it('shows the offline disabled-hint under the advanced action buttons', async () => {
+    render(<SyncSection {...baseProps} advanced online={false} />)
 
     await openSyncRow('dropbox')
     expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeDisabled()
     expect(screen.getByText("You're offline — sync actions are unavailable.")).toBeInTheDocument()
   })
 
-  it('shows the not-connected disabled-hint under the action buttons', async () => {
+  it('shows the not-connected disabled-hint under the advanced action buttons', async () => {
     render(
       <SyncSection
         {...baseProps}
+        advanced
         summaries={{
           dropbox: notConnectedSummary,
           'google-drive': notConnectedSummary,

@@ -3,38 +3,6 @@
 @tailwind utilities;
 
 @font-face {
-  font-family: 'Fantasque Sans Mono';
-  src: url('/fonts/FantasqueSansMono-Regular.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Fantasque Sans Mono';
-  src: url('/fonts/FantasqueSansMono-Italic.otf') format('opentype');
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Fantasque Sans Mono';
-  src: url('/fonts/FantasqueSansMono-Bold.otf') format('opentype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Fantasque Sans Mono';
-  src: url('/fonts/FantasqueSansMono-BoldItalic.otf') format('opentype');
-  font-weight: 700;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
   font-family: 'iA Writer Mono';
   src: url('/fonts/iAWriterMonoV.ttf') format('truetype');
   font-weight: 400 700;
@@ -153,23 +121,6 @@
   font-style: normal;
   font-display: swap;
 }
-
-@font-face {
-  font-family: 'Grandstander';
-  src: url('/fonts/Grandstander-VariableFont_wght.ttf') format('truetype');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Grandstander';
-  src: url('/fonts/Grandstander-Italic-VariableFont_wght.ttf') format('truetype');
-  font-weight: 100 900;
-  font-style: italic;
-  font-display: swap;
-}
-
 
 @layer base {
   :root {

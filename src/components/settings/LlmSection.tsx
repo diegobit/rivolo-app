@@ -31,6 +31,7 @@ type LlmSectionProps = {
   aiLanguage: string
   allowWebSearch: boolean
   settingsError: string | null
+  advanced?: boolean
   onSelectProvider: (provider: LlmProviderId) => void | Promise<void>
   onSaveProviderSettings: (
     provider: LlmProviderId,
@@ -67,6 +68,7 @@ export default function LlmSection({
   aiLanguage,
   allowWebSearch,
   settingsError,
+  advanced = false,
   onSelectProvider,
   onSaveProviderSettings,
   onSaveProviderKey,
@@ -99,58 +101,13 @@ export default function LlmSection({
       </div>
 
       <div className="mt-5 space-y-2">
-        <span className={fieldLabelClass}>Reply language</span>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <button
-            className={`${aiLanguage === 'follow' ? buttonPillActive : buttonPill} shrink-0`}
-            type="button"
-            aria-pressed={aiLanguage === 'follow'}
-            onClick={() => {
-              setCustomLanguageOpen(false)
-              setLanguageDraft(null)
-              onFollowLanguage()
-            }}
-          >
-            Match my language
-          </button>
-          <button
-            className={`${aiLanguage !== 'follow' ? buttonPillActive : buttonPill} shrink-0`}
-            type="button"
-            aria-pressed={aiLanguage !== 'follow'}
-            aria-expanded={showLanguageInput}
-            onClick={() => setCustomLanguageOpen(true)}
-          >
-            Custom
-          </button>
-          {showLanguageInput && (
-            <input
-              autoComplete="off"
-              type="text"
-              inputMode="text"
-              autoFocus
-              className="min-h-7 w-full min-w-0 rounded-full border border-slate-200 bg-white px-3 text-xs outline-none transition focus:border-slate-400 sm:w-48"
-              placeholder="e.g. Italian, English..."
-              value={languageValue}
-              onChange={(event) => setLanguageDraft(event.target.value)}
-              onBlur={commitLanguage}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  commitLanguage()
-                }
-              }}
-            />
-          )}
-        </div>
-      </div>
-
-      <div className="mt-5 space-y-2">
         <span className={fieldLabelClass}>Providers</span>
         <div className="overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">
           {LLM_PROVIDER_IDS.map((id) => (
             <ProviderRow
               key={id}
               id={id}
+              advanced={advanced}
               isActive={id === provider}
               isOpen={expanded === id}
               onToggle={() => {
@@ -172,6 +129,24 @@ export default function LlmSection({
         </div>
       </div>
 
+      {advanced && (
+        <div className="mt-5">
+          <LanguageControls
+            aiLanguage={aiLanguage}
+            showLanguageInput={showLanguageInput}
+            languageValue={languageValue}
+            onOpenCustom={() => setCustomLanguageOpen(true)}
+            onFollow={() => {
+              setCustomLanguageOpen(false)
+              setLanguageDraft(null)
+              onFollowLanguage()
+            }}
+            onDraftChange={setLanguageDraft}
+            onCommit={commitLanguage}
+          />
+        </div>
+      )}
+
       {settingsError && (
         <p className="mt-3 break-words text-xs text-rose-600" role="status" aria-live="polite">
           {settingsError}
@@ -181,8 +156,73 @@ export default function LlmSection({
   )
 }
 
+type LanguageControlsProps = {
+  aiLanguage: string
+  showLanguageInput: boolean
+  languageValue: string
+  onOpenCustom: () => void
+  onFollow: () => void
+  onDraftChange: (value: string) => void
+  onCommit: () => void
+}
+
+function LanguageControls({
+  aiLanguage,
+  showLanguageInput,
+  languageValue,
+  onOpenCustom,
+  onFollow,
+  onDraftChange,
+  onCommit,
+}: LanguageControlsProps) {
+  return (
+    <div className="space-y-2">
+      <span className={fieldLabelClass}>Reply language</span>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <button
+          className={`${aiLanguage === 'follow' ? buttonPillActive : buttonPill} shrink-0`}
+          type="button"
+          aria-pressed={aiLanguage === 'follow'}
+          onClick={onFollow}
+        >
+          Match my language
+        </button>
+        <button
+          className={`${aiLanguage !== 'follow' ? buttonPillActive : buttonPill} shrink-0`}
+          type="button"
+          aria-pressed={aiLanguage !== 'follow'}
+          aria-expanded={showLanguageInput}
+          onClick={onOpenCustom}
+        >
+          Custom
+        </button>
+        {showLanguageInput && (
+          <input
+            autoComplete="off"
+            type="text"
+            inputMode="text"
+            autoFocus
+            className="min-h-7 w-full min-w-0 rounded-full border border-slate-200 bg-white px-3 text-xs outline-none transition focus:border-slate-400 sm:w-48"
+            placeholder="e.g. Italian, English..."
+            value={languageValue}
+            onChange={(event) => onDraftChange(event.target.value)}
+            onBlur={onCommit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                onCommit()
+              }
+            }}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
 type ProviderRowProps = {
   id: LlmProviderId
+  advanced: boolean
   isActive: boolean
   isOpen: boolean
   onToggle: () => void
@@ -203,6 +243,7 @@ type ProviderRowProps = {
 
 function ProviderRow({
   id,
+  advanced,
   isActive,
   isOpen,
   onToggle,
@@ -386,6 +427,9 @@ function ProviderRow({
     id === 'openai-compatible'
       ? 'Set a model and base URL to activate.'
       : 'Add an API key to activate.'
+  const showCompatibleSetup = id === 'openai-compatible'
+  const showModelControl = advanced || id === 'openai-compatible'
+  const showReasoningControls = advanced
 
   return (
     <AccordionRow
@@ -397,15 +441,17 @@ function ProviderRow({
       onToggle={onToggle}
       panelId={panelId}
     >
-      <p className="break-words pt-3 text-xs text-slate-500">{webSearchMessages[id]}</p>
+      {advanced && (
+        <p className="break-words pt-3 text-xs text-slate-500">{webSearchMessages[id]}</p>
+      )}
 
-      {webSearchSupported && (
+      {advanced && webSearchSupported && (
         <div className="overflow-hidden rounded-xl border border-slate-200">
           <SettingsToggle checked={allowWebSearch} label="Web search" onChange={handleWebSearch} />
         </div>
       )}
 
-      {id === 'openai-compatible' && (
+      {showCompatibleSetup && (
         <div className="space-y-2">
           <label htmlFor={`${id}-base-url`} className={fieldLabelClass}>
             Base URL
@@ -433,30 +479,32 @@ function ProviderRow({
         </div>
       )}
 
-      <div className="space-y-2">
-        <label htmlFor={`${id}-model`} className={fieldLabelClass}>
-          Model
-        </label>
-        <input
-          id={`${id}-model`}
-          autoComplete="off"
-          type="text"
-          inputMode="text"
-          className={inputClass}
-          placeholder={registry.defaultModel ?? 'Required model ID'}
-          value={modelValue}
-          onChange={(event) => setModelDraft(event.target.value)}
-          onBlur={commitModel}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              commitModel()
-            }
-          }}
-        />
-      </div>
+      {showModelControl && (
+        <div className="space-y-2">
+          <label htmlFor={`${id}-model`} className={fieldLabelClass}>
+            Model
+          </label>
+          <input
+            id={`${id}-model`}
+            autoComplete="off"
+            type="text"
+            inputMode="text"
+            className={inputClass}
+            placeholder={registry.defaultModel ?? 'Required model ID'}
+            value={modelValue}
+            onChange={(event) => setModelDraft(event.target.value)}
+            onBlur={commitModel}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                commitModel()
+              }
+            }}
+          />
+        </div>
+      )}
 
-      {id === 'gemini' && (
+      {showReasoningControls && id === 'gemini' && (
         <div className="space-y-2">
           <label htmlFor="gemini-thinking-level" className={fieldLabelClass}>
             Thinking level
@@ -483,7 +531,7 @@ function ProviderRow({
         </div>
       )}
 
-      {id === 'anthropic' && (
+      {showReasoningControls && id === 'anthropic' && (
         <div className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="anthropic-reasoning-mode" className={fieldLabelClass}>
@@ -533,7 +581,7 @@ function ProviderRow({
         </div>
       )}
 
-      {id === 'openai' && (
+      {showReasoningControls && id === 'openai' && (
         <div className="space-y-2">
           <label htmlFor="openai-reasoning-effort" className={fieldLabelClass}>
             Reasoning effort

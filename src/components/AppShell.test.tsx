@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { TIMELINE_NEW_CHAT_EVENT } from '../lib/timelineEvents'
 import AppShell from './AppShell'
 
 const stores = vi.hoisted(() => ({
@@ -46,6 +47,9 @@ const stores = vi.hoisted(() => ({
     timelineEmpty: null as boolean | null,
     setTimelineEmpty: vi.fn(),
   },
+  viewport: {
+    isNarrow: false,
+  },
 }))
 
 vi.mock('../store/useSettingsStore', () => ({
@@ -60,14 +64,35 @@ vi.mock('../store/useSyncStore', () => ({
 vi.mock('../store/useUIStore', () => ({
   useUIStore: (selector: (state: typeof stores.ui) => unknown) => selector(stores.ui),
 }))
-vi.mock('../hooks/useIsNarrowViewport', () => ({ useIsNarrowViewport: () => false }))
+vi.mock('../hooks/useIsNarrowViewport', () => ({ useIsNarrowViewport: () => stores.viewport.isNarrow }))
 vi.mock('../hooks/useKeyboardOffsetCssVar', () => ({ useKeyboardOffsetCssVar: vi.fn() }))
 vi.mock('../hooks/useTabSyncState', () => ({
   useTabSyncState: () => stores.tabSync,
 }))
 vi.mock('./app-shell/useAutoPullSync', () => ({ useAutoPullSync: vi.fn() }))
-vi.mock('./app-shell/BottomTrayRow', () => ({ default: () => null }))
-vi.mock('./app-shell/ShortcutsPopover', () => ({ default: () => null }))
+vi.mock('./app-shell/BottomTrayRow', () => ({
+  default: ({
+    showMobileNewChatButton,
+    onNewChat,
+  }: {
+    showMobileNewChatButton: boolean
+    onNewChat: () => void
+  }) =>
+    showMobileNewChatButton ? (
+      <button type="button" aria-label="New chat" onClick={onNewChat}>
+        New chat
+      </button>
+    ) : null,
+}))
+vi.mock('./app-shell/ShortcutsPopover', () => ({
+  default: ({ shortcutsRef }: { shortcutsRef: { current: HTMLDivElement | null } }) => (
+    <div ref={shortcutsRef}>
+      <button type="button" aria-label="Shortcuts">
+        ?
+      </button>
+    </div>
+  ),
+}))
 
 const installMatchMedia = (matches: boolean) => {
   Object.defineProperty(window, 'matchMedia', {
@@ -85,6 +110,18 @@ const installMatchMedia = (matches: boolean) => {
   })
 }
 
+const getHeaderSlots = () => {
+  const logo = screen.getByRole('link', { name: 'Home' })
+  const left = logo.previousElementSibling
+  const right = logo.nextElementSibling
+
+  if (!(left instanceof HTMLElement) || !(right instanceof HTMLElement)) {
+    throw new Error('Header slots could not be resolved')
+  }
+
+  return { left, right }
+}
+
 describe('AppShell attention and stale tab states', () => {
   beforeEach(() => {
     installMatchMedia(false)
@@ -100,7 +137,12 @@ describe('AppShell attention and stale tab states', () => {
     stores.days = { loaded: true, loading: false, days: [{}] }
     stores.sync.activeProvider = null
     stores.sync.syncAttention = null
+    stores.ui.mode = 'timeline'
+    stores.ui.chatPanelOpen = false
+    stores.ui.desktopChatPanelOpen = false
+    stores.ui.chatMessageCount = 0
     stores.ui.timelineEmpty = null
+    stores.viewport.isNarrow = false
   })
 
   afterEach(() => {
@@ -254,10 +296,10 @@ describe('AppShell attention and stale tab states', () => {
   it('shows the current theme state and cycles the header theme button', async () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     const renderSettingsShell = () => (
-      <MemoryRouter initialEntries={['/settings']}>
+      <MemoryRouter initialEntries={['/privacy']}>
         <Routes>
           <Route path="/" element={<AppShell />}>
-            <Route path="settings" element={<div>Settings content</div>} />
+            <Route path="privacy" element={<div>Privacy content</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -283,7 +325,112 @@ describe('AppShell attention and stale tab states', () => {
     expect(stores.settings.updateThemePreference).toHaveBeenCalledExactlyOnceWith('system')
   })
 
-  it('keeps theme in the header and hides the settings shortcut away from the timeline', () => {
+  it('uses mobile home header slots with settings on the right and no theme shortcut', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
+    stores.sync.activeProvider = 'google-drive'
+    stores.viewport.isNarrow = true
+
+    const renderShell = (initialEntry: string) => (
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+            <Route path="settings" element={<div>Settings content</div>} />
+            <Route path="privacy" element={<div>Privacy content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    )
+    render(renderShell('/'))
+
+    const settingsLink = screen.getByRole('link', { name: 'Settings' })
+    const { left, right } = getHeaderSlots()
+
+    expect(screen.queryByRole('button', { name: 'Theme: System' })).not.toBeInTheDocument()
+    expect(left).toBeEmptyDOMElement()
+    expect(right).toContainElement(settingsLink)
+    expect(screen.queryByRole('button', { name: 'Shortcuts' })).not.toBeInTheDocument()
+  })
+
+  it('shows mobile new chat in the left header slot during chat', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    stores.ui.chatMessageCount = 1
+    const onNewChat = vi.fn()
+    window.addEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const newChatButton = screen.getByRole('button', { name: 'New chat' })
+    const { left } = getHeaderSlots()
+
+    expect(left).toContainElement(newChatButton)
+
+    await userEvent.click(newChatButton)
+    expect(onNewChat).toHaveBeenCalledOnce()
+
+    window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
+  })
+
+  it('uses mobile route header slots with back on the left and no theme shortcut', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route path="settings" element={<div>Settings content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const backLink = screen.getByRole('link', { name: 'Back' })
+    const { left, right } = getHeaderSlots()
+
+    expect(left).toContainElement(backLink)
+    expect(screen.queryByRole('button', { name: 'Theme: System' })).not.toBeInTheDocument()
+    expect(right).toBeEmptyDOMElement()
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Shortcuts' })).not.toBeInTheDocument()
+  })
+
+  it('keeps desktop home shortcuts, theme, and settings available', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = false
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const shortcutsButton = screen.getByRole('button', { name: 'Shortcuts' })
+    const themeButton = screen.getByRole('button', { name: 'Theme: System' })
+    const settingsLink = screen.getByRole('link', { name: 'Settings' })
+    const { left, right } = getHeaderSlots()
+
+    expect(left).toContainElement(shortcutsButton)
+    expect(right).toContainElement(themeButton)
+    expect(right).toContainElement(settingsLink)
+  })
+
+  it('hides the theme shortcut on Settings and the settings shortcut away from the timeline', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     const renderShell = (initialEntry: string) => (
       <MemoryRouter initialEntries={[initialEntry]}>
@@ -303,7 +450,7 @@ describe('AppShell attention and stale tab states', () => {
 
     view.unmount()
     view = render(renderShell('/settings'))
-    expect(screen.getByRole('button', { name: 'Theme: System' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Theme: System' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
 
     view.unmount()

@@ -1,7 +1,7 @@
 export default function Privacy() {
   return (
     <div className="space-y-4">
-      <header className="px-1 pt-1">
+      <header className="px-3 pt-1">
         <h1 className="text-2xl font-bold tracking-normal text-slate-700">Privacy</h1>
         <p className="mt-1 text-xs text-slate-500">Effective date: July 4, 2026</p>
       </header>

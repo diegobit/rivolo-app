@@ -1,72 +1,31 @@
-import CodeMirror from '@uiw/react-codemirror'
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { EditorView } from '@codemirror/view'
 import {
-  type BodyFont,
-  type MonospaceFont,
+  type BodyFontChoice,
+  type FontPreset,
   type TitleFont,
-  bodyFontOptions,
-  monospaceFontOptions,
+  bodyFontChoiceOptions,
+  fontPresetOptions,
   titleFontOptions,
 } from '../../lib/fonts'
-import { editorHighlights } from '../../lib/editorHighlights'
 import { buttonPill, buttonPillActive } from '../../lib/ui'
 import { themePreferenceLabels, type ThemePreference } from '../../lib/theme'
-import AccordionRow from './AccordionRow'
 import SettingsToggle from './SettingsToggle'
-
-const previewMarkdownExtension = markdown({ base: markdownLanguage })
-const previewEditorTheme = EditorView.theme({
-  '&.cm-editor': {
-    backgroundColor: 'transparent',
-  },
-  '&': {
-    backgroundColor: 'transparent',
-  },
-  '.cm-scroller': {
-    fontFamily: 'inherit',
-    fontSize: 'inherit',
-  },
-  '.cm-content': {
-    minHeight: '0',
-    padding: '0',
-  },
-  '.cm-line': {
-    padding: '0',
-  },
-  '.cm-gutters': {
-    display: 'none',
-  },
-  '.cm-activeLine': {
-    backgroundColor: 'transparent',
-  },
-  '&.cm-focused': {
-    outline: 'none',
-  },
-})
 
 type AppearanceSectionProps = {
   themePreference: ThemePreference
   wallpaper: 'none' | 'thoughts-light' | 'thoughts-high'
   highlightInputMode: boolean
   autocorrection: boolean
-  fontPreference: 'proportional' | 'monospace'
-  bodyFont: BodyFont
-  monospaceFont: MonospaceFont
+  fontPreset: FontPreset | 'custom'
   titleFont: TitleFont
-  showFontPreview: boolean
-  previewText: string
-  titlePreviewFontFamily: string
-  bodyPreviewFontFamily: string
-  bodyPreviewFontSize: string
+  bodyFontChoice: BodyFontChoice
+  advanced?: boolean
   onThemePreferenceChange: (value: ThemePreference) => void
   onWallpaperChange: (value: 'none' | 'thoughts-light' | 'thoughts-high') => void
   onHighlightInputModeChange: (enabled: boolean) => void
   onAutocorrectionChange: (enabled: boolean) => void
-  onTitleFontChange: (font: TitleFont) => void
-  onBodyFontChange: (font: BodyFont) => void
-  onMonospaceFontChange: (font: MonospaceFont) => void
-  onFontPreviewToggle: () => void
+  onFontPresetChange: (preset: FontPreset) => void
+  onTitleFontChange: (titleFont: TitleFont) => void
+  onBodyFontChoiceChange: (choice: BodyFontChoice) => void
 }
 
 export default function AppearanceSection({
@@ -74,23 +33,17 @@ export default function AppearanceSection({
   wallpaper,
   highlightInputMode,
   autocorrection,
-  fontPreference,
-  bodyFont,
-  monospaceFont,
+  fontPreset,
   titleFont,
-  showFontPreview,
-  previewText,
-  titlePreviewFontFamily,
-  bodyPreviewFontFamily,
-  bodyPreviewFontSize,
+  bodyFontChoice,
+  advanced = false,
   onThemePreferenceChange,
   onWallpaperChange,
   onHighlightInputModeChange,
   onAutocorrectionChange,
+  onFontPresetChange,
   onTitleFontChange,
-  onBodyFontChange,
-  onMonospaceFontChange,
-  onFontPreviewToggle,
+  onBodyFontChoiceChange,
 }: AppearanceSectionProps) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -113,34 +66,102 @@ export default function AppearanceSection({
       </div>
 
       <div className="mt-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wallpaper</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Font preset
+        </h3>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            className={wallpaper === 'none' ? buttonPillActive : buttonPill}
-            type="button"
-            aria-pressed={wallpaper === 'none'}
-            onClick={() => onWallpaperChange('none')}
-          >
-            No background
-          </button>
-          <button
-            className={wallpaper === 'thoughts-light' ? buttonPillActive : buttonPill}
-            type="button"
-            aria-pressed={wallpaper === 'thoughts-light'}
-            onClick={() => onWallpaperChange('thoughts-light')}
-          >
-            Rivolo Light
-          </button>
-          <button
-            className={wallpaper === 'thoughts-high' ? buttonPillActive : buttonPill}
-            type="button"
-            aria-pressed={wallpaper === 'thoughts-high'}
-            onClick={() => onWallpaperChange('thoughts-high')}
-          >
-            Rivolo Strong
-          </button>
+          {fontPresetOptions.map((option) => (
+            <button
+              key={option.id}
+              className={fontPreset === option.id ? buttonPillActive : buttonPill}
+              type="button"
+              aria-pressed={fontPreset === option.id}
+              onClick={() => onFontPresetChange(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
+        {fontPreset === 'custom' && (
+          <p className="mt-2 text-xs text-slate-500">Custom font settings are active.</p>
+        )}
       </div>
+
+      {advanced && (
+        <div className="mt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Title font
+          </h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {titleFontOptions.map((option) => (
+              <button
+                key={option.id}
+                className={titleFont === option.id ? buttonPillActive : buttonPill}
+                type="button"
+                aria-pressed={titleFont === option.id}
+                onClick={() => onTitleFontChange(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {advanced && (
+        <div className="mt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Body font
+          </h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {bodyFontChoiceOptions.map((option) => (
+              <button
+                key={option.id}
+                className={bodyFontChoice === option.id ? buttonPillActive : buttonPill}
+                type="button"
+                aria-pressed={bodyFontChoice === option.id}
+                onClick={() => onBodyFontChoiceChange(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {advanced && (
+        <div className="mt-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Background
+          </h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className={wallpaper === 'none' ? buttonPillActive : buttonPill}
+              type="button"
+              aria-pressed={wallpaper === 'none'}
+              onClick={() => onWallpaperChange('none')}
+            >
+              No background
+            </button>
+            <button
+              className={wallpaper === 'thoughts-light' ? buttonPillActive : buttonPill}
+              type="button"
+              aria-pressed={wallpaper === 'thoughts-light'}
+              onClick={() => onWallpaperChange('thoughts-light')}
+            >
+              Rivolo Light
+            </button>
+            <button
+              className={wallpaper === 'thoughts-high' ? buttonPillActive : buttonPill}
+              type="button"
+              aria-pressed={wallpaper === 'thoughts-high'}
+              onClick={() => onWallpaperChange('thoughts-high')}
+            >
+              Rivolo Strong
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -148,105 +169,17 @@ export default function AppearanceSection({
         </h3>
         <div className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
           <SettingsToggle
-            checked={highlightInputMode}
-            label="Highlight input mode"
-            onChange={onHighlightInputModeChange}
-          />
-          <SettingsToggle
             checked={autocorrection}
             label="Autocorrection"
             onChange={onAutocorrectionChange}
           />
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Title Font</h3>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {titleFontOptions.map((option) => (
-            <button
-              key={option.id}
-              className={titleFont === option.id ? buttonPillActive : buttonPill}
-              type="button"
-              aria-pressed={titleFont === option.id}
-              onClick={() => onTitleFontChange(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Body Font</h3>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {bodyFontOptions.map((option) => (
-            <button
-              key={option.id}
-              className={
-                fontPreference === 'proportional' && bodyFont === option.id
-                  ? buttonPillActive
-                  : buttonPill
-              }
-              type="button"
-              aria-pressed={fontPreference === 'proportional' && bodyFont === option.id}
-              onClick={() => onBodyFontChange(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-          {monospaceFontOptions.map((option) => (
-            <button
-              key={option.id}
-              className={
-                fontPreference === 'monospace' && monospaceFont === option.id
-                  ? buttonPillActive
-                  : buttonPill
-              }
-              type="button"
-              aria-pressed={fontPreference === 'monospace' && monospaceFont === option.id}
-              onClick={() => onMonospaceFontChange(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-          <AccordionRow
-            label="Font Preview"
-            isOpen={showFontPreview}
-            onToggle={onFontPreviewToggle}
-            panelId="font-preview-panel"
-            panelClassName="pt-4"
-          >
-            <div className="space-y-3 rounded-[4px] border border-slate-200/60 bg-white p-4 shadow-[var(--theme-card-shadow)]">
-              <div
-                className="flex flex-wrap items-baseline gap-2 text-3xl text-[var(--theme-title)]"
-                style={{ fontFamily: titlePreviewFontFamily }}
-              >
-                <span className="font-bold">Today</span>
-                <span className="font-normal text-[var(--theme-title-muted)]">24, Saturday</span>
-              </div>
-              <div
-                className="overflow-x-auto whitespace-pre-wrap bg-transparent text-sm font-normal text-[var(--theme-editor-text)]"
-                style={{ fontFamily: bodyPreviewFontFamily, fontSize: bodyPreviewFontSize }}
-              >
-                <CodeMirror
-                  value={previewText}
-                  extensions={[previewMarkdownExtension, previewEditorTheme, EditorView.lineWrapping, ...editorHighlights]}
-                  editable={false}
-                  basicSetup={{
-                    lineNumbers: false,
-                    foldGutter: false,
-                    highlightActiveLine: false,
-                    highlightActiveLineGutter: false,
-                  }}
-                  style={{ fontFamily: bodyPreviewFontFamily, fontSize: bodyPreviewFontSize }}
-                />
-              </div>
-            </div>
-          </AccordionRow>
+          {advanced && (
+            <SettingsToggle
+              checked={highlightInputMode}
+              label="Highlight input mode"
+              onChange={onHighlightInputModeChange}
+            />
+          )}
         </div>
       </div>
     </section>

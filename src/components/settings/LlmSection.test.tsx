@@ -52,6 +52,7 @@ describe('LlmSection', () => {
     renderSection({ llmSecrets: {} })
 
     expect(screen.queryByRole('switch', { name: 'Web search' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Reply language')).not.toBeInTheDocument()
     const rowHeaders = screen
       .getAllByRole('button')
       .filter((button) => button.getAttribute('aria-controls')?.startsWith('llm-panel-'))
@@ -61,18 +62,37 @@ describe('LlmSection', () => {
     }
   })
 
-  it('toggles web search immediately', async () => {
+  it('keeps native provider tuning out of the normal setup row', async () => {
+    renderSection()
+
+    await openLlmRow('gemini')
+    expect(screen.queryByRole('switch', { name: 'Web search' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Model')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Thinking level')).not.toBeInTheDocument()
+    expect(screen.getByText('API key saved')).toBeInTheDocument()
+  })
+
+  it('keeps OpenAI-compatible required fields in normal setup', async () => {
+    renderSection()
+
+    await openLlmRow('openai-compatible')
+    expect(screen.getByLabelText('Base URL')).toBeInTheDocument()
+    expect(screen.getByLabelText('Model')).toBeInTheDocument()
+    expect(screen.getByText('API key (optional)')).toBeInTheDocument()
+  })
+
+  it('toggles web search immediately in advanced mode', async () => {
     const onAllowWebSearchChange = vi.fn()
-    renderSection({ onAllowWebSearchChange })
+    renderSection({ advanced: true, onAllowWebSearchChange })
 
     await openLlmRow('gemini')
     await userEvent.click(screen.getByRole('switch', { name: 'Web search' }))
     expect(onAllowWebSearchChange).toHaveBeenCalledExactlyOnceWith(false)
   })
 
-  it('saves the gemini thinking level immediately with the merged object', async () => {
+  it('saves the gemini thinking level immediately with the merged object in advanced mode', async () => {
     const onSaveProviderSettings = vi.fn()
-    renderSection({ onSaveProviderSettings })
+    renderSection({ advanced: true, onSaveProviderSettings })
 
     await openLlmRow('gemini')
     await userEvent.selectOptions(screen.getByLabelText('Thinking level'), 'high')
@@ -83,9 +103,9 @@ describe('LlmSection', () => {
     })
   })
 
-  it('commits the model on blur', async () => {
+  it('commits the native provider model on blur in advanced mode', async () => {
     const onSaveProviderSettings = vi.fn()
-    renderSection({ onSaveProviderSettings })
+    renderSection({ advanced: true, onSaveProviderSettings })
 
     await openLlmRow('gemini')
     const input = screen.getByLabelText('Model')
@@ -100,9 +120,9 @@ describe('LlmSection', () => {
     })
   })
 
-  it('reverts a blank model and shows an error', async () => {
+  it('reverts a blank advanced model and shows an error', async () => {
     const onSaveProviderSettings = vi.fn()
-    renderSection({ onSaveProviderSettings })
+    renderSection({ advanced: true, onSaveProviderSettings })
 
     await openLlmRow('gemini')
     const input = screen.getByLabelText('Model') as HTMLInputElement
@@ -152,9 +172,9 @@ describe('LlmSection', () => {
     expect(screen.queryByLabelText(/^API key/)).not.toBeInTheDocument()
   })
 
-  it('commits the custom reply language on blur, not on each keystroke', async () => {
+  it('commits the custom reply language from advanced mode on blur, not on each keystroke', async () => {
     const onAiLanguageChange = vi.fn()
-    renderSection({ aiLanguage: 'follow', onAiLanguageChange })
+    renderSection({ aiLanguage: 'follow', advanced: true, onAiLanguageChange })
 
     await userEvent.click(screen.getByRole('button', { name: 'Custom' }))
     const input = screen.getByPlaceholderText('e.g. Italian, English...')
@@ -162,5 +182,22 @@ describe('LlmSection', () => {
     expect(onAiLanguageChange).not.toHaveBeenCalled()
     await userEvent.tab()
     expect(onAiLanguageChange).toHaveBeenCalledExactlyOnceWith('Italian')
+  })
+
+  it('merges basic and advanced controls into one row in advanced mode', async () => {
+    renderSection({ advanced: true, provider: 'anthropic' })
+
+    const rowHeaders = screen
+      .getAllByRole('button')
+      .filter((button) => button.getAttribute('aria-controls')?.startsWith('llm-panel-'))
+    expect(rowHeaders).toHaveLength(4)
+    expect(screen.getByText('Reply language')).toBeInTheDocument()
+
+    await openLlmRow('gemini')
+    expect(screen.getByLabelText('Model')).toBeInTheDocument()
+    expect(screen.getByLabelText('Thinking level')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Web search' })).toBeInTheDocument()
+    expect(screen.getByText('API key saved')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Use Gemini' })).toBeInTheDocument()
   })
 })

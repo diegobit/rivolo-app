@@ -98,6 +98,8 @@ export default function AppShell() {
   const showMobileChatHeaderBlur = isHome && isNarrowViewportMode && mode === 'chat' && chatPanelOpen
   const showMobileNewChatButton =
     isHome && mode === 'chat' && isNarrowViewportMode && chatMessageCount > 0
+  const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
+  const showDesktopThemeButton = !isNarrowViewportMode && location.pathname !== '/settings'
   const syncDirection = syncOperation === 'push' ? 'up' : 'down'
   const setupNotices = attentionLoaded
     ? getSetupNotices({
@@ -181,7 +183,7 @@ export default function AppShell() {
   const themeButtonLabel = `Theme: ${themePreferenceLabels[themePreference]}`
   const themeButtonIcon =
     themePreference === 'system' ? '/sun-horizon.svg' : themePreference === 'light' ? '/sun.svg' : '/moon.svg'
-  const themeButton = (
+  const renderThemeButton = () => (
     <button
       type="button"
       className={`${topIconButton} hero-ui-fade-up`}
@@ -402,8 +404,7 @@ export default function AppShell() {
       >
         {showMobileChatHeaderBlur && (
           <div
-            className="pointer-events-none absolute inset-x-0 top-0 z-0 bg-[var(--theme-blur-surface)] shadow-[0_4px_12px_rgb(var(--theme-shadow-color)/0.10)] backdrop-blur-md sm:hidden"
-            style={{ height: 'calc(env(safe-area-inset-top) + 4rem)' }}
+            className="pointer-events-none absolute left-1/2 top-0 z-0 h-16 w-screen -translate-x-1/2 bg-[var(--theme-blur-surface)] shadow-[0_4px_12px_rgb(var(--theme-shadow-color)/0.10)] backdrop-blur-md sm:hidden"
             aria-hidden="true"
           />
         )}
@@ -416,7 +417,7 @@ export default function AppShell() {
               />
             </NavLink>
           )}
-          {isHome && (
+          {showDesktopShortcutsButton && (
             <ShortcutsPopover
               shortcutsRef={shortcutsRef}
               showShortcuts={isHome && showShortcuts}
@@ -427,7 +428,7 @@ export default function AppShell() {
           {showMobileNewChatButton && (
             <button
               type="button"
-              className={`${topIconButton} hero-ui-fade-up sm:hidden`}
+              className={topIconButton}
               aria-label="New chat"
               onClick={() => {
                 window.dispatchEvent(new CustomEvent(TIMELINE_NEW_CHAT_EVENT))
@@ -503,7 +504,7 @@ export default function AppShell() {
               />
             </div>
           )}
-          {themeButton}
+          {showDesktopThemeButton && renderThemeButton()}
           {showSettingsButton && (
             <NavLink
               to="/settings"
