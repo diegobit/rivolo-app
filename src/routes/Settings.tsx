@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import SegmentedControl from '../components/SegmentedControl'
 import AppearanceSection from '../components/settings/AppearanceSection'
 import DataSection, { type CloudVersionHistory } from '../components/settings/DataSection'
 import LlmSection from '../components/settings/LlmSection'
@@ -14,7 +15,6 @@ import { isProviderReady } from '../lib/llm/readiness'
 import { getSetupNotices } from '../lib/setupAttention'
 import { DEFAULT_GOOGLE_DRIVE_FILE_NAME, getGoogleDrivePath } from '../lib/googleDriveState'
 import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
-import { buttonPill, buttonPillActive } from '../lib/ui'
 import type { SyncProviderId } from '../lib/sync'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useSyncProviderActions } from './settings/useSyncProviderActions'
@@ -308,24 +308,14 @@ export default function Settings() {
     <div className="space-y-4">
       <header className="flex items-center justify-between px-3 pt-1">
         <h1 className="text-2xl font-bold tracking-normal text-slate-700">Settings</h1>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className={!showAdvanced ? buttonPillActive : buttonPill}
-            aria-pressed={!showAdvanced}
-            onClick={() => setShowAdvanced(false)}
-          >
-            Basic
-          </button>
-          <button
-            type="button"
-            className={showAdvanced ? buttonPillActive : buttonPill}
-            aria-pressed={showAdvanced}
-            onClick={() => setShowAdvanced(true)}
-          >
-            Advanced
-          </button>
-        </div>
+        <SegmentedControl
+          options={[
+            { value: 'basic', label: 'Basic' },
+            { value: 'advanced', label: 'Advanced' },
+          ]}
+          value={showAdvanced ? 'advanced' : 'basic'}
+          onChange={(next) => setShowAdvanced(next === 'advanced')}
+        />
       </header>
 
       {initialLoadDone &&
