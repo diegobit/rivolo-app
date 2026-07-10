@@ -31,7 +31,7 @@ export default function BottomTrayRow({
   onToggleDesktopChatPanel,
   onScrollToToday,
 }: BottomTrayRowProps) {
-  const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.1rem]'
+  const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.5rem] sm:top-[-3.1rem]'
   const trayRowAlignmentClass = mode === 'timeline' ? 'items-center' : 'items-end'
   const modeToggleOffsetClassName = mode === 'timeline' ? '' : 'mb-1.5 sm:mb-3'
 
@@ -62,7 +62,7 @@ export default function BottomTrayRow({
         {showMobileChatTogglePill && (
           <button
             type="button"
-            className="absolute right-2 top-[-3.1rem] inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:hidden"
+            className="absolute right-[15px] top-[-3.5rem] inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:hidden"
             aria-label={chatPanelOpen ? 'Hide chat' : 'Show chat'}
             onClick={onToggleChatPanel}
           >
@@ -82,7 +82,7 @@ export default function BottomTrayRow({
           <button
             type="button"
             className={`absolute ${mobileScrollToTodayTopClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:right-0 sm:h-10 sm:w-10 ${
-              showMobileChatTogglePill ? 'right-[3.75rem]' : 'right-2'
+              showMobileChatTogglePill ? 'right-[67px]' : 'right-[15px]'
             }`}
             aria-label="Scroll to Today"
             onClick={onScrollToToday}
