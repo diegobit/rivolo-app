@@ -332,7 +332,7 @@ export default function Settings() {
           />
         ))}
 
-      <div id="settings-ai" className="scroll-mt-2 sm:scroll-mt-20">
+      <div id="settings-ai" className="mx-3 scroll-mt-2 sm:mx-0 sm:scroll-mt-20">
         <LlmSection
           provider={provider}
           providerSettings={providerSettings}
@@ -356,7 +356,7 @@ export default function Settings() {
         />
       </div>
 
-      <div id="settings-sync" className="scroll-mt-2 sm:scroll-mt-20">
+      <div id="settings-sync" className="mx-3 scroll-mt-2 sm:mx-0 sm:scroll-mt-20">
         <SyncSection
           activeProvider={activeProvider}
           provider={selectedSyncProvider}
@@ -391,7 +391,7 @@ export default function Settings() {
         />
       </div>
 
-      <div>
+      <div className="mx-3 sm:mx-0">
         <AppearanceSection
           advanced={showAdvanced}
           themePreference={themePreference}
@@ -425,20 +425,22 @@ export default function Settings() {
         />
       </div>
 
-      <DataSection
-        exportFileName={
-          (activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'
-        }
-        importStatus={importStatus}
-        onImport={handleImport}
-        onExport={handleExport}
-        cloudHistory={cloudHistory}
-        onRestored={async () => {
-          await loadTimeline()
-          await loadProviderStates()
-          await loadSyncState()
-        }}
-      />
+      <div className="mx-3 sm:mx-0">
+        <DataSection
+          exportFileName={
+            (activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'
+          }
+          importStatus={importStatus}
+          onImport={handleImport}
+          onExport={handleExport}
+          cloudHistory={cloudHistory}
+          onRestored={async () => {
+            await loadTimeline()
+            await loadProviderStates()
+            await loadSyncState()
+          }}
+        />
+      </div>
 
       <p className="text-center text-xs text-slate-400">
         Rivolo v{__APP_VERSION__} •{' '}

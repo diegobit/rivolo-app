@@ -24,7 +24,7 @@ const SETUP_NOTICES: Record<SetupNoticeId, SetupNotice> = {
   sync: {
     id: 'sync',
     title: 'Cloud sync is off',
-    description: 'Your notes are stored only on this device.',
+    description: 'Everything stays on this device.',
     settingsSectionId: 'settings-sync',
   },
 }

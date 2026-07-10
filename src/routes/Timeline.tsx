@@ -2164,7 +2164,7 @@ export default function Timeline() {
         <div className="mt-4 space-y-2">
           {hasMorePast && <div ref={olderDaysSentinelRef} className="h-px w-full" aria-hidden="true" />}
 
-          {loadingMore && <p className="text-center text-xs text-slate-400">Loading older notes...</p>}
+          {loadingMore && <p className="text-center text-xs text-slate-400">Loading older days...</p>}
 
           {!supportsIntersectionObserver && hasMorePast && !loadingMore && (
             <div className="flex justify-center">
@@ -2173,7 +2173,7 @@ export default function Timeline() {
                 type="button"
                 onClick={() => handleLoadOlderDays('button')}
               >
-                Load older notes
+                Load older days
               </button>
             </div>
           )}

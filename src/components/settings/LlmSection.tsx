@@ -92,7 +92,7 @@ export default function LlmSection({
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <div>
         <h2 className="text-lg font-bold text-slate-700">AI assistant</h2>
         <p className="mt-1 text-xs text-slate-500">

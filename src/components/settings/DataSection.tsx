@@ -86,7 +86,7 @@ export default function DataSection({
   const showBackupTools = backups.length > 0 || Boolean(cloudHistory)
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <h2 className="text-lg font-bold text-slate-700">Data</h2>
       <p className="mt-1 text-xs text-slate-500">
         Import or export Rivolo Markdown (.md) files. Each entry/day must start with &lt;!-- day:YYYY-MM-DD --&gt;.

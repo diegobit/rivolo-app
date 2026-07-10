@@ -46,7 +46,7 @@ export default function AppearanceSection({
   onBodyFontChoiceChange,
 }: AppearanceSectionProps) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <h2 className="text-lg font-bold text-slate-700">Appearance</h2>
       <div className="mt-4">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Theme</h3>
