@@ -1,7 +1,7 @@
 import { formatDayTitle, isValidDayId } from './dates'
 import { isFtsAvailable, queryAll, queryOne, run, runDatabaseTransaction, upsertFts } from './db'
 import { markSyncLocalDirty } from './syncDirty'
-import { searchDaysInMemory, type Day, type SearchFilter } from './notesCore'
+import { searchDaysInMemory, type Day, type DaySearchResult, type SearchFilter } from './notesCore'
 
 export type { Day, DaySearchResult, SearchFilter } from './notesCore'
 
@@ -260,13 +260,41 @@ export const searchDays = async (
     return []
   }
 
-  const rows = await queryAll<DayRow>(
-    `
+  const escapedTerms = trimmed
+    .split(/\s+/)
+    .filter((term) => /^[\x20-\x7e]+$/.test(term))
+    .map((term) => term.replace(/[\\%_]/g, '\\$&'))
+  const where = escapedTerms.length
+    ? `WHERE ${escapedTerms
+        .map(() => '(human_title LIKE ? ESCAPE \'\\\' OR content_md LIKE ? ESCAPE \'\\\')')
+        .join(' AND ')}`
+    : ''
+  const termParams = escapedTerms.flatMap((term) => [`%${term}%`, `%${term}%`])
+  const batchSize = Math.max(limit * 4, 50)
+  const results: DaySearchResult[] = []
+  let offset = 0
+
+  while (results.length < limit) {
+    const rows = await queryAll<DayRow>(
+      `
       SELECT day_id, human_title, content_md, created_at, updated_at
       FROM days
+      ${where}
       ORDER BY day_id DESC
+      LIMIT ? OFFSET ?
     `,
-  )
+      [...termParams, batchSize, offset],
+    )
 
-  return searchDaysInMemory(rows.map(mapRow), trimmed, { filter }, limit)
+    results.push(
+      ...searchDaysInMemory(rows.map(mapRow), trimmed, { filter }, limit - results.length),
+    )
+
+    if (rows.length < batchSize) {
+      break
+    }
+    offset += batchSize
+  }
+
+  return results
 }

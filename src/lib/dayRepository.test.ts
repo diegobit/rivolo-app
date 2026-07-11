@@ -6,7 +6,9 @@ import {
   moveDay,
   replaceDays,
   saveDay,
+  searchDays,
 } from './dayRepository'
+import { searchDaysInMemory, type Day } from './notesCore'
 
 const mocks = vi.hoisted(() => ({
   isFtsAvailable: vi.fn(),
@@ -94,5 +96,126 @@ describe('appendToDay', () => {
     const day = await appendToDay('2026-07-11', '  appended text\n')
 
     expect(day?.contentMd).toBe('appended text')
+  })
+})
+
+describe('searchDays', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const toRow = (day: Day) => ({
+    day_id: day.dayId,
+    human_title: day.humanTitle,
+    content_md: day.contentMd,
+    created_at: day.createdAt,
+    updated_at: day.updatedAt,
+  })
+
+  it('builds an escaped, term-wise LIKE prefilter with a bounded query', async () => {
+    mocks.queryAll.mockResolvedValue([])
+
+    await searchDays(' 100%_ "quoted" O\'Reilly ')
+
+    const [sql, params] = mocks.queryAll.mock.calls[0]
+    expect(sql).toContain(
+      "WHERE (human_title LIKE ? ESCAPE '\\' OR content_md LIKE ? ESCAPE '\\') AND (human_title LIKE ? ESCAPE '\\' OR content_md LIKE ? ESCAPE '\\') AND (human_title LIKE ? ESCAPE '\\' OR content_md LIKE ? ESCAPE '\\')",
+    )
+    expect(sql).toContain('LIMIT ? OFFSET ?')
+    expect(params).toEqual([
+      '%100\\%\\_%',
+      '%100\\%\\_%',
+      '%"quoted"%',
+      '%"quoted"%',
+      "%O'Reilly%",
+      "%O'Reilly%",
+      120,
+      0,
+    ])
+  })
+
+  it('leaves non-ASCII terms to the locale-aware in-memory matcher', async () => {
+    mocks.queryAll.mockResolvedValue([])
+
+    await searchDays('CAFÉ')
+
+    const [sql, params] = mocks.queryAll.mock.calls[0]
+    expect(sql).not.toContain('WHERE')
+    expect(params).toEqual([120, 0])
+  })
+
+  it('keeps paging past false-positive candidates to preserve old search results', async () => {
+    const falsePositives = Array.from({ length: 50 }, (_, index) =>
+      toRow({
+        dayId: `2026-06-${String(50 - index).padStart(2, '0')}`,
+        humanTitle: 'alpha title',
+        contentMd: 'beta appears on a different line',
+        createdAt: index,
+        updatedAt: index,
+      }),
+    )
+    const match = toRow({
+      dayId: '2026-05-01',
+      humanTitle: 'Match',
+      contentMd: 'the alpha beta phrase matches',
+      createdAt: 51,
+      updatedAt: 51,
+    })
+    mocks.queryAll
+      .mockResolvedValueOnce(falsePositives)
+      .mockResolvedValueOnce([match])
+
+    const results = await searchDays('alpha beta', {}, 1)
+
+    expect(results.map(({ day }) => day.dayId)).toEqual(['2026-05-01'])
+    expect(mocks.queryAll).toHaveBeenCalledTimes(2)
+    expect(mocks.queryAll.mock.calls[1][1]).toEqual(['%alpha%', '%alpha%', '%beta%', '%beta%', 50, 50])
+  })
+
+  it('matches the previous in-memory behavior on representative queries and filters', async () => {
+    const days: Day[] = [
+      {
+        dayId: '2026-07-03',
+        humanTitle: 'Release 100%_ "quoted"',
+        contentMd: 'first line\n- [ ] Alpha beta task #ship @team',
+        createdAt: 3,
+        updatedAt: 3,
+      },
+      {
+        dayId: '2026-07-02',
+        humanTitle: 'Unicode CAFÉ',
+        contentMd: 'A café note\n# Alpha heading',
+        createdAt: 2,
+        updatedAt: 2,
+      },
+      {
+        dayId: '2026-07-01',
+        humanTitle: 'Other',
+        contentMd: 'alpha on one line\nbeta on another',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ]
+    const cases = [
+      { query: '100%_ "quoted"', filter: null },
+      { query: 'alpha beta', filter: null },
+      { query: 'café', filter: null },
+      { query: 'alpha', filter: 'open-todos' as const },
+      { query: 'ship', filter: 'tags' as const },
+      { query: '', filter: 'open-todos' as const },
+    ]
+
+    for (const { query, filter } of cases) {
+      mocks.queryAll.mockImplementation(async (_sql: string, params: unknown[]) => {
+        const batchSize = params.at(-2) as number
+        const offset = params.at(-1) as number
+        return days.slice(offset, offset + batchSize).map(toRow)
+      })
+
+      await expect(searchDays(query, { filter }, 30)).resolves.toEqual(
+        searchDaysInMemory(days, query, { filter }, 30),
+      )
+      mocks.queryAll.mockReset()
+    }
   })
 })
