@@ -12,7 +12,33 @@ export type ImportResult = {
   warnings: string[]
 }
 
-const DAY_MARKER = /<!--\s*day:(\d{4}-\d{2}-\d{2})\s*-->/g
+const DAY_MARKER = /^<!--[ \t]*day:(\d{4}-\d{2}-\d{2})[ \t]*-->[ \t]*\r?$/gm
+const DAY_MARKER_LINE = /^<!--[ \t]*day:\d{4}-\d{2}-\d{2}[ \t]*-->[ \t]*\r?$/
+
+// Exported content lines that could be mistaken for structure are prefixed with
+// this token. Prefix-prefixed content is escaped too, so removing exactly one
+// token during import is reversible across repeated export/import cycles.
+const CONTENT_ESCAPE_PREFIX = '<!-- rivolo:escaped-content -->'
+
+const encodeContent = (content: string) =>
+  content
+    .split('\n')
+    .map((line) =>
+      line.startsWith(CONTENT_ESCAPE_PREFIX) || DAY_MARKER_LINE.test(line)
+        ? `${CONTENT_ESCAPE_PREFIX}${line}`
+        : line,
+    )
+    .join('\n')
+
+const decodeContent = (content: string) =>
+  content
+    .split('\n')
+    .map((line) =>
+      line.startsWith(CONTENT_ESCAPE_PREFIX)
+        ? line.slice(CONTENT_ESCAPE_PREFIX.length)
+        : line,
+    )
+    .join('\n')
 
 export const parseMarkdown = (source: string): ImportResult => {
   const warnings: string[] = []
@@ -47,7 +73,7 @@ export const parseMarkdown = (source: string): ImportResult => {
       }
     }
 
-    const contentMd = lines.slice(contentStart).join('\n').trimEnd()
+    const contentMd = decodeContent(lines.slice(contentStart).join('\n').trimEnd())
 
     if (dayMap.has(dayId)) {
       warnings.push(`Duplicate day marker for ${dayId}; using last block.`)
@@ -66,7 +92,7 @@ export const exportMarkdown = (days: Day[]) => {
     .map((day) => {
       const title = day.humanTitle || formatDayTitle(day.dayId)
       const underline = '-'.repeat(Math.max(3, title.length))
-      const content = day.contentMd.trimEnd()
+      const content = encodeContent(day.contentMd.trimEnd())
       return [
         `<!-- day:${day.dayId} -->`,
         title,

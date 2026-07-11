@@ -115,6 +115,26 @@ ${markdownDay('2026-06-29', 'second')}`
     )
   })
 
+  it('round-trips literal day markers through database export and import', async () => {
+    const contentMd = `\`\`\`md
+<!-- day:2026-01-01 -->
+\`\`\`
+prefix <!-- day:2024-12-31 --> suffix`
+    mocks.listDays.mockResolvedValue([localDay('2026-07-11', contentMd)])
+    const { exportMarkdownFromDb, importMarkdownToDb } = await import('./importExport')
+
+    const exported = await exportMarkdownFromDb()
+    const result = await importMarkdownToDb(exported)
+
+    expect(result).toEqual({ imported: 1, warnings: [] })
+    expect(mocks.saveDay).toHaveBeenCalledWith(
+      '2026-07-11',
+      contentMd,
+      '2026-07-11',
+      { markDirty: true },
+    )
+  })
+
   it('blocks replacement that would delete local days unless explicitly allowed', async () => {
     mocks.listDays.mockResolvedValue([
       localDay('2026-06-30', 'keep me'),
