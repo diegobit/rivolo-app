@@ -7,6 +7,7 @@ import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/tim
 import { isPrimaryModifierPressed } from '../lib/device'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
+import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
 import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
 import { useAutoPullSync } from './app-shell/useAutoPullSync'
 import { isProviderReady } from '../lib/llm/readiness'
@@ -47,6 +48,7 @@ export default function AppShell() {
   const syncing = useSyncStore((state) => state.syncing)
   const syncOperation = useSyncStore((state) => state.syncOperation)
   const syncAttention = useSyncStore((state) => state.syncAttention)
+  const persistFailureMessage = useDatabasePersistFailure()
   const activeProvider = useSyncStore((state) => state.activeProvider)
   const mode = useUIStore((state) => state.mode)
   const setMode = useUIStore((state) => state.setMode)
@@ -109,6 +111,16 @@ export default function AppShell() {
       })
     : []
   const attentionItems: AttentionItem[] = [
+    ...(persistFailureMessage
+      ? [
+          {
+            id: 'persist-attention',
+            title: "Notes aren't saving",
+            description: persistFailureMessage,
+            settingsSectionId: 'settings-data' as const,
+          },
+        ]
+      : []),
     ...(syncAttention
       ? [
           {

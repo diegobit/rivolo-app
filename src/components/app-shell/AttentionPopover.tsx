@@ -6,7 +6,7 @@ export type AttentionItem = {
   id: string
   title: string
   description: string
-  settingsSectionId: 'settings-ai' | 'settings-sync'
+  settingsSectionId: 'settings-ai' | 'settings-sync' | 'settings-data'
   dismissibleSetupNoticeId?: SetupNoticeId
 }
 

@@ -9,6 +9,7 @@ import {
 } from './tabSyncCoordinator'
 
 const DB_KEY = 'single-note-db'
+const PERSIST_FAILURE_MESSAGE = 'Your notes could not be saved on this device. Check available storage and try again.'
 
 let sqlPromise: Promise<SqlJsStatic> | null = null
 let dbPromise: Promise<Database> | null = null
@@ -17,6 +18,22 @@ let pendingSavePromise: Promise<void> | null = null
 let bulkMutationDepth = 0
 let bulkMutationDirty = false
 let ftsAvailable: boolean | null = null
+
+let persistFailureMessage: string | null = null
+const persistFailureListeners = new Set<() => void>()
+
+const setPersistFailureMessage = (message: string | null) => {
+  if (persistFailureMessage === message) return
+  persistFailureMessage = message
+  persistFailureListeners.forEach((listener) => listener())
+}
+
+export const subscribeDatabasePersistFailure = (listener: () => void) => {
+  persistFailureListeners.add(listener)
+  return () => persistFailureListeners.delete(listener)
+}
+
+export const getDatabasePersistFailureSnapshot = () => persistFailureMessage
 
 const ensureSql = () => {
   if (!sqlPromise) {
@@ -69,16 +86,18 @@ const ensureSchema = (db: Database) => {
   `)
 }
 
-const persistDatabase = (db: Database) => {
+export const persistDatabase = (db: Database) => {
   assertDatabaseWritable()
   const data = db.export()
   const savePromise = set(DB_KEY, data).then(() => {
     broadcastDatabasePersisted()
+    setPersistFailureMessage(null)
   })
   pendingSavePromise = savePromise
 
   savePromise.catch((error: unknown) => {
     console.error('[DB] persist:failed', { error })
+    setPersistFailureMessage(PERSIST_FAILURE_MESSAGE)
   }).finally(() => {
     if (pendingSavePromise === savePromise) {
       pendingSavePromise = null

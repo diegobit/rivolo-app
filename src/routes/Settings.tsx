@@ -297,7 +297,7 @@ export default function Settings() {
   useEffect(() => {
     if (!initialLoadDone) return
     const sectionId = location.hash.slice(1)
-    if (sectionId !== 'settings-ai' && sectionId !== 'settings-sync') return
+    if (sectionId !== 'settings-ai' && sectionId !== 'settings-sync' && sectionId !== 'settings-data') return
     const frame = window.requestAnimationFrame(() => {
       document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -425,7 +425,7 @@ export default function Settings() {
         />
       </div>
 
-      <div className="mx-3 sm:mx-0">
+      <div id="settings-data" className="mx-3 scroll-mt-2 sm:mx-0 sm:scroll-mt-20">
         <DataSection
           exportFileName={
             (activeSyncStatus.targetName || savedDropboxPath).split('/').pop() || 'inbox.md'
