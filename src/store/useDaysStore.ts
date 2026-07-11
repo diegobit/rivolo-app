@@ -21,6 +21,7 @@ type DaysState = {
   loading: boolean
   loadingMore: boolean
   hasMorePast: boolean
+  loadError: string | null
   loadTimeline: () => Promise<void>
   loadOlderDays: () => Promise<void>
   loadDay: (dayId: string) => Promise<{ created: boolean }>
@@ -78,6 +79,7 @@ export const useDaysStore = create<DaysState>((set, get) => ({
   loading: false,
   loadingMore: false,
   hasMorePast: false,
+  loadError: null,
 
   loadTimeline: async () => {
     const loadTimer = startDebugTimer(LOG_SCOPE, 'loadTimeline', {
@@ -86,7 +88,7 @@ export const useDaysStore = create<DaysState>((set, get) => ({
       olderPageSize: OLDER_PAGE_SIZE,
     })
 
-    set({ loading: true })
+    set({ loading: true, loadError: null })
     try {
       const todayId = getTodayId()
       const cutoffDayId = addDays(todayId, -RECENT_WINDOW_DAYS)
@@ -157,7 +159,7 @@ export const useDaysStore = create<DaysState>((set, get) => ({
         error: getErrorMessage(error),
       })
 
-      set({ loaded: true, loading: false, loadingMore: false })
+      set({ loaded: true, loading: false, loadingMore: false, loadError: getErrorMessage(error) })
     }
   },
 

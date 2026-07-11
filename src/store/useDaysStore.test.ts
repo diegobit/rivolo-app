@@ -39,3 +39,35 @@ describe('useDaysStore date moves', () => {
     expect(useDaysStore.getState().activeDay).toEqual(existingDay)
   })
 })
+
+describe('useDaysStore loadTimeline error state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useDaysStore.setState({ days: [], activeDay: null, loaded: false, loading: false, loadError: null })
+  })
+
+  it('records a load error instead of silently reporting an empty timeline', async () => {
+    mocks.listDaysSince.mockRejectedValueOnce(new Error('database is corrupt'))
+
+    await useDaysStore.getState().loadTimeline()
+
+    const state = useDaysStore.getState()
+    expect(state.loaded).toBe(true)
+    expect(state.loading).toBe(false)
+    expect(state.days).toEqual([])
+    expect(state.loadError).toBe('database is corrupt')
+  })
+
+  it('clears a previous load error once a retry succeeds', async () => {
+    useDaysStore.setState({ loadError: 'database is corrupt' })
+    mocks.listDaysSince.mockResolvedValueOnce([existingDay])
+    mocks.listDaysBefore.mockResolvedValueOnce([])
+    mocks.hasDaysBefore.mockResolvedValueOnce(false)
+
+    await useDaysStore.getState().loadTimeline()
+
+    const state = useDaysStore.getState()
+    expect(state.loadError).toBeNull()
+    expect(state.days).toEqual([existingDay])
+  })
+})
