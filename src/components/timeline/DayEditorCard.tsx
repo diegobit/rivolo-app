@@ -161,7 +161,7 @@ const DayEditorCardHeader = ({
       <div className="flex items-center gap-2">
         <div ref={menuRef} className="relative touch-actions">
           <button
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 sm:h-8 sm:w-8"
             type="button"
             aria-label="Open note actions"
             onClick={() => setShowDeleteMenu((state) => !state)}
@@ -169,7 +169,7 @@ const DayEditorCardHeader = ({
             <img src="/dots-three.svg" alt="" className="h-4 w-4 opacity-70" />
           </button>
           {showDeleteMenu && (
-            <div className="absolute right-0 top-10 z-10 min-w-[150px] rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+            <div className="absolute right-0 top-12 z-10 min-w-[150px] rounded-xl border border-slate-200 bg-white p-1 shadow-lg sm:top-10">
               <button
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
                 type="button"
@@ -192,7 +192,7 @@ const DayEditorCardHeader = ({
           )}
         </div>
         <button
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white opacity-0 shadow-sm transition hover:border-slate-300 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 touch-hide pointer-events-none"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white opacity-0 shadow-sm transition hover:border-slate-300 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 touch-hide pointer-events-none sm:h-8 sm:w-8"
           type="button"
           aria-label="Delete"
           onClick={() => {
