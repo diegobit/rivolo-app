@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getTodayId } from '../../lib/dates'
-import { chat, type ChatMessage as LlmMessage } from '../../lib/llm'
+import type { ChatMessage as LlmMessage } from '../../lib/llm'
 import { hasAssistantPayloadContent, parseAssistantPayload, stripCodeFences, type AssistantPayload } from '../../lib/assistantPayload'
 import { createStreamTagParser, toCitationMarker, type StreamTagPiece } from '../../lib/llm/streamTagParser'
 import { DAILY_ANALYST_SYSTEM_PROMPT } from '../../lib/llm/systemPrompts'
@@ -160,6 +160,7 @@ export const useTimelineChat = ({
       }
 
       try {
+        const { chat } = await import('../../lib/llm')
         const contextDays = await buildContextDays(trimmed)
         const contextText = formatContext(contextDays)
         const contextMap = new Map(contextDays.map((day) => [day.dayId, day.contentMd]))
