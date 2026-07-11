@@ -92,7 +92,9 @@ export const pushToSyncAndRefresh = async (force = false) =>
     requirePrimarySyncTab()
     const result = await pushToSync(force)
     await useSyncStore.getState().loadState()
-    if (result.status !== 'blocked') {
+    if (result.status === 'pushed' && result.attention) {
+      recordSyncAttention('push', result.attention)
+    } else if (result.status !== 'blocked') {
       clearSyncAttention()
     }
     return result

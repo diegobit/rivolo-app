@@ -37,6 +37,7 @@ vi.mock('./useSyncStore', () => ({
 
 import {
   pullFromSyncAndRefresh,
+  pushToSyncAndRefresh,
   scheduleAutoPushToSync,
 } from './syncActions'
 
@@ -87,6 +88,22 @@ describe('sync action tab coordination', () => {
       expect.objectContaining({
         operation: 'push',
         message: expect.stringContaining('Google Drive changed remotely'),
+      }),
+    )
+  })
+
+  it('records attention returned by a completed push', async () => {
+    sync.pushToSync.mockResolvedValue({
+      status: 'pushed',
+      attention: 'Google Drive changed while uploading.',
+    })
+
+    await pushToSyncAndRefresh()
+
+    expect(stores.setSyncAttention).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'push',
+        message: 'Google Drive changed while uploading.',
       }),
     )
   })

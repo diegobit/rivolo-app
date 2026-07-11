@@ -34,6 +34,7 @@ export type SyncPushResult =
     }
   | {
       status: 'pushed'
+      attention?: string
     }
 
 export type SyncProvider = {

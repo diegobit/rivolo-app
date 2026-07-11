@@ -81,6 +81,14 @@ const appendRollbackBackup = async (entry: ImportRollbackBackup) => {
   await del(IMPORT_ROLLBACK_BACKUP_KEY)
 }
 
+export const saveRollbackBackup = async (contentMd: string) => {
+  await appendRollbackBackup({
+    createdAt: Date.now(),
+    contentMd,
+    dayCount: parseMarkdown(contentMd).days.length,
+  })
+}
+
 export type ImportSafetyReason = 'no-day-markers' | 'duplicate-day-markers' | 'would-delete-local-days'
 
 export class ImportSafetyError extends Error {
@@ -184,11 +192,7 @@ export const importMarkdownToDb = async (
     })
   }
 
-  await appendRollbackBackup({
-    createdAt: Date.now(),
-    contentMd: exportMarkdown(currentDays),
-    dayCount: currentDays.length,
-  })
+  await saveRollbackBackup(exportMarkdown(currentDays))
 
   await runBulkDatabaseMutation(async () => {
     await replaceDays(normalizedDays, { markDirty })

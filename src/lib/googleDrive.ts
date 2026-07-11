@@ -1,4 +1,4 @@
-import { exportMarkdownFromDb, importMarkdownToDb } from './importExport'
+import { exportMarkdownFromDb, importMarkdownToDb, saveRollbackBackup } from './importExport'
 import { authorizedGoogleDriveFetch, disconnectGoogleDriveAuth } from './googleDriveAuth'
 import {
   DEFAULT_GOOGLE_DRIVE_FOLDER_NAME,
@@ -24,6 +24,7 @@ type DriveFile = {
   name: string
   mimeType: string
   version: string
+  headRevisionId?: string
   modifiedTime?: string
   trashed?: boolean
   parents?: string[]
@@ -38,7 +39,7 @@ type DriveError = {
   error?: { message?: string }
 }
 
-const FILE_FIELDS = 'id,name,mimeType,version,modifiedTime,trashed,parents,capabilities(canDownload,canEdit,canModifyContent)'
+const FILE_FIELDS = 'id,name,mimeType,version,headRevisionId,modifiedTime,trashed,parents,capabilities(canDownload,canEdit,canModifyContent)'
 
 const driveError = async (response: Response, fallback: string) => {
   const payload = (await response.json().catch(() => null)) as DriveError | null
@@ -163,6 +164,53 @@ const downloadDriveFile = async (fileId: string) => {
   )
   if (!response.ok) throw await driveError(response, 'Failed to download the Google Drive file.')
   return response.text()
+}
+
+type DriveRevision = { id: string; modifiedTime?: string }
+
+const findConcurrentDriveRevision = async (
+  fileId: string,
+  previousHeadRevisionId: string | undefined,
+  nextHeadRevisionId: string | undefined,
+) => {
+  if (!previousHeadRevisionId || !nextHeadRevisionId) return null
+
+  try {
+    const params = new URLSearchParams({ pageSize: '1000', fields: 'revisions(id,modifiedTime)' })
+    const response = await authorizedGoogleDriveFetch(
+      `${DRIVE_API}/files/${encodeURIComponent(fileId)}/revisions?${params}`,
+    )
+    if (!response.ok) return null
+    const payload = (await response.json()) as { revisions?: DriveRevision[]; nextPageToken?: string }
+    if (payload.nextPageToken) return null
+    const revisions = payload.revisions ?? []
+    if (revisions.some((revision) => !revision.modifiedTime)) return null
+    const orderedRevisions = [...revisions].sort((left, right) =>
+      left.modifiedTime!.localeCompare(right.modifiedTime!),
+    )
+    const previousIndex = orderedRevisions.findIndex((revision) => revision.id === previousHeadRevisionId)
+    const nextIndex = orderedRevisions.findIndex((revision) => revision.id === nextHeadRevisionId)
+    if (previousIndex === -1 || nextIndex === -1 || Math.abs(previousIndex - nextIndex) <= 1) {
+      return null
+    }
+
+    return orderedRevisions[nextIndex + Math.sign(previousIndex - nextIndex)]?.id ?? null
+  } catch {
+    return null
+  }
+}
+
+const recoverConcurrentDriveRevision = async (fileId: string, revisionId: string) => {
+  try {
+    const response = await authorizedGoogleDriveFetch(
+      `${DRIVE_API}/files/${encodeURIComponent(fileId)}/revisions/${encodeURIComponent(revisionId)}?alt=media`,
+    )
+    if (!response.ok) return false
+    await saveRollbackBackup(await response.text())
+    return true
+  } catch {
+    return false
+  }
 }
 
 const createDriveFile = async (fileName: string, folderId: string, content: string) => {
@@ -341,8 +389,21 @@ export const pushToGoogleDrive = async (force = false) => {
       content,
     )
   }
+  const concurrentRevisionId = metadata
+    ? await findConcurrentDriveRevision(metadata.id, metadata.headRevisionId, uploaded.headRevisionId)
+    : null
+  const recoveredConflict = concurrentRevisionId
+    ? await recoverConcurrentDriveRevision(uploaded.id, concurrentRevisionId)
+    : false
   await finalizeGoogleDrivePushState(uploaded.id, uploaded.version, state.localRevision, contentHash)
-  return { status: 'pushed' as const }
+  return concurrentRevisionId
+    ? {
+        status: 'pushed' as const,
+        attention: recoveredConflict
+          ? 'Google Drive changed while uploading. A local backup of the remote conflict was saved.'
+          : 'Google Drive changed while uploading. The conflict could not be backed up automatically.',
+      }
+    : { status: 'pushed' as const }
 }
 
 export const googleDriveProvider = {
