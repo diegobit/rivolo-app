@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { formatDayTitle } from './dates'
 import { exportMarkdown, parseMarkdown } from './markdown'
 import type { Day } from './notesCore'
 
@@ -110,4 +111,51 @@ three`
       ])
     },
   )
+
+  it('preserves a leading thematic break verbatim instead of mispromoting it to the title', () => {
+    const result = parseMarkdown('<!-- day:2026-07-11 -->\n---\nSome content')
+
+    expect(result.days).toEqual([
+      {
+        dayId: '2026-07-11',
+        humanTitle: formatDayTitle('2026-07-11'),
+        contentMd: '---\nSome content',
+      },
+    ])
+  })
+
+  it('preserves a leading underscore thematic break verbatim', () => {
+    const result = parseMarkdown('<!-- day:2026-07-11 -->\n___\nSome content')
+
+    expect(result.days[0].contentMd).toBe('___\nSome content')
+  })
+
+  it('preserves a leading thematic break verbatim even with a blank line before it', () => {
+    const result = parseMarkdown('<!-- day:2026-07-11 -->\n\n---\nSome content')
+
+    expect(result.days[0].contentMd).toBe('---\nSome content')
+  })
+
+  it('still treats a real title followed by its setext underline as structure (no blank separator)', () => {
+    const result = parseMarkdown('<!-- day:2026-07-11 -->\nTitle\n---\nBody')
+
+    expect(result.days).toEqual([
+      { dayId: '2026-07-11', humanTitle: 'Title', contentMd: 'Body' },
+    ])
+  })
+
+  it("round-trips a day whose content starts with a thematic break byte-identically", () => {
+    const contentMd = '---\nA note that opens with a thematic break.'
+    const day = makeDay(contentMd)
+
+    const result = parseMarkdown(exportMarkdown([day]))
+
+    expect(result.days).toEqual([
+      expect.objectContaining({
+        dayId: day.dayId,
+        humanTitle: day.humanTitle,
+        contentMd,
+      }),
+    ])
+  })
 })

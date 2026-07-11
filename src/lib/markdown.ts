@@ -65,7 +65,7 @@ export const parseMarkdown = (source: string): ImportResult => {
     let humanTitle = formatDayTitle(dayId)
     let contentStart = 0
 
-    if (firstNonEmptyIndex !== -1) {
+    if (firstNonEmptyIndex !== -1 && !lines[firstNonEmptyIndex].trim().match(/^[-_]{3,}$/)) {
       humanTitle = lines[firstNonEmptyIndex].trim()
       contentStart = firstNonEmptyIndex + 1
 
