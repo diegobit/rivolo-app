@@ -46,3 +46,45 @@ describe('streamTagParser insert actions', () => {
     expect(parsed.inserts).toEqual([])
   })
 })
+
+describe('streamTagParser calendar validation', () => {
+  it.each([
+    '2026-02-30',
+    '2026-00-10',
+    '2026-13-10',
+    '2026-99-10',
+    '2026-01-00',
+    '2027-02-29',
+  ])('rejects invalid ref and insert dates %s in whole responses', (dayId) => {
+    const parsed = parseTaggedAssistantResponse(
+      `<ref day="${dayId}" quote="Quote"/> <insert text="Note" target_day="${dayId}"/>`,
+    )
+
+    expect(parsed.citations).toEqual([])
+    expect(parsed.inserts).toEqual([])
+  })
+
+  it('rejects invalid dates when tags are split across chunks', () => {
+    const parser = createStreamTagParser()
+    const events = [
+      ...parser.push('<ref day="2026-02').events,
+      ...parser.push('-30" quote="Quote"/> <insert text="Note" target_').events,
+      ...parser.push('day="2026-99-99"/>').events,
+      ...parser.flush().events,
+    ]
+
+    expect(events).toEqual([])
+  })
+
+  it.each(['2026-01-01', '2026-12-31', '2028-02-29'])(
+    'preserves valid ref and insert date %s',
+    (dayId) => {
+      const parsed = parseTaggedAssistantResponse(
+        `<ref day="${dayId}" quote="Quote"/> <insert text="Note" target_day="${dayId}"/>`,
+      )
+
+      expect(parsed.citations).toEqual([{ day: dayId, quote: 'Quote' }])
+      expect(parsed.inserts).toEqual([{ text: 'Note', targetDay: dayId }])
+    },
+  )
+})

@@ -1,3 +1,5 @@
+import { isValidDayId } from '../dates'
+
 type ParsedTag = {
   name: string
   attributes: Record<string, string>
@@ -48,7 +50,6 @@ export type ParsedTaggedAssistantResponse = {
 }
 
 const MAX_TAG_LENGTH = 1024
-const DAY_ID_REGEX = /^\d{4}-\d{2}-\d{2}$/
 const ENTITY_MAP: Record<string, string> = {
   '&quot;': '"',
   '&apos;': "'",
@@ -59,8 +60,6 @@ const ENTITY_MAP: Record<string, string> = {
 
 const decodeEntities = (value: string) =>
   value.replace(/&(quot|apos|amp|lt|gt);/g, (entity) => ENTITY_MAP[entity] ?? entity)
-
-const isValidDayId = (value: string) => DAY_ID_REGEX.test(value)
 
 const parseTag = (rawTag: string): ParsedTag | null => {
   const trimmed = rawTag.trim()

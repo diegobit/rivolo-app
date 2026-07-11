@@ -121,6 +121,22 @@ describe('useTimelineChat automatic inserts', () => {
     expect(onInsertNote).not.toHaveBeenCalled()
   })
 
+  it('applies nothing when an insert targets an invalid calendar date', async () => {
+    mocks.chat.mockResolvedValue({
+      text: '<insert text="Buy milk" target_day="2026-02-30"/>',
+      raw: null,
+    })
+    const onInsertNote = vi.fn(async () => undefined)
+    const { result } = renderHook(() => useChatHarness(onInsertNote))
+
+    await act(async () => {
+      await result.current.handleChatSend('Add milk')
+    })
+
+    expect(onInsertNote).not.toHaveBeenCalled()
+    expect(assistantMessage(result.current.messages)?.meta?.insertText).toBeNull()
+  })
+
   it('keeps a failed insert available for one-tap retry', async () => {
     mocks.chat.mockResolvedValue({
       text: '<insert text="Buy milk" target_day="2026-07-02"/>',

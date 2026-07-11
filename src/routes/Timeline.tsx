@@ -1409,6 +1409,12 @@ export default function Timeline() {
       markDaySavesStale(dayId)
 
       const result = await moveDayDate(dayId, nextDayId)
+      if (result.error) {
+        const dateError = result.error
+        setDateErrors((state) => ({ ...state, [dayId]: dateError }))
+        return
+      }
+
       if (result.conflict) {
         setDateErrors((state) => ({ ...state, [dayId]: 'Day already exists. Choose another date.' }))
         return

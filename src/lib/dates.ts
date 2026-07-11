@@ -1,5 +1,25 @@
 const pad = (value: number) => value.toString().padStart(2, '0')
 
+const DAY_ID_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+
+export const isValidDayId = (value: string) => {
+  const match = value.match(DAY_ID_PATTERN)
+  if (!match) {
+    return false
+  }
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(year, month - 1, day)
+
+  return (
+    date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day
+  )
+}
+
 export const getDayIdFromDate = (date: Date) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }

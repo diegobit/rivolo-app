@@ -1,4 +1,4 @@
-import { formatDayTitle } from './dates'
+import { formatDayTitle, isValidDayId } from './dates'
 import { isFtsAvailable, queryAll, queryOne, run, runDatabaseTransaction, upsertFts } from './db'
 import { markSyncLocalDirty } from './syncDirty'
 import { searchDaysInMemory, type Day, type SearchFilter } from './notesCore'
@@ -26,6 +26,12 @@ const mapRow = (row: DayRow): Day => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 })
+
+const assertValidDayId = (dayId: string) => {
+  if (!isValidDayId(dayId)) {
+    throw new Error(`Invalid day ID: ${dayId}`)
+  }
+}
 
 export const listDays = async (limit = 60) => {
   const rows = await queryAll<DayRow>(
@@ -85,6 +91,7 @@ export const getDay = async (dayId: string) => {
 }
 
 export const ensureDay = async (dayId: string) => {
+  assertValidDayId(dayId)
   const existing = await getDay(dayId)
   if (existing) {
     return existing
@@ -115,6 +122,7 @@ export const saveDay = async (
   humanTitle?: string,
   options: { markDirty?: boolean } = {},
 ) => {
+  assertValidDayId(dayId)
   const existing = await getDay(dayId)
   const now = Date.now()
   const title = humanTitle ?? existing?.humanTitle ?? formatDayTitle(dayId)
@@ -142,6 +150,9 @@ export const saveDay = async (
 }
 
 export const moveDay = async (fromDayId: string, toDayId: string) => {
+  assertValidDayId(fromDayId)
+  assertValidDayId(toDayId)
+
   if (fromDayId === toDayId) {
     return { day: await getDay(fromDayId), conflict: false }
   }
@@ -175,6 +186,7 @@ export const moveDay = async (fromDayId: string, toDayId: string) => {
 }
 
 export const appendLineToDay = async (dayId: string, line: string) => {
+  assertValidDayId(dayId)
   const existing = await ensureDay(dayId)
   const nextContent = existing.contentMd
     ? `${existing.contentMd.replace(/\s+$/, '')}\n${line.trim()}`
@@ -183,6 +195,7 @@ export const appendLineToDay = async (dayId: string, line: string) => {
 }
 
 export const appendToDay = async (dayId: string, text: string) => {
+  assertValidDayId(dayId)
   const existing = await ensureDay(dayId)
   const trimmed = text.trim()
   const nextContent = existing.contentMd
@@ -207,6 +220,10 @@ export const clearDays = async () => {
 }
 
 export const replaceDays = async (days: DayWrite[], options: { markDirty?: boolean } = {}) => {
+  for (const day of days) {
+    assertValidDayId(day.dayId)
+  }
+
   const markDirty = options.markDirty ?? true
   const now = Date.now()
 

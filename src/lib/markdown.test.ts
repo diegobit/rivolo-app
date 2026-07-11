@@ -87,4 +87,27 @@ three`
       warnings: ['No day markers found.'],
     })
   })
+
+  it.each([
+    '2026-02-30',
+    '2026-00-10',
+    '2026-13-10',
+    '2026-99-10',
+    '2026-01-00',
+    '2027-02-29',
+  ])('skips invalid calendar marker %s', (dayId) => {
+    expect(parseMarkdown(`<!-- day:${dayId} -->\nInvalid`)).toEqual({
+      days: [],
+      warnings: [`Invalid day marker for ${dayId}; skipping block.`],
+    })
+  })
+
+  it.each(['2026-01-01', '2026-12-31', '2028-02-29'])(
+    'preserves valid calendar marker %s',
+    (dayId) => {
+      expect(parseMarkdown(`<!-- day:${dayId} -->\nTitle\n---\n\nBody`).days).toEqual([
+        { dayId, humanTitle: 'Title', contentMd: 'Body' },
+      ])
+    },
+  )
 })

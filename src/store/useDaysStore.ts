@@ -11,7 +11,7 @@ import {
   saveDay,
 } from '../lib/dayRepository'
 import { debugLog, startDebugTimer } from '../lib/debugLogs'
-import { addDays, getTodayId } from '../lib/dates'
+import { addDays, getTodayId, isValidDayId } from '../lib/dates'
 import type { Day } from '../lib/dayRepository'
 
 type DaysState = {
@@ -27,7 +27,7 @@ type DaysState = {
   appendToToday: (line: string) => Promise<void>
   patchDayContent: (dayId: string, content: string) => void
   updateDayContent: (dayId: string, content: string) => Promise<void>
-  moveDayDate: (fromDayId: string, toDayId: string) => Promise<{ conflict: boolean }>
+  moveDayDate: (fromDayId: string, toDayId: string) => Promise<{ conflict: boolean; error?: string }>
   deleteDay: (dayId: string) => Promise<void>
 }
 
@@ -319,6 +319,10 @@ export const useDaysStore = create<DaysState>((set, get) => ({
   },
 
   moveDayDate: async (fromDayId: string, toDayId: string) => {
+    if (!isValidDayId(fromDayId) || !isValidDayId(toDayId)) {
+      return { conflict: false, error: 'Choose a valid calendar date.' }
+    }
+
     const result = await moveDay(fromDayId, toDayId)
     if (result.conflict || !result.day) {
       return { conflict: result.conflict }

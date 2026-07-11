@@ -1,4 +1,4 @@
-import { formatDayTitle } from './dates.js'
+import { formatDayTitle, isValidDayId } from './dates.js'
 import type { Day } from './notesCore.js'
 
 export type ParsedDay = {
@@ -51,6 +51,11 @@ export const parseMarkdown = (source: string): ImportResult => {
 
   matches.forEach((match, index) => {
     const dayId = match[1]
+    if (!isValidDayId(dayId)) {
+      warnings.push(`Invalid day marker for ${dayId}; skipping block.`)
+      return
+    }
+
     const start = (match.index ?? 0) + match[0].length
     const end = matches[index + 1]?.index ?? source.length
     const block = source.slice(start, end).replace(/^\n+/, '')
