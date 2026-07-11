@@ -54,3 +54,45 @@ describe('dayRepository day ID validation', () => {
     expect(mocks.markSyncLocalDirty).not.toHaveBeenCalled()
   })
 })
+
+describe('appendToDay', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const mockStoredDay = (initialContent: string) => {
+    const row = {
+      day_id: '2026-07-11',
+      human_title: 'Saturday, July 11, 2026',
+      content_md: initialContent,
+      created_at: 1,
+      updated_at: 1,
+    }
+
+    mocks.queryOne.mockImplementation(async () => ({ ...row }))
+    mocks.run.mockImplementation(async (sql: string, params: unknown[]) => {
+      if (sql.startsWith('UPDATE days SET human_title')) {
+        row.content_md = params[1] as string
+      }
+    })
+
+    return row
+  }
+
+  it('preserves existing content byte-for-byte when appending', async () => {
+    const original = '\n\n  indented first line\nbody'
+    mockStoredDay(original)
+
+    const day = await appendToDay('2026-07-11', '  appended text  ')
+
+    expect(day?.contentMd).toBe(`${original}\n\nappended text`)
+  })
+
+  it('stores exactly the trimmed appended text when existing content is empty', async () => {
+    mockStoredDay('')
+
+    const day = await appendToDay('2026-07-11', '  appended text\n')
+
+    expect(day?.contentMd).toBe('appended text')
+  })
+})

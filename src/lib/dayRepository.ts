@@ -199,7 +199,7 @@ export const appendToDay = async (dayId: string, text: string) => {
   const existing = await ensureDay(dayId)
   const trimmed = text.trim()
   const nextContent = existing.contentMd
-    ? `${existing.contentMd.trimStart()}\n\n${trimmed}`
+    ? `${existing.contentMd}\n\n${trimmed}`
     : trimmed
   return saveDay(dayId, nextContent, existing.humanTitle)
 }
