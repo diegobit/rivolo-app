@@ -15,7 +15,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico'],
+      // Public files referenced by absolute URLs bypass Vite's module graph, so
+      // list them for Workbox to keep the installed app's shell usable offline.
+      includeAssets: ['favicon.ico', '**/*.{svg,png,jpg,ttf}'],
       manifest: {
         name: 'Rivolo',
         short_name: 'Rivolo',
