@@ -74,15 +74,21 @@ vi.mock('./app-shell/BottomTrayRow', () => ({
   default: ({
     showMobileNewChatButton,
     onNewChat,
+    showScrollToToday,
   }: {
     showMobileNewChatButton: boolean
     onNewChat: () => void
-  }) =>
-    showMobileNewChatButton ? (
-      <button type="button" aria-label="New chat" onClick={onNewChat}>
-        New chat
-      </button>
-    ) : null,
+    showScrollToToday: boolean
+  }) => (
+    <>
+      {showMobileNewChatButton ? (
+        <button type="button" aria-label="New chat" onClick={onNewChat}>
+          New chat
+        </button>
+      ) : null}
+      {showScrollToToday ? <div data-testid="scroll-to-today-visible" /> : null}
+    </>
+  ),
 }))
 vi.mock('./app-shell/ShortcutsPopover', () => ({
   default: ({ shortcutsRef }: { shortcutsRef: { current: HTMLDivElement | null } }) => (
@@ -492,5 +498,77 @@ describe('AppShell attention and stale tab states', () => {
     stores.ui.timelineEmpty = true
     rerender(renderHome())
     expect(screen.queryByRole('button', { name: '2 items need attention' })).not.toBeInTheDocument()
+  })
+
+  it('coalesces rapid scroll/resize events into a single rAF-scheduled update, preserving scroll-to-today visibility', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    let scrollY = 0
+    Object.defineProperty(window, 'scrollY', {
+      configurable: true,
+      get: () => scrollY,
+    })
+
+    const rafCallbacks: FrameRequestCallback[] = []
+    const rafSpy = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback)
+      return rafCallbacks.length
+    })
+    vi.stubGlobal('requestAnimationFrame', rafSpy)
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const flushRaf = () => {
+      const pending = rafCallbacks.splice(0, rafCallbacks.length)
+      pending.forEach((callback) => callback(0))
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div data-scroll-target="today" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const todayTarget = document.querySelector<HTMLElement>("[data-scroll-target='today']")
+    if (!todayTarget) throw new Error('today target not rendered')
+    const rectSpy = vi.spyOn(todayTarget, 'getBoundingClientRect').mockReturnValue({
+      top: -2000,
+      bottom: -1990,
+      left: 0,
+      right: 0,
+      width: 0,
+      height: 10,
+      x: 0,
+      y: -2000,
+      toJSON: () => undefined,
+    } as DOMRect)
+
+    rafSpy.mockClear()
+    rectSpy.mockClear()
+
+    scrollY = 3000
+    fireEvent.scroll(window)
+    fireEvent.scroll(window)
+    fireEvent.resize(window)
+
+    expect(rafSpy).toHaveBeenCalledTimes(1)
+    expect(rectSpy).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('scroll-to-today-visible')).not.toBeInTheDocument()
+
+    act(() => flushRaf())
+
+    expect(rectSpy).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('scroll-to-today-visible')).toBeInTheDocument()
+
+    rafSpy.mockClear()
+    rectSpy.mockClear()
+    scrollY = 0
+    fireEvent.scroll(window)
+    act(() => flushRaf())
+
+    expect(screen.queryByTestId('scroll-to-today-visible')).not.toBeInTheDocument()
   })
 })

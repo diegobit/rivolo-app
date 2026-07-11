@@ -226,7 +226,10 @@ export default function AppShell() {
   }, [isHome, isRealTimelineVisible, postWelcomeAttentionReady, sawWelcome, timelineLoaded])
 
   useEffect(() => {
-    const handleScroll = () => {
+    let rafId: number | null = null
+
+    const applyScrollState = () => {
+      rafId = null
       setIsScrolled(window.scrollY > 0)
 
       if (!isHome) {
@@ -251,12 +254,18 @@ export default function AppShell() {
       setShowScrollToToday(farFromToday)
     }
 
-    handleScroll()
+    const handleScroll = () => {
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(applyScrollState)
+    }
+
+    applyScrollState()
     window.addEventListener('scroll', handleScroll, { passive: true })
     window.addEventListener('resize', handleScroll)
     return () => {
       window.removeEventListener('scroll', handleScroll)
       window.removeEventListener('resize', handleScroll)
+      if (rafId !== null) cancelAnimationFrame(rafId)
     }
   }, [isHome])
 
