@@ -1,4 +1,5 @@
 import { getDropboxState, updateDropboxState } from './dropboxState'
+import { createAuthorizedFetch } from './syncAuth'
 
 const DROPBOX_AUTH = 'https://www.dropbox.com/oauth2/authorize'
 const DROPBOX_API = 'https://api.dropboxapi.com/2'
@@ -186,22 +187,7 @@ export const getDropboxAccessToken = async (forceRefresh = false) => {
   return memoryToken.accessToken
 }
 
-export const authorizedDropboxFetch = async (
-  input: string,
-  init: RequestInit = {},
-  retry = true,
-) => {
-  const token = await getDropboxAccessToken()
-  const headers = new Headers(init.headers)
-  headers.set('Authorization', `Bearer ${token}`)
-  const response = await fetch(input, { ...init, headers })
-  if (response.status === 401 && retry) {
-    const refreshedToken = await getDropboxAccessToken(true)
-    headers.set('Authorization', `Bearer ${refreshedToken}`)
-    return fetch(input, { ...init, headers })
-  }
-  return response
-}
+export const authorizedDropboxFetch = createAuthorizedFetch(getDropboxAccessToken)
 
 export const disconnectDropboxAuth = async () => {
   try {

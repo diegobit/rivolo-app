@@ -14,6 +14,17 @@ export type DropboxViewState = {
   updateFilePath: (path: string) => Promise<void>
 }
 
+const stateToView = (state: Awaited<ReturnType<typeof getDropboxState>>) => ({
+  filePath: state.filePath ?? '',
+  lastRemoteRev: state.lastRemoteRev,
+  lastSyncAt: state.lastSyncAt,
+  localDirty: state.localDirty,
+  hasAuth: state.connected,
+  accountId: state.accountId,
+  accountEmail: state.accountEmail,
+  accountName: state.accountName,
+})
+
 export const useDropboxStore = create<DropboxViewState>((set) => ({
   filePath: '',
   lastRemoteRev: null,
@@ -24,31 +35,6 @@ export const useDropboxStore = create<DropboxViewState>((set) => ({
   accountEmail: null,
   accountName: null,
 
-  loadState: async () => {
-    const state = await getDropboxState()
-    set({
-      filePath: state.filePath ?? '',
-      lastRemoteRev: state.lastRemoteRev,
-      lastSyncAt: state.lastSyncAt,
-      localDirty: state.localDirty,
-      hasAuth: state.connected,
-      accountId: state.accountId,
-      accountEmail: state.accountEmail,
-      accountName: state.accountName,
-    })
-  },
-
-  updateFilePath: async (path: string) => {
-    const state = await updateDropboxFilePath(path)
-    set({
-      filePath: state.filePath ?? '',
-      lastRemoteRev: state.lastRemoteRev,
-      lastSyncAt: state.lastSyncAt,
-      localDirty: state.localDirty,
-      hasAuth: state.connected,
-      accountId: state.accountId,
-      accountEmail: state.accountEmail,
-      accountName: state.accountName,
-    })
-  },
+  loadState: async () => set(stateToView(await getDropboxState())),
+  updateFilePath: async (path: string) => set(stateToView(await updateDropboxFilePath(path))),
 }))

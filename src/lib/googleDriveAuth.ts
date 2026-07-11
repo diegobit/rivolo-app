@@ -3,6 +3,7 @@ import {
   markGoogleDriveLocalDirty,
   updateGoogleDriveState,
 } from './googleDriveState'
+import { createAuthorizedFetch } from './syncAuth'
 
 const GOOGLE_IDENTITY_SCRIPT = 'https://accounts.google.com/gsi/client'
 const ACCESS_TOKEN_REFRESH_BUFFER = 60_000
@@ -204,22 +205,7 @@ export const getGoogleDriveAccessToken = async (forceRefresh = false) => {
   return memoryToken.accessToken
 }
 
-export const authorizedGoogleDriveFetch = async (
-  input: string,
-  init: RequestInit = {},
-  retry = true,
-) => {
-  const token = await getGoogleDriveAccessToken()
-  const headers = new Headers(init.headers)
-  headers.set('Authorization', `Bearer ${token}`)
-  const response = await fetch(input, { ...init, headers })
-  if (response.status === 401 && retry) {
-    const refreshedToken = await getGoogleDriveAccessToken(true)
-    headers.set('Authorization', `Bearer ${refreshedToken}`)
-    return fetch(input, { ...init, headers })
-  }
-  return response
-}
+export const authorizedGoogleDriveFetch = createAuthorizedFetch(getGoogleDriveAccessToken)
 
 export const disconnectGoogleDriveAuth = async () => {
   try {
