@@ -1,30 +1,23 @@
 import { EditorSelection, Prec, type Line } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
+import { getToggledValue, matchTodoMarker } from './todoMarker'
 
-const TODO_MARKER_REGEX = /^(\s*-\s+\[)([ xX])(\])/
 const LIST_MARKER_REGEX = /^(\s*)(?:[-+*]|\d+[.)])\s+(.*)$/
 
 const getTodoMarker = (line: Line) => {
-  const match = line.text.match(TODO_MARKER_REGEX)
+  const match = matchTodoMarker(line.text)
   if (!match) return null
-  const markerStartOffset = match.index ?? 0
-  const markerFrom = line.from + markerStartOffset
-  const markerTo = markerFrom + match[0].length
-  const bracketFrom = line.from + match[1].length - 1
-  const bracketTo = markerTo
-  const toggleFrom = line.from + match[1].length
+  const bracketFrom = line.from + match.prefix.length - 1
+  const bracketTo = bracketFrom + 3
+  const toggleFrom = line.from + match.prefix.length
   return {
-    markerFrom,
-    markerTo,
     bracketFrom,
     bracketTo,
     toggleFrom,
     toggleTo: toggleFrom + 1,
-    value: match[2],
+    value: match.value,
   }
 }
-
-const getToggleValue = (value: string) => (value.toLowerCase() === 'x' ? ' ' : 'x')
 
 const createTodoLine = (lineText: string) => {
   const listMatch = lineText.match(LIST_MARKER_REGEX)
@@ -38,7 +31,7 @@ const createTodoLine = (lineText: string) => {
   return content ? `${indentation}- [ ] ${content}` : `${indentation}- [ ] `
 }
 
-const toggleTodoAtPos = (view: EditorView, pos: number) => {
+export const toggleTodoAtPos = (view: EditorView, pos: number) => {
   const line = view.state.doc.lineAt(pos)
   const marker = getTodoMarker(line)
   if (!marker) return false
@@ -47,7 +40,7 @@ const toggleTodoAtPos = (view: EditorView, pos: number) => {
     changes: {
       from: marker.toggleFrom,
       to: marker.toggleTo,
-      insert: getToggleValue(marker.value),
+      insert: getToggledValue(marker.value),
     },
   })
   return true
@@ -81,7 +74,7 @@ const toggleOrCreateTodosInSelection = (view: EditorView) => {
         changes.push({
           from: marker.toggleFrom,
           to: marker.toggleTo,
-          insert: getToggleValue(marker.value),
+          insert: getToggledValue(marker.value),
         })
         continue
       }
