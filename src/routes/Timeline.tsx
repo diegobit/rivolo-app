@@ -314,6 +314,7 @@ export default function Timeline() {
   const loading = useDaysStore((state) => state.loading)
   const loadingMore = useDaysStore((state) => state.loadingMore)
   const hasMorePast = useDaysStore((state) => state.hasMorePast)
+  const loadError = useDaysStore((state) => state.loadError)
   const loadTimeline = useDaysStore((state) => state.loadTimeline)
   const loadOlderDays = useDaysStore((state) => state.loadOlderDays)
   const loadDay = useDaysStore((state) => state.loadDay)
@@ -457,7 +458,7 @@ export default function Timeline() {
         : searchResults,
     [hiddenDeleteDayIds, searchResults],
   )
-  const hasNoNotes = !loading && visibleDays.length === 0
+  const hasNoNotes = !loading && !loadError && visibleDays.length === 0
 
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
@@ -1072,6 +1073,10 @@ export default function Timeline() {
     setChatPanelOpen,
   })
 
+  const handleRetryLoad = useCallback(() => {
+    void loadTimeline()
+  }, [loadTimeline])
+
   const handleEmptyCta = useCallback(() => {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (!prefersReducedMotion) {
@@ -1594,6 +1599,15 @@ export default function Timeline() {
           onStartToday={handleEmptyCta}
           heroLogoRef={heroLogoRef}
         />
+      )}
+
+      {!hasSearchIntent && !loading && loadError && (
+        <section className="flex min-h-[46vh] flex-col items-center justify-center gap-4 px-6 text-center">
+          <p className="text-base font-semibold text-rose-400">Could not load your notes — retry</p>
+          <button className={buttonPrimary} type="button" onClick={handleRetryLoad}>
+            Retry
+          </button>
+        </section>
       )}
 
       {!loading && noSearchResults && (

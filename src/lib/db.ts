@@ -20,7 +20,10 @@ let ftsAvailable: boolean | null = null
 
 const ensureSql = () => {
   if (!sqlPromise) {
-    sqlPromise = initSqlJs({ locateFile: () => sqlWasmUrl })
+    sqlPromise = initSqlJs({ locateFile: () => sqlWasmUrl }).catch((error) => {
+      sqlPromise = null
+      throw error
+    })
   }
 
   return sqlPromise
@@ -133,7 +136,10 @@ export const getDatabase = async () => {
       const db = stored ? new SQL.Database(new Uint8Array(stored)) : new SQL.Database()
       ensureSchema(db)
       return db
-    })()
+    })().catch((error) => {
+      dbPromise = null
+      throw error
+    })
   }
 
   return dbPromise
