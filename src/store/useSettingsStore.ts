@@ -407,7 +407,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const nextStored = {
       ...root,
       [provider]: { ...currentProvider, apiKey: normalizedKey },
-      ...(provider === 'gemini' ? { geminiApiKey: normalizedKey } : {}),
     }
     await setJsonSetting('llm.secrets', nextStored)
     set({ llmSecrets: { ...get().llmSecrets, [provider]: { apiKey: normalizedKey } } })
@@ -423,6 +422,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       ...root,
       [provider]: remainingProviderFields,
     }
+    // Still clear the legacy mirror on removal (unlike the save path, which no longer
+    // writes it): normalizeSecrets falls back to root.geminiApiKey when gemini.apiKey is
+    // absent, so leaving a stale legacy value here would resurrect a "removed" key for
+    // any user whose stored data predates this cleanup.
     if (provider === 'gemini') delete nextStored.geminiApiKey
     await setJsonSetting('llm.secrets', nextStored)
 

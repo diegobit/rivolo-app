@@ -246,3 +246,47 @@ describe('useSettingsStore theme preference', () => {
     )
   })
 })
+
+describe('useSettingsStore legacy geminiApiKey', () => {
+  beforeEach(() => {
+    installMatchMedia(false)
+    settingsRepository.getSetting.mockReset()
+    settingsRepository.setSetting.mockReset().mockResolvedValue(undefined)
+    settingsRepository.getJsonSetting.mockReset()
+    settingsRepository.setJsonSetting.mockReset().mockResolvedValue(undefined)
+    useSettingsStore.setState({ llmSecrets: {}, providerSettings: DEFAULT_LLM_PROVIDER_SETTINGS })
+  })
+
+  it('still migrates a pre-existing legacy geminiApiKey on load', async () => {
+    mockLoadSettingsValues({}, { 'llm.secrets': { geminiApiKey: 'legacy-key' } })
+
+    await useSettingsStore.getState().loadSettings()
+
+    expect(useSettingsStore.getState().llmSecrets.gemini?.apiKey).toBe('legacy-key')
+  })
+
+  it('does not recreate the legacy mirror when saving a new key', async () => {
+    settingsRepository.getJsonSetting.mockResolvedValue({})
+
+    await useSettingsStore.getState().saveProviderKey('gemini', 'fresh-key')
+
+    expect(settingsRepository.setJsonSetting).toHaveBeenCalledExactlyOnceWith(
+      'llm.secrets',
+      { gemini: { apiKey: 'fresh-key' } },
+    )
+  })
+
+  it('clears a stale legacy mirror when the key is removed, so it cannot resurrect on the next load', async () => {
+    settingsRepository.getJsonSetting.mockResolvedValue({
+      gemini: { apiKey: 'fresh-key' },
+      geminiApiKey: 'stale-legacy-key',
+    })
+
+    await useSettingsStore.getState().clearProviderKey('gemini')
+
+    expect(settingsRepository.setJsonSetting).toHaveBeenCalledExactlyOnceWith(
+      'llm.secrets',
+      { gemini: {} },
+    )
+  })
+})
