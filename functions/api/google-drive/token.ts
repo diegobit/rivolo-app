@@ -1,22 +1,27 @@
 import {
-  clearRefreshCookieHeader,
-  createRefreshCookieHeader,
-  getStoredRefreshToken,
-  jsonResponse,
+  googleAllowedOrigins,
+  googleCookieConfig,
   refreshGoogleAccessToken,
   toPublicOAuthError,
-  validateMutationRequest,
   type GoogleOAuthEnv,
 } from '../../_lib/googleOAuth'
+import {
+  clearTokenCookieHeader,
+  createTokenCookieHeader,
+  jsonResponse,
+  readStoredToken,
+  validateMutationRequest,
+} from '../../_lib/tokenCookie'
 
 export const onRequestPost: PagesFunction<GoogleOAuthEnv> = async ({ request, env }) => {
-  const validationError = validateMutationRequest(request, env)
+  const validationError = validateMutationRequest(request, googleAllowedOrigins(env))
   if (validationError) return jsonResponse({ code: 'INVALID_REQUEST', message: validationError }, 403)
 
-  const refreshToken = await getStoredRefreshToken(request, env)
+  const config = googleCookieConfig(env)
+  const refreshToken = await readStoredToken(request, config)
   if (!refreshToken) {
     return jsonResponse({ code: 'AUTH_REQUIRED', message: 'Connect Google Drive to sync.' }, 401, {
-      'Set-Cookie': clearRefreshCookieHeader(request),
+      'Set-Cookie': clearTokenCookieHeader(request, config),
     })
   }
 
@@ -30,17 +35,13 @@ export const onRequestPost: PagesFunction<GoogleOAuthEnv> = async ({ request, en
       },
       200,
       {
-        'Set-Cookie': await createRefreshCookieHeader(
-          request,
-          nextRefreshToken,
-          env.GOOGLE_TOKEN_ENCRYPTION_KEY,
-        ),
+        'Set-Cookie': await createTokenCookieHeader(request, config, nextRefreshToken),
       },
     )
   } catch (error) {
     const publicError = toPublicOAuthError(error)
     return jsonResponse(publicError, publicError.status, {
-      ...(publicError.status === 401 ? { 'Set-Cookie': clearRefreshCookieHeader(request) } : {}),
+      ...(publicError.status === 401 ? { 'Set-Cookie': clearTokenCookieHeader(request, config) } : {}),
     })
   }
 }
