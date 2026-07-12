@@ -8,6 +8,7 @@ import {
   ensureDatabaseSchema,
   executeSql,
   exportSerializedDatabase,
+  isAscii,
   isAtLeastThreeCodePoints,
   openSerializedDatabase,
   queryRows,
@@ -94,7 +95,7 @@ describe('official SQLite wasm migration', () => {
       )
     }
 
-    for (const query of ['ell', 'café', '100%_', '"quoted"', 'kel']) {
+    for (const query of ['ell', '100%_', '"quoted"', 'kel']) {
       const candidates = queryRows<{
         day_id: string
         human_title: string
@@ -125,6 +126,9 @@ describe('official SQLite wasm migration', () => {
     expect(isAtLeastThreeCodePoints('a')).toBe(false)
     expect(isAtLeastThreeCodePoints('é🙂')).toBe(false)
     expect(isAtLeastThreeCodePoints('é🙂a')).toBe(true)
+    expect(isAscii('plain ASCII')).toBe(true)
+    expect(isAscii('აბგ')).toBe(false)
+    expect(isAscii('ꭰꭱꭲ')).toBe(false)
     db.close()
   })
 })

@@ -2,7 +2,7 @@ import { formatDayTitle, isValidDayId } from './dates'
 import { isFtsAvailable, queryAll, queryOne, run, runDatabaseTransaction, upsertFts } from './db'
 import { markSyncLocalDirty } from './syncDirty'
 import { searchDaysInMemory, type Day, type DaySearchResult, type SearchFilter } from './notesCore'
-import { isAtLeastThreeCodePoints, quoteFtsPhrase } from './sqliteRuntime'
+import { isAscii, isAtLeastThreeCodePoints, quoteFtsPhrase } from './sqliteRuntime'
 
 export type { Day, DaySearchResult, SearchFilter } from './notesCore'
 
@@ -271,7 +271,11 @@ export const searchDays = async (
         .join(' AND ')}`
     : ''
   const termParams = escapedTerms.flatMap((term) => [`%${term}%`, `%${term}%`])
-  const useFts = Boolean(trimmed) && isAtLeastThreeCodePoints(trimmed) && (await isFtsAvailable())
+  const useFts =
+    Boolean(trimmed) &&
+    isAscii(trimmed) &&
+    isAtLeastThreeCodePoints(trimmed) &&
+    (await isFtsAvailable())
   const candidateSql = useFts
     ? `
       SELECT days.day_id, days.human_title, days.content_md, days.created_at, days.updated_at

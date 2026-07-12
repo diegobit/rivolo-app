@@ -134,4 +134,7 @@ export const quoteFtsPhrase = (query: string) => `"${query.replace(/"/g, '""')}"
 
 export const isAtLeastThreeCodePoints = (value: string) => [...value].length >= 3
 
+export const isAscii = (value: string) =>
+  [...value].every((character) => (character.codePointAt(0) ?? 0x80) <= 0x7f)
+
 export type { SqlValue }

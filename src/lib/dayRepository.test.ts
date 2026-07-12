@@ -194,15 +194,22 @@ describe('searchDays', () => {
     expect(mocks.isFtsAvailable).not.toHaveBeenCalled()
   })
 
-  it('leaves non-ASCII terms to the locale-aware in-memory matcher', async () => {
-    mocks.queryAll.mockResolvedValue([])
+  it.each(['CAFÉ', 'აბგ', 'ꭰꭱꭲ'])(
+    'leaves non-ASCII query %s to the locale-aware in-memory matcher',
+    async (query) => {
+      mocks.isFtsAvailable.mockResolvedValue(true)
+      mocks.queryAll.mockResolvedValue([])
 
-    await searchDays('CAFÉ')
+      await searchDays(query)
 
-    const [sql, params] = mocks.queryAll.mock.calls[0]
-    expect(sql).not.toContain('WHERE')
-    expect(params).toEqual([120, 0])
-  })
+      const [sql, params] = mocks.queryAll.mock.calls[0]
+      expect(sql).toContain('FROM days')
+      expect(sql).not.toContain('FROM days_fts')
+      expect(sql).not.toContain('WHERE')
+      expect(params).toEqual([120, 0])
+      expect(mocks.isFtsAvailable).not.toHaveBeenCalled()
+    },
+  )
 
   it('keeps paging past false-positive candidates to preserve old search results', async () => {
     const falsePositives = Array.from({ length: 50 }, (_, index) =>
