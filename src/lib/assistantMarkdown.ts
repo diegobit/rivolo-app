@@ -36,9 +36,15 @@ const renderInlineMarkdown = (value: string, citations: Citation[]) => {
 
   const escaped = escapeHtml(withCodeTokens)
 
+  // Protect the href from the emphasis/citation passes below: a URL containing
+  // *, ** or ~~ would otherwise be rewritten inside the attribute (e.g. an <em>
+  // injected into the link). The label stays inline so it still gets formatted.
+  const urlTokens: string[] = []
   const withLinks = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label, url) => {
     const safeUrl = url.replace(/&quot;/g, '')
-    return `<a href="${safeUrl}" target="_blank" rel="noreferrer">${label}</a>`
+    const token = `@@LINK_URL_${urlTokens.length}@@`
+    urlTokens.push(safeUrl)
+    return `<a href="${token}" target="_blank" rel="noreferrer">${label}</a>`
   })
 
   const withFormatting = withLinks
@@ -64,7 +70,12 @@ const renderInlineMarkdown = (value: string, citations: Citation[]) => {
     return `<span class="assistant-cite-inline" data-citation-index="${index}" role="button" tabindex="0" title="${tooltip}" aria-label="${ariaLabel}">${label}</span>`
   })
 
-  return withCitations.replace(/@@INLINE_CODE_(\d+)@@/g, (_match, indexText) => {
+  const withUrls = withCitations.replace(/@@LINK_URL_(\d+)@@/g, (_match, indexText) => {
+    const index = Number(indexText)
+    return urlTokens[index] ?? ''
+  })
+
+  return withUrls.replace(/@@INLINE_CODE_(\d+)@@/g, (_match, indexText) => {
     const index = Number(indexText)
     return codeTokens[index] ?? ''
   })
