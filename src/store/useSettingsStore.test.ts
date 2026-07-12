@@ -77,7 +77,34 @@ describe('useSettingsStore theme preference', () => {
     settingsRepository.setSetting.mockReset().mockResolvedValue(undefined)
     settingsRepository.getJsonSetting.mockReset()
     settingsRepository.setJsonSetting.mockReset().mockResolvedValue(undefined)
-    useSettingsStore.setState({ themePreference: 'system', loading: false, settingsError: null })
+    useSettingsStore.setState({
+      settingsView: 'basic',
+      themePreference: 'system',
+      loading: false,
+      settingsError: null,
+    })
+  })
+
+  it('defaults a missing Settings view to basic and persists the preference', async () => {
+    mockLoadSettingsValues()
+
+    await useSettingsStore.getState().loadSettings()
+
+    expect(useSettingsStore.getState().settingsView).toBe('basic')
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith('settings.view', 'basic')
+  })
+
+  it('restores and updates the selected Settings view', async () => {
+    mockLoadSettingsValues({ 'settings.view': 'advanced' })
+
+    await useSettingsStore.getState().loadSettings()
+    expect(useSettingsStore.getState().settingsView).toBe('advanced')
+
+    settingsRepository.setSetting.mockClear()
+    await useSettingsStore.getState().updateSettingsView('basic')
+
+    expect(settingsRepository.setSetting).toHaveBeenCalledExactlyOnceWith('settings.view', 'basic')
+    expect(useSettingsStore.getState().settingsView).toBe('basic')
   })
 
   it('defaults missing theme settings to system and mirrors the resolved light theme', async () => {

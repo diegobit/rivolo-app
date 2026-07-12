@@ -38,6 +38,8 @@ type Wallpaper = 'none' | 'thoughts-light' | 'thoughts-high'
 
 type AiLanguage = 'follow' | string
 
+type SettingsView = 'basic' | 'advanced'
+
 type SettingsState = {
   provider: LlmProviderId
   providerSettings: LlmProviderSettings
@@ -47,6 +49,7 @@ type SettingsState = {
   settingsError: string | null
   loading: boolean
   dismissedSetupNotices: DismissedSetupNotices
+  settingsView: SettingsView
   themePreference: ThemePreference
   wallpaper: Wallpaper
   highlightInputMode: boolean
@@ -65,6 +68,7 @@ type SettingsState = {
   clearProviderKey: (provider: LlmProviderId) => Promise<void>
   updateAllowWebSearch: (enabled: boolean) => Promise<void>
   updateAiLanguage: (language: AiLanguage) => Promise<void>
+  updateSettingsView: (settingsView: SettingsView) => Promise<void>
   updateThemePreference: (themePreference: ThemePreference) => Promise<void>
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
   updateHighlightInputMode: (enabled: boolean) => Promise<void>
@@ -77,6 +81,9 @@ type SettingsState = {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const isSettingsView = (value: string | null): value is SettingsView =>
+  value === 'basic' || value === 'advanced'
 
 type NativeLlmProviderId = Exclude<LlmProviderId, 'openai-compatible'>
 type ModelSource = 'default' | 'custom'
@@ -181,6 +188,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   settingsError: null,
   loading: false,
   dismissedSetupNotices: DEFAULT_DISMISSED_SETUP_NOTICES,
+  settingsView: 'basic',
   themePreference: getLocalThemePreference() ?? 'system',
   wallpaper: 'thoughts-light',
   highlightInputMode: false,
@@ -203,6 +211,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         storedAllowWebSearch,
         storedAiLanguage,
         storedSecrets,
+        storedSettingsView,
         storedTheme,
         storedWallpaper,
         storedHighlightInputMode,
@@ -222,6 +231,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         getSetting('llm.allowWebSearch'),
         getSetting('ai.language'),
         getJsonSetting<unknown>('llm.secrets'),
+        getSetting('settings.view'),
         getSetting('appearance.theme'),
         getSetting('appearance.wallpaper'),
         getSetting('appearance.highlightInputMode'),
@@ -253,6 +263,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const llmSecrets = normalizeSecrets(storedSecrets)
       const allowWebSearch = storedAllowWebSearch !== 'false'
       const aiLanguage = storedAiLanguage || 'follow'
+      const settingsView: SettingsView = isSettingsView(storedSettingsView)
+        ? storedSettingsView
+        : 'basic'
       const themePreference = normalizeThemePreference(storedTheme)
       const defaultWallpaper: Wallpaper = 'thoughts-light'
       const wallpaper: Wallpaper =
@@ -300,6 +313,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         migrations.push(setSetting('llm.allowWebSearch', allowWebSearch ? 'true' : 'false'))
       }
       if (!storedAiLanguage) migrations.push(setSetting('ai.language', aiLanguage))
+      if (storedSettingsView !== settingsView) {
+        migrations.push(setSetting('settings.view', settingsView))
+      }
       if (storedTheme !== themePreference) migrations.push(setSetting('appearance.theme', themePreference))
       if (storedWallpaper !== wallpaper) migrations.push(setSetting('appearance.wallpaper', wallpaper))
       if (storedHighlightInputMode !== 'true' && storedHighlightInputMode !== 'false') {
@@ -325,6 +341,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         llmSecrets,
         allowWebSearch,
         aiLanguage,
+        settingsView,
         themePreference,
         wallpaper,
         highlightInputMode,
@@ -442,6 +459,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   updateAiLanguage: async (language) => {
     await setSetting('ai.language', language)
     set({ aiLanguage: language })
+  },
+
+  updateSettingsView: async (settingsView) => {
+    await setSetting('settings.view', settingsView)
+    set({ settingsView })
   },
 
   updateThemePreference: async (themePreference) => {
