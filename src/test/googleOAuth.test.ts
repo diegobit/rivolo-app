@@ -2,12 +2,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   GOOGLE_REFRESH_COOKIE,
-  createRefreshCookieHeader,
-  decryptRefreshCookie,
-  encryptRefreshCookie,
-  validateMutationRequest,
+  googleAllowedOrigins,
+  googleCookieConfig,
   type GoogleOAuthEnv,
 } from '../../functions/_lib/googleOAuth'
+import {
+  clearTokenCookieHeader,
+  createTokenCookieHeader,
+  decryptToken,
+  encryptToken,
+  validateMutationRequest,
+} from '../../functions/_lib/tokenCookie'
+import { dropboxCookieConfig } from '../../functions/_lib/dropboxOAuth'
 import { onRequestPost as refreshAccessToken } from '../../functions/api/google-drive/token'
 import { onRequestPost as exchangeAuthorizationCode } from '../../functions/api/google-drive/exchange'
 
@@ -48,12 +54,26 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('Google OAuth backend boundary', () => {
   it('encrypts refresh tokens and rejects tampering', async () => {
-    const encrypted = await encryptRefreshCookie('refresh-secret', env.GOOGLE_TOKEN_ENCRYPTION_KEY)
+    const encrypted = await encryptToken(
+      'refresh-secret',
+      env.GOOGLE_TOKEN_ENCRYPTION_KEY,
+      googleCookieConfig(env).tokenPayloadKey,
+    )
 
     expect(encrypted).not.toContain('refresh-secret')
-    expect(await decryptRefreshCookie(encrypted, env.GOOGLE_TOKEN_ENCRYPTION_KEY)).toBe('refresh-secret')
     expect(
-      await decryptRefreshCookie(tamperEncryptedPayload(encrypted), env.GOOGLE_TOKEN_ENCRYPTION_KEY),
+      await decryptToken(
+        encrypted,
+        env.GOOGLE_TOKEN_ENCRYPTION_KEY,
+        googleCookieConfig(env).tokenPayloadKey,
+      ),
+    ).toBe('refresh-secret')
+    expect(
+      await decryptToken(
+        tamperEncryptedPayload(encrypted),
+        env.GOOGLE_TOKEN_ENCRYPTION_KEY,
+        googleCookieConfig(env).tokenPayloadKey,
+      ),
     ).toBeNull()
   })
 
@@ -67,22 +87,45 @@ describe('Google OAuth backend boundary', () => {
       headers: { Origin: 'https://attacker.example', 'X-Requested-With': 'XmlHttpRequest' },
     })
 
-    expect(validateMutationRequest(valid, env)).toBeNull()
-    expect(validateMutationRequest(crossOrigin, env)).toBe('Origin is not allowed.')
+    expect(validateMutationRequest(valid, googleAllowedOrigins(env))).toBeNull()
+    expect(validateMutationRequest(crossOrigin, googleAllowedOrigins(env))).toBe('Origin is not allowed.')
+  })
+
+  it('preserves Google cookie attributes while both provider configs use the shared helper', async () => {
+    const request = new Request('https://rivolo.app/api/google-drive/token')
+    const googleConfig = googleCookieConfig(env)
+    const dropboxConfig = dropboxCookieConfig({
+      DROPBOX_CLIENT_ID: 'dropbox-client-id',
+      DROPBOX_TOKEN_ENCRYPTION_KEY: 'another-long-test-encryption-key',
+    })
+
+    const googleHeader = await createTokenCookieHeader(request, googleConfig, 'google-refresh-token')
+    const dropboxHeader = await createTokenCookieHeader(request, dropboxConfig, 'dropbox-refresh-token')
+
+    expect(googleHeader.slice(googleHeader.indexOf('; ') + 2)).toBe(
+      'Max-Age=34560000; Path=/api/google-drive; HttpOnly; SameSite=Strict; Secure',
+    )
+    expect(clearTokenCookieHeader(request, googleConfig)).toBe(
+      'rivolo_gdrive_refresh=; Max-Age=0; Path=/api/google-drive; HttpOnly; SameSite=Strict; Secure',
+    )
+    expect(await decryptToken(googleHeader.split(';', 1)[0].split('=')[1], googleConfig.secret, googleConfig.tokenPayloadKey)).toBe('google-refresh-token')
+    expect(dropboxHeader).toContain('Path=/api/dropbox; HttpOnly; SameSite=Strict; Secure')
+    expect(await decryptToken(dropboxHeader.split(';', 1)[0].split('=')[1], dropboxConfig.secret)).toBe('dropbox-refresh-token')
   })
 
   it('refreshes silently from the HttpOnly cookie and rotates its expiry', async () => {
-    const cookie = await createRefreshCookieHeader(
-      new Request('https://rivolo.app/api/google-drive/token'),
-      'refresh-secret',
-      env.GOOGLE_TOKEN_ENCRYPTION_KEY,
-    )
+    const requestUrl = 'https://rivolo.app/api/google-drive/token'
+    const config = googleCookieConfig(env)
+    const cookie = await createTokenCookieHeader(new Request(requestUrl), config, 'refresh-secret')
     const cookiePair = cookie.split(';', 1)[0]
     expect(cookie).toContain('Max-Age=34560000')
     expect(cookie).toContain('Path=/api/google-drive')
     expect(cookie).toContain('HttpOnly')
     expect(cookie).toContain('SameSite=Strict')
     expect(cookie).toContain('Secure')
+    expect(clearTokenCookieHeader(new Request(requestUrl), config)).toBe(
+      'rivolo_gdrive_refresh=; Max-Age=0; Path=/api/google-drive; HttpOnly; SameSite=Strict; Secure',
+    )
     const googleFetch = vi.fn(async () =>
       Response.json({ access_token: 'access-token', expires_in: 3600 }),
     )
@@ -107,10 +150,10 @@ describe('Google OAuth backend boundary', () => {
   })
 
   it('preserves the stored refresh token when a later code exchange omits it', async () => {
-    const cookie = await createRefreshCookieHeader(
+    const cookie = await createTokenCookieHeader(
       new Request('https://rivolo.app/api/google-drive/exchange'),
+      googleCookieConfig(env),
       'existing-refresh-token',
-      env.GOOGLE_TOKEN_ENCRYPTION_KEY,
     )
     vi.stubGlobal(
       'fetch',
@@ -133,7 +176,11 @@ describe('Google OAuth backend boundary', () => {
     expect(await response.json()).toMatchObject({ accessToken: 'new-access-token' })
     const nextCookie = response.headers.get('Set-Cookie')?.split(';', 1)[0].split('=')[1]
     expect(
-      await decryptRefreshCookie(decodeURIComponent(nextCookie ?? ''), env.GOOGLE_TOKEN_ENCRYPTION_KEY),
+      await decryptToken(
+        decodeURIComponent(nextCookie ?? ''),
+        env.GOOGLE_TOKEN_ENCRYPTION_KEY,
+        googleCookieConfig(env).tokenPayloadKey,
+      ),
     ).toBe('existing-refresh-token')
   })
 })

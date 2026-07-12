@@ -7,11 +7,13 @@ export type CookieConfig = {
   path: string
   secret: string
   maxAgeSeconds: number
+  tokenPayloadKey?: 'token' | 'refreshToken'
 }
 
 type CookiePayload = {
   version: 1
-  token: string
+  token?: string
+  refreshToken?: string
 }
 
 const encoder = new TextEncoder()
@@ -38,10 +40,14 @@ const getEncryptionKey = async (secret: string) => {
   return crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt', 'decrypt'])
 }
 
-export const encryptToken = async (token: string, secret: string) => {
+export const encryptToken = async (
+  token: string,
+  secret: string,
+  tokenPayloadKey: CookieConfig['tokenPayloadKey'] = 'token',
+) => {
   const key = await getEncryptionKey(secret)
   const iv = crypto.getRandomValues(new Uint8Array(12))
-  const payload: CookiePayload = { version: 1, token }
+  const payload: CookiePayload = { version: 1, [tokenPayloadKey]: token }
   const encrypted = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     key,
@@ -50,7 +56,11 @@ export const encryptToken = async (token: string, secret: string) => {
   return `${bytesToBase64Url(iv)}.${bytesToBase64Url(new Uint8Array(encrypted))}`
 }
 
-export const decryptToken = async (value: string, secret: string) => {
+export const decryptToken = async (
+  value: string,
+  secret: string,
+  tokenPayloadKey: CookieConfig['tokenPayloadKey'] = 'token',
+) => {
   try {
     const [ivValue, encryptedValue, extra] = value.split('.')
     if (!ivValue || !encryptedValue || extra) return null
@@ -61,7 +71,8 @@ export const decryptToken = async (value: string, secret: string) => {
       base64UrlToBytes(encryptedValue),
     )
     const payload = JSON.parse(decoder.decode(decrypted)) as Partial<CookiePayload>
-    return payload.version === 1 && typeof payload.token === 'string' ? payload.token : null
+    const token = payload[tokenPayloadKey]
+    return payload.version === 1 && typeof token === 'string' ? token : null
   } catch {
     return null
   }
@@ -90,7 +101,7 @@ export const createTokenCookieHeader = async (
   config: CookieConfig,
   token: string,
 ) => {
-  const encrypted = await encryptToken(token, config.secret)
+  const encrypted = await encryptToken(token, config.secret, config.tokenPayloadKey)
   return `${config.name}=${encodeURIComponent(encrypted)}; Max-Age=${config.maxAgeSeconds}; ${cookieAttributes(request, config.path)}`
 }
 
@@ -99,7 +110,7 @@ export const clearTokenCookieHeader = (request: Request, config: CookieConfig) =
 
 export const readStoredToken = async (request: Request, config: CookieConfig) => {
   const encrypted = readCookie(request, config.name)
-  return encrypted ? decryptToken(encrypted, config.secret) : null
+  return encrypted ? decryptToken(encrypted, config.secret, config.tokenPayloadKey) : null
 }
 
 export const jsonResponse = (payload: unknown, status = 200, headers: HeadersInit = {}) => {
