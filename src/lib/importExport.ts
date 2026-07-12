@@ -28,7 +28,10 @@ const isStoredRollbackBackup = (value: unknown): value is StoredRollbackBackup =
   if (typeof value !== 'object' || value === null) return false
   const entry = value as Record<string, unknown>
   if (typeof entry.createdAt !== 'number' || typeof entry.dayCount !== 'number') return false
-  return typeof entry.contentMd === 'string' || entry.contentMdGz instanceof Uint8Array
+  // ArrayBuffer.isView (not instanceof Uint8Array) so a Uint8Array revived by
+  // structuredClone from another realm — a worker, or the fake-indexeddb test
+  // path — is still recognised instead of being silently dropped.
+  return typeof entry.contentMd === 'string' || ArrayBuffer.isView(entry.contentMdGz)
 }
 
 const inflateBackup = (stored: StoredRollbackBackup): ImportRollbackBackup | null => {

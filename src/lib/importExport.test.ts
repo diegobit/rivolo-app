@@ -1,3 +1,4 @@
+import vm from 'node:vm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate'
 
@@ -258,6 +259,26 @@ ${markdownDay('2026-06-30', 'second')}`
     ])
     expect(strFromU8(inflateSync(saved[1].contentMdGz))).toBe('# legacy backup')
     expect(mocks.del).toHaveBeenCalledWith('rivolo.import.latestRollbackBackup')
+  })
+
+  it('reads a compressed backup whose bytes were revived in another realm', async () => {
+    // structuredClone (used by real idb-keyval, workers, and fake-indexeddb) can
+    // revive a Uint8Array from a different realm, where `instanceof Uint8Array`
+    // is false; the guard must not drop such a backup.
+    const CrossRealmUint8Array = vm.runInNewContext('Uint8Array') as Uint8ArrayConstructor
+    const crossRealmGz = CrossRealmUint8Array.from(deflateSync(strToU8('# cross-realm backup')))
+    expect(crossRealmGz instanceof Uint8Array).toBe(false)
+    expect(ArrayBuffer.isView(crossRealmGz)).toBe(true)
+
+    const existing = [{ createdAt: 300, contentMdGz: crossRealmGz, dayCount: 2 }]
+    mocks.get.mockImplementation(async (key: string) =>
+      key === 'rivolo.import.rollbackBackups' ? existing : undefined,
+    )
+    const { listRollbackBackups } = await import('./importExport')
+
+    await expect(listRollbackBackups()).resolves.toEqual([
+      expect.objectContaining({ createdAt: 300, contentMd: '# cross-realm backup', dayCount: 2 }),
+    ])
   })
 
   it('drops backups that no longer decompress instead of failing the import', async () => {
