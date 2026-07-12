@@ -2,6 +2,7 @@ import { formatDayTitle, isValidDayId } from './dates'
 import { isFtsAvailable, queryAll, queryOne, run, runDatabaseTransaction, upsertFts } from './db'
 import { markSyncLocalDirty } from './syncDirty'
 import { searchDaysInMemory, type Day, type DaySearchResult, type SearchFilter } from './notesCore'
+import { isAtLeastThreeCodePoints, quoteFtsPhrase } from './sqliteRuntime'
 
 export type { Day, DaySearchResult, SearchFilter } from './notesCore'
 
@@ -270,21 +271,34 @@ export const searchDays = async (
         .join(' AND ')}`
     : ''
   const termParams = escapedTerms.flatMap((term) => [`%${term}%`, `%${term}%`])
-  const batchSize = Math.max(limit * 4, 50)
-  const results: DaySearchResult[] = []
-  let offset = 0
-
-  while (results.length < limit) {
-    const rows = await queryAll<DayRow>(
-      `
+  const useFts = Boolean(trimmed) && isAtLeastThreeCodePoints(trimmed) && (await isFtsAvailable())
+  const candidateSql = useFts
+    ? `
+      SELECT days.day_id, days.human_title, days.content_md, days.created_at, days.updated_at
+      FROM days_fts
+      INNER JOIN days ON days.day_id = days_fts.day_id
+      WHERE days_fts MATCH ?
+      ORDER BY days.day_id DESC
+      LIMIT ? OFFSET ?
+    `
+    : `
       SELECT day_id, human_title, content_md, created_at, updated_at
       FROM days
       ${where}
       ORDER BY day_id DESC
       LIMIT ? OFFSET ?
-    `,
-      [...termParams, batchSize, offset],
-    )
+    `
+  const candidateParams = useFts ? [quoteFtsPhrase(trimmed)] : termParams
+  const batchSize = Math.max(limit * 4, 50)
+  const results: DaySearchResult[] = []
+  let offset = 0
+
+  while (results.length < limit) {
+    const rows = await queryAll<DayRow>(candidateSql, [
+      ...candidateParams,
+      batchSize,
+      offset,
+    ])
 
     results.push(
       ...searchDaysInMemory(rows.map(mapRow), trimmed, { filter }, limit - results.length),
