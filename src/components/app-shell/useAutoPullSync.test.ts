@@ -8,6 +8,7 @@ const coordinator = vi.hoisted(() => ({
 const syncActions = vi.hoisted(() => ({
   pullFromSyncAndRefresh: vi.fn(),
   recordSyncAttention: vi.fn(),
+  detectRemoteChangeWhileDirty: vi.fn(),
 }))
 
 vi.mock('../../lib/tabSyncCoordinator', () => coordinator)
@@ -18,6 +19,7 @@ describe('useAutoPullSync tab coordination', () => {
     vi.clearAllMocks()
     coordinator.getTabSyncBlockReason.mockReturnValue(null)
     syncActions.pullFromSyncAndRefresh.mockResolvedValue({ status: 'noop' })
+    syncActions.detectRemoteChangeWhileDirty.mockResolvedValue(undefined)
   })
 
   it('does not auto-pull when another tab owns the lease', () => {
@@ -56,5 +58,40 @@ describe('useAutoPullSync tab coordination', () => {
         'Import aborted because the Markdown file contains duplicate day markers.',
       )
     })
+  })
+
+  it('detects remote changes instead of auto-pulling when local edits are dirty', async () => {
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+    )
+
+    await waitFor(() => {
+      expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalled()
+    })
+    expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+  })
+
+  it('auto-pulls (not detect) when local is clean', async () => {
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
+    )
+
+    await waitFor(() => {
+      expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledWith({ force: false })
+    })
+    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
+  })
+
+  it('does neither while another tab owns the lease, even when dirty', () => {
+    coordinator.getTabSyncBlockReason.mockReturnValue(
+      'Sync is paused in this tab because another Rivolo tab is active.',
+    )
+
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+    )
+
+    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
+    expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
   })
 })

@@ -1,4 +1,4 @@
-import { getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
+import { checkActiveProviderRemote, getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../lib/syncState'
 import { claimPrimaryTabForSync, getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import { useDaysStore } from './useDaysStore'
@@ -58,6 +58,26 @@ export const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') 
   return reason === 'remote_missing'
     ? `${label} file is missing. Local data is safe. Use “Restore from local copy” to recreate it.`
     : `${label} changed remotely. Pull first, or use “Restore from local copy” to overwrite it.`
+}
+
+export const remoteChangedWhileDirtyMessage = (reason: 'remote_missing' | 'remote_changed') => {
+  const label = activeProviderLabel()
+  return reason === 'remote_missing'
+    ? `${label} file was removed on another device while you have unsynced local edits here. Push local to recreate it — your local notes are safe.`
+    : `${label} changed on another device while you have unsynced local edits here. Push local to overwrite the remote, or pull remote to replace local (a backup is kept).`
+}
+
+// Auto-pull is intentionally suppressed while local edits are dirty so unsynced
+// work is never overwritten — but that means a device could silently diverge if
+// another device advances the remote. This runs a content-free metadata check
+// and, on divergence, raises the existing sync-attention notice (which links to
+// the Push local / Pull remote recovery actions). Unchanged remote stays quiet.
+export const detectRemoteChangeWhileDirty = async () => {
+  if (!canRunAutoSync()) return
+  const check = await checkActiveProviderRemote()
+  if (check.status === 'changed') {
+    recordSyncAttention('pull', remoteChangedWhileDirtyMessage(check.reason))
+  }
 }
 
 export const pullFromSyncAndRefresh = async (options?: {

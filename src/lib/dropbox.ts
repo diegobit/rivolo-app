@@ -9,7 +9,7 @@ import { finalizeDropboxPushState, getDropboxState, updateDropboxState } from '.
 import type { DropboxState } from './dropboxState'
 import { markSyncLocalDirty } from './syncDirty'
 import { hashSyncContent } from './syncHash'
-import type { SyncProvider, SyncPullOptions, SyncStatus } from './sync'
+import type { SyncProvider, SyncPullOptions, SyncRemoteCheck, SyncStatus } from './sync'
 
 const DROPBOX_API = 'https://api.dropboxapi.com/2'
 const DROPBOX_CONTENT = 'https://content.dropboxapi.com/2'
@@ -151,6 +151,19 @@ export const getDropboxStatus = async (): Promise<SyncStatus> => {
   }
 }
 
+// Content-free check used while local edits are dirty (pull is suppressed then):
+// fetch metadata only and compare its rev to the last one we synced.
+export const checkDropboxRemote = async (): Promise<SyncRemoteCheck> => {
+  const state = await getDropboxState()
+  if (!state.connected || !state.lastRemoteRev) return { status: 'unknown' as const }
+  const path = await resolveDropboxPath(state)
+  const metadata = await fetchMetadata(path)
+  if (!metadata) return { status: 'changed' as const, reason: 'remote_missing' as const }
+  return metadata.rev === state.lastRemoteRev
+    ? { status: 'unchanged' as const }
+    : { status: 'changed' as const, reason: 'remote_changed' as const }
+}
+
 export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
   const state = await getDropboxState()
   const path = await resolveDropboxPath(state)
@@ -261,5 +274,6 @@ export const dropboxProvider = {
   getStatus: getDropboxStatus,
   pull: pullFromDropbox,
   push: pushToDropbox,
+  checkRemote: checkDropboxRemote,
   disconnect: disconnectDropbox,
 } satisfies SyncProvider

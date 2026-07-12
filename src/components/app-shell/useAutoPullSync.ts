@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
-import { pullFromSyncAndRefresh, recordSyncAttention } from '../../store/syncActions'
+import {
+  detectRemoteChangeWhileDirty,
+  pullFromSyncAndRefresh,
+  recordSyncAttention,
+} from '../../store/syncActions'
 
 type AutoPullStatus = {
   connected: boolean
@@ -16,7 +20,6 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
     (reason: 'start' | 'reconnect' | 'visibility') => {
       if (!navigator.onLine) return
       if (!status.connected || !status.targetName) return
-      if (status.localDirty) return
       if (getTabSyncBlockReason()) return
       if (autoPullInFlight.current) return
 
@@ -25,6 +28,25 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
 
       autoPullInFlight.current = true
       lastAutoPullAt.current = now
+
+      if (status.localDirty) {
+        // Never auto-pull while dirty (it would overwrite unsynced edits), but
+        // still detect a remote that advanced so the device isn't silently
+        // diverged — surfaces the existing sync-attention / Push-Pull recovery.
+        console.info('[Sync] auto-pull:detect-while-dirty', { reason })
+        void detectRemoteChangeWhileDirty()
+          .catch((error: unknown) => {
+            recordSyncAttention(
+              'pull',
+              error instanceof Error ? error.message : 'Remote change check failed.',
+            )
+          })
+          .finally(() => {
+            autoPullInFlight.current = false
+          })
+        return
+      }
+
       console.info('[Sync] auto-pull:trigger', { reason })
       void pullFromSyncAndRefresh({ force: false })
         .catch((error: unknown) => {
