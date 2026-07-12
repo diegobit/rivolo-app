@@ -164,4 +164,21 @@ describe('useTimelineChat automatic inserts', () => {
     expect(assistantMessage(result.current.messages)?.meta?.insertStatus).toBe('applied')
     expect(result.current.chatError).toBeNull()
   })
+
+  it('surfaces a failed retry through the same visible error path as a first-send failure', async () => {
+    mocks.chat
+      .mockResolvedValueOnce({ text: '', raw: null })
+      .mockRejectedValueOnce(new Error('Provider unavailable'))
+    const onInsertNote = vi.fn(async () => undefined)
+    const { result } = renderHook(() => useChatHarness(onInsertNote))
+
+    await act(async () => {
+      await result.current.handleChatSend('hello')
+    })
+
+    expect(mocks.chat).toHaveBeenCalledTimes(2)
+    expect(result.current.chatError).toBe('Provider unavailable')
+    expect(assistantMessage(result.current.messages)?.meta?.isStreaming).toBe(false)
+    expect(result.current.sending).toBe(false)
+  })
 })

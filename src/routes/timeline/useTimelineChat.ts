@@ -298,6 +298,7 @@ export const useTimelineChat = ({
             }
           } catch (retryError) {
             console.error('[LLM Retry Error]', retryError)
+            throw retryError
           }
         }
 
