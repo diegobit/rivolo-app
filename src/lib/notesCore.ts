@@ -124,8 +124,6 @@ const getMatchedBlocks = (day: Day, query: string, filter: SearchFilter | null) 
       isMatch = hasMatchingToken(line, TAG_REGEX, normalizedQuery)
     } else if (filter === 'mentions') {
       isMatch = hasMatchingToken(line, MENTION_REGEX, normalizedQuery)
-    } else if (filter === 'headings') {
-      isMatch = false
     } else if (normalizedQuery) {
       isMatch = includesText(line, normalizedQuery)
     }
