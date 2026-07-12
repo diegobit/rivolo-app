@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import { isApplePlatform } from '../../lib/device'
 
 type ShortcutsPopoverProps = {
@@ -15,19 +15,40 @@ export default function ShortcutsPopover({
   buttonClassName,
 }: ShortcutsPopoverProps) {
   const primaryModifierLabel = isApplePlatform() ? 'Cmd' : 'Ctrl'
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!showShortcuts) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      onToggle()
+      triggerRef.current?.focus()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onToggle, showShortcuts])
 
   return (
     <div ref={shortcutsRef} className="hero-ui-fade-up relative">
       <button
+        ref={triggerRef}
         className={buttonClassName}
         type="button"
         aria-label="Shortcuts"
+        aria-expanded={showShortcuts}
+        aria-haspopup="dialog"
         onClick={onToggle}
       >
         <img src="/question-mark.svg" alt="" className="h-5 w-5" />
       </button>
       {showShortcuts && (
-        <div className="absolute left-0 z-20 mt-2 w-max rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 shadow-lg">
+        <div
+          className="absolute left-0 z-20 mt-2 w-max rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 shadow-lg"
+          role="dialog"
+          aria-label="Keyboard shortcuts"
+        >
           <div className="grid gap-4">
             <div className="space-y-2">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
