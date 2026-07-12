@@ -14,7 +14,7 @@ import { prepareGoogleDriveAuth } from '../lib/googleDriveAuth'
 import { isProviderReady } from '../lib/llm/readiness'
 import { getSetupNotices } from '../lib/setupAttention'
 import { DEFAULT_GOOGLE_DRIVE_FILE_NAME, getGoogleDrivePath } from '../lib/googleDriveState'
-import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
+import { claimPrimaryTabForSync } from '../lib/tabSyncCoordinator'
 import type { SyncProviderId } from '../lib/sync'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useSyncProviderActions } from './settings/useSyncProviderActions'
@@ -221,7 +221,7 @@ export default function Settings() {
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-    const blockedReason = getTabSyncBlockReason()
+    const blockedReason = claimPrimaryTabForSync()
     if (blockedReason) {
       setImportStatus(blockedReason)
       event.target.value = ''
@@ -249,7 +249,7 @@ export default function Settings() {
 
   const handleSaveSyncTarget = async () => {
     setSyncStatus(null)
-    const blockedReason = getTabSyncBlockReason()
+    const blockedReason = claimPrimaryTabForSync()
     if (blockedReason) {
       setSyncStatus(blockedReason)
       return

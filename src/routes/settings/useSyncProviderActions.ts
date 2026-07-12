@@ -3,7 +3,7 @@ import { prepareGoogleDriveAuth, startGoogleDriveAuth } from '../../lib/googleDr
 import { isImportSafetyError } from '../../lib/importExport'
 import { disconnectProvider, type SyncProviderId } from '../../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../../lib/syncState'
-import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
+import { claimPrimaryTabForSync } from '../../lib/tabSyncCoordinator'
 import { blockedPushMessage, pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../../store/syncActions'
 
 type UseSyncProviderActionsParams = {
@@ -33,7 +33,7 @@ export const useSyncProviderActions = ({
   const isActive = activeProvider === provider
 
   const requireSafeSyncTab = () => {
-    const reason = getTabSyncBlockReason()
+    const reason = claimPrimaryTabForSync()
     if (reason) setStatus(reason)
     return !reason
   }

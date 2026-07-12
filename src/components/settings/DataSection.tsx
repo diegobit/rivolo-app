@@ -4,7 +4,7 @@ import {
   listRollbackBackups,
   type ImportRollbackBackup,
 } from '../../lib/importExport'
-import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
+import { claimPrimaryTabForSync } from '../../lib/tabSyncCoordinator'
 import { buttonPrimary, buttonSecondary } from '../../lib/ui'
 import type { SyncProviderId } from '../../lib/syncState'
 import AccordionRow from './AccordionRow'
@@ -55,7 +55,7 @@ export default function DataSection({
 
   const handleRestore = async (backup: ImportRollbackBackup) => {
     setStatus(null)
-    const blockedReason = getTabSyncBlockReason()
+    const blockedReason = claimPrimaryTabForSync()
     if (blockedReason) {
       setStatus(blockedReason)
       return
