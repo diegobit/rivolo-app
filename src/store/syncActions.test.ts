@@ -6,6 +6,7 @@ const sync = vi.hoisted(() => ({
   pushToSync: vi.fn(),
 }))
 const coordinator = vi.hoisted(() => ({
+  claimPrimaryTabForSync: vi.fn(),
   getTabSyncBlockReason: vi.fn(),
 }))
 const stores = vi.hoisted(() => ({
@@ -46,6 +47,7 @@ describe('sync action tab coordination', () => {
     vi.useFakeTimers()
     vi.clearAllMocks()
     stores.syncAttention = null
+    coordinator.claimPrimaryTabForSync.mockReturnValue(null)
     coordinator.getTabSyncBlockReason.mockReturnValue(null)
     sync.pullFromSync.mockResolvedValue({ status: 'noop' })
     sync.pushToSync.mockResolvedValue({ status: 'pushed' })
@@ -57,7 +59,7 @@ describe('sync action tab coordination', () => {
   })
 
   it('blocks manual sync when another tab owns the lease', async () => {
-    coordinator.getTabSyncBlockReason.mockReturnValue(
+    coordinator.claimPrimaryTabForSync.mockReturnValue(
       'Sync is paused in this tab because another Rivolo tab is active.',
     )
 
@@ -65,6 +67,7 @@ describe('sync action tab coordination', () => {
       'Sync is paused in this tab because another Rivolo tab is active.',
     )
     expect(sync.pullFromSync).not.toHaveBeenCalled()
+    expect(coordinator.claimPrimaryTabForSync).toHaveBeenCalledOnce()
   })
 
   it('does not schedule auto-push in a secondary tab', () => {

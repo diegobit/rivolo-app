@@ -8,7 +8,7 @@ const importExport = vi.hoisted(() => ({
   importMarkdownToDb: vi.fn(),
 }))
 const coordinator = vi.hoisted(() => ({
-  getTabSyncBlockReason: vi.fn(),
+  claimPrimaryTabForSync: vi.fn(),
 }))
 
 vi.mock('../../lib/importExport', () => importExport)
@@ -36,7 +36,7 @@ const renderSection = (overrides: Partial<React.ComponentProps<typeof DataSectio
 describe('DataSection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    coordinator.getTabSyncBlockReason.mockReturnValue(null)
+    coordinator.claimPrimaryTabForSync.mockReturnValue(null)
     importExport.listRollbackBackups.mockResolvedValue([])
     importExport.importMarkdownToDb.mockResolvedValue({ imported: 2, warnings: [] })
   })

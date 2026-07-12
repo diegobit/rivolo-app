@@ -64,7 +64,7 @@ export const isPrimaryTab = () => {
   if (!isBrowser()) return true
   if (!getStorage()) return false
   const lease = readLease()
-  return !lease || lease.ownerId === TAB_ID
+  return lease?.ownerId === TAB_ID
 }
 
 let snapshot: TabSyncSnapshot = {
@@ -174,7 +174,11 @@ export const startPrimaryTabCoordinator = () => {
   startCrossTabEvents()
 
   const heartbeat = () => {
-    if (document.visibilityState === 'visible') claimPrimaryTab()
+    if (document.visibilityState === 'visible') {
+      claimPrimaryTab()
+    } else {
+      refreshSnapshot()
+    }
   }
   heartbeat()
   window.setInterval(heartbeat, PRIMARY_HEARTBEAT_MS)
@@ -190,6 +194,11 @@ export const subscribeTabSync = (listener: () => void) => {
 export const getTabSyncSnapshot = () => snapshot
 
 export const getTabSyncBlockReason = () => {
+  if (databaseStale) return DATABASE_STALE_RELOAD_MESSAGE
+  return isPrimaryTab() ? null : SYNC_PAUSED_SECONDARY_MESSAGE
+}
+
+export const claimPrimaryTabForSync = () => {
   if (databaseStale) return DATABASE_STALE_RELOAD_MESSAGE
   return claimPrimaryTab() ? null : SYNC_PAUSED_SECONDARY_MESSAGE
 }

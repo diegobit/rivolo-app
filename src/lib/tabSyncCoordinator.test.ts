@@ -18,8 +18,38 @@ describe('tab sync coordinator', () => {
   })
 
   afterEach(() => {
+    vi.clearAllTimers()
     vi.useRealTimers()
     vi.unstubAllGlobals()
+  })
+
+  it('reads the block reason without claiming or rewriting the lease', async () => {
+    const tabA = await loadTab('tab-a')
+    expect(tabA.getTabSyncBlockReason()).toBe(tabA.SYNC_PAUSED_SECONDARY_MESSAGE)
+    expect(localStorage.getItem(PRIMARY_LEASE_KEY)).toBeNull()
+
+    expect(tabA.claimPrimaryTab()).toBe(true)
+    const activeLease = localStorage.getItem(PRIMARY_LEASE_KEY)
+    const tabB = await loadTab('tab-b')
+
+    expect(tabB.getTabSyncBlockReason()).toBe(tabB.SYNC_PAUSED_SECONDARY_MESSAGE)
+    expect(localStorage.getItem(PRIMARY_LEASE_KEY)).toBe(activeLease)
+  })
+
+  it('does not treat a hidden tab with an expired lease as primary', async () => {
+    const visibilityState = vi.spyOn(document, 'visibilityState', 'get')
+    visibilityState.mockReturnValue('visible')
+    const tabA = await loadTab('tab-a')
+    tabA.startPrimaryTabCoordinator()
+    expect(tabA.isPrimaryTab()).toBe(true)
+
+    visibilityState.mockReturnValue('hidden')
+    document.dispatchEvent(new Event('visibilitychange'))
+    vi.advanceTimersByTime(20_001)
+
+    expect(tabA.isPrimaryTab()).toBe(false)
+    expect(tabA.getTabSyncSnapshot().isPrimary).toBe(false)
+    expect(tabA.getTabSyncBlockReason()).toBe(tabA.SYNC_PAUSED_SECONDARY_MESSAGE)
   })
 
   it('allows only one tab to hold the primary lease and recovers after expiry', async () => {

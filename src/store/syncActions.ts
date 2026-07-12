@@ -1,6 +1,6 @@
 import { getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../lib/syncState'
-import { getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
+import { claimPrimaryTabForSync, getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import { useDaysStore } from './useDaysStore'
 import { useSyncStore } from './useSyncStore'
 
@@ -32,7 +32,7 @@ const enqueueSyncOperation = async <T>(operation: SyncQueueOperation, runner: ()
 }
 
 const requirePrimarySyncTab = () => {
-  const reason = getTabSyncBlockReason()
+  const reason = claimPrimaryTabForSync()
   if (reason) throw new Error(reason)
 }
 
