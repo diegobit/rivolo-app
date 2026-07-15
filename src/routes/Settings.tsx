@@ -99,10 +99,12 @@ export default function Settings() {
   const [syncProviderDraft, setSyncProviderDraft] = useState<SyncProviderId | null>(null)
   const [dropboxPathDraft, setDropboxPathDraft] = useState<string | null>(null)
   const [googleDriveFileNameDraft, setGoogleDriveFileNameDraft] = useState<string | null>(null)
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [initialLoadDone, setInitialLoadDone] = useState(false)
 
   const selectedSyncProvider = syncProviderDraft ?? activeProvider ?? 'dropbox'
+  const settingsView = useSettingsStore((state) => state.settingsView)
+  const updateSettingsView = useSettingsStore((state) => state.updateSettingsView)
+  const showAdvanced = settingsView === 'advanced'
   const savedDropboxPath = dropboxFilePath || DEFAULT_DROPBOX_PATH
   const dropboxPath = dropboxPathDraft ?? savedDropboxPath
   const isDropboxPathDirty = dropboxPath.trim() !== savedDropboxPath
@@ -313,8 +315,10 @@ export default function Settings() {
             { value: 'basic', label: 'Basic' },
             { value: 'advanced', label: 'Advanced' },
           ]}
-          value={showAdvanced ? 'advanced' : 'basic'}
-          onChange={(next) => setShowAdvanced(next === 'advanced')}
+          value={settingsView}
+          onChange={(next) => {
+            void updateSettingsView(next)
+          }}
         />
       </header>
 
