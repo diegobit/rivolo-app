@@ -99,9 +99,45 @@ describe('appendToDay', () => {
   })
 })
 
+describe('FTS write maintenance', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.queryOne.mockResolvedValue(null)
+    mocks.runDatabaseTransaction.mockImplementation(async (callback) => callback())
+    mocks.isFtsAvailable.mockResolvedValue(true)
+  })
+
+  it('updates the index when a day is saved', async () => {
+    await saveDay('2026-07-12', 'indexed content', 'Indexed title')
+
+    expect(mocks.upsertFts).toHaveBeenCalledWith(
+      '2026-07-12',
+      'Indexed title',
+      'indexed content',
+    )
+  })
+
+  it('rebuilds index rows when all days are replaced', async () => {
+    await replaceDays(
+      [
+        { dayId: '2026-07-12', humanTitle: 'First', contentMd: 'alpha' },
+        { dayId: '2026-07-11', humanTitle: 'Second', contentMd: 'beta' },
+      ],
+      { markDirty: false },
+    )
+
+    expect(mocks.run).toHaveBeenCalledWith('DELETE FROM days_fts')
+    expect(mocks.upsertFts.mock.calls).toEqual([
+      ['2026-07-12', 'First', 'alpha'],
+      ['2026-07-11', 'Second', 'beta'],
+    ])
+  })
+})
+
 describe('searchDays', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.isFtsAvailable.mockResolvedValue(false)
   })
 
   const toRow = (day: Day) => ({
@@ -134,15 +170,46 @@ describe('searchDays', () => {
     ])
   })
 
-  it('leaves non-ASCII terms to the locale-aware in-memory matcher', async () => {
+  it('uses the trigram FTS index for literal queries of at least three code points', async () => {
+    mocks.isFtsAvailable.mockResolvedValue(true)
     mocks.queryAll.mockResolvedValue([])
 
-    await searchDays('CAFÉ')
+    await searchDays('100%_ "quoted"')
 
     const [sql, params] = mocks.queryAll.mock.calls[0]
-    expect(sql).not.toContain('WHERE')
-    expect(params).toEqual([120, 0])
+    expect(sql).toContain('FROM days_fts')
+    expect(sql).toContain('WHERE days_fts MATCH ?')
+    expect(params).toEqual(['"100%_ ""quoted"""', 120, 0])
   })
+
+  it('keeps one and two code-point queries on the LIKE fallback', async () => {
+    mocks.isFtsAvailable.mockResolvedValue(true)
+    mocks.queryAll.mockResolvedValue([])
+
+    await searchDays('é🙂')
+
+    const [sql] = mocks.queryAll.mock.calls[0]
+    expect(sql).toContain('FROM days')
+    expect(sql).not.toContain('FROM days_fts')
+    expect(mocks.isFtsAvailable).not.toHaveBeenCalled()
+  })
+
+  it.each(['CAFÉ', 'აბგ', 'ꭰꭱꭲ'])(
+    'leaves non-ASCII query %s to the locale-aware in-memory matcher',
+    async (query) => {
+      mocks.isFtsAvailable.mockResolvedValue(true)
+      mocks.queryAll.mockResolvedValue([])
+
+      await searchDays(query)
+
+      const [sql, params] = mocks.queryAll.mock.calls[0]
+      expect(sql).toContain('FROM days')
+      expect(sql).not.toContain('FROM days_fts')
+      expect(sql).not.toContain('WHERE')
+      expect(params).toEqual([120, 0])
+      expect(mocks.isFtsAvailable).not.toHaveBeenCalled()
+    },
+  )
 
   it('keeps paging past false-positive candidates to preserve old search results', async () => {
     const falsePositives = Array.from({ length: 50 }, (_, index) =>

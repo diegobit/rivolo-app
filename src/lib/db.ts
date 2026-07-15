@@ -1,18 +1,27 @@
-import initSqlJs from 'sql.js'
-import type { Database, SqlJsStatic } from 'sql.js'
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
+import initSqlite from '@sqlite.org/sqlite-wasm'
+import sqliteWasmUrl from '@sqlite.org/sqlite-wasm/sqlite3.wasm?url'
 import { get, set } from 'idb-keyval'
 import {
   assertDatabaseWritable,
   beginDatabaseSnapshotLoad,
   broadcastDatabasePersisted,
 } from './tabSyncCoordinator'
+import {
+  ensureDatabaseSchema,
+  executeSql,
+  exportSerializedDatabase,
+  openSerializedDatabase,
+  queryFirstRow,
+  queryRows,
+  type RivoloDatabase,
+  type RivoloSqlite,
+} from './sqliteRuntime'
 
 const DB_KEY = 'single-note-db'
 const PERSIST_FAILURE_MESSAGE = 'Your notes could not be saved on this device. Check available storage and try again.'
 
-let sqlPromise: Promise<SqlJsStatic> | null = null
-let dbPromise: Promise<Database> | null = null
+let sqlPromise: Promise<RivoloSqlite> | null = null
+let dbPromise: Promise<RivoloDatabase> | null = null
 let saveTimer: number | null = null
 let pendingSavePromise: Promise<void> | null = null
 let bulkMutationDepth = 0
@@ -37,58 +46,24 @@ export const getDatabasePersistFailureSnapshot = () => persistFailureMessage
 
 const ensureSql = () => {
   if (!sqlPromise) {
-    sqlPromise = initSqlJs({ locateFile: () => sqlWasmUrl }).catch((error) => {
-      sqlPromise = null
-      throw error
-    })
+    const initialize = initSqlite as unknown as (options: {
+      locateFile: () => string
+    }) => Promise<RivoloSqlite>
+    sqlPromise = initialize({ locateFile: () => sqliteWasmUrl }).catch(
+      (error) => {
+        sqlPromise = null
+        throw error
+      },
+    )
   }
 
   return sqlPromise
 }
 
-const ensureSchema = (db: Database) => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS days (
-      day_id TEXT PRIMARY KEY,
-      human_title TEXT NOT NULL,
-      content_md TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-  `)
-
-  try {
-    db.run(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS days_fts
-      USING fts5(day_id UNINDEXED, human_title, content_md);
-    `)
-    ftsAvailable = true
-  } catch (error) {
-    ftsAvailable = false
-    console.warn('FTS5 unavailable, falling back to LIKE search.', error)
-  }
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-  `)
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS chat_messages (
-      id TEXT PRIMARY KEY,
-      created_at INTEGER NOT NULL,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      meta_json TEXT
-    );
-  `)
-}
-
-export const persistDatabase = (db: Database) => {
+export const persistDatabase = async (db: RivoloDatabase) => {
   assertDatabaseWritable()
-  const data = db.export()
+  const sqlite = await ensureSql()
+  const data = exportSerializedDatabase(sqlite, db)
   const savePromise = set(DB_KEY, data).then(() => {
     broadcastDatabasePersisted()
     setPersistFailureMessage(null)
@@ -107,22 +82,22 @@ export const persistDatabase = (db: Database) => {
   return savePromise
 }
 
-const scheduleSave = (db: Database) => {
+const scheduleSave = (db: RivoloDatabase) => {
   if (saveTimer) {
     window.clearTimeout(saveTimer)
   }
 
   saveTimer = window.setTimeout(() => {
     saveTimer = null
-    try {
-      void persistDatabase(db)
-    } catch (error) {
-      console.error('[DB] persist:blocked', { error })
-    }
+    void persistDatabase(db).catch((error) => {
+      if (!persistFailureMessage) {
+        console.error('[DB] persist:blocked', { error })
+      }
+    })
   }, 400)
 }
 
-const markDatabaseChanged = (db: Database) => {
+const markDatabaseChanged = (db: RivoloDatabase) => {
   if (bulkMutationDepth > 0) {
     bulkMutationDirty = true
     return
@@ -149,11 +124,13 @@ export const flushDatabaseSave = async () => {
 export const getDatabase = async () => {
   if (!dbPromise) {
     dbPromise = (async () => {
-      const SQL = await ensureSql()
+      const sqlite = await ensureSql()
       beginDatabaseSnapshotLoad()
       const stored = await get(DB_KEY)
-      const db = stored ? new SQL.Database(new Uint8Array(stored)) : new SQL.Database()
-      ensureSchema(db)
+      const db = openSerializedDatabase(sqlite, stored ? new Uint8Array(stored) : null)
+      const schema = ensureDatabaseSchema(db)
+      ftsAvailable = schema.ftsAvailable
+      if (schema.ftsRebuilt) scheduleSave(db)
       return db
     })().catch((error) => {
       dbPromise = null
@@ -167,7 +144,7 @@ export const getDatabase = async () => {
 export const run = async (sql: string, params: (string | number | null)[] = []) => {
   assertDatabaseWritable()
   const db = await getDatabase()
-  db.run(sql, params)
+  executeSql(db, sql, params)
   markDatabaseChanged(db)
 }
 
@@ -200,15 +177,15 @@ export const runBulkDatabaseMutation = async <T>(callback: () => Promise<T>) => 
 export const runDatabaseTransaction = async <T>(callback: () => Promise<T>) => {
   assertDatabaseWritable()
   const db = await getDatabase()
-  db.run('BEGIN TRANSACTION')
+  executeSql(db, 'BEGIN TRANSACTION')
 
   try {
     const result = await callback()
-    db.run('COMMIT')
+    executeSql(db, 'COMMIT')
     return result
   } catch (error) {
     try {
-      db.run('ROLLBACK')
+      executeSql(db, 'ROLLBACK')
     } catch (rollbackError) {
       console.error('[DB] transaction rollback failed', { rollbackError })
     }
@@ -221,16 +198,7 @@ export const queryAll = async <T = Record<string, string | number | null>>(
   params: (string | number | null)[] = [],
 ): Promise<T[]> => {
   const db = await getDatabase()
-  const statement = db.prepare(sql)
-  statement.bind(params)
-  const rows: T[] = []
-
-  while (statement.step()) {
-    rows.push(statement.getAsObject() as T)
-  }
-
-  statement.free()
-  return rows
+  return queryRows<T>(db, sql, params)
 }
 
 export const queryOne = async <T = Record<string, string | number | null>>(
@@ -238,11 +206,7 @@ export const queryOne = async <T = Record<string, string | number | null>>(
   params: (string | number | null)[] = [],
 ): Promise<T | null> => {
   const db = await getDatabase()
-  const statement = db.prepare(sql)
-  statement.bind(params)
-  const result = statement.step() ? (statement.getAsObject() as T) : null
-  statement.free()
-  return result
+  return queryFirstRow<T>(db, sql, params)
 }
 
 export const isFtsAvailable = async () => {
@@ -261,8 +225,8 @@ export const upsertFts = async (
   }
 
   const db = await getDatabase()
-  db.run('DELETE FROM days_fts WHERE day_id = ?', [dayId])
-  db.run('INSERT INTO days_fts (day_id, human_title, content_md) VALUES (?, ?, ?)', [
+  executeSql(db, 'DELETE FROM days_fts WHERE day_id = ?', [dayId])
+  executeSql(db, 'INSERT INTO days_fts (day_id, human_title, content_md) VALUES (?, ?, ?)', [
     dayId,
     humanTitle,
     content,

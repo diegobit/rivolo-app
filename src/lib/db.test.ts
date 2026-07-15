@@ -1,27 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  initSqlJs: vi.fn(),
+  initSqlite: vi.fn(),
   get: vi.fn(),
   set: vi.fn(),
   assertDatabaseWritable: vi.fn(),
+  ensureDatabaseSchema: vi.fn(),
+  executeSql: vi.fn(),
+  exportSerializedDatabase: vi.fn(),
+  openSerializedDatabase: vi.fn(),
+  queryFirstRow: vi.fn(),
+  queryRows: vi.fn(),
 }))
 
-vi.mock('sql.js', () => ({ default: mocks.initSqlJs }))
-vi.mock('sql.js/dist/sql-wasm.wasm?url', () => ({ default: 'test-wasm-url' }))
+vi.mock('@sqlite.org/sqlite-wasm', () => ({ default: mocks.initSqlite }))
+vi.mock('@sqlite.org/sqlite-wasm/sqlite3.wasm?url', () => ({ default: 'test-wasm-url' }))
 vi.mock('idb-keyval', () => ({ get: mocks.get, set: mocks.set }))
+vi.mock('./sqliteRuntime', () => ({
+  ensureDatabaseSchema: mocks.ensureDatabaseSchema,
+  executeSql: mocks.executeSql,
+  exportSerializedDatabase: mocks.exportSerializedDatabase,
+  openSerializedDatabase: mocks.openSerializedDatabase,
+  queryFirstRow: mocks.queryFirstRow,
+  queryRows: mocks.queryRows,
+}))
 vi.mock('./tabSyncCoordinator', () => ({
   assertDatabaseWritable: mocks.assertDatabaseWritable,
   beginDatabaseSnapshotLoad: vi.fn(),
   broadcastDatabasePersisted: vi.fn(),
 }))
 
-class FakeDatabase {
-  run() {}
-  export() {
-    return new Uint8Array()
-  }
-}
+class FakeDatabase {}
 
 describe('getDatabase', () => {
   beforeEach(() => {
@@ -29,20 +38,20 @@ describe('getDatabase', () => {
     vi.resetModules()
     mocks.get.mockResolvedValue(null)
     mocks.set.mockResolvedValue(undefined)
+    mocks.initSqlite.mockResolvedValue({})
+    mocks.ensureDatabaseSchema.mockReturnValue({ ftsAvailable: true, ftsRebuilt: false })
+    mocks.openSerializedDatabase.mockReturnValue(new FakeDatabase())
+    mocks.exportSerializedDatabase.mockReturnValue(new Uint8Array())
   })
 
   it('resets the cached open so a later call can retry and succeed after a failed open', async () => {
     let attempt = 0
-    mocks.initSqlJs.mockResolvedValue({
-      Database: class {
-        constructor() {
-          attempt += 1
-          if (attempt === 1) {
-            throw new Error('corrupt database bytes')
-          }
-          return new FakeDatabase()
-        }
-      },
+    mocks.openSerializedDatabase.mockImplementation(() => {
+      attempt += 1
+      if (attempt === 1) {
+        throw new Error('corrupt database bytes')
+      }
+      return new FakeDatabase()
     })
 
     const { getDatabase } = await import('./db')
@@ -54,9 +63,9 @@ describe('getDatabase', () => {
     expect(attempt).toBe(2)
   })
 
-  it('resets the cached sql.js engine so a later call can retry after an init failure', async () => {
-    mocks.initSqlJs.mockRejectedValueOnce(new Error('wasm load failed'))
-    mocks.initSqlJs.mockResolvedValueOnce({ Database: FakeDatabase })
+  it('resets the cached SQLite engine so a later call can retry after an init failure', async () => {
+    mocks.initSqlite.mockRejectedValueOnce(new Error('wasm load failed'))
+    mocks.initSqlite.mockResolvedValueOnce({})
 
     const { getDatabase } = await import('./db')
 
@@ -64,7 +73,7 @@ describe('getDatabase', () => {
 
     const db = await getDatabase()
     expect(db).toBeInstanceOf(FakeDatabase)
-    expect(mocks.initSqlJs).toHaveBeenCalledTimes(2)
+    expect(mocks.initSqlite).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -73,6 +82,8 @@ describe('persistDatabase', () => {
     vi.clearAllMocks()
     vi.resetModules()
     mocks.set.mockResolvedValue(undefined)
+    mocks.initSqlite.mockResolvedValue({})
+    mocks.exportSerializedDatabase.mockReturnValue(new Uint8Array())
   })
 
   it('records a persist-failure message when the underlying storage write rejects', async () => {
