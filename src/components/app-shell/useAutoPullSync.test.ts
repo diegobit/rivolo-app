@@ -1,5 +1,5 @@
-import { renderHook, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAutoPullSync } from './useAutoPullSync'
 
 const coordinator = vi.hoisted(() => ({
@@ -20,6 +20,11 @@ describe('useAutoPullSync tab coordination', () => {
     coordinator.getTabSyncBlockReason.mockReturnValue(null)
     syncActions.pullFromSyncAndRefresh.mockResolvedValue({ status: 'noop' })
     syncActions.detectRemoteChangeWhileDirty.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.clearAllTimers()
+    vi.useRealTimers()
   })
 
   it('does not auto-pull when another tab owns the lease', () => {
@@ -93,5 +98,48 @@ describe('useAutoPullSync tab coordination', () => {
 
     expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
     expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+  })
+
+  it('periodically rechecks remote metadata while local edits remain dirty', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
+
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+    )
+
+    await act(async () => Promise.resolve())
+    expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
+    })
+
+    expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalledTimes(16)
+    expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+  })
+
+  it('retries dirty detection after a recent clean auto-pull used the throttle', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
+
+    const { rerender } = renderHook(
+      ({ localDirty }) =>
+        useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty }),
+      { initialProps: { localDirty: false } },
+    )
+
+    await act(async () => Promise.resolve())
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+
+    rerender({ localDirty: true })
+    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
+    })
+
+    expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalledTimes(1)
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
   })
 })

@@ -12,19 +12,21 @@ type AutoPullStatus = {
   localDirty: boolean
 }
 
+const AUTO_PULL_INTERVAL_MS = 2 * 60 * 1000
+
 export const useAutoPullSync = (status: AutoPullStatus) => {
   const lastAutoPullAt = useRef(0)
   const autoPullInFlight = useRef(false)
 
   const maybeAutoPull = useCallback(
-    (reason: 'start' | 'reconnect' | 'visibility') => {
+    (reason: 'start' | 'reconnect' | 'visibility' | 'interval') => {
       if (!navigator.onLine) return
       if (!status.connected || !status.targetName) return
       if (getTabSyncBlockReason()) return
       if (autoPullInFlight.current) return
 
       const now = Date.now()
-      if (now - lastAutoPullAt.current < 2 * 60 * 1000) return
+      if (now - lastAutoPullAt.current < AUTO_PULL_INTERVAL_MS) return
 
       autoPullInFlight.current = true
       lastAutoPullAt.current = now
@@ -66,6 +68,18 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
     console.info('[Sync] auto-pull:event', { reason: 'start' })
     maybeAutoPull('start')
   }, [maybeAutoPull])
+
+  useEffect(() => {
+    if (!status.connected || !status.targetName || !status.localDirty) return
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      console.info('[Sync] auto-pull:event', { reason: 'interval' })
+      maybeAutoPull('interval')
+    }, AUTO_PULL_INTERVAL_MS)
+
+    return () => window.clearInterval(intervalId)
+  }, [maybeAutoPull, status.connected, status.targetName, status.localDirty])
 
   useEffect(() => {
     const handleOnline = () => {
