@@ -53,18 +53,21 @@ const clearSyncAttention = () => {
   }
 }
 
+// These messages render inside the sync-attention alert, which shows its own
+// recovery buttons in both Basic and Advanced mode — so they describe the
+// situation without naming any button that could be absent from the mode.
 export const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') => {
   const label = activeProviderLabel()
   return reason === 'remote_missing'
-    ? `${label} file is missing. Local data is safe. Use “Restore from local copy” to recreate it.`
-    : `${label} changed remotely. Pull first, or use “Restore from local copy” to overwrite it.`
+    ? `${label} file is missing. Local data is safe — keep this device's notes to recreate it.`
+    : `${label} changed remotely. Choose which copy to keep.`
 }
 
 export const remoteChangedWhileDirtyMessage = (reason: 'remote_missing' | 'remote_changed') => {
   const label = activeProviderLabel()
   return reason === 'remote_missing'
-    ? `${label} file was removed on another device while you have unsynced local edits here. Push local to recreate it — your local notes are safe.`
-    : `${label} changed on another device while you have unsynced local edits here. Push local to overwrite the remote, or pull remote to replace local (a backup is kept).`
+    ? `${label} file was removed on another device. Your local notes are safe — keep this device's notes to recreate it.`
+    : `${label} changed on another device while you have unsynced local edits here. Choose which copy to keep — using the cloud version saves a local backup first.`
 }
 
 // Auto-pull is intentionally suppressed while local edits are dirty so unsynced

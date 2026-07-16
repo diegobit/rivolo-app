@@ -44,34 +44,21 @@ describe('useSyncProviderActions', () => {
     vi.restoreAllMocks()
   })
 
-  it('passes force after confirming a dirty manual pull', async () => {
+  it('never force-imports on a dirty manual pull; points at Force pull instead', async () => {
     const confirm = vi.fn(() => true)
     vi.stubGlobal('confirm', confirm)
-    const { handlePull, loadProviderStates, setStatus } = useActions(true)
+    const { handlePull, setStatus } = useActions(true)
 
     await handlePull()
 
-    expect(confirm).toHaveBeenCalledWith(
-      'Pull from Dropbox and replace local notes? Unpushed local changes and local-only days missing from Dropbox will be overwritten. A rollback backup will be saved first.',
-    )
-    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledWith({
-      force: true,
-      allowUnsafeImport: true,
-    })
-    expect(loadProviderStates).toHaveBeenCalledOnce()
-    expect(setStatus).toHaveBeenLastCalledWith('Pulled and imported.')
-  })
-
-  it('does not pull dirty local notes when confirmation is canceled', async () => {
-    vi.stubGlobal('confirm', vi.fn(() => false))
-    const { handlePull } = useActions(true)
-
-    await handlePull()
-
+    expect(confirm).not.toHaveBeenCalled()
     expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+    expect(setStatus).toHaveBeenLastCalledWith(
+      'You have unsynced local edits here. Use “Force pull (overwrite local)” to replace them with the Dropbox copy — a rollback backup is saved first.',
+    )
   })
 
-  it('confirms past an import safety block and retries the pull once', async () => {
+  it('points a safety-blocked pull at Force pull instead of a browser confirm', async () => {
     const safetyError = Object.assign(
       new Error('Import blocked: it would delete 2 local day(s).'),
       {
@@ -81,43 +68,24 @@ describe('useSyncProviderActions', () => {
         deletedDayIds: ['2026-06-28', '2026-06-27'],
       },
     )
-    syncActions.pullFromSyncAndRefresh
-      .mockRejectedValueOnce(safetyError)
-      .mockResolvedValueOnce({ status: 'pulled' })
+    syncActions.pullFromSyncAndRefresh.mockRejectedValueOnce(safetyError)
     const confirm = vi.fn(() => true)
     vi.stubGlobal('confirm', confirm)
     const { handlePull, setStatus } = useActions(false)
 
     await handlePull()
 
-    expect(confirm).toHaveBeenCalledWith(
-      'Import blocked: it would delete 2 local day(s). Replace local notes anyway? A rollback backup will be saved first.',
-    )
-    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenLastCalledWith({
+    expect(confirm).not.toHaveBeenCalled()
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledExactlyOnceWith({
       force: false,
-      allowUnsafeImport: true,
+      allowUnsafeImport: false,
     })
-    expect(setStatus).toHaveBeenLastCalledWith('Pulled and imported.')
+    expect(setStatus).toHaveBeenLastCalledWith(
+      'Import blocked: it would delete 2 local day(s). Use “Force pull (overwrite local)” to replace local notes anyway — a rollback backup is saved first.',
+    )
   })
 
-  it('cancels the import safety override without importing', async () => {
-    const safetyError = Object.assign(new Error('Import blocked: duplicates.'), {
-      name: 'ImportSafetyError',
-      reasons: ['duplicate-day-markers'],
-      warnings: [],
-      deletedDayIds: [],
-    })
-    syncActions.pullFromSyncAndRefresh.mockRejectedValueOnce(safetyError)
-    vi.stubGlobal('confirm', vi.fn(() => false))
-    const { handlePull, setStatus } = useActions(false)
-
-    await handlePull()
-
-    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
-    expect(setStatus).toHaveBeenLastCalledWith('Pull canceled. Local notes were not changed.')
-  })
-
-  it('does not offer an override for a zero-marker remote file', async () => {
+  it('does not point a zero-marker remote file at Force pull', async () => {
     const safetyError = Object.assign(
       new Error('Import aborted: the file contains no day markers.'),
       {
@@ -135,8 +103,48 @@ describe('useSyncProviderActions', () => {
     await handlePull()
 
     expect(confirm).not.toHaveBeenCalled()
-    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
     expect(setStatus).toHaveBeenLastCalledWith('Import aborted: the file contains no day markers.')
+  })
+
+  it('force pull passes force and allowUnsafeImport even while dirty', async () => {
+    const { handleForcePull, loadProviderStates, setStatus } = useActions(true)
+
+    await handleForcePull()
+
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledExactlyOnceWith({
+      force: true,
+      allowUnsafeImport: true,
+    })
+    expect(loadProviderStates).toHaveBeenCalledOnce()
+    expect(setStatus).toHaveBeenLastCalledWith('Pulled and imported.')
+  })
+
+  it('force pull also works with a clean local copy', async () => {
+    const { handleForcePull, setStatus } = useActions(false)
+
+    await handleForcePull()
+
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledExactlyOnceWith({
+      force: true,
+      allowUnsafeImport: true,
+    })
+    expect(setStatus).toHaveBeenLastCalledWith('Pulled and imported.')
+  })
+
+  it('no sync flow ever opens a window.confirm dialog', async () => {
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal('confirm', confirm)
+    syncActions.pushToSyncAndRefresh.mockResolvedValue({ status: 'pushed' })
+    const dirty = useActions(true)
+    const clean = useActions(false)
+
+    await dirty.handlePull()
+    await dirty.handleForcePull()
+    await clean.handlePull()
+    await clean.handlePush()
+    await clean.handlePush(true)
+
+    expect(confirm).not.toHaveBeenCalled()
   })
 
   it('blocks manual pull when another tab owns the primary lease', async () => {

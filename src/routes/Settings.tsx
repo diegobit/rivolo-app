@@ -273,7 +273,7 @@ export default function Settings() {
     await loadSyncState()
   }
 
-  const { handleConnect, handleDisconnect, handleActivate, handlePull, handlePush } =
+  const { handleConnect, handleDisconnect, handleActivate, handlePull, handleForcePull, handlePush } =
     useSyncProviderActions({
       provider: selectedSyncProvider,
       activeProvider,
@@ -391,6 +391,7 @@ export default function Settings() {
           }}
           onSaveTarget={handleSaveSyncTarget}
           onPull={handlePull}
+          onForcePull={handleForcePull}
           onPush={handlePush}
         />
       </div>
