@@ -5,6 +5,7 @@ import {
   bodyFontChoiceFamilies,
   bodyFontChoiceOptions,
   fontPresetOptions,
+  getMonospaceFontSize,
   titleFontFamilies,
   titleFontOptions,
 } from '../../lib/fonts'
@@ -47,6 +48,25 @@ export default function AppearanceSection({
   onTitleFontChange,
   onBodyFontChoiceChange,
 }: AppearanceSectionProps) {
+  const fontPreview = (
+    <div className="bg-slate-50 px-4 py-3">
+      <p className="text-xl" style={{ fontFamily: titleFontFamilies[titleFont] }}>
+        <span className="font-bold text-slate-700">Today</span>
+        <span className="ml-2 font-normal text-slate-400">July 16</span>
+      </p>
+      <div
+        className="mt-1 text-slate-700"
+        style={{
+          fontFamily: bodyFontChoiceFamilies[bodyFontChoice],
+          fontSize: bodyFontChoice === 'lato' ? '0.98rem' : getMonospaceFontSize(bodyFontChoice),
+        }}
+      >
+        <p>@bob send message for breakfast at 8:30</p>
+        <p>Budget: 1,024 € + 15% ≈ 1,178 € --{'>'} due 31/12 (v1.0)</p>
+      </div>
+    </div>
+  )
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <h2 className="text-lg font-bold text-slate-700">Appearance</h2>
@@ -72,18 +92,21 @@ export default function AppearanceSection({
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Font preset
           </h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {fontPresetOptions.map((option) => (
-              <button
-                key={option.id}
-                className={fontPreset === option.id ? buttonPillActive : buttonPill}
-                type="button"
-                aria-pressed={fontPreset === option.id}
-                onClick={() => onFontPresetChange(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
+          <div className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
+            <div className="flex flex-wrap gap-2 px-3 py-2.5">
+              {fontPresetOptions.map((option) => (
+                <button
+                  key={option.id}
+                  className={fontPreset === option.id ? buttonPillActive : buttonPill}
+                  type="button"
+                  aria-pressed={fontPreset === option.id}
+                  onClick={() => onFontPresetChange(option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {fontPreview}
           </div>
           {fontPreset === 'custom' && (
             <p className="mt-2 text-xs text-slate-500">Custom font settings are active.</p>
@@ -93,44 +116,41 @@ export default function AppearanceSection({
 
       {advanced && (
         <div className="mt-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Title font
-          </h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {titleFontOptions.map((option) => (
-              <button
-                key={option.id}
-                className={titleFont === option.id ? buttonPillActive : buttonPill}
-                style={{ fontFamily: titleFontFamilies[option.id] }}
-                type="button"
-                aria-pressed={titleFont === option.id}
-                onClick={() => onTitleFontChange(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {advanced && (
-        <div className="mt-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Body font
-          </h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {bodyFontChoiceOptions.map((option) => (
-              <button
-                key={option.id}
-                className={bodyFontChoice === option.id ? buttonPillActive : buttonPill}
-                style={{ fontFamily: bodyFontChoiceFamilies[option.id] }}
-                type="button"
-                aria-pressed={bodyFontChoice === option.id}
-                onClick={() => onBodyFontChoiceChange(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fonts</h3>
+          <div className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
+            <div className="flex items-center gap-3 px-3 py-2.5">
+              <span className="w-9 shrink-0 text-xs font-medium text-slate-400">Title</span>
+              <div className="flex flex-wrap gap-2">
+                {titleFontOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    className={titleFont === option.id ? buttonPillActive : buttonPill}
+                    type="button"
+                    aria-pressed={titleFont === option.id}
+                    onClick={() => onTitleFontChange(option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-3 py-2.5">
+              <span className="w-9 shrink-0 text-xs font-medium text-slate-400">Body</span>
+              <div className="flex flex-wrap gap-2">
+                {bodyFontChoiceOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    className={bodyFontChoice === option.id ? buttonPillActive : buttonPill}
+                    type="button"
+                    aria-pressed={bodyFontChoice === option.id}
+                    onClick={() => onBodyFontChoiceChange(option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {fontPreview}
           </div>
         </div>
       )}
