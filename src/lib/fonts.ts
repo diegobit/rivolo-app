@@ -76,6 +76,12 @@ export const bodyFontChoiceOptions: Array<{ id: BodyFontChoice; label: string }>
   { id: 'lato', label: 'Lato' },
 ]
 
+export const bodyFontChoiceFamilies: Record<BodyFontChoice, string> = {
+  iawriter: monospaceFontFamilies.iawriter,
+  inconsolata: monospaceFontFamilies.inconsolata,
+  lato: bodyFontFamilies.system,
+}
+
 export const getBodyFontChoice = (
   fontPreference: FontPreference,
   monospaceFont: MonospaceFont,

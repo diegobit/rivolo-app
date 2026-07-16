@@ -61,8 +61,9 @@ describe('AppearanceSection', () => {
     const onWallpaperChange = vi.fn()
     renderSection({ advanced: true, wallpaper: 'none', onWallpaperChange })
 
-    // Basic controls remain (superset).
-    expect(screen.getByRole('button', { name: 'Monospace' })).toBeInTheDocument()
+    // Basic controls remain, except the font preset row which the
+    // title/body font pickers replace in advanced mode.
+    expect(screen.queryByRole('button', { name: 'Monospace' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'System' })).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: 'Autocorrection' })).toBeInTheDocument()
     // Advanced controls are added.
