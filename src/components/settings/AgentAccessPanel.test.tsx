@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentAccessProfile } from '../../lib/agentAccess'
 import AgentAccessPanel from './AgentAccessPanel'
 
@@ -25,9 +25,20 @@ const callbacks = {
 
 describe('AgentAccessPanel', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     Object.assign(navigator, {
       clipboard: { writeText: vi.fn(async () => undefined) },
     })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ tokens: [] }), { status: 200 }),
+      ),
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('keeps the disabled state simple and touch friendly', async () => {

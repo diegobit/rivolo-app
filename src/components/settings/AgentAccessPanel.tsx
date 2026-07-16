@@ -7,6 +7,7 @@ import {
 } from '../../lib/agentAccess'
 import { SYNC_PROVIDER_LABELS, type SyncProviderId } from '../../lib/syncState'
 import { buttonDanger, buttonPrimary, buttonSecondary } from '../../lib/ui'
+import AgentAccessTokensPanel from './AgentAccessTokensPanel'
 
 export type AgentAccessPanelProps = {
   provider: SyncProviderId
@@ -166,6 +167,12 @@ export default function AgentAccessPanel({
               </>
             )}
           </dl>
+
+          <AgentAccessTokensPanel
+            key={view.profile.profileId}
+            profileId={view.profile.profileId}
+            online={online}
+          />
 
           <button
             className={`${buttonDanger} min-h-11`}
