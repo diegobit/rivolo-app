@@ -141,6 +141,15 @@ const resolveProfileTimeZone = async (profileTimeZone: ProfileTimeZone) =>
     ? profileTimeZone()
     : profileTimeZone
 
+const compactWriteResult = <Result extends AddToDayWriterResult>(result: Result) => {
+  const { day, ...metadata } = result
+  return {
+    ...metadata,
+    day_id: day.dayId,
+    content_chars: day.contentMd.length,
+  }
+}
+
 export const registerWriteTools = <Result extends AddToDayWriterResult>(
   server: McpServer,
   addToDay: AddToDayWriter<Result>,
@@ -167,10 +176,7 @@ export const registerWriteTools = <Result extends AddToDayWriterResult>(
           position: args.position,
         })
 
-        return jsonResult({
-          ...result,
-          day_id: result.day.dayId,
-        })
+        return jsonResult(compactWriteResult(result))
       }),
   )
 
@@ -199,7 +205,7 @@ export const registerWriteTools = <Result extends AddToDayWriterResult>(
         })
 
         return jsonResult({
-          ...result,
+          ...compactWriteResult(result),
           ...resolvedDay,
         })
       }),

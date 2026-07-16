@@ -157,9 +157,16 @@ describe('registerWriteTools', () => {
   })
 
   it('defaults add_to_day to append and forwards the validated input', async () => {
-    const writer = vi.fn<AddToDayWriter>().mockImplementation(async (input) =>
-      makeWriteResult(input.day_id, input.position),
-    )
+    const writer = vi.fn<
+      AddToDayWriter<
+        AddToDayWriterResult & {
+          source: { provider: 'dropbox'; rev: string }
+        }
+      >
+    >().mockImplementation(async (input) => ({
+      ...makeWriteResult(input.day_id, input.position),
+      source: { provider: 'dropbox', rev: 'rev-2' },
+    }))
     const client = await connect(writer)
 
     const result = await client.callTool({
@@ -177,11 +184,16 @@ describe('registerWriteTools', () => {
       operation_id: 'operation-1',
       position: 'append',
     })
-    expect(JSON.parse(readTextResult(result))).toMatchObject({
+    const payload = JSON.parse(readTextResult(result))
+    expect(payload).toMatchObject({
       day_id: '2026-07-16',
+      content_chars: 10,
       position: 'append',
       operation_id: 'operation-1',
+      source: { provider: 'dropbox', rev: 'rev-2' },
     })
+    expect(payload).not.toHaveProperty('day')
+    expect(payload).not.toHaveProperty('contentMd')
   })
 
   it('forwards an explicit prepend position', async () => {
@@ -229,11 +241,15 @@ describe('registerWriteTools', () => {
       operation_id: 'operation-1',
       position: 'append',
     })
-    expect(JSON.parse(readTextResult(result))).toMatchObject({
+    const payload = JSON.parse(readTextResult(result))
+    expect(payload).toMatchObject({
       day_id: '2025-12-31',
       time_zone: 'America/Los_Angeles',
+      content_chars: 10,
       position: 'append',
     })
+    expect(payload).not.toHaveProperty('day')
+    expect(payload).not.toHaveProperty('contentMd')
   })
 
   it('returns writer errors without masking their message', async () => {
