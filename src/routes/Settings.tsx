@@ -273,8 +273,16 @@ export default function Settings() {
     await loadSyncState()
   }
 
-  const { handleConnect, handleDisconnect, handleActivate, handlePull, handleForcePull, handlePush } =
-    useSyncProviderActions({
+  const {
+    handleConnect,
+    handleDisconnect,
+    handleActivate,
+    handlePull,
+    handleForcePull,
+    handlePush,
+    pullRefused,
+    pushBlocked,
+  } = useSyncProviderActions({
       provider: selectedSyncProvider,
       activeProvider,
       connected: selectedSummary.connected,
@@ -285,6 +293,10 @@ export default function Settings() {
       loadSyncState,
       setActiveProvider: setActiveSyncProvider,
     })
+
+  // Sync attention belongs to the active provider; only surface it (and the
+  // force action it calls for) while that provider's panel is the one shown.
+  const selectedAttention = activeProvider === selectedSyncProvider ? syncAttention : null
 
   const setupNotices = getSetupNotices({
     aiNeedsSetup: !isProviderReady(provider, providerSettings, llmSecrets),
@@ -370,14 +382,14 @@ export default function Settings() {
           }}
           online={online}
           syncPaused={!tabSync.isPrimary}
-          attention={
-            activeProvider === selectedSyncProvider ? (syncAttention?.message ?? null) : null
-          }
+          attention={selectedAttention?.message ?? null}
           targetDraft={selectedTarget}
           targetDirty={selectedTargetDirty}
           syncBusy={syncing}
           status={syncStatus}
           advanced={showAdvanced}
+          showForcePull={pullRefused || selectedAttention?.operation === 'pull'}
+          showForcePush={pushBlocked || selectedAttention?.operation === 'push'}
           onProviderChange={(nextProvider) => {
             setSyncProviderDraft(nextProvider)
             setSyncStatus(null)

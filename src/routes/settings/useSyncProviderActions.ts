@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { startDropboxAuth } from '../../lib/dropbox'
 import { prepareGoogleDriveAuth, startGoogleDriveAuth } from '../../lib/googleDriveAuth'
 import { isImportSafetyError } from '../../lib/importExport'
@@ -31,6 +32,27 @@ export const useSyncProviderActions = ({
 }: UseSyncProviderActionsParams) => {
   const label = SYNC_PROVIDER_LABELS[provider]
   const isActive = activeProvider === provider
+
+  // Real reveal state for the Advanced force buttons: each flag records that
+  // the last manual attempt was refused/blocked, and clears once a later sync
+  // succeeds — the UI never parses status strings to decide what to show.
+  const [pullRefused, setPullRefused] = useState(false)
+  const [pushBlocked, setPushBlocked] = useState(false)
+
+  // The flags describe one provider's last attempt; forget them when the
+  // panel switches provider (adjusting state during render, per
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes).
+  const [flagsProvider, setFlagsProvider] = useState(provider)
+  if (flagsProvider !== provider) {
+    setFlagsProvider(provider)
+    setPullRefused(false)
+    setPushBlocked(false)
+  }
+
+  const clearRefusals = () => {
+    setPullRefused(false)
+    setPushBlocked(false)
+  }
 
   const requireSafeSyncTab = () => {
     const reason = claimPrimaryTabForSync()
@@ -108,6 +130,7 @@ export const useSyncProviderActions = ({
   const runPull = async (options: { force: boolean; allowUnsafeImport: boolean }) => {
     const result = await pullFromSyncAndRefresh(options)
     await loadProviderStates()
+    clearRefusals()
     setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
   }
 
@@ -118,6 +141,7 @@ export const useSyncProviderActions = ({
     if (!requireActive()) return
     if (!requireSafeSyncTab()) return
     if (localDirty) {
+      setPullRefused(true)
       setStatus(
         `You have unsynced local edits here. Use “Force pull (overwrite local)” to replace them with the ${label} copy — a rollback backup is saved first.`,
       )
@@ -128,6 +152,7 @@ export const useSyncProviderActions = ({
       await runPull({ force: false, allowUnsafeImport: false })
     } catch (error) {
       if (isImportSafetyError(error) && !error.reasons.includes('no-day-markers')) {
+        setPullRefused(true)
         setStatus(
           `${error.message} Use “Force pull (overwrite local)” to replace local notes anyway — a rollback backup is saved first.`,
         )
@@ -157,17 +182,26 @@ export const useSyncProviderActions = ({
     try {
       const result = await pushToSyncAndRefresh(force)
       await loadProviderStates()
-      if (result.status === 'clean') {
-        setStatus('No local changes to push.')
-      } else if (result.status === 'blocked') {
+      if (result.status === 'blocked') {
+        setPushBlocked(true)
         setStatus(blockedPushMessage(result.reason))
-      } else {
-        setStatus(`Uploaded to ${label}.`)
+        return
       }
+      clearRefusals()
+      setStatus(result.status === 'clean' ? 'No local changes to push.' : `Uploaded to ${label}.`)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : `${label} push failed.`)
     }
   }
 
-  return { handleConnect, handleDisconnect, handleActivate, handlePull, handleForcePull, handlePush }
+  return {
+    handleConnect,
+    handleDisconnect,
+    handleActivate,
+    handlePull,
+    handleForcePull,
+    handlePush,
+    pullRefused,
+    pushBlocked,
+  }
 }

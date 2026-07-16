@@ -34,6 +34,8 @@ const baseProps = {
   targetDirty: false,
   syncBusy: false,
   status: null,
+  showForcePull: false,
+  showForcePush: false,
   onProviderChange: vi.fn(),
   onConnect: vi.fn(),
   onDisconnect: vi.fn(),
@@ -142,8 +144,15 @@ describe('SyncSection', () => {
   })
 
   it('shows both recovery actions inside the attention alert in Basic mode', async () => {
+    // Even with both force reveals requested, Basic mode never renders the
+    // standalone Advanced actions — the alert is the only recovery surface.
     render(
-      <SyncSection {...baseProps} attention="Dropbox changed remotely. Choose which copy to keep." />,
+      <SyncSection
+        {...baseProps}
+        attention="Dropbox changed remotely. Choose which copy to keep."
+        showForcePull
+        showForcePush
+      />,
     )
 
     await openSyncRow('dropbox')
@@ -208,11 +217,14 @@ describe('SyncSection', () => {
   })
 
   it('shows the in-alert recovery actions in Advanced mode too', async () => {
+    // Pull-side attention: the alert keeps both recovery actions, and the
+    // matching force action joins the manual row.
     render(
       <SyncSection
         {...baseProps}
         advanced
         attention="Dropbox changed remotely. Choose which copy to keep."
+        showForcePull
       />,
     )
 
@@ -220,10 +232,12 @@ describe('SyncSection', () => {
     expect(screen.getByRole('button', { name: USE_CLOUD_LABEL })).toBeEnabled()
     expect(screen.getByRole('button', { name: KEEP_LOCAL_LABEL })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Force pull (overwrite local)' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Force push (overwrite remote)' })).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Force push (overwrite remote)' }),
+    ).not.toBeInTheDocument()
   })
 
-  it('adds advanced target and exactly four manual sync actions alongside the basic controls', async () => {
+  it('adds advanced target and, while healthy, exactly Pull and Push alongside the basic controls', async () => {
     render(<SyncSection {...baseProps} advanced />)
 
     await openSyncRow('dropbox')
@@ -235,9 +249,44 @@ describe('SyncSection', () => {
     expect(screen.getByLabelText('Dropbox path')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Push to Dropbox' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Force pull (overwrite local)' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Force push (overwrite remote)' })).toBeEnabled()
+    // Healthy sync keeps the destructive actions hidden.
+    expect(
+      screen.queryByRole('button', { name: 'Force pull (overwrite local)' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Force push (overwrite remote)' }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Restore from local copy' })).not.toBeInTheDocument()
+  })
+
+  it('reveals Force push while a push is blocked and hides it once cleared', async () => {
+    const { rerender } = render(<SyncSection {...baseProps} advanced showForcePush />)
+
+    await openSyncRow('dropbox')
+    expect(screen.getByRole('button', { name: 'Force push (overwrite remote)' })).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Force pull (overwrite local)' }),
+    ).not.toBeInTheDocument()
+
+    rerender(<SyncSection {...baseProps} advanced />)
+    expect(
+      screen.queryByRole('button', { name: 'Force push (overwrite remote)' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('reveals Force pull while a pull is refused and hides it once cleared', async () => {
+    const { rerender } = render(<SyncSection {...baseProps} advanced showForcePull />)
+
+    await openSyncRow('dropbox')
+    expect(screen.getByRole('button', { name: 'Force pull (overwrite local)' })).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Force push (overwrite remote)' }),
+    ).not.toBeInTheDocument()
+
+    rerender(<SyncSection {...baseProps} advanced />)
+    expect(
+      screen.queryByRole('button', { name: 'Force pull (overwrite local)' }),
+    ).not.toBeInTheDocument()
   })
 
   it('wires Pull and Push to their non-force handlers', async () => {
@@ -254,7 +303,7 @@ describe('SyncSection', () => {
 
   it('requires two clicks to force push: first arms, second confirms with force=true (no window.confirm)', async () => {
     const onPush = vi.fn()
-    render(<SyncSection {...baseProps} advanced onPush={onPush} />)
+    render(<SyncSection {...baseProps} advanced showForcePush onPush={onPush} />)
 
     await openSyncRow('dropbox')
     await userEvent.click(screen.getByRole('button', { name: 'Force push (overwrite remote)' }))
@@ -269,7 +318,7 @@ describe('SyncSection', () => {
 
   it('requires two clicks to force pull: first arms, second confirms', async () => {
     const onForcePull = vi.fn()
-    render(<SyncSection {...baseProps} advanced onForcePull={onForcePull} />)
+    render(<SyncSection {...baseProps} advanced showForcePull onForcePull={onForcePull} />)
 
     await openSyncRow('dropbox')
     await userEvent.click(screen.getByRole('button', { name: 'Force pull (overwrite local)' }))
@@ -284,7 +333,16 @@ describe('SyncSection', () => {
   it('arming one destructive action disarms the other', async () => {
     const onForcePull = vi.fn()
     const onPush = vi.fn()
-    render(<SyncSection {...baseProps} advanced onForcePull={onForcePull} onPush={onPush} />)
+    render(
+      <SyncSection
+        {...baseProps}
+        advanced
+        showForcePull
+        showForcePush
+        onForcePull={onForcePull}
+        onPush={onPush}
+      />,
+    )
 
     await openSyncRow('dropbox')
     await userEvent.click(screen.getByRole('button', { name: 'Force pull (overwrite local)' }))
