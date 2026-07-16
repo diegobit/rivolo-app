@@ -36,8 +36,14 @@ type SyncSectionProps = {
   onTargetChange: (value: string) => void
   onSaveTarget: () => void | Promise<void>
   onPull: () => void | Promise<void>
+  onForcePull: () => void | Promise<void>
   onPush: (force?: boolean) => void | Promise<void>
 }
+
+// Destructive sync actions all share one two-click idiom: the first click arms
+// the button (its label turns into an explicit confirmation), the second runs
+// it. Only one button is armed at a time and arming decays after a timeout.
+type ArmableAction = 'force-pull' | 'force-push' | 'alert-use-cloud' | 'alert-keep-local'
 
 const inputClass =
   'min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base outline-none transition focus:border-slate-400'
@@ -61,6 +67,7 @@ export default function SyncSection({
   onTargetChange,
   onSaveTarget,
   onPull,
+  onForcePull,
   onPush,
 }: SyncSectionProps) {
   const summary = summaries[provider]
@@ -75,19 +82,19 @@ export default function SyncSection({
   const syncTabStatus = syncPaused ? 'Paused in this tab' : 'Primary tab'
 
   const [collapsed, setCollapsed] = useState(true)
-  const [overwriteArmed, setOverwriteArmed] = useState(false)
+  const [armedAction, setArmedAction] = useState<ArmableAction | null>(null)
 
-  const overwriteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const armTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const disarmOverwrite = () => {
-    if (overwriteTimeoutRef.current) clearTimeout(overwriteTimeoutRef.current)
-    overwriteTimeoutRef.current = null
-    setOverwriteArmed(false)
+  const disarm = () => {
+    if (armTimeoutRef.current) clearTimeout(armTimeoutRef.current)
+    armTimeoutRef.current = null
+    setArmedAction(null)
   }
 
   useEffect(() => {
     return () => {
-      if (overwriteTimeoutRef.current) clearTimeout(overwriteTimeoutRef.current)
+      if (armTimeoutRef.current) clearTimeout(armTimeoutRef.current)
     }
   }, [])
 
@@ -97,17 +104,18 @@ export default function SyncSection({
   const [armedForKey, setArmedForKey] = useState(selectionKey)
   if (selectionKey !== armedForKey) {
     setArmedForKey(selectionKey)
-    if (overwriteArmed) setOverwriteArmed(false)
+    if (armedAction) setArmedAction(null)
   }
 
-  const handleOverwriteClick = () => {
-    if (!overwriteArmed) {
-      setOverwriteArmed(true)
-      overwriteTimeoutRef.current = setTimeout(disarmOverwrite, OVERWRITE_ARM_TIMEOUT_MS)
+  const handleArmedClick = (action: ArmableAction, run: () => void) => {
+    if (armedAction !== action) {
+      if (armTimeoutRef.current) clearTimeout(armTimeoutRef.current)
+      setArmedAction(action)
+      armTimeoutRef.current = setTimeout(disarm, OVERWRITE_ARM_TIMEOUT_MS)
       return
     }
-    disarmOverwrite()
-    void onPush(true)
+    disarm()
+    run()
   }
 
   const syncActionsDisabled = syncControlsDisabled || !online || !summary.connected || !isActive
@@ -118,6 +126,22 @@ export default function SyncSection({
       : !isActive
         ? `Activate ${label} to pull or push.`
         : null
+
+  const renderArmedButton = (
+    action: ArmableAction,
+    idleLabel: string,
+    armedLabel: string,
+    run: () => void,
+  ) => (
+    <button
+      className={`${armedAction === action ? buttonDangerFilled : buttonDanger} min-h-11`}
+      type="button"
+      onClick={() => handleArmedClick(action, run)}
+      disabled={syncActionsDisabled}
+    >
+      {armedAction === action ? armedLabel : idleLabel}
+    </button>
+  )
 
   const renderProviderRows = () => (
     <div className="overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">
@@ -174,6 +198,22 @@ export default function SyncSection({
                     role="alert"
                   >
                     Automatic sync needs attention: {attention}
+                    {/* Recovery actions live inside the alert so no mode is a
+                        dead end: Basic shows them only while attention is up. */}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {renderArmedButton(
+                        'alert-use-cloud',
+                        'Use cloud version — replaces notes on this device',
+                        'Confirm — replace notes on this device',
+                        () => void onForcePull(),
+                      )}
+                      {renderArmedButton(
+                        'alert-keep-local',
+                        "Keep this device's notes — replaces the cloud copy",
+                        'Confirm — replace the cloud copy',
+                        () => void onPush(true),
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -257,14 +297,18 @@ export default function SyncSection({
                       >
                         Push to {label}
                       </button>
-                      <button
-                        className={`${overwriteArmed ? buttonDangerFilled : buttonDanger} min-h-11`}
-                        type="button"
-                        onClick={handleOverwriteClick}
-                        disabled={syncActionsDisabled}
-                      >
-                        {overwriteArmed ? 'Confirm overwrite' : 'Restore from local copy'}
-                      </button>
+                      {renderArmedButton(
+                        'force-pull',
+                        'Force pull (overwrite local)',
+                        'Confirm force pull',
+                        () => void onForcePull(),
+                      )}
+                      {renderArmedButton(
+                        'force-push',
+                        'Force push (overwrite remote)',
+                        'Confirm force push',
+                        () => void onPush(true),
+                      )}
                     </div>
                     {syncActionsDisabled && disabledReason && (
                       <p className="text-xs text-slate-500">{disabledReason}</p>

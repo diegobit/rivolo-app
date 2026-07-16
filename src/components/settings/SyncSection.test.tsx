@@ -41,8 +41,12 @@ const baseProps = {
   onTargetChange: vi.fn(),
   onSaveTarget: vi.fn(),
   onPull: vi.fn(),
+  onForcePull: vi.fn(),
   onPush: vi.fn(),
 }
+
+const USE_CLOUD_LABEL = 'Use cloud version — replaces notes on this device'
+const KEEP_LOCAL_LABEL = "Keep this device's notes — replaces the cloud copy"
 
 const openSyncRow = async (id: string) => {
   const header = screen
@@ -130,17 +134,96 @@ describe('SyncSection', () => {
 
   it('shows the automatic sync attention message', async () => {
     render(
-      <SyncSection
-        {...baseProps}
-        attention="Dropbox changed remotely. Pull first, or use “Restore from local copy” to overwrite it."
-      />,
+      <SyncSection {...baseProps} attention="Dropbox changed remotely. Choose which copy to keep." />,
     )
 
     await openSyncRow('dropbox')
     expect(screen.getByRole('alert')).toHaveTextContent('Dropbox changed remotely.')
   })
 
-  it('adds advanced target and manual sync actions alongside the basic controls', async () => {
+  it('shows both recovery actions inside the attention alert in Basic mode', async () => {
+    render(
+      <SyncSection {...baseProps} attention="Dropbox changed remotely. Choose which copy to keep." />,
+    )
+
+    await openSyncRow('dropbox')
+    expect(screen.getByRole('button', { name: USE_CLOUD_LABEL })).toBeEnabled()
+    expect(screen.getByRole('button', { name: KEEP_LOCAL_LABEL })).toBeEnabled()
+    // Basic mode still shows none of the standalone Advanced actions.
+    expect(screen.queryByRole('button', { name: 'Pull from Dropbox' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Push to Dropbox' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Force pull (overwrite local)' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Force push (overwrite remote)' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows no sync action buttons in Basic mode while sync is healthy', async () => {
+    render(<SyncSection {...baseProps} attention={null} />)
+
+    await openSyncRow('dropbox')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: USE_CLOUD_LABEL })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: KEEP_LOCAL_LABEL })).not.toBeInTheDocument()
+  })
+
+  it('arms then confirms the in-alert cloud-version action to force pull (Basic mode)', async () => {
+    const onForcePull = vi.fn()
+    render(
+      <SyncSection
+        {...baseProps}
+        attention="Dropbox changed remotely. Choose which copy to keep."
+        onForcePull={onForcePull}
+      />,
+    )
+
+    await openSyncRow('dropbox')
+    await userEvent.click(screen.getByRole('button', { name: USE_CLOUD_LABEL }))
+    expect(onForcePull).not.toHaveBeenCalled()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Confirm — replace notes on this device' }),
+    )
+    expect(onForcePull).toHaveBeenCalledOnce()
+  })
+
+  it('arms then confirms the in-alert keep-local action to force push (Basic mode)', async () => {
+    const onPush = vi.fn()
+    render(
+      <SyncSection
+        {...baseProps}
+        attention="Dropbox changed remotely. Choose which copy to keep."
+        onPush={onPush}
+      />,
+    )
+
+    await openSyncRow('dropbox')
+    await userEvent.click(screen.getByRole('button', { name: KEEP_LOCAL_LABEL }))
+    expect(onPush).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm — replace the cloud copy' }))
+    expect(onPush).toHaveBeenCalledExactlyOnceWith(true)
+  })
+
+  it('shows the in-alert recovery actions in Advanced mode too', async () => {
+    render(
+      <SyncSection
+        {...baseProps}
+        advanced
+        attention="Dropbox changed remotely. Choose which copy to keep."
+      />,
+    )
+
+    await openSyncRow('dropbox')
+    expect(screen.getByRole('button', { name: USE_CLOUD_LABEL })).toBeEnabled()
+    expect(screen.getByRole('button', { name: KEEP_LOCAL_LABEL })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Force pull (overwrite local)' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Force push (overwrite remote)' })).toBeEnabled()
+  })
+
+  it('adds advanced target and exactly four manual sync actions alongside the basic controls', async () => {
     render(<SyncSection {...baseProps} advanced />)
 
     await openSyncRow('dropbox')
@@ -152,27 +235,67 @@ describe('SyncSection', () => {
     expect(screen.getByLabelText('Dropbox path')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Push to Dropbox' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Force pull (overwrite local)' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Force push (overwrite remote)' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Restore from local copy' })).not.toBeInTheDocument()
   })
 
-  it('requires two advanced clicks to overwrite: first arms, second confirms with force=true (no window.confirm)', async () => {
+  it('wires Pull and Push to their non-force handlers', async () => {
+    const onPull = vi.fn()
+    const onPush = vi.fn()
+    render(<SyncSection {...baseProps} advanced onPull={onPull} onPush={onPush} />)
+
+    await openSyncRow('dropbox')
+    await userEvent.click(screen.getByRole('button', { name: 'Pull from Dropbox' }))
+    expect(onPull).toHaveBeenCalledOnce()
+    await userEvent.click(screen.getByRole('button', { name: 'Push to Dropbox' }))
+    expect(onPush).toHaveBeenCalledExactlyOnceWith(false)
+  })
+
+  it('requires two clicks to force push: first arms, second confirms with force=true (no window.confirm)', async () => {
     const onPush = vi.fn()
     render(<SyncSection {...baseProps} advanced onPush={onPush} />)
 
     await openSyncRow('dropbox')
-    const overwriteButton = screen.getByRole('button', {
-      name: 'Restore from local copy',
-    })
-    await userEvent.click(overwriteButton)
+    await userEvent.click(screen.getByRole('button', { name: 'Force push (overwrite remote)' }))
 
     expect(onPush).not.toHaveBeenCalled()
-    const confirmButton = screen.getByRole('button', {
-      name: 'Confirm overwrite',
-    })
-    await userEvent.click(confirmButton)
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm force push' }))
 
     // A stray window.confirm (jsdom returns false by default) would block this call.
     expect(onPush).toHaveBeenCalledExactlyOnceWith(true)
-    expect(screen.getByRole('button', { name: 'Restore from local copy' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Force push (overwrite remote)' })).toBeInTheDocument()
+  })
+
+  it('requires two clicks to force pull: first arms, second confirms', async () => {
+    const onForcePull = vi.fn()
+    render(<SyncSection {...baseProps} advanced onForcePull={onForcePull} />)
+
+    await openSyncRow('dropbox')
+    await userEvent.click(screen.getByRole('button', { name: 'Force pull (overwrite local)' }))
+
+    expect(onForcePull).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm force pull' }))
+
+    expect(onForcePull).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'Force pull (overwrite local)' })).toBeInTheDocument()
+  })
+
+  it('arming one destructive action disarms the other', async () => {
+    const onForcePull = vi.fn()
+    const onPush = vi.fn()
+    render(<SyncSection {...baseProps} advanced onForcePull={onForcePull} onPush={onPush} />)
+
+    await openSyncRow('dropbox')
+    await userEvent.click(screen.getByRole('button', { name: 'Force pull (overwrite local)' }))
+    expect(screen.getByRole('button', { name: 'Confirm force pull' })).toBeInTheDocument()
+
+    // Arming force push re-labels force pull back to idle; nothing runs.
+    await userEvent.click(screen.getByRole('button', { name: 'Force push (overwrite remote)' }))
+    expect(screen.getByRole('button', { name: 'Force pull (overwrite local)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm force push' })).toBeInTheDocument()
+    expect(onForcePull).not.toHaveBeenCalled()
+    expect(onPush).not.toHaveBeenCalled()
   })
 
   it('shows the offline disabled-hint under the advanced action buttons', async () => {

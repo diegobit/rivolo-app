@@ -105,50 +105,46 @@ export const useSyncProviderActions = ({
     return true
   }
 
+  const runPull = async (options: { force: boolean; allowUnsafeImport: boolean }) => {
+    const result = await pullFromSyncAndRefresh(options)
+    await loadProviderStates()
+    setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
+  }
+
+  // Safe pull: never replaces unsynced local edits and never overrides an
+  // import safety block — both cases point at the explicit Force pull instead.
   const handlePull = async () => {
     setStatus(null)
     if (!requireActive()) return
     if (!requireSafeSyncTab()) return
-
-    const pullOptions = { force: false, allowUnsafeImport: false }
     if (localDirty) {
-      const confirmed = window.confirm(
-        `Pull from ${label} and replace local notes? Unpushed local changes and local-only days missing from ${label} will be overwritten. A rollback backup will be saved first.`,
+      setStatus(
+        `You have unsynced local edits here. Use “Force pull (overwrite local)” to replace them with the ${label} copy — a rollback backup is saved first.`,
       )
-      if (!confirmed) return
-      pullOptions.force = true
-      pullOptions.allowUnsafeImport = true
-    }
-
-    const runPull = async (options: typeof pullOptions) => {
-      const result = await pullFromSyncAndRefresh(options)
-      await loadProviderStates()
-      setStatus(result.status === 'noop' ? `No changes on ${label}.` : 'Pulled and imported.')
+      return
     }
 
     try {
-      await runPull(pullOptions)
+      await runPull({ force: false, allowUnsafeImport: false })
     } catch (error) {
-      if (
-        isImportSafetyError(error) &&
-        !pullOptions.allowUnsafeImport &&
-        !error.reasons.includes('no-day-markers')
-      ) {
-        const confirmed = window.confirm(
-          `${error.message} Replace local notes anyway? A rollback backup will be saved first.`,
+      if (isImportSafetyError(error) && !error.reasons.includes('no-day-markers')) {
+        setStatus(
+          `${error.message} Use “Force pull (overwrite local)” to replace local notes anyway — a rollback backup is saved first.`,
         )
-        if (!confirmed) {
-          setStatus('Pull canceled. Local notes were not changed.')
-          return
-        }
-        try {
-          await runPull({ ...pullOptions, allowUnsafeImport: true })
-        } catch (retryError) {
-          setStatus(retryError instanceof Error ? retryError.message : `${label} pull failed.`)
-        }
         return
       }
+      setStatus(error instanceof Error ? error.message : `${label} pull failed.`)
+    }
+  }
 
+  const handleForcePull = async () => {
+    setStatus(null)
+    if (!requireActive()) return
+    if (!requireSafeSyncTab()) return
+
+    try {
+      await runPull({ force: true, allowUnsafeImport: true })
+    } catch (error) {
       setStatus(error instanceof Error ? error.message : `${label} pull failed.`)
     }
   }
@@ -173,5 +169,5 @@ export const useSyncProviderActions = ({
     }
   }
 
-  return { handleConnect, handleDisconnect, handleActivate, handlePull, handlePush }
+  return { handleConnect, handleDisconnect, handleActivate, handlePull, handleForcePull, handlePush }
 }
