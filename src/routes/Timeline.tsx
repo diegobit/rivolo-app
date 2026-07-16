@@ -8,7 +8,7 @@ import EmptyStateHero from '../components/timeline/EmptyStateHero'
 import ChatMessageList from '../components/timeline/ChatMessageList'
 import { isIOS, isPrimaryModifierPressed } from '../lib/device'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
-import { getNarrowViewportMediaQuery, isNarrowViewport } from '../lib/viewport'
+import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import {
   TIMELINE_NEW_CHAT_EVENT,
   TIMELINE_SCROLL_TODAY_EVENT,
@@ -373,7 +373,7 @@ export default function Timeline() {
   const [isLogoAnimating, setIsLogoAnimating] = useState(false)
   const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
-  const [isNarrowViewportMode, setIsNarrowViewportMode] = useState(() => isNarrowViewport())
+  const isNarrowViewportMode = useIsNarrowViewport()
   const searchResultsRef = useRef<DaySearchResult[]>([])
 
   const hasRestoredScroll = useRef(false)
@@ -581,28 +581,6 @@ export default function Timeline() {
       editorPinTtlMs: EDITOR_PIN_TTL_MS,
       editorPinPruneIntervalMs: EDITOR_PIN_PRUNE_INTERVAL_MS,
     })
-  }, [])
-
-  useEffect(() => {
-    const mediaQuery = getNarrowViewportMediaQuery()
-
-    const updateViewport = () => {
-      setIsNarrowViewportMode(mediaQuery.matches)
-    }
-
-    updateViewport()
-
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', updateViewport)
-      return () => {
-        mediaQuery.removeEventListener('change', updateViewport)
-      }
-    }
-
-    mediaQuery.addListener(updateViewport)
-    return () => {
-      mediaQuery.removeListener(updateViewport)
-    }
   }, [])
 
   useEffect(() => {
