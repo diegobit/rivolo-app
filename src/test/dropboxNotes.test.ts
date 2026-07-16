@@ -325,6 +325,34 @@ describe('createDropboxNotesAdapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('does not upload a file with content before the first day marker', async () => {
+    const source = [
+      'Private preamble',
+      '',
+      '<!-- day:2026-07-16 -->',
+      'Jul 16, 2026',
+      '------------',
+      '',
+      'Existing note',
+    ].join('\n')
+    const fetchMock = makeFetch(download(source, 'rev-1'))
+    const adapter = createDropboxNotesAdapter({
+      authorizedFetch: fetchMock,
+      path: PATH,
+    })
+
+    await expect(
+      adapter.addToDay({
+        day_id: '2026-07-16',
+        content_md: 'Agent note',
+        operation_id: 'operation-preamble',
+      }),
+    ).rejects.toThrow(
+      'Dropbox notes cannot be updated safely because their day markers are invalid.',
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('does not include Dropbox response content in request errors', async () => {
     const fetchMock = makeFetch(
       json({ access_token: 'secret-token', notes: 'private content' }, { status: 500 }),

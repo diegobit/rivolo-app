@@ -291,6 +291,13 @@ describe('createGoogleDriveNotesSource', () => {
       content: day('2026-02-30', 'Feb 30, 2026', 'invalid date block'),
       message: 'Invalid day marker for 2026-02-30',
     },
+    {
+      name: 'has content before the first day marker',
+      content: `Private preamble
+
+${day('2026-07-16', 'Jul 16, 2026', 'existing note')}`,
+      message: 'Content before the first day marker is ignored.',
+    },
   ])('does not upload when the source $name', async ({ content, message }) => {
     const fetchMock = vi
       .fn()
@@ -345,5 +352,62 @@ describe('createGoogleDriveNotesSource', () => {
     expect(
       fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH'),
     ).toHaveLength(1)
+  })
+
+  it('does not expose rejected fetch details', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new Error('Authorization: Bearer secret-token'))
+
+    const error = await createGoogleDriveNotesSource(fetchMock, target)
+      .read()
+      .catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toBe(
+      'Failed to fetch Google Drive notes metadata.',
+    )
+    expect((error as Error).message).not.toContain('secret-token')
+  })
+
+  it('does not expose Google Drive response content', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      json(
+        {
+          error: {
+            message: 'Private note content and secret-token',
+          },
+        },
+        { status: 500 },
+      ),
+    )
+
+    const error = await createGoogleDriveNotesSource(fetchMock, target)
+      .read()
+      .catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toBe(
+      'Failed to fetch Google Drive notes metadata. Google Drive returned status 500.',
+    )
+    expect((error as Error).message).not.toContain('Private note content')
+    expect((error as Error).message).not.toContain('secret-token')
+  })
+
+  it('does not expose invalid successful response content', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('Private note content and secret-token'))
+
+    const error = await createGoogleDriveNotesSource(fetchMock, target)
+      .read()
+      .catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toBe(
+      'Google Drive returned invalid notes metadata.',
+    )
+    expect((error as Error).message).not.toContain('Private note content')
+    expect((error as Error).message).not.toContain('secret-token')
   })
 })

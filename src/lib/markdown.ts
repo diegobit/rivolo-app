@@ -49,6 +49,11 @@ export const parseMarkdown = (source: string): ImportResult => {
     return { days: [], warnings: ['No day markers found.'] }
   }
 
+  const firstMarkerIndex = matches[0].index ?? 0
+  if (source.slice(0, firstMarkerIndex).trim()) {
+    warnings.push('Content before the first day marker is ignored.')
+  }
+
   matches.forEach((match, index) => {
     const dayId = match[1]
     if (!isValidDayId(dayId)) {

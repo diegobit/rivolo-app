@@ -34,12 +34,6 @@ type DriveRevision = {
   modifiedTime?: string
 }
 
-type DriveError = {
-  error?: {
-    message?: string
-  }
-}
-
 export type GoogleDriveNotesTarget = {
   fileId: string
   fileName: string
@@ -76,9 +70,28 @@ type ConcurrentRevisionInspection =
   | { status: 'recoverable'; revisionId: string }
   | { status: 'inconclusive' }
 
-const driveError = async (response: Response, fallback: string) => {
-  const payload = (await response.json().catch(() => null)) as DriveError | null
-  return new Error(payload?.error?.message || fallback)
+const driveError = (response: Response, fallback: string) =>
+  new Error(`${fallback} Google Drive returned status ${response.status}.`)
+
+const requestDrive = async (
+  authorizedFetch: AuthorizedFetch,
+  input: string,
+  init: RequestInit | undefined,
+  fallback: string,
+) => {
+  try {
+    return await authorizedFetch(input, init)
+  } catch {
+    throw new Error(fallback)
+  }
+}
+
+const readDriveJson = async <T>(response: Response, fallback: string) => {
+  try {
+    return (await response.json()) as T
+  } catch {
+    throw new Error(fallback)
+  }
 }
 
 const validateDriveFile = (file: DriveFile, target: GoogleDriveNotesTarget) => {
@@ -160,31 +173,49 @@ export const createGoogleDriveNotesSource = (
   }
 
   const fetchMetadata = async () => {
-    const response = await authorizedFetch(
+    const response = await requestDrive(
+      authorizedFetch,
       `${DRIVE_API}/files/${encodeURIComponent(target.fileId)}?fields=${encodeURIComponent(FILE_FIELDS)}`,
+      undefined,
+      'Failed to fetch Google Drive notes metadata.',
     )
     if (!response.ok) {
-      throw await driveError(response, 'Failed to fetch Google Drive notes metadata.')
+      throw driveError(response, 'Failed to fetch Google Drive notes metadata.')
     }
-    return validateDriveFile((await response.json()) as DriveFile, target)
+    return validateDriveFile(
+      await readDriveJson<DriveFile>(
+        response,
+        'Google Drive returned invalid notes metadata.',
+      ),
+      target,
+    )
   }
 
   const downloadFile = async () => {
-    const response = await authorizedFetch(
+    const response = await requestDrive(
+      authorizedFetch,
       `${DRIVE_API}/files/${encodeURIComponent(target.fileId)}?alt=media`,
+      undefined,
+      'Failed to download Google Drive notes.',
     )
     if (!response.ok) {
-      throw await driveError(response, 'Failed to download Google Drive notes.')
+      throw driveError(response, 'Failed to download Google Drive notes.')
     }
     return response.text()
   }
 
   const downloadRevision = async (revisionId: string) => {
-    const response = await authorizedFetch(
+    const response = await requestDrive(
+      authorizedFetch,
       `${DRIVE_API}/files/${encodeURIComponent(target.fileId)}/revisions/${encodeURIComponent(revisionId)}?alt=media`,
+      undefined,
+      'Failed to download the concurrent Google Drive revision.',
     )
     if (!response.ok) {
-      throw await driveError(response, 'Failed to download the concurrent Google Drive revision.')
+      throw driveError(
+        response,
+        'Failed to download the concurrent Google Drive revision.',
+      )
     }
     return response.text()
   }
@@ -194,7 +225,8 @@ export const createGoogleDriveNotesSource = (
       uploadType: 'media',
       fields: FILE_FIELDS,
     })
-    const response = await authorizedFetch(
+    const response = await requestDrive(
+      authorizedFetch,
       `${DRIVE_UPLOAD_API}/files/${encodeURIComponent(target.fileId)}?${params}`,
       {
         method: 'PATCH',
@@ -203,11 +235,18 @@ export const createGoogleDriveNotesSource = (
         },
         body: content,
       },
+      'Failed to upload Google Drive notes.',
     )
     if (!response.ok) {
-      throw await driveError(response, 'Failed to upload Google Drive notes.')
+      throw driveError(response, 'Failed to upload Google Drive notes.')
     }
-    return validateDriveFile((await response.json()) as DriveFile, target)
+    return validateDriveFile(
+      await readDriveJson<DriveFile>(
+        response,
+        'Google Drive returned invalid upload metadata.',
+      ),
+      target,
+    )
   }
 
   const listRevisions = async () => {
@@ -215,15 +254,25 @@ export const createGoogleDriveNotesSource = (
       pageSize: '1000',
       fields: 'nextPageToken,revisions(id,modifiedTime)',
     })
-    const response = await authorizedFetch(
-      `${DRIVE_API}/files/${encodeURIComponent(target.fileId)}/revisions?${params}`,
-    )
+    let response: Response
+    try {
+      response = await authorizedFetch(
+        `${DRIVE_API}/files/${encodeURIComponent(target.fileId)}/revisions?${params}`,
+      )
+    } catch {
+      return null
+    }
     if (!response.ok) {
       return null
     }
-    const payload = (await response.json()) as {
+    let payload: {
       revisions?: DriveRevision[]
       nextPageToken?: string
+    }
+    try {
+      payload = (await response.json()) as typeof payload
+    } catch {
+      return null
     }
     if (payload.nextPageToken) {
       return null
