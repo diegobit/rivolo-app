@@ -142,4 +142,80 @@ describe('useAutoPullSync tab coordination', () => {
     expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalledTimes(1)
     expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
   })
+
+  it('refreshes on focus after 15 seconds backgrounded, bypassing the normal throttle', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
+
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
+    )
+
+    await act(async () => Promise.resolve())
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+
+    act(() => window.dispatchEvent(new Event('blur')))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(14_999)
+    })
+    act(() => window.dispatchEvent(new Event('focus')))
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+
+    act(() => window.dispatchEvent(new Event('blur')))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+    act(() => window.dispatchEvent(new Event('focus')))
+    await act(async () => Promise.resolve())
+
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(2)
+  })
+
+  it('deduplicates visibility and focus events for the same foreground return', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
+    const visibilityState = vi.spyOn(document, 'visibilityState', 'get')
+    visibilityState.mockReturnValue('visible')
+
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
+    )
+
+    await act(async () => Promise.resolve())
+    visibilityState.mockReturnValue('hidden')
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+
+    visibilityState.mockReturnValue('visible')
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      window.dispatchEvent(new Event('focus'))
+    })
+    await act(async () => Promise.resolve())
+
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(2)
+    visibilityState.mockRestore()
+  })
+
+  it('uses remote-change detection on foreground return while dirty', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
+
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+    )
+
+    await act(async () => Promise.resolve())
+    act(() => window.dispatchEvent(new Event('blur')))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+    act(() => window.dispatchEvent(new Event('focus')))
+    await act(async () => Promise.resolve())
+
+    expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalledTimes(2)
+    expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+  })
 })
