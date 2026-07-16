@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import type { AgentAccessProfile } from '../../lib/agentAccess'
 import SyncSection from './SyncSection'
 import type { SyncProviderSummary } from './SyncSection'
 
@@ -49,6 +50,32 @@ const baseProps = {
 
 const USE_CLOUD_LABEL = 'Use cloud version — replaces notes on this device'
 const KEEP_LOCAL_LABEL = "Keep this device's notes — replaces the cloud copy"
+
+const agentProfile: AgentAccessProfile = {
+  profileId: '00000000-0000-4000-8000-000000000001',
+  provider: 'dropbox',
+  providerAccountId: 'dbid:one',
+  providerEmail: 'person@example.com',
+  providerName: 'Person',
+  target: { path: '/inbox.md' },
+  timeZone: 'Europe/Rome',
+  createdAt: '2026-07-16T10:00:00.000Z',
+  updatedAt: '2026-07-16T10:00:00.000Z',
+  revokedAt: null,
+}
+
+const enabledAgentAccess = {
+  view: { state: 'enabled' as const, profile: agentProfile, message: null },
+  busy: false,
+  online: true,
+  targetReady: true,
+  statusKnown: true,
+  enabled: true,
+  boundToProvider: true,
+  onEnable: vi.fn(),
+  onDisable: vi.fn(),
+  onRetry: vi.fn(),
+}
 
 const openSyncRow = async (id: string) => {
   const header = screen
@@ -379,5 +406,73 @@ describe('SyncSection', () => {
     await openSyncRow('dropbox')
     expect(screen.getByRole('button', { name: 'Pull from Dropbox' })).toBeDisabled()
     expect(screen.getByText('Connect Dropbox to enable sync actions.')).toBeInTheDocument()
+  })
+
+  it('shows Agent access only inside the connected active provider panel', async () => {
+    const { rerender } = render(
+      <SyncSection
+        {...baseProps}
+        provider="google-drive"
+        agentAccess={{ ...enabledAgentAccess, boundToProvider: false }}
+      />,
+    )
+
+    await openSyncRow('google-drive')
+    expect(screen.queryByRole('heading', { name: 'Agent access' })).not.toBeInTheDocument()
+
+    rerender(<SyncSection {...baseProps} provider="dropbox" agentAccess={enabledAgentAccess} />)
+    expect(screen.getByRole('heading', { name: 'Agent access' })).toBeInTheDocument()
+  })
+
+  it('makes disable-before-switch explicit in the activation action', async () => {
+    const onActivate = vi.fn()
+    render(
+      <SyncSection
+        {...baseProps}
+        provider="google-drive"
+        onActivate={onActivate}
+        agentAccess={{ ...enabledAgentAccess, boundToProvider: false }}
+      />,
+    )
+
+    await openSyncRow('google-drive')
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Disable Agent access, then use Google Drive',
+      }),
+    )
+    expect(onActivate).toHaveBeenCalledOnce()
+  })
+
+  it('makes disable-before-target-change explicit and blocks it until status is known', async () => {
+    const { rerender } = render(
+      <SyncSection
+        {...baseProps}
+        advanced
+        targetDirty
+        agentAccess={enabledAgentAccess}
+      />,
+    )
+
+    await openSyncRow('dropbox')
+    expect(
+      screen.getByRole('button', { name: 'Disable Agent access & save' }),
+    ).toBeEnabled()
+
+    rerender(
+      <SyncSection
+        {...baseProps}
+        advanced
+        targetDirty
+        agentAccess={{
+          ...enabledAgentAccess,
+          view: { state: 'loading', profile: null, message: null },
+          statusKnown: false,
+          enabled: false,
+          boundToProvider: false,
+        }}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 })

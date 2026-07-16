@@ -17,6 +17,12 @@ import { DEFAULT_GOOGLE_DRIVE_FILE_NAME, getGoogleDrivePath } from '../lib/googl
 import { claimPrimaryTabForSync } from '../lib/tabSyncCoordinator'
 import type { SyncProviderId } from '../lib/sync'
 import { useTabSyncState } from '../hooks/useTabSyncState'
+import {
+  agentAccessDisableWarning,
+  runConfirmedAgentAccessDisable,
+  runWithAgentAccessSafety,
+  useAgentAccess,
+} from './settings/useAgentAccess'
 import { useSyncProviderActions } from './settings/useSyncProviderActions'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
@@ -75,6 +81,7 @@ export default function Settings() {
   const loadDropboxState = useDropboxStore((state) => state.loadState)
   const updateFilePath = useDropboxStore((state) => state.updateFilePath)
   const googleDriveConnected = useGoogleDriveStore((state) => state.connected)
+  const googleDriveFileId = useGoogleDriveStore((state) => state.fileId)
   const googleDriveFolderId = useGoogleDriveStore((state) => state.folderId)
   const googleDriveFileName = useGoogleDriveStore((state) => state.fileName)
   const googleDriveRemoteVersion = useGoogleDriveStore((state) => state.lastRemoteVersion)
@@ -100,6 +107,7 @@ export default function Settings() {
   const [dropboxPathDraft, setDropboxPathDraft] = useState<string | null>(null)
   const [googleDriveFileNameDraft, setGoogleDriveFileNameDraft] = useState<string | null>(null)
   const [initialLoadDone, setInitialLoadDone] = useState(false)
+  const agentAccess = useAgentAccess(online)
 
   const selectedSyncProvider = syncProviderDraft ?? activeProvider ?? 'dropbox'
   const settingsView = useSettingsStore((state) => state.settingsView)
@@ -215,9 +223,42 @@ export default function Settings() {
   const selectedTarget = selectedSyncProvider === 'dropbox' ? dropboxPath : googleFileName
   const selectedTargetDirty =
     selectedSyncProvider === 'dropbox' ? isDropboxPathDirty : isGoogleFileNameDirty
+  const agentAccessBoundToSelectedProvider =
+    agentAccess.view.state === 'enabled' &&
+    agentAccess.view.profile.provider === selectedSyncProvider
 
   const loadProviderStates = async () => {
     await Promise.all([loadDropboxState(), loadGoogleDriveState()])
+  }
+
+  const runWithAgentSafety = async (
+    actionLabel: string,
+    action: () => Promise<void>,
+    requiresDisable = agentAccess.enabled,
+  ) => {
+    const result = await runWithAgentAccessSafety({
+      statusKnown: agentAccess.statusKnown,
+      enabled: requiresDisable,
+      confirmDisable: () =>
+        window.confirm(
+          agentAccessDisableWarning(`This will ${actionLabel} and disable Agent access`),
+        ),
+      disable: agentAccess.disable,
+      action,
+    })
+    if (result === 'cancelled') {
+      setSyncStatus('No changes were made.')
+      return false
+    }
+    if (result === 'status-unknown') {
+      setSyncStatus(`Check Agent access before you ${actionLabel}.`)
+      return false
+    }
+    if (result === 'disable-failed') {
+      setSyncStatus(`Agent access must be disabled before you ${actionLabel}.`)
+      return false
+    }
+    return true
   }
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -258,7 +299,18 @@ export default function Settings() {
     }
 
     if (selectedSyncProvider === 'dropbox') {
-      await updateFilePath(dropboxPath.trim() || DEFAULT_DROPBOX_PATH)
+      const nextPath = dropboxPath.trim() || DEFAULT_DROPBOX_PATH
+      if (
+        !(await runWithAgentSafety(
+          'change the sync target',
+          async () => {
+            await updateFilePath(nextPath)
+          },
+          agentAccessBoundToSelectedProvider && selectedTargetDirty,
+        ))
+      ) {
+        return
+      }
       setDropboxPathDraft(null)
     } else {
       const nextFileName = googleFileName.trim() || DEFAULT_GOOGLE_DRIVE_FILE_NAME
@@ -266,7 +318,17 @@ export default function Settings() {
         setSyncStatus('Google Drive file name must be a Markdown file name without folders.')
         return
       }
-      await updateGoogleDriveFileName(nextFileName)
+      if (
+        !(await runWithAgentSafety(
+          'change the sync target',
+          async () => {
+            await updateGoogleDriveFileName(nextFileName)
+          },
+          agentAccessBoundToSelectedProvider && selectedTargetDirty,
+        ))
+      ) {
+        return
+      }
       setGoogleDriveFileNameDraft(null)
     }
     await loadProviderStates()
@@ -293,6 +355,38 @@ export default function Settings() {
       loadSyncState,
       setActiveProvider: setActiveSyncProvider,
     })
+
+  const handleDisconnectWithAgentSafety = async () => {
+    if (activeProvider !== selectedSyncProvider && !agentAccessBoundToSelectedProvider) {
+      await handleDisconnect()
+      return
+    }
+    await runWithAgentSafety(`disconnect ${selectedSyncProvider}`, handleDisconnect)
+  }
+
+  const handleActivateWithAgentSafety = async () => {
+    await runWithAgentSafety(
+      'switch sync providers',
+      handleActivate,
+      agentAccess.enabled && activeProvider !== selectedSyncProvider,
+    )
+  }
+
+  const handleEnableAgentAccess = async () => {
+    if (selectedSyncProvider === 'dropbox') {
+      await agentAccess.enable({ provider: 'dropbox', path: savedDropboxPath })
+      return
+    }
+    if (!googleDriveFileId) return
+    await agentAccess.enable({ provider: 'google-drive', fileId: googleDriveFileId })
+  }
+
+  const handleDisableAgentAccess = async () => {
+    await runConfirmedAgentAccessDisable({
+      confirmDisable: window.confirm,
+      disable: agentAccess.disable,
+    })
+  }
 
   // Sync attention belongs to the active provider; only surface it (and the
   // force action it calls for) while that provider's panel is the one shown.
@@ -395,8 +489,8 @@ export default function Settings() {
             setSyncStatus(null)
           }}
           onConnect={handleConnect}
-          onDisconnect={handleDisconnect}
-          onActivate={handleActivate}
+          onDisconnect={handleDisconnectWithAgentSafety}
+          onActivate={handleActivateWithAgentSafety}
           onTargetChange={(value) => {
             if (selectedSyncProvider === 'dropbox') setDropboxPathDraft(value)
             else setGoogleDriveFileNameDraft(value)
@@ -405,6 +499,21 @@ export default function Settings() {
           onPull={handlePull}
           onForcePull={handleForcePull}
           onPush={handlePush}
+          agentAccess={{
+            view: agentAccess.view,
+            busy: agentAccess.busy,
+            online,
+            targetReady:
+              selectedSyncProvider === 'dropbox'
+                ? Boolean(savedDropboxPath.trim())
+                : Boolean(googleDriveFileId),
+            statusKnown: agentAccess.statusKnown,
+            enabled: agentAccess.enabled,
+            boundToProvider: agentAccessBoundToSelectedProvider,
+            onEnable: handleEnableAgentAccess,
+            onDisable: handleDisableAgentAccess,
+            onRetry: agentAccess.load,
+          }}
         />
       </div>
 

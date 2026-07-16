@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { SYNC_PROVIDER_IDS, SYNC_PROVIDER_LABELS, type SyncProviderId } from '../../lib/syncState'
 import { buttonDanger, buttonPrimary, buttonSecondary } from '../../lib/ui'
 import AccordionRow from './AccordionRow'
+import AgentAccessPanel, { type AgentAccessPanelProps } from './AgentAccessPanel'
 
 const OVERWRITE_ARM_TIMEOUT_MS = 4000
 
@@ -42,6 +43,11 @@ type SyncSectionProps = {
   onPull: () => void | Promise<void>
   onForcePull: () => void | Promise<void>
   onPush: (force?: boolean) => void | Promise<void>
+  agentAccess?: Omit<AgentAccessPanelProps, 'provider' | 'advanced'> & {
+    statusKnown: boolean
+    enabled: boolean
+    boundToProvider: boolean
+  }
 }
 
 // Destructive sync actions all share one two-click idiom: the first click arms
@@ -75,6 +81,7 @@ export default function SyncSection({
   onPull,
   onForcePull,
   onPush,
+  agentAccess,
 }: SyncSectionProps) {
   const summary = summaries[provider]
   const label = SYNC_PROVIDER_LABELS[provider]
@@ -85,6 +92,8 @@ export default function SyncSection({
       ? 'Rivolo reads and writes this Markdown path in Dropbox.'
       : 'Rivolo creates this visible Markdown file in the /rivolo folder in My Drive and tracks it by file ID.'
   const syncControlsDisabled = syncBusy || syncPaused
+  const providerMutationDisabled =
+    syncControlsDisabled || Boolean(agentAccess && !agentAccess.statusKnown)
   const syncTabStatus = syncPaused ? 'Paused in this tab' : 'Primary tab'
 
   const [collapsed, setCollapsed] = useState(true)
@@ -229,9 +238,11 @@ export default function SyncSection({
                       className={`${buttonDanger} min-h-11`}
                       type="button"
                       onClick={onDisconnect}
-                      disabled={syncControlsDisabled}
+                      disabled={providerMutationDisabled}
                     >
-                      Disconnect {rowLabel}
+                      {agentAccess?.boundToProvider
+                        ? `Disable Agent access & disconnect ${rowLabel}`
+                        : `Disconnect ${rowLabel}`}
                     </button>
                   ) : (
                     <button
@@ -248,9 +259,11 @@ export default function SyncSection({
                       className={`${buttonPrimary} min-h-11`}
                       type="button"
                       onClick={onActivate}
-                      disabled={syncControlsDisabled}
+                      disabled={providerMutationDisabled}
                     >
-                      Use {rowLabel} for sync
+                      {agentAccess?.enabled
+                        ? `Disable Agent access, then use ${rowLabel}`
+                        : `Use ${rowLabel} for sync`}
                     </button>
                   )}
                 </div>
@@ -272,16 +285,18 @@ export default function SyncSection({
                           autoComplete="off"
                           className={inputClass}
                           value={targetDraft}
-                          disabled={syncPaused}
+                          disabled={syncPaused || Boolean(agentAccess && !agentAccess.statusKnown)}
                           onChange={(event) => onTargetChange(event.target.value)}
                         />
                         <button
                           className={`${buttonPrimary} min-h-11 shrink-0`}
                           type="button"
-                          disabled={syncControlsDisabled || !targetDirty}
+                          disabled={providerMutationDisabled || !targetDirty}
                           onClick={onSaveTarget}
                         >
-                          Save
+                          {agentAccess?.boundToProvider
+                            ? 'Disable Agent access & save'
+                            : 'Save'}
                         </button>
                       </div>
                     </div>
@@ -322,6 +337,10 @@ export default function SyncSection({
                       <p className="text-xs text-slate-500">{disabledReason}</p>
                     )}
                   </>
+                )}
+
+                {agentAccess && summary.connected && isActive && (
+                  <AgentAccessPanel {...agentAccess} provider={provider} advanced={advanced} />
                 )}
 
                 {status && (
