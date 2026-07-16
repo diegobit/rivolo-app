@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "mcp:build": "tsc -p tsconfig.mcp.json",
+    "mcp:worker:build": "tsc -p tsconfig.mcp-worker.json && wrangler deploy --dry-run --config wrangler.mcp.toml --outdir dist-mcp-worker",
     "mcp:start": "node dist-mcp/mcp/index.js",
     "preview": "vite preview"
   },

@@ -1,0 +1,15 @@
+name = "rivolo-mcp"
+main = "mcp/worker.ts"
+compatibility_date = "2026-06-21"
+
+# Replace this placeholder with the production D1 database id before deployment.
+[[d1_databases]]
+binding = "MCP_DB"
+database_name = "rivolo-mcp"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[vars]
+GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"
+DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
+MCP_ALLOWED_ORIGINS = "https://mcp.rivolo.app"

@@ -25,5 +25,6 @@
     "src/lib/markdown.ts",
     "src/lib/noteWrites.ts",
     "src/lib/notesCore.ts"
-  ]
+  ],
+  "exclude": ["mcp/remoteServer.ts", "mcp/worker.ts"]
 }

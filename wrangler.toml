@@ -10,8 +10,22 @@ GOOGLE_ALLOWED_ORIGINS = "http://localhost:8788"
 DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
 DROPBOX_ALLOWED_ORIGINS = "http://localhost:8788"
 
+[[d1_databases]]
+binding = "MCP_DB"
+database_name = "rivolo-mcp"
+# Replace this placeholder with the shared production D1 database id.
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
 [env.production.vars]
 GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"
 GOOGLE_ALLOWED_ORIGINS = "https://rivolo.app"
 DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
 DROPBOX_ALLOWED_ORIGINS = "https://rivolo.app"
+
+[[env.production.d1_databases]]
+binding = "MCP_DB"
+database_name = "rivolo-mcp"
+# Replace this placeholder with the same id used by wrangler.mcp.toml.
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
