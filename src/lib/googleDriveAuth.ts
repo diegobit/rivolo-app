@@ -3,7 +3,7 @@ import {
   markGoogleDriveLocalDirty,
   updateGoogleDriveState,
 } from './googleDriveState'
-import { createAuthorizedFetch } from './syncAuth'
+import { createAuthorizedFetch, parseApiError } from './syncAuth'
 
 const GOOGLE_IDENTITY_SCRIPT = 'https://accounts.google.com/gsi/client'
 const ACCESS_TOKEN_REFRESH_BUFFER = 60_000
@@ -38,11 +38,6 @@ type TokenPayload = {
   expiresAt: number
 }
 
-type ApiErrorPayload = {
-  code?: string
-  message?: string
-}
-
 type GoogleDriveUser = {
   permissionId?: string
   displayName?: string
@@ -58,13 +53,6 @@ declare global {
 let preparePromise: Promise<void> | null = null
 let googleClientId: string | null = null
 let memoryToken: TokenPayload | null = null
-
-const parseApiError = async (response: Response, fallback: string) => {
-  const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null
-  const error = new Error(payload?.message || fallback)
-  ;(error as Error & { code?: string }).code = payload?.code
-  return error
-}
 
 const loadGoogleIdentityScript = async () => {
   if (window.google?.accounts.oauth2) return

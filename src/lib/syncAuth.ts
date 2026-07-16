@@ -1,3 +1,18 @@
+type ApiErrorPayload = {
+  code?: string
+  message?: string
+}
+
+// Shared by dropboxAuth.ts and googleDriveAuth.ts: both providers' backend
+// endpoints report failures as JSON { message, code? }. Falls back to the
+// caller's text when the body is missing, malformed, or not JSON.
+export const parseApiError = async (response: Response, fallback: string) => {
+  const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null
+  const error = new Error(payload?.message || fallback)
+  ;(error as Error & { code?: string }).code = payload?.code
+  return error
+}
+
 // Shared by dropboxAuth.ts and googleDriveAuth.ts: both wrap every API call
 // with a bearer token and retry exactly once on a 401 after a forced token
 // refresh. Only the token getter differs between providers.

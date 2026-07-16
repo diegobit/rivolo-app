@@ -1,5 +1,5 @@
 import { getDropboxState, updateDropboxState } from './dropboxState'
-import { createAuthorizedFetch } from './syncAuth'
+import { createAuthorizedFetch, parseApiError } from './syncAuth'
 
 const DROPBOX_AUTH = 'https://www.dropbox.com/oauth2/authorize'
 const DROPBOX_API = 'https://api.dropboxapi.com/2'
@@ -10,11 +10,6 @@ const ACCESS_TOKEN_REFRESH_BUFFER = 60_000
 type TokenPayload = {
   accessToken: string
   expiresAt: number
-}
-
-type ApiErrorPayload = {
-  code?: string
-  message?: string
 }
 
 type DropboxOAuthSession = {
@@ -82,13 +77,6 @@ const loadOAuthSession = () => {
 
 const clearOAuthSession = () => {
   sessionStorage.removeItem(DROPBOX_OAUTH_STORAGE)
-}
-
-const parseApiError = async (response: Response, fallback: string) => {
-  const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null
-  const error = new Error(payload?.message || fallback)
-  ;(error as Error & { code?: string }).code = payload?.code
-  return error
 }
 
 const fetchDropboxAccount = async (accessToken: string) => {
