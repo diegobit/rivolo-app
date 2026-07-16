@@ -121,6 +121,20 @@ export const clearMcpProfileSessionCookie = (
 export const readMcpProfileSession = (request: Request, env: McpAgentAccessEnv) =>
   readStoredToken(request, mcpProfileSessionCookieConfig(env))
 
+export const readActiveMcpProfileSession = async (
+  request: Request,
+  env: McpAgentAccessEnv,
+) => {
+  const profileId = await readMcpProfileSession(request, env)
+  if (!profileId) return null
+  const repository = mcpProfileRepository(env)
+  const [profile, credential] = await Promise.all([
+    repository.getMetadata(profileId),
+    repository.decryptCredential(profileId),
+  ])
+  return profile && !profile.revokedAt && credential ? profileId : null
+}
+
 export const setCookieHeaders = (...cookies: string[]) => {
   const headers = new Headers()
   cookies.forEach((cookie) => headers.append('Set-Cookie', cookie))
