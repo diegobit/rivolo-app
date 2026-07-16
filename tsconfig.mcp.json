@@ -23,6 +23,7 @@
     "src/lib/dates.ts",
     "src/lib/llm/systemPrompts.ts",
     "src/lib/markdown.ts",
+    "src/lib/noteWrites.ts",
     "src/lib/notesCore.ts"
   ]
 }
