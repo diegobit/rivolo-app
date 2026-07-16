@@ -208,6 +208,15 @@ export const registerOAuthClient = async (request: Request, env: McpOAuthEnv) =>
       201,
     )
   } catch (error) {
+    if (error instanceof McpOAuthProtocolError) {
+      const registrationError = error.message.includes('redirect')
+        ? 'invalid_redirect_uri'
+        : 'invalid_client_metadata'
+      return jsonResponse(
+        { error: registrationError, error_description: error.message },
+        400,
+      )
+    }
     return oauthErrorResponse(error)
   }
 }

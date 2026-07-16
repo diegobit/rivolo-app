@@ -275,8 +275,21 @@ describe('MCP OAuth metadata and registration', () => {
         env,
       )
       expect(response.status).toBe(400)
-      expect(await response.json()).toMatchObject({ error: 'invalid_request' })
+      expect(await response.json()).toMatchObject({
+        error: 'invalid_redirect_uri',
+      })
     }
+
+    const confidential = await registerOAuthClient(
+      jsonRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/register`, {
+        redirect_uris: ['https://client.example/callback'],
+        token_endpoint_auth_method: 'client_secret_basic',
+      }),
+      env,
+    )
+    expect(await confidential.json()).toMatchObject({
+      error: 'invalid_client_metadata',
+    })
   })
 })
 
