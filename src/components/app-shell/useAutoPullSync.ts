@@ -13,20 +13,27 @@ type AutoPullStatus = {
 }
 
 const AUTO_PULL_INTERVAL_MS = 2 * 60 * 1000
+const FOREGROUND_BACKGROUND_MIN_MS = 15 * 1000
 
 export const useAutoPullSync = (status: AutoPullStatus) => {
   const lastAutoPullAt = useRef(0)
   const autoPullInFlight = useRef(false)
+  const backgroundedAt = useRef<number | null>(null)
 
   const maybeAutoPull = useCallback(
-    (reason: 'start' | 'reconnect' | 'visibility' | 'interval') => {
+    (reason: 'start' | 'reconnect' | 'foreground' | 'interval') => {
       if (!navigator.onLine) return
       if (!status.connected || !status.targetName) return
       if (getTabSyncBlockReason()) return
       if (autoPullInFlight.current) return
 
       const now = Date.now()
-      if (now - lastAutoPullAt.current < AUTO_PULL_INTERVAL_MS) return
+      if (
+        reason !== 'foreground' &&
+        now - lastAutoPullAt.current < AUTO_PULL_INTERVAL_MS
+      ) {
+        return
+      }
 
       autoPullInFlight.current = true
       lastAutoPullAt.current = now
@@ -86,16 +93,42 @@ export const useAutoPullSync = (status: AutoPullStatus) => {
       console.info('[Sync] auto-pull:event', { reason: 'reconnect' })
       maybeAutoPull('reconnect')
     }
-    const handleVisibility = () => {
+    const handleBackground = () => {
+      if (backgroundedAt.current === null) {
+        backgroundedAt.current = Date.now()
+      }
+    }
+    const handleForeground = () => {
       if (document.visibilityState !== 'visible') return
-      console.info('[Sync] auto-pull:event', { reason: 'visibility' })
-      maybeAutoPull('visibility')
+
+      const startedAt = backgroundedAt.current
+      backgroundedAt.current = null
+      if (
+        startedAt === null ||
+        Date.now() - startedAt < FOREGROUND_BACKGROUND_MIN_MS
+      ) {
+        return
+      }
+
+      console.info('[Sync] auto-pull:event', { reason: 'foreground' })
+      maybeAutoPull('foreground')
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') {
+        handleBackground()
+        return
+      }
+      handleForeground()
     }
 
     window.addEventListener('online', handleOnline)
+    window.addEventListener('blur', handleBackground)
+    window.addEventListener('focus', handleForeground)
     document.addEventListener('visibilitychange', handleVisibility)
     return () => {
       window.removeEventListener('online', handleOnline)
+      window.removeEventListener('blur', handleBackground)
+      window.removeEventListener('focus', handleForeground)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [maybeAutoPull])
