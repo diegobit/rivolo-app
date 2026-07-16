@@ -7,6 +7,11 @@ import {
   type AddToDayInput,
   type AddToDayResult,
 } from '../src/lib/noteWrites.js'
+import {
+  MAX_WRITE_OPERATION_ID_CHARS,
+  MIN_WRITE_OPERATION_ID_CHARS,
+  WRITE_OPERATION_ID_PATTERN,
+} from '../src/lib/writeOperationId.js'
 
 const DAY_ID_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -26,8 +31,18 @@ const contentSchema = z
 
 const operationIdSchema = z
   .string()
-  .min(1, 'operation_id must not be empty.')
-  .refine((value) => value.trim().length > 0, 'operation_id must not be empty.')
+  .min(
+    MIN_WRITE_OPERATION_ID_CHARS,
+    `operation_id must be at least ${MIN_WRITE_OPERATION_ID_CHARS} characters.`,
+  )
+  .max(
+    MAX_WRITE_OPERATION_ID_CHARS,
+    `operation_id must be ${MAX_WRITE_OPERATION_ID_CHARS} characters or fewer.`,
+  )
+  .regex(
+    new RegExp(WRITE_OPERATION_ID_PATTERN),
+    'operation_id contains unsupported characters.',
+  )
 
 const positionSchema = z.enum(['append', 'prepend']).default('append')
 

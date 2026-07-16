@@ -10,6 +10,11 @@ import {
   type ProfileTimeZone,
 } from '../../mcp/writeTools.js'
 import { MAX_NOTE_WRITE_CHARS } from '../lib/noteWrites.js'
+import {
+  MAX_WRITE_OPERATION_ID_CHARS,
+  MIN_WRITE_OPERATION_ID_CHARS,
+  WRITE_OPERATION_ID_PATTERN,
+} from '../lib/writeOperationId.js'
 
 const makeWriteResult = (
   dayId: string,
@@ -129,7 +134,9 @@ describe('registerWriteTools', () => {
           },
           operation_id: {
             type: 'string',
-            minLength: 1,
+            minLength: MIN_WRITE_OPERATION_ID_CHARS,
+            maxLength: MAX_WRITE_OPERATION_ID_CHARS,
+            pattern: WRITE_OPERATION_ID_PATTERN,
           },
           position: {
             type: 'string',
@@ -270,7 +277,7 @@ describe('registerWriteTools', () => {
     expect(readTextResult(result)).toBe('Provider write failed.')
   })
 
-  it('rejects invalid dates and oversized content before calling the writer', async () => {
+  it('rejects invalid dates, content, and operation IDs before calling the writer', async () => {
     const writer = vi.fn<AddToDayWriter>().mockImplementation(async (input) =>
       makeWriteResult(input.day_id),
     )
@@ -291,6 +298,14 @@ describe('registerWriteTools', () => {
         operation_id: 'operation-2',
       },
     })
+    const invalidOperationId = await client.callTool({
+      name: 'add_to_day',
+      arguments: {
+        day_id: '2026-07-16',
+        content_md: 'Added note',
+        operation_id: 'bad id!!',
+      },
+    })
 
     expect(invalidDate.isError).toBe(true)
     expect(readTextResult(invalidDate)).toContain(
@@ -299,6 +314,10 @@ describe('registerWriteTools', () => {
     expect(oversizedContent.isError).toBe(true)
     expect(readTextResult(oversizedContent)).toContain(
       `content_md must be ${MAX_NOTE_WRITE_CHARS} characters or fewer.`,
+    )
+    expect(invalidOperationId.isError).toBe(true)
+    expect(readTextResult(invalidOperationId)).toContain(
+      'operation_id contains unsupported characters',
     )
     expect(writer).not.toHaveBeenCalled()
   })

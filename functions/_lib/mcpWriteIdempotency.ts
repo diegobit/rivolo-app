@@ -1,3 +1,9 @@
+import {
+  isValidWriteOperationId,
+  MAX_WRITE_OPERATION_ID_CHARS,
+  MIN_WRITE_OPERATION_ID_CHARS,
+} from '../../src/lib/writeOperationId.js'
+
 export type McpWritePosition = 'append' | 'prepend'
 
 export type McpWriteInput = {
@@ -32,7 +38,6 @@ type WriteOperationClaim<Result> =
 
 const PROFILE_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const OPERATION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/
 const DAY_ID = /^(\d{4})-(\d{2})-(\d{2})$/
 const INPUT_HASH = /^[0-9a-f]{64}$/
 const MAX_CONTENT_CHARS = 20_000
@@ -89,9 +94,9 @@ const validateProfileId = (profileId: string) => {
 }
 
 const validateOperationId = (operationId: string) => {
-  if (!OPERATION_ID.test(operationId)) {
+  if (!isValidWriteOperationId(operationId)) {
     throw new McpWriteOperationValidationError(
-      'operation_id must be 8-128 ASCII letters, numbers, dots, underscores, colons, or hyphens.',
+      `operation_id must be ${MIN_WRITE_OPERATION_ID_CHARS}-${MAX_WRITE_OPERATION_ID_CHARS} ASCII letters, numbers, dots, underscores, colons, or hyphens.`,
     )
   }
   return operationId
