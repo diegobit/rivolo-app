@@ -66,7 +66,7 @@ export const exchangeGoogleCode = async (
 
 export const refreshGoogleAccessToken = async (
   refreshToken: string,
-  env: GoogleOAuthEnv,
+  env: Pick<GoogleOAuthEnv, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'>,
 ) =>
   requestGoogleToken(
     new URLSearchParams({

@@ -3,6 +3,7 @@ import { exportMarkdown, parseMarkdown } from '../src/lib/markdown.js'
 import { addToDay, type AddToDayInput, type AddToDayResult } from '../src/lib/noteWrites.js'
 import { sortDaysDescending, type Day } from '../src/lib/notesCore.js'
 import type { NotesSnapshot } from './readTools.js'
+import { ProviderWriteNotAppliedError } from './providerWriteErrors.js'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3'
@@ -364,9 +365,20 @@ export const createGoogleDriveNotesSource = (
   }
 
   const add = async (input: AddToDayInput): Promise<GoogleDriveAddToDayResult> => {
-    const before = await fetchMetadata()
-    const beforeContent = await downloadFile()
-    const initial = applyWrite(beforeContent, input, before.modifiedTime)
+    let before: DriveFile
+    let initial: ReturnType<typeof applyWrite>
+    try {
+      before = await fetchMetadata()
+      const beforeContent = await downloadFile()
+      initial = applyWrite(beforeContent, input, before.modifiedTime)
+    } catch (error) {
+      throw new ProviderWriteNotAppliedError(
+        error instanceof Error
+          ? error.message
+          : 'Google Drive notes could not be prepared for writing.',
+        { cause: error },
+      )
+    }
     const uploaded = await uploadFile(initial.content)
     const current = await fetchMetadata()
     const inspection = await inspectConcurrentRevision(before, uploaded, current)

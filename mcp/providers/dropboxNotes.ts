@@ -7,6 +7,7 @@ import {
 } from '../../src/lib/noteWrites.js'
 import { sortDaysDescending, type Day } from '../../src/lib/notesCore.js'
 import type { NotesSnapshot } from '../readTools.js'
+import { ProviderWriteNotAppliedError } from '../providerWriteErrors.js'
 
 const DROPBOX_CONTENT = 'https://content.dropboxapi.com/2'
 const DEFAULT_CONFLICT_RETRIES = 2
@@ -246,13 +247,24 @@ export const createDropboxNotesAdapter = (
 
   const addToDay = async (input: AddToDayInput): Promise<DropboxAddToDayResult> => {
     for (let conflictRetries = 0; conflictRetries <= maxConflictRetries; conflictRetries += 1) {
-      const snapshot = await loadNotes()
-      if (snapshot.warnings.length > 0) {
-        throw new Error(
-          'Dropbox notes cannot be updated safely because their day markers are invalid.',
+      let snapshot: DropboxNotesSnapshot
+      let mutation: AddToDayResult
+      try {
+        snapshot = await loadNotes()
+        if (snapshot.warnings.length > 0) {
+          throw new Error(
+            'Dropbox notes cannot be updated safely because their day markers are invalid.',
+          )
+        }
+        mutation = applyAddToDay(snapshot.days, input, { now: now() })
+      } catch (error) {
+        throw new ProviderWriteNotAppliedError(
+          error instanceof Error
+            ? error.message
+            : 'Dropbox notes could not be prepared for writing.',
+          { cause: error },
         )
       }
-      const mutation = applyAddToDay(snapshot.days, input, { now: now() })
       const content = exportMarkdown(mutation.days)
 
       try {
@@ -277,7 +289,10 @@ export const createDropboxNotesAdapter = (
           continue
         }
         if (error instanceof DropboxConflictError) {
-          throw new Error('Dropbox notes changed repeatedly; retry the operation.')
+          throw new ProviderWriteNotAppliedError(
+            'Dropbox notes changed repeatedly; retry the operation.',
+            { cause: error },
+          )
         }
         throw error
       }

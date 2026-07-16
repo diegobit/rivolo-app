@@ -338,6 +338,30 @@ export class ProviderProfileRepository {
     return decryptToken(row.encrypted_refresh_token, this.encryptionSecret)
   }
 
+  async updateCredential(profileId: string, refreshToken: string): Promise<void> {
+    const credential = requiredText(refreshToken, 'refreshToken', 8192)
+    const encryptedRefreshToken = await encryptToken(
+      credential,
+      this.encryptionSecret,
+    )
+    const result = await this.db
+      .prepare(
+        `UPDATE mcp_provider_profiles
+        SET encrypted_refresh_token = ?, updated_at = ?
+        WHERE profile_id = ? AND revoked_at IS NULL`,
+      )
+      .bind(
+        encryptedRefreshToken,
+        this.now().toISOString(),
+        validateProfileId(profileId),
+      )
+      .run()
+
+    if (result.meta.changes !== 1) {
+      throw new ProviderProfileValidationError('Profile is not active.')
+    }
+  }
+
   async revoke(profileId: string): Promise<boolean> {
     const timestamp = this.now().toISOString()
     const result = await this.db

@@ -5,6 +5,11 @@ import {
 } from './providerProfiles'
 import type { McpAgentAccessEnv } from './mcpAgentAccess'
 
+export type McpBearerAuthEnv = Pick<
+  McpAgentAccessEnv,
+  'MCP_DB' | 'MCP_PROVIDER_TOKEN_ENCRYPTION_KEY'
+>
+
 export const MCP_PERSONAL_TOKEN_SCOPES = ['notes:read', 'notes:write'] as const
 
 export type McpPersonalTokenMetadata = {
@@ -24,6 +29,7 @@ export type CreatedMcpPersonalToken = McpPersonalTokenMetadata & {
 export type AuthenticatedMcpBearer = {
   profile: ProviderProfileMetadata
   token: McpPersonalTokenMetadata
+  providerRefreshToken: string
 }
 
 type McpPersonalTokenRow = {
@@ -103,11 +109,21 @@ const createTokenSecret = () => {
   return `rvl_${bytesToBase64Url(random)}`
 }
 
+const parseScopes = (value: string): McpPersonalTokenMetadata['scopes'] =>
+  value
+    .split(/\s+/)
+    .filter(
+      (scope): scope is McpPersonalTokenMetadata['scopes'][number] =>
+        MCP_PERSONAL_TOKEN_SCOPES.includes(
+          scope as McpPersonalTokenMetadata['scopes'][number],
+        ),
+    )
+
 const toMetadata = (row: McpPersonalTokenRow): McpPersonalTokenMetadata => ({
   tokenId: row.token_id,
   name: row.name,
   prefix: row.token_prefix,
-  scopes: [...MCP_PERSONAL_TOKEN_SCOPES],
+  scopes: parseScopes(row.scopes),
   createdAt: row.created_at,
   lastUsedAt: row.last_used_at,
   revokedAt: row.revoked_at,
@@ -244,7 +260,7 @@ const parseBearerToken = (request: Request) => {
 
 export const authenticateMcpBearer = async (
   request: Request,
-  env: McpAgentAccessEnv,
+  env: McpBearerAuthEnv,
 ): Promise<AuthenticatedMcpBearer | null> => {
   try {
     const bearer = parseBearerToken(request)
@@ -269,7 +285,11 @@ export const authenticateMcpBearer = async (
     } catch {
       // Authentication must not fail because best-effort usage metadata failed.
     }
-    return { profile, token: toMetadata(activeToken) }
+    return {
+      profile,
+      token: toMetadata(activeToken),
+      providerRefreshToken: credential,
+    }
   } catch (error) {
     if (error instanceof ProviderProfileValidationError) return null
     throw new McpBearerAuthenticationError()

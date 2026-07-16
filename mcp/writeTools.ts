@@ -70,7 +70,16 @@ export type AddToDayWriterResult = Pick<
   'day' | 'created' | 'position' | 'operation_id'
 >
 
-export type AddToDayWriter<Result extends AddToDayWriterResult = AddToDayWriterResult> = (
+export type CompactAddToDayWriterResult = Omit<AddToDayWriterResult, 'day'> & {
+  day_id: string
+  content_chars: number
+}
+
+export type AddToDayWriterOutput =
+  | AddToDayWriterResult
+  | CompactAddToDayWriterResult
+
+export type AddToDayWriter<Result extends AddToDayWriterOutput = AddToDayWriterResult> = (
   input: AddToDayInput,
 ) => MaybePromise<Result>
 
@@ -156,16 +165,21 @@ const resolveProfileTimeZone = async (profileTimeZone: ProfileTimeZone) =>
     ? profileTimeZone()
     : profileTimeZone
 
-const compactWriteResult = <Result extends AddToDayWriterResult>(result: Result) => {
+export const compactWriteResult = <Result extends AddToDayWriterOutput>(
+  result: Result,
+): CompactAddToDayWriterResult & Omit<Result, 'day'> => {
+  if (!('day' in result)) {
+    return result as CompactAddToDayWriterResult & Omit<Result, 'day'>
+  }
   const { day, ...metadata } = result
   return {
     ...metadata,
     day_id: day.dayId,
     content_chars: day.contentMd.length,
-  }
+  } as CompactAddToDayWriterResult & Omit<Result, 'day'>
 }
 
-export const registerWriteTools = <Result extends AddToDayWriterResult>(
+export const registerWriteTools = <Result extends AddToDayWriterOutput>(
   server: McpServer,
   addToDay: AddToDayWriter<Result>,
   profileTimeZone: ProfileTimeZone,

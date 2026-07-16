@@ -65,7 +65,10 @@ export const exchangeDropboxCode = async (
     }),
   )
 
-export const refreshDropboxAccessToken = async (refreshToken: string, env: DropboxOAuthEnv) =>
+export const refreshDropboxAccessToken = async (
+  refreshToken: string,
+  env: Pick<DropboxOAuthEnv, 'DROPBOX_CLIENT_ID'>,
+) =>
   requestDropboxToken(
     new URLSearchParams({
       grant_type: 'refresh_token',

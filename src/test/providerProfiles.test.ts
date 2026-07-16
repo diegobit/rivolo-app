@@ -116,6 +116,21 @@ class FakeD1 {
     if (!sql.includes('UPDATE mcp_provider_profiles')) {
       throw new Error(`Unexpected query: ${sql}`)
     }
+    if (sql.includes('SET encrypted_refresh_token = ?')) {
+      const [encryptedRefreshToken, updatedAt, profileId] = values as [
+        string,
+        string,
+        string,
+      ]
+      const row = this.rows.get(profileId)
+      if (!row || row.revoked_at) return { meta: { changes: 0 } }
+      this.rows.set(profileId, {
+        ...row,
+        encrypted_refresh_token: encryptedRefreshToken,
+        updated_at: updatedAt,
+      })
+      return { meta: { changes: 1 } }
+    }
     const [updatedAt, revokedAt, profileId] = values as [string, string, string]
     const row = this.rows.get(profileId)
     if (!row || row.revoked_at) return { meta: { changes: 0 } }
@@ -197,6 +212,10 @@ describe('provider profile persistence', () => {
     expect(db.rows.get(created.profileId)?.encrypted_refresh_token).not.toContain(
       'first-refresh-token',
     )
+    await repository.updateCredential(created.profileId, 'rotated-refresh-token')
+    expect(await repository.decryptCredential(created.profileId)).toBe(
+      'rotated-refresh-token',
+    )
     expect(await repository.revoke(created.profileId)).toBe(true)
     expect(await repository.decryptCredential(created.profileId)).toBeNull()
 
@@ -216,7 +235,7 @@ describe('provider profile persistence', () => {
       timeZone: 'Europe/London',
       revokedAt: null,
       createdAt: '2026-07-16T08:00:00.000Z',
-      updatedAt: '2026-07-16T10:00:00.000Z',
+      updatedAt: '2026-07-16T11:00:00.000Z',
     })
     expect(await repository.decryptCredential(created.profileId)).toBe(
       'replacement-refresh-token',
