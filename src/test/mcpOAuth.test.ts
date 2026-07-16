@@ -180,11 +180,16 @@ const completeConsent = async (
   env: McpOAuthEnv,
   cookie: string,
   parameters: URLSearchParams,
+  profileId: string,
 ) => {
   const response = await submitOAuthConsent(
     formRequest(
       `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`,
-      new URLSearchParams([...parameters, ['decision', 'allow']]),
+      new URLSearchParams([
+        ...parameters,
+        ['profile_id', profileId],
+        ['decision', 'allow'],
+      ]),
       {
         Origin: 'https://rivolo.app',
         Cookie: cookie,
@@ -315,6 +320,7 @@ describe('MCP OAuth authorization and tokens', () => {
     expect(consent.status).toBe(200)
     expect(consentHtml).toContain('Allow Codex?')
     expect(consentHtml).toContain('notes@example.com')
+    expect(consentHtml).toContain(`name="profile_id" value="${profile.profileId}"`)
     expect(consentHtml).not.toContain('provider-refresh-secret')
 
     const wrongRedirect = new URLSearchParams(parameters)
@@ -366,7 +372,7 @@ describe('MCP OAuth authorization and tokens', () => {
     const clientId = await registerClient(env, redirectUri)
     const { verifier, challenge } = await pkce()
     const parameters = authorizationParameters(clientId, redirectUri, challenge)
-    const code = await completeConsent(env, cookie, parameters)
+    const code = await completeConsent(env, cookie, parameters, profile.profileId)
     expect(code).toMatch(/^rvc_code_[A-Za-z0-9_-]{43}$/)
 
     const storedCode = db.database
@@ -457,6 +463,7 @@ describe('MCP OAuth authorization and tokens', () => {
       env,
       cookie,
       authorizationParameters(clientId, redirectUri, challenge),
+      profile.profileId,
     )
     const initialResponse = await exchangeCode(
       env,
@@ -524,6 +531,7 @@ describe('MCP OAuth authorization and tokens', () => {
       env,
       cookie,
       authorizationParameters(clientId, redirectUri, challenge),
+      profile.profileId,
     )
     const response = await exchangeCode(
       env,
@@ -559,6 +567,7 @@ describe('MCP OAuth authorization and tokens', () => {
       env,
       cookie,
       authorizationParameters(clientId, redirectUri, challenge),
+      profile.profileId,
     )
     const response = await exchangeCode(
       env,
@@ -645,7 +654,34 @@ describe('MCP OAuth authorization and tokens', () => {
     expect(crossOrigin.status).toBe(400)
     expect(await crossOrigin.text()).toContain('Consent origin is invalid.')
 
-    const code = await completeConsent(env, cookie, parameters)
+    const changedProfile = await submitOAuthConsent(
+      formRequest(
+        `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`,
+        new URLSearchParams([
+          ...parameters,
+          ['profile_id', '22222222-2222-4222-8222-222222222222'],
+          ['decision', 'allow'],
+        ]),
+        { Origin: 'https://rivolo.app', Cookie: cookie },
+      ),
+      env,
+    )
+    expect(changedProfile.status).toBe(400)
+    expect(await changedProfile.text()).toContain(
+      'The Rivolo notes profile changed. Review access again.',
+    )
+    expect(
+      db.database
+        .prepare('SELECT COUNT(*) AS count FROM mcp_oauth_authorization_codes')
+        .get(),
+    ).toEqual({ count: 0 })
+
+    const code = await completeConsent(
+      env,
+      cookie,
+      parameters,
+      profile.profileId,
+    )
     const response = await exchangeCode(
       env,
       clientId,

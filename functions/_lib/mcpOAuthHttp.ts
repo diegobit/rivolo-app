@@ -81,6 +81,7 @@ const hidden = (name: string, value: string | null) =>
 
 const consentPage = (
   authorization: OAuthAuthorizationRequest,
+  profileId: string,
   accountLabel: string,
   issuerUrl: string,
 ) => {
@@ -103,6 +104,7 @@ const consentPage = (
 </dl>
 <p>Only the latest cloud-synced state is available. The client never receives your Dropbox or Google Drive credential.</p>
 <form method="post" action="${escapeHtml(`${issuerUrl}/authorize`)}">
+  ${hidden('profile_id', profileId)}
   ${hidden('response_type', 'code')}
   ${hidden('client_id', authorization.client.clientId)}
   ${hidden('redirect_uri', authorization.redirectUri)}
@@ -243,7 +245,7 @@ export const showOAuthConsent = async (request: Request, env: McpOAuthEnv) => {
     }
     const accountLabel =
       profile.providerEmail ?? profile.providerName ?? profile.providerAccountId
-    return consentPage(authorization, accountLabel, config.issuerUrl)
+    return consentPage(authorization, profileId, accountLabel, config.issuerUrl)
   } catch (error) {
     return errorPage(
       error instanceof McpOAuthProtocolError
@@ -263,6 +265,12 @@ export const submitOAuthConsent = async (request: Request, env: McpOAuthEnv) => 
     ).parseAuthorizationRequest(body, config.resourceUrl)
     const profileId = await readActiveMcpProfileSession(request, env)
     if (!profileId) return errorPage('Rivolo agent access is not active.', 401)
+    if (body.get('profile_id') !== profileId) {
+      throw new McpOAuthProtocolError(
+        'invalid_request',
+        'The Rivolo notes profile changed. Review access again.',
+      )
+    }
 
     const target = new URL(authorization.redirectUri)
     target.searchParams.set('iss', config.issuerUrl)
