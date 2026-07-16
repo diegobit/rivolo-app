@@ -274,6 +274,57 @@ describe('createDropboxNotesAdapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 
+  it('does not upload a file with no Rivolo day markers', async () => {
+    const fetchMock = makeFetch(download('Unmarked private content', 'rev-1'))
+    const adapter = createDropboxNotesAdapter({
+      authorizedFetch: fetchMock,
+      path: PATH,
+    })
+
+    await expect(
+      adapter.addToDay({
+        day_id: '2026-07-16',
+        content_md: 'Agent note',
+        operation_id: 'operation-no-markers',
+      }),
+    ).rejects.toThrow(
+      'Dropbox notes cannot be updated safely because their day markers are invalid.',
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not upload a file with duplicate Rivolo day markers', async () => {
+    const duplicateDays = [
+      '<!-- day:2026-07-16 -->',
+      'Jul 16, 2026',
+      '------------',
+      '',
+      'First block',
+      '',
+      '<!-- day:2026-07-16 -->',
+      'Jul 16, 2026',
+      '------------',
+      '',
+      'Second block',
+    ].join('\n')
+    const fetchMock = makeFetch(download(duplicateDays, 'rev-1'))
+    const adapter = createDropboxNotesAdapter({
+      authorizedFetch: fetchMock,
+      path: PATH,
+    })
+
+    await expect(
+      adapter.addToDay({
+        day_id: '2026-07-16',
+        content_md: 'Agent note',
+        operation_id: 'operation-duplicate',
+      }),
+    ).rejects.toThrow(
+      'Dropbox notes cannot be updated safely because their day markers are invalid.',
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('does not include Dropbox response content in request errors', async () => {
     const fetchMock = makeFetch(
       json({ access_token: 'secret-token', notes: 'private content' }, { status: 500 }),

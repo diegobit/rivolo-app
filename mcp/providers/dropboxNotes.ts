@@ -247,6 +247,11 @@ export const createDropboxNotesAdapter = (
   const addToDay = async (input: AddToDayInput): Promise<DropboxAddToDayResult> => {
     for (let conflictRetries = 0; conflictRetries <= maxConflictRetries; conflictRetries += 1) {
       const snapshot = await loadNotes()
+      if (snapshot.warnings.length > 0) {
+        throw new Error(
+          'Dropbox notes cannot be updated safely because their day markers are invalid.',
+        )
+      }
       const mutation = applyAddToDay(snapshot.days, input, { now: now() })
       const content = exportMarkdown(mutation.days)
 
