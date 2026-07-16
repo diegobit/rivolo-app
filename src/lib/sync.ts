@@ -37,11 +37,21 @@ export type SyncPushResult =
       attention?: string
     }
 
+// A content-free metadata check: has the remote advanced past the version we
+// last synced? Used to detect divergence while local edits are dirty (auto-pull
+// is suppressed then, so nothing else would notice). 'unknown' means there is
+// nothing to compare yet (disconnected, or never synced).
+export type SyncRemoteCheck =
+  | { status: 'unknown' }
+  | { status: 'unchanged' }
+  | { status: 'changed'; reason: 'remote_missing' | 'remote_changed' }
+
 export type SyncProvider = {
   id: SyncProviderId
   getStatus: () => Promise<SyncStatus>
   pull: (options?: SyncPullOptions) => Promise<SyncPullResult>
   push: (force?: boolean) => Promise<SyncPushResult>
+  checkRemote: () => Promise<SyncRemoteCheck>
   disconnect: () => Promise<void>
 }
 
@@ -84,6 +94,12 @@ export const getActiveProviderStatus = async () => {
   const provider = await getActiveProvider()
   if (!provider) return EMPTY_STATUS
   return provider.getStatus()
+}
+
+export const checkActiveProviderRemote = async (): Promise<SyncRemoteCheck> => {
+  const provider = await getActiveProvider()
+  if (!provider) return { status: 'unknown' }
+  return provider.checkRemote()
 }
 
 export const pullFromSync = async (options: SyncPullOptions = {}) => {

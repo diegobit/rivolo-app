@@ -1,5 +1,5 @@
-import { renderHook, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAutoPullSync } from './useAutoPullSync'
 
 const coordinator = vi.hoisted(() => ({
@@ -8,6 +8,7 @@ const coordinator = vi.hoisted(() => ({
 const syncActions = vi.hoisted(() => ({
   pullFromSyncAndRefresh: vi.fn(),
   recordSyncAttention: vi.fn(),
+  detectRemoteChangeWhileDirty: vi.fn(),
 }))
 
 vi.mock('../../lib/tabSyncCoordinator', () => coordinator)
@@ -18,6 +19,12 @@ describe('useAutoPullSync tab coordination', () => {
     vi.clearAllMocks()
     coordinator.getTabSyncBlockReason.mockReturnValue(null)
     syncActions.pullFromSyncAndRefresh.mockResolvedValue({ status: 'noop' })
+    syncActions.detectRemoteChangeWhileDirty.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.clearAllTimers()
+    vi.useRealTimers()
   })
 
   it('does not auto-pull when another tab owns the lease', () => {
@@ -56,5 +63,83 @@ describe('useAutoPullSync tab coordination', () => {
         'Import aborted because the Markdown file contains duplicate day markers.',
       )
     })
+  })
+
+  it('detects remote changes instead of auto-pulling when local edits are dirty', async () => {
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+    )
+
+    await waitFor(() => {
+      expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalled()
+    })
+    expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+  })
+
+  it('auto-pulls (not detect) when local is clean', async () => {
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
+    )
+
+    await waitFor(() => {
+      expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledWith({ force: false })
+    })
+    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
+  })
+
+  it('does neither while another tab owns the lease, even when dirty', () => {
+    coordinator.getTabSyncBlockReason.mockReturnValue(
+      'Sync is paused in this tab because another Rivolo tab is active.',
+    )
+
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+    )
+
+    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
+    expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+  })
+
+  it('periodically rechecks remote metadata while local edits remain dirty', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
+
+    renderHook(() =>
+      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+    )
+
+    await act(async () => Promise.resolve())
+    expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
+    })
+
+    expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalledTimes(16)
+    expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
+  })
+
+  it('retries dirty detection after a recent clean auto-pull used the throttle', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
+
+    const { rerender } = renderHook(
+      ({ localDirty }) =>
+        useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty }),
+      { initialProps: { localDirty: false } },
+    )
+
+    await act(async () => Promise.resolve())
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+
+    rerender({ localDirty: true })
+    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
+    })
+
+    expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalledTimes(1)
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
   })
 })

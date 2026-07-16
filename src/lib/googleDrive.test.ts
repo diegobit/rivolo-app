@@ -388,3 +388,55 @@ describe('Google Drive sync provider', () => {
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain('uploadType=media')
   })
 })
+
+describe('checkGoogleDriveRemote', () => {
+  const syncedState = {
+    ...connectedState,
+    fileId: 'file-1',
+    folderId: 'folder-1',
+    lastRemoteVersion: '1',
+  }
+
+  beforeEach(() => {
+    settings.clear()
+    settings.set('google-drive.state', structuredClone(syncedState))
+    vi.restoreAllMocks()
+    vi.resetModules()
+  })
+
+  it('reports unchanged when the remote version still matches, fetching metadata only', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(driveFile('1')))
+    vi.stubGlobal('fetch', fetchMock)
+    const { checkGoogleDriveRemote } = await import('./googleDrive')
+
+    expect(await checkGoogleDriveRemote()).toEqual({ status: 'unchanged' })
+    expect(fetchMock).toHaveBeenCalledTimes(1) // fetch the known file's metadata; no folder work, no download
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/files/file-1')
+  })
+
+  it('reports remote_changed when the remote version advanced', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(driveFile('2')))
+    vi.stubGlobal('fetch', fetchMock)
+    const { checkGoogleDriveRemote } = await import('./googleDrive')
+
+    expect(await checkGoogleDriveRemote()).toEqual({ status: 'changed', reason: 'remote_changed' })
+  })
+
+  it('reports remote_missing when the remote file is gone (404)', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 404 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { checkGoogleDriveRemote } = await import('./googleDrive')
+
+    expect(await checkGoogleDriveRemote()).toEqual({ status: 'changed', reason: 'remote_missing' })
+  })
+
+  it('reports unknown without any network call when nothing has synced yet', async () => {
+    settings.set('google-drive.state', structuredClone(connectedState)) // fileId/lastRemoteVersion null
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { checkGoogleDriveRemote } = await import('./googleDrive')
+
+    expect(await checkGoogleDriveRemote()).toEqual({ status: 'unknown' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
