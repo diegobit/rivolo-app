@@ -301,11 +301,7 @@ export const createGoogleDriveNotesSource = (
 
   const applyWrite = (source: string, input: AddToDayInput, modifiedTime?: string) => {
     const parsed = toDays(source, modifiedTime)
-    const unsafeWarning = parsed.warnings.find(
-      (warning) =>
-        warning === 'No day markers found.' ||
-        warning.startsWith('Duplicate day marker for '),
-    )
+    const unsafeWarning = parsed.warnings[0]
     if (unsafeWarning) {
       throw new Error(
         `Google Drive notes cannot be written safely: ${unsafeWarning} Repair the Markdown structure in Rivolo first.`,

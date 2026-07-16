@@ -286,6 +286,11 @@ describe('createGoogleDriveNotesSource', () => {
       ].join('\n\n'),
       message: 'Duplicate day marker for 2026-07-16',
     },
+    {
+      name: 'has an invalid calendar day marker',
+      content: day('2026-02-30', 'Feb 30, 2026', 'invalid date block'),
+      message: 'Invalid day marker for 2026-02-30',
+    },
   ])('does not upload when the source $name', async ({ content, message }) => {
     const fetchMock = vi
       .fn()
