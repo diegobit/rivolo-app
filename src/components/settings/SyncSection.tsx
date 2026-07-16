@@ -29,6 +29,10 @@ type SyncSectionProps = {
   syncBusy: boolean
   status: string | null
   advanced?: boolean
+  // Progressive disclosure: each force button renders only while its
+  // operation is actually blocked, next to the message explaining why.
+  showForcePull: boolean
+  showForcePush: boolean
   onProviderChange: (provider: SyncProviderId) => void
   onConnect: () => void
   onDisconnect: () => void | Promise<void>
@@ -60,6 +64,8 @@ export default function SyncSection({
   syncBusy,
   status,
   advanced = false,
+  showForcePull,
+  showForcePush,
   onProviderChange,
   onConnect,
   onDisconnect,
@@ -297,18 +303,20 @@ export default function SyncSection({
                       >
                         Push to {label}
                       </button>
-                      {renderArmedButton(
-                        'force-pull',
-                        'Force pull (overwrite local)',
-                        'Confirm force pull',
-                        () => void onForcePull(),
-                      )}
-                      {renderArmedButton(
-                        'force-push',
-                        'Force push (overwrite remote)',
-                        'Confirm force push',
-                        () => void onPush(true),
-                      )}
+                      {showForcePull &&
+                        renderArmedButton(
+                          'force-pull',
+                          'Force pull (overwrite local)',
+                          'Confirm force pull',
+                          () => void onForcePull(),
+                        )}
+                      {showForcePush &&
+                        renderArmedButton(
+                          'force-push',
+                          'Force push (overwrite remote)',
+                          'Confirm force push',
+                          () => void onPush(true),
+                        )}
                     </div>
                     {syncActionsDisabled && disabledReason && (
                       <p className="text-xs text-slate-500">{disabledReason}</p>
