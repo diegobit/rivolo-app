@@ -201,7 +201,7 @@ afterEach(() => {
 })
 
 describe('MCP provider profile session', () => {
-  it('stores only an encrypted profile id in a secure /api/mcp cookie', async () => {
+  it('stores only an encrypted profile id in a secure Lax /api/mcp cookie', async () => {
     const env = createEnv(new FakeD1())
     const profileId = '11111111-1111-4111-8111-111111111111'
     const request = new Request('https://rivolo.app/api/dropbox/mcp-enable')
@@ -209,7 +209,7 @@ describe('MCP provider profile session', () => {
 
     expect(header).toContain('Path=/api/mcp')
     expect(header).toContain('HttpOnly')
-    expect(header).toContain('SameSite=Strict')
+    expect(header).toContain('SameSite=Lax')
     expect(header).toContain('Secure')
     expect(header).not.toContain(profileId)
 
@@ -217,6 +217,27 @@ describe('MCP provider profile session', () => {
       headers: { Cookie: cookiePair(header, 'rivolo_mcp_profile') },
     })
     expect(await readMcpProfileSession(sessionRequest, env)).toBe(profileId)
+  })
+
+  it('keeps existing provider refresh cookies SameSite=Strict', async () => {
+    const env = createEnv(new FakeD1())
+    const request = new Request('https://rivolo.app/api/dropbox/token')
+
+    const dropboxHeader = await createTokenCookieHeader(
+      request,
+      dropboxCookieConfig(env),
+      'dropbox-refresh',
+    )
+    const googleHeader = await createTokenCookieHeader(
+      request,
+      googleCookieConfig(env),
+      'google-refresh',
+    )
+
+    expect(dropboxHeader).toContain('SameSite=Strict')
+    expect(googleHeader).toContain('SameSite=Strict')
+    expect(dropboxHeader).not.toContain('SameSite=Lax')
+    expect(googleHeader).not.toContain('SameSite=Lax')
   })
 
   it('rejects malformed enable input before contacting a provider', async () => {

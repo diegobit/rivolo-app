@@ -8,6 +8,7 @@ export type CookieConfig = {
   secret: string
   maxAgeSeconds: number
   tokenPayloadKey?: 'token' | 'refreshToken'
+  sameSite?: 'Strict' | 'Lax'
 }
 
 type CookiePayload = {
@@ -91,9 +92,13 @@ export const readCookie = (request: Request, name: string) => {
   return null
 }
 
-const cookieAttributes = (request: Request, path: string) => {
+const cookieAttributes = (
+  request: Request,
+  path: string,
+  sameSite: CookieConfig['sameSite'] = 'Strict',
+) => {
   const secure = new URL(request.url).protocol === 'https:' ? '; Secure' : ''
-  return `Path=${path}; HttpOnly; SameSite=Strict${secure}`
+  return `Path=${path}; HttpOnly; SameSite=${sameSite}${secure}`
 }
 
 export const createTokenCookieHeader = async (
@@ -102,11 +107,11 @@ export const createTokenCookieHeader = async (
   token: string,
 ) => {
   const encrypted = await encryptToken(token, config.secret, config.tokenPayloadKey)
-  return `${config.name}=${encodeURIComponent(encrypted)}; Max-Age=${config.maxAgeSeconds}; ${cookieAttributes(request, config.path)}`
+  return `${config.name}=${encodeURIComponent(encrypted)}; Max-Age=${config.maxAgeSeconds}; ${cookieAttributes(request, config.path, config.sameSite)}`
 }
 
 export const clearTokenCookieHeader = (request: Request, config: CookieConfig) =>
-  `${config.name}=; Max-Age=0; ${cookieAttributes(request, config.path)}`
+  `${config.name}=; Max-Age=0; ${cookieAttributes(request, config.path, config.sameSite)}`
 
 export const readStoredToken = async (request: Request, config: CookieConfig) => {
   const encrypted = readCookie(request, config.name)

@@ -104,6 +104,7 @@ export const mcpProfileSessionCookieConfig = (
   path: MCP_PROFILE_SESSION_PATH,
   secret: env.MCP_PROFILE_SESSION_ENCRYPTION_KEY,
   maxAgeSeconds: COOKIE_MAX_AGE_SECONDS,
+  sameSite: 'Lax',
 })
 
 export const createMcpProfileSessionCookie = (
