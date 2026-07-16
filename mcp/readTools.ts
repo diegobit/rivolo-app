@@ -126,7 +126,7 @@ export const registerReadTools = (server: McpServer, loadNotes: LoadNotes) => {
     'list_days',
     {
       title: 'List Days',
-      description: 'List Rivolo day entries from the local markdown file. Metadata only by default.',
+      description: 'List Rivolo day entries from the configured notes source. Metadata only by default.',
       inputSchema: {
         date_from: dayIdSchema.optional(),
         date_to: dayIdSchema.optional(),
