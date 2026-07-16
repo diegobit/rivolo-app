@@ -5,6 +5,10 @@ import {
   type AuthenticatedMcpBearer,
 } from '../functions/_lib/mcpPersonalTokens.js'
 import {
+  authenticateMcpOAuthBearer,
+  type AuthenticatedMcpOAuthBearer,
+} from '../functions/_lib/mcpOAuth.js'
+import {
   McpWriteNotAppliedError,
   McpWriteOperationRepository,
   createIdempotentWriter,
@@ -27,6 +31,10 @@ import {
   type AddToDayWriter,
   type CompactAddToDayWriterResult,
 } from './writeTools.js'
+import {
+  createMcpBearerChallenge,
+  type McpOAuthMetadataConfig,
+} from '../src/lib/mcpOAuthMetadata.js'
 
 const SERVER_VERSION = '0.2.0'
 const JSON_HEADERS = {
@@ -48,10 +56,25 @@ export type RemoteMcpEnv = {
   DROPBOX_CLIENT_ID: string
   GOOGLE_CLIENT_ID: string
   GOOGLE_CLIENT_SECRET: string
+  MCP_OAUTH_ISSUER_URL?: string
+  MCP_RESOURCE_URL?: string
 }
 
+export type RemoteMcpPrincipal = {
+  profile: AuthenticatedMcpBearer['profile']
+  providerRefreshToken: string
+  scopes: ReadonlyArray<'notes:read' | 'notes:write'>
+}
+
+type RemoteMcpAuthResult =
+  | AuthenticatedMcpBearer
+  | AuthenticatedMcpOAuthBearer
+
 export type RemoteMcpDependencies = {
-  authenticate: typeof authenticateMcpBearer
+  authenticate: (
+    request: Request,
+    env: RemoteMcpEnv,
+  ) => Promise<RemoteMcpAuthResult | null>
   fetch: typeof fetch
   refreshDropbox: (
     refreshToken: string,
@@ -75,8 +98,29 @@ type RemoteCompactWriteResult = CompactAddToDayWriterResult & {
   attention?: string
 }
 
+const bearerValue = (request: Request) =>
+  request.headers.get('Authorization')?.match(/^Bearer ([^\s]+)$/i)?.[1] ?? null
+
+export const authenticateRemoteMcpBearer = async (
+  request: Request,
+  env: RemoteMcpEnv,
+  authenticators = {
+    personal: authenticateMcpBearer,
+    oauth: authenticateMcpOAuthBearer,
+  },
+): Promise<RemoteMcpAuthResult | null> => {
+    const bearer = bearerValue(request)
+    if (bearer?.startsWith('rva_')) {
+      return authenticators.oauth(request, env)
+    }
+    if (bearer?.startsWith('rvl_')) {
+      return authenticators.personal(request, env)
+    }
+    return null
+  }
+
 const defaultDependencies: RemoteMcpDependencies = {
-  authenticate: authenticateMcpBearer,
+  authenticate: (request, env) => authenticateRemoteMcpBearer(request, env),
   fetch,
   refreshDropbox: refreshDropboxAccessToken,
   refreshGoogle: refreshGoogleAccessToken,
@@ -88,11 +132,16 @@ const jsonResponse = (payload: unknown, status: number, headers: HeadersInit = {
     headers: { ...JSON_HEADERS, ...Object.fromEntries(new Headers(headers)) },
   })
 
-const unauthorizedResponse = () =>
+const oauthMetadataConfig = (env: RemoteMcpEnv): McpOAuthMetadataConfig => ({
+  issuerUrl: env.MCP_OAUTH_ISSUER_URL,
+  resourceUrl: env.MCP_RESOURCE_URL,
+})
+
+const unauthorizedResponse = (env: RemoteMcpEnv) =>
   jsonResponse(
     { error: 'MCP bearer authentication required.' },
     401,
-    { 'WWW-Authenticate': 'Bearer realm="rivolo-mcp"' },
+    { 'WWW-Authenticate': createMcpBearerChallenge(oauthMetadataConfig(env)) },
   )
 
 const validateOrigin = (request: Request, env: RemoteMcpEnv) => {
@@ -106,9 +155,15 @@ const validateOrigin = (request: Request, env: RemoteMcpEnv) => {
 }
 
 const hasScope = (
-  auth: AuthenticatedMcpBearer,
-  scope: AuthenticatedMcpBearer['token']['scopes'][number],
-) => auth.token.scopes.includes(scope)
+  principal: RemoteMcpPrincipal,
+  scope: RemoteMcpPrincipal['scopes'][number],
+) => principal.scopes.includes(scope)
+
+const toPrincipal = (auth: RemoteMcpAuthResult): RemoteMcpPrincipal => ({
+  profile: auth.profile,
+  providerRefreshToken: auth.providerRefreshToken,
+  scopes: 'token' in auth ? auth.token.scopes : auth.scopes,
+})
 
 const authorizedFetch = (
   getAccessToken: () => Promise<string>,
@@ -120,7 +175,7 @@ const authorizedFetch = (
 }
 
 const createDropboxAccessToken = (
-  auth: AuthenticatedMcpBearer,
+  auth: RemoteMcpPrincipal,
   env: RemoteMcpEnv,
   dependencies: RemoteMcpDependencies,
 ) => {
@@ -148,7 +203,7 @@ const createDropboxAccessToken = (
 }
 
 const createGoogleAccessToken = (
-  auth: AuthenticatedMcpBearer,
+  auth: RemoteMcpPrincipal,
   env: RemoteMcpEnv,
   dependencies: RemoteMcpDependencies,
 ) => {
@@ -172,7 +227,7 @@ const compactProviderResult = (
   compactWriteResult(result) as RemoteCompactWriteResult
 
 const createNotesRuntime = (
-  auth: AuthenticatedMcpBearer,
+  auth: RemoteMcpPrincipal,
   env: RemoteMcpEnv,
   dependencies: RemoteMcpDependencies,
 ): {
@@ -209,7 +264,7 @@ const createNotesRuntime = (
 }
 
 const createDurableWriter = (
-  auth: AuthenticatedMcpBearer,
+  auth: RemoteMcpPrincipal,
   env: RemoteMcpEnv,
   writer: AddToDayWriter<RemoteCompactWriteResult>,
 ) =>
@@ -238,7 +293,7 @@ export const handleRemoteMcpRequest = async (
     return jsonResponse({ error: 'Origin is not allowed.' }, 403)
   }
 
-  let auth: AuthenticatedMcpBearer | null
+  let auth: RemoteMcpAuthResult | null
   try {
     auth = await dependencies.authenticate(request, env)
   } catch {
@@ -248,16 +303,18 @@ export const handleRemoteMcpRequest = async (
     )
   }
 
-  if (!auth) return unauthorizedResponse()
+  if (!auth) return unauthorizedResponse(env)
 
-  const canRead = hasScope(auth, 'notes:read')
-  const canWrite = hasScope(auth, 'notes:write')
+  const principal = toPrincipal(auth)
+
+  const canRead = hasScope(principal, 'notes:read')
+  const canWrite = hasScope(principal, 'notes:write')
   if (!canRead && !canWrite) {
     return jsonResponse({ error: 'MCP token has no usable scopes.' }, 403)
   }
 
   try {
-    const runtime = createNotesRuntime(auth, env, dependencies)
+    const runtime = createNotesRuntime(principal, env, dependencies)
     const server = new McpServer({
       name: 'rivolo-notes',
       version: SERVER_VERSION,
@@ -267,8 +324,8 @@ export const handleRemoteMcpRequest = async (
     if (canWrite) {
       registerWriteTools(
         server,
-        createDurableWriter(auth, env, runtime.addToDay),
-        auth.profile.timeZone,
+        createDurableWriter(principal, env, runtime.addToDay),
+        principal.profile.timeZone,
       )
     }
 

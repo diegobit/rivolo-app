@@ -11,10 +11,18 @@ import {
 } from './providerProfiles'
 import type { McpAgentAccessEnv } from './mcpAgentAccess'
 
-export type McpOAuthEnv = McpAgentAccessEnv & {
+export type McpOAuthConfigEnv = {
   MCP_OAUTH_ISSUER_URL?: string
   MCP_RESOURCE_URL?: string
 }
+
+export type McpOAuthEnv = McpAgentAccessEnv & McpOAuthConfigEnv
+
+export type McpOAuthBearerEnv = Pick<
+  McpAgentAccessEnv,
+  'MCP_DB' | 'MCP_PROVIDER_TOKEN_ENCRYPTION_KEY'
+> &
+  McpOAuthConfigEnv
 
 export type McpOAuthScope = (typeof MCP_OAUTH_SCOPES)[number]
 
@@ -247,7 +255,7 @@ const toClient = (row: OAuthClientRow): RegisteredOAuthClient => {
   }
 }
 
-export const getMcpOAuthConfig = (env: McpOAuthEnv) =>
+export const getMcpOAuthConfig = (env: McpOAuthConfigEnv) =>
   resolveMcpOAuthConfig({
     issuerUrl: env.MCP_OAUTH_ISSUER_URL ?? DEFAULT_MCP_OAUTH_ISSUER_URL,
     resourceUrl: env.MCP_RESOURCE_URL ?? DEFAULT_MCP_RESOURCE_URL,
@@ -768,7 +776,7 @@ const parseBearerToken = (request: Request) => {
 
 export const authenticateMcpOAuthBearer = async (
   request: Request,
-  env: McpOAuthEnv,
+  env: McpOAuthBearerEnv,
 ): Promise<AuthenticatedMcpOAuthBearer | null> => {
   try {
     const token = parseBearerToken(request)

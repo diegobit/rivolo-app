@@ -1,11 +1,14 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
+import type { AuthenticatedMcpOAuthBearer } from '../../functions/_lib/mcpOAuth'
 import type { AuthenticatedMcpBearer } from '../../functions/_lib/mcpPersonalTokens'
 import {
+  authenticateRemoteMcpBearer,
   handleRemoteMcpRequest,
   type RemoteMcpDependencies,
   type RemoteMcpEnv,
 } from '../../mcp/remoteServer'
+import worker from '../../mcp/worker'
 
 type OperationRow = {
   input_hash: string
@@ -142,6 +145,17 @@ const googleAuth = (): AuthenticatedMcpBearer => ({
   providerRefreshToken: 'google-refresh-secret',
 })
 
+const oauthAuth = (
+  scopes: AuthenticatedMcpOAuthBearer['scopes'] = ['notes:read', 'notes:write'],
+): AuthenticatedMcpOAuthBearer => ({
+  profile: dropboxAuth().profile,
+  providerRefreshToken: 'dropbox-refresh-secret',
+  clientId: 'rvc_oauth-client-example',
+  scopes,
+  expiresAt: 1_800_000_000,
+  resource: 'https://mcp.rivolo.app/mcp',
+})
+
 const createEnv = (db = new FakeWriteD1()): RemoteMcpEnv => ({
   MCP_DB: db as unknown as D1Database,
   MCP_PROVIDER_TOKEN_ENCRYPTION_KEY: 'profile-encryption-secret',
@@ -215,6 +229,32 @@ const responsePayload = async (response: Response) => {
 }
 
 describe('hosted MCP Streamable HTTP endpoint', () => {
+  it('dispatches PAT and OAuth bearer prefixes without trial authentication', async () => {
+    const personal = vi.fn().mockResolvedValue(dropboxAuth())
+    const oauth = vi.fn().mockResolvedValue(oauthAuth())
+    const env = createEnv()
+
+    await expect(
+      authenticateRemoteMcpBearer(
+        mcpRequest('tools/list', undefined, { token: `rvl_${'A'.repeat(43)}` }),
+        env,
+        { personal, oauth },
+      ),
+    ).resolves.toMatchObject({ token: { prefix: 'rvl_example1' } })
+    expect(personal).toHaveBeenCalledTimes(1)
+    expect(oauth).not.toHaveBeenCalled()
+
+    await expect(
+      authenticateRemoteMcpBearer(
+        mcpRequest('tools/list', undefined, { token: `rva_${'B'.repeat(43)}` }),
+        env,
+        { personal, oauth },
+      ),
+    ).resolves.toMatchObject({ clientId: 'rvc_oauth-client-example' })
+    expect(personal).toHaveBeenCalledTimes(1)
+    expect(oauth).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects missing bearer auth and disallowed browser origins before auth', async () => {
     const authenticate = vi.fn().mockResolvedValue(null)
     const env = createEnv()
@@ -225,7 +265,9 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
       { ...defaultDependencies(null), authenticate },
     )
     expect(unauthorized.status).toBe(401)
-    expect(unauthorized.headers.get('WWW-Authenticate')).toContain('Bearer')
+    expect(unauthorized.headers.get('WWW-Authenticate')).toBe(
+      'Bearer resource_metadata="https://mcp.rivolo.app/.well-known/oauth-protected-resource/mcp", scope="notes:read notes:write"',
+    )
 
     const rejectedOrigin = await handleRemoteMcpRequest(
       mcpRequest('tools/list', undefined, { origin: 'https://evil.example' }),
@@ -261,6 +303,21 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
     const names = payload.result?.tools?.map((tool) => tool.name) ?? []
 
     expect(names).toContain('list_days')
+    expect(names).toContain('add_to_day')
+    expect(names).toContain('add_to_today')
+  })
+
+  it('normalizes OAuth grants into the same scope-gated tool boundary', async () => {
+    const response = await handleRemoteMcpRequest(
+      mcpRequest('tools/list', undefined, { token: `rva_${'A'.repeat(43)}` }),
+      createEnv(),
+      defaultDependencies(oauthAuth(['notes:write'])),
+    )
+    const payload = await responsePayload(response)
+    const names = payload.result?.tools?.map((tool) => tool.name) ?? []
+
+    expect(response.status).toBe(200)
+    expect(names).not.toContain('list_days')
     expect(names).toContain('add_to_day')
     expect(names).toContain('add_to_today')
   })
@@ -450,5 +507,26 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
 
     expect(response.status).toBe(503)
     expect(text).not.toContain('secret database detail')
+  })
+})
+
+describe('hosted MCP Worker discovery', () => {
+  it('serves protected-resource metadata from the MCP origin', async () => {
+    const response = await worker.fetch(
+      new Request(
+        'https://mcp.rivolo.app/.well-known/oauth-protected-resource/mcp',
+      ),
+      createEnv(),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    await expect(response.json()).resolves.toEqual({
+      resource: 'https://mcp.rivolo.app/mcp',
+      authorization_servers: ['https://rivolo.app/api/mcp/oauth'],
+      scopes_supported: ['notes:read', 'notes:write'],
+      bearer_methods_supported: ['header'],
+      resource_name: 'Rivolo notes',
+    })
   })
 })

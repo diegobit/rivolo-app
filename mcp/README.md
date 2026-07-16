@@ -65,15 +65,16 @@ The server has no network listener and no write tools. Access is controlled by t
 ## Hosted Worker
 
 The hosted endpoint is a separate Cloudflare Worker at `/mcp`. It uses
-Streamable HTTP, authenticates `Authorization: Bearer rvl_...` personal tokens,
-and reads or additively writes the provider target saved by Rivolo Settings.
+Streamable HTTP and reads or additively writes the provider target saved by
+Rivolo Settings. Clients can authenticate through Rivolo OAuth (`rva_...`
+access tokens) or a personal token (`rvl_...`) created in Settings.
 
 Before deploying:
 
 1. Create one D1 database and replace the placeholder database id in both
    `wrangler.toml` (Rivolo Pages Settings APIs) and `wrangler.mcp.toml` (hosted
    MCP Worker). Both services must bind the same database as `MCP_DB`.
-2. Apply `migrations/0001` through `0003` to that database.
+2. Apply `migrations/0001` through `0004` to that database.
 3. Set Worker secrets:
    - `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY` — exactly the same value used by Pages.
    - `GOOGLE_CLIENT_SECRET`.
@@ -84,6 +85,13 @@ Before deploying:
 5. Route `mcp.rivolo.app` to the Worker and keep
    `MCP_ALLOWED_ORIGINS` restricted to trusted browser origins. Native MCP
    clients normally omit `Origin`.
+6. Configure Cloudflare rate-limit or WAF rules for the OAuth registration,
+   token, and authorization endpoints before enabling public OAuth. See
+   [`docs/mcp-oauth.md`](../docs/mcp-oauth.md).
+
+`MCP_PROFILE_SESSION_ENCRYPTION_KEY` is a Pages-only browser-session secret.
+The Worker must share `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY` with Pages, but does
+not need the profile-session secret.
 
 Build the Worker without deploying:
 

@@ -22,6 +22,7 @@
     "functions/_lib/dropboxOAuth.ts",
     "functions/_lib/googleOAuth.ts",
     "functions/_lib/mcpAgentAccess.ts",
+    "functions/_lib/mcpOAuth.ts",
     "functions/_lib/mcpPersonalTokens.ts",
     "functions/_lib/mcpWriteIdempotency.ts",
     "functions/_lib/providerProfiles.ts",
@@ -29,6 +30,7 @@
     "src/lib/dates.ts",
     "src/lib/llm/systemPrompts.ts",
     "src/lib/markdown.ts",
+    "src/lib/mcpOAuthMetadata.ts",
     "src/lib/noteWrites.ts",
     "src/lib/notesCore.ts",
     "src/lib/writeOperationId.ts"
