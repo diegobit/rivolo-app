@@ -1,5 +1,35 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createAuthorizedFetch } from './syncAuth'
+import { createAuthorizedFetch, parseApiError } from './syncAuth'
+
+describe('parseApiError', () => {
+  it('uses the JSON message and carries the optional code on the error', async () => {
+    const response = new Response(JSON.stringify({ message: 'Token expired.', code: 'auth/expired' }))
+    const error = await parseApiError(response, 'Fallback text.')
+    expect(error.message).toBe('Token expired.')
+    expect((error as Error & { code?: string }).code).toBe('auth/expired')
+  })
+
+  it('omits the code when the payload has none', async () => {
+    const response = new Response(JSON.stringify({ message: 'Nope.' }))
+    const error = await parseApiError(response, 'Fallback text.')
+    expect(error.message).toBe('Nope.')
+    expect((error as Error & { code?: string }).code).toBeUndefined()
+  })
+
+  it('falls back to the caller text for a non-JSON body', async () => {
+    const response = new Response('<html>gateway error</html>')
+    const error = await parseApiError(response, 'Dropbox connect failed.')
+    expect(error.message).toBe('Dropbox connect failed.')
+    expect((error as Error & { code?: string }).code).toBeUndefined()
+  })
+
+  it('falls back to the caller text when the JSON has no message', async () => {
+    const response = new Response(JSON.stringify({ code: 'auth/unknown' }))
+    const error = await parseApiError(response, 'Google Drive connect failed.')
+    expect(error.message).toBe('Google Drive connect failed.')
+    expect((error as Error & { code?: string }).code).toBe('auth/unknown')
+  })
+})
 
 describe('createAuthorizedFetch', () => {
   it('attaches the bearer token to every request', async () => {
