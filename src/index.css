@@ -259,7 +259,7 @@
     --theme-search-match: rgba(34, 179, 255, 0.24);
     --theme-icon-filter: invert(92%) sepia(9%) saturate(524%) hue-rotate(179deg) brightness(105%) contrast(96%);
     --theme-wallpaper-filter: invert(1) hue-rotate(180deg) saturate(1.4) brightness(0.74) contrast(1.05);
-    --theme-wallpaper-light-opacity: 0.04;
+    --theme-wallpaper-light-opacity: 0.045;
     --theme-wallpaper-medium-opacity: 0.16;
     --theme-wallpaper-strong-opacity: 0.2;
     --theme-blur-surface: rgb(var(--theme-page-rgb) / 0.62);
