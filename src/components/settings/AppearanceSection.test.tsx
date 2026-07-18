@@ -94,6 +94,7 @@ describe('AppearanceSection', () => {
       '@bob send message for breakfast at 8:30',
     )
     expect(preview.lastElementChild).toHaveClass(
+      'bg-fixed',
       'opacity-[var(--theme-wallpaper-strong-opacity)]',
     )
   })

@@ -217,7 +217,7 @@ export default function AppearanceSection({
                 {renderFontPreviewContent()}
               </div>
               <div
-                className={`absolute inset-0 bg-[url('/bg-thoughts.jpg')] bg-cover bg-center transition-[filter,opacity] duration-[600ms] motion-reduce:transition-none ${wallpaperPreviewOpacity}`}
+                className={`absolute inset-0 bg-[url('/bg-thoughts.jpg')] bg-fixed bg-cover bg-center transition-[filter,opacity] duration-[600ms] motion-reduce:transition-none ${wallpaperPreviewOpacity}`}
                 style={{ filter: 'var(--theme-wallpaper-filter)' }}
                 aria-hidden="true"
               />
