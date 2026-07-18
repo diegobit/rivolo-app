@@ -36,6 +36,11 @@ describe('AppearanceSection', () => {
     expect(screen.getByRole('button', { name: 'System' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: 'Light' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: 'Dark' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'System' }).parentElement).toHaveClass(
+      'rounded-xl',
+      'border',
+      'border-slate-200',
+    )
 
     await userEvent.click(screen.getByRole('button', { name: 'System' }))
     expect(onThemePreferenceChange).toHaveBeenCalledExactlyOnceWith('system')

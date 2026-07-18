@@ -90,7 +90,7 @@ export default function AppearanceSection({
       <h2 className="text-lg font-bold text-slate-700">Appearance</h2>
       <div className="mt-4">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Theme</h3>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap gap-2 rounded-xl border border-slate-200 px-3 py-2.5">
           {(['system', 'light', 'dark'] as const).map((option) => (
             <button
               key={option}
