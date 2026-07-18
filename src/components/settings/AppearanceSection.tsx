@@ -48,8 +48,8 @@ export default function AppearanceSection({
   onTitleFontChange,
   onBodyFontChoiceChange,
 }: AppearanceSectionProps) {
-  const fontPreview = (
-    <div className="bg-slate-50 px-4 py-3">
+  const renderFontPreviewContent = () => (
+    <>
       <p className="text-xl" style={{ fontFamily: titleFontFamilies[titleFont] }}>
         <span className="font-bold text-slate-700">Today</span>
         <span className="ml-2 font-normal text-slate-400">July 16</span>
@@ -64,8 +64,26 @@ export default function AppearanceSection({
         <p>@bob send message for breakfast at 8:30</p>
         <p>Budget: 1,024 € + 15% ≈ 1,178 € --{'>'} due 31/12 (v1.0)</p>
       </div>
-    </div>
+    </>
   )
+
+  const fontPreview = (
+    <div className="bg-slate-50 px-4 py-3">{renderFontPreviewContent()}</div>
+  )
+
+  const wallpaperPreviewOpacity =
+    wallpaper === 'none'
+      ? 'opacity-0'
+      : wallpaper === 'thoughts-light'
+        ? 'opacity-[var(--theme-wallpaper-light-opacity)]'
+        : 'opacity-[var(--theme-wallpaper-strong-opacity)]'
+
+  const wallpaperPreviewLabel =
+    wallpaper === 'none'
+      ? 'No background preview'
+      : wallpaper === 'thoughts-light'
+        ? 'Rivolo Light background preview'
+        : 'Rivolo Strong background preview'
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
@@ -160,31 +178,50 @@ export default function AppearanceSection({
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Background
           </h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              className={wallpaper === 'none' ? buttonPillActive : buttonPill}
-              type="button"
-              aria-pressed={wallpaper === 'none'}
-              onClick={() => onWallpaperChange('none')}
+          <div className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
+            <div className="flex flex-nowrap gap-2 px-3 py-2.5">
+              <button
+                className={wallpaper === 'none' ? buttonPillActive : buttonPill}
+                type="button"
+                aria-label="No background"
+                aria-pressed={wallpaper === 'none'}
+                onClick={() => onWallpaperChange('none')}
+              >
+                None
+              </button>
+              <button
+                className={wallpaper === 'thoughts-light' ? buttonPillActive : buttonPill}
+                type="button"
+                aria-label="Rivolo Light"
+                aria-pressed={wallpaper === 'thoughts-light'}
+                onClick={() => onWallpaperChange('thoughts-light')}
+              >
+                Light
+              </button>
+              <button
+                className={wallpaper === 'thoughts-high' ? buttonPillActive : buttonPill}
+                type="button"
+                aria-label="Rivolo Strong"
+                aria-pressed={wallpaper === 'thoughts-high'}
+                onClick={() => onWallpaperChange('thoughts-high')}
+              >
+                Strong
+              </button>
+            </div>
+            <div
+              className="relative overflow-hidden bg-[var(--theme-page)] sm:hidden"
+              role="img"
+              aria-label={wallpaperPreviewLabel}
             >
-              No background
-            </button>
-            <button
-              className={wallpaper === 'thoughts-light' ? buttonPillActive : buttonPill}
-              type="button"
-              aria-pressed={wallpaper === 'thoughts-light'}
-              onClick={() => onWallpaperChange('thoughts-light')}
-            >
-              Rivolo Light
-            </button>
-            <button
-              className={wallpaper === 'thoughts-high' ? buttonPillActive : buttonPill}
-              type="button"
-              aria-pressed={wallpaper === 'thoughts-high'}
-              onClick={() => onWallpaperChange('thoughts-high')}
-            >
-              Rivolo Strong
-            </button>
+              <div className="invisible px-4 py-3" aria-hidden="true">
+                {renderFontPreviewContent()}
+              </div>
+              <div
+                className={`absolute inset-0 bg-[url('/bg-thoughts.jpg')] bg-cover bg-center transition-[filter,opacity] duration-[600ms] motion-reduce:transition-none ${wallpaperPreviewOpacity}`}
+                style={{ filter: 'var(--theme-wallpaper-filter)' }}
+                aria-hidden="true"
+              />
+            </div>
           </div>
         </div>
       )}

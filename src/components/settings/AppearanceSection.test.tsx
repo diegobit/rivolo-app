@@ -71,10 +71,26 @@ describe('AppearanceSection', () => {
       'aria-pressed',
       'true',
     )
+    expect(screen.getByRole('img', { name: 'No background preview' })).toHaveClass(
+      'sm:hidden',
+    )
     expect(screen.getByRole('switch', { name: 'Highlight input mode' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Rivolo Light' }))
     expect(onWallpaperChange).toHaveBeenCalledExactlyOnceWith('thoughts-light')
+  })
+
+  it('previews the selected background at the font sample height on mobile', () => {
+    renderSection({ advanced: true, wallpaper: 'thoughts-high' })
+
+    const preview = screen.getByRole('img', { name: 'Rivolo Strong background preview' })
+    expect(preview).toHaveClass('sm:hidden')
+    expect(preview.querySelector('.invisible')).toHaveTextContent(
+      '@bob send message for breakfast at 8:30',
+    )
+    expect(preview.lastElementChild).toHaveClass(
+      'opacity-[var(--theme-wallpaper-strong-opacity)]',
+    )
   })
 
   it('offers individual title and body font pickers in advanced mode', async () => {
