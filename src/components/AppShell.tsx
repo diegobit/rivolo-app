@@ -9,7 +9,7 @@ import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
 import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
-import { useAutoPullSync } from './app-shell/useAutoPullSync'
+import { useAutoSync } from './app-shell/useAutoSync'
 import { isProviderReady } from '../lib/llm/readiness'
 import { getSetupNotices } from '../lib/setupAttention'
 import { buildAttentionItems } from '../lib/attention'
@@ -327,7 +327,7 @@ export default function AppShell() {
   }, [showTrayRow])
 
   useKeyboardOffsetCssVar()
-  useAutoPullSync(syncStatus)
+  useAutoSync(syncStatus)
 
   useEffect(() => {
     if (!showShortcuts) return

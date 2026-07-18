@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useAutoPullSync } from './useAutoPullSync'
+import { useAutoSync } from './useAutoSync'
 
 const coordinator = vi.hoisted(() => ({
   getTabSyncBlockReason: vi.fn(),
@@ -10,20 +10,18 @@ const syncActions = vi.hoisted(() => ({
   pullFromSyncAndRefresh: vi.fn(),
   pushToSyncAndRefresh: vi.fn(),
   recordSyncAttention: vi.fn(),
-  detectRemoteChangeWhileDirty: vi.fn(),
 }))
 
 vi.mock('../../lib/tabSyncCoordinator', () => coordinator)
 vi.mock('../../store/syncActions', () => syncActions)
 
-describe('useAutoPullSync tab coordination', () => {
+describe('useAutoSync tab coordination', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     coordinator.getTabSyncBlockReason.mockReturnValue(null)
     syncActions.blockedPushMessage.mockReturnValue('Remote changed.')
     syncActions.pullFromSyncAndRefresh.mockResolvedValue({ status: 'noop' })
     syncActions.pushToSyncAndRefresh.mockResolvedValue({ status: 'pushed' })
-    syncActions.detectRemoteChangeWhileDirty.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -37,7 +35,7 @@ describe('useAutoPullSync tab coordination', () => {
     )
 
     renderHook(() =>
-      useAutoPullSync({
+      useAutoSync({
         connected: true,
         targetName: '/inbox.md',
         localDirty: false,
@@ -54,7 +52,7 @@ describe('useAutoPullSync tab coordination', () => {
     )
 
     renderHook(() =>
-      useAutoPullSync({
+      useAutoSync({
         connected: true,
         targetName: '/inbox.md',
         localDirty: false,
@@ -71,26 +69,24 @@ describe('useAutoPullSync tab coordination', () => {
 
   it('conditionally pushes instead of pulling on start when local edits are dirty', async () => {
     renderHook(() =>
-      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
     )
 
     await waitFor(() => {
       expect(syncActions.pushToSyncAndRefresh).toHaveBeenCalledWith(false)
     })
     expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
-    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
   })
 
-  it('auto-pulls (not detect) when local is clean', async () => {
+  it('auto-pulls when local is clean', async () => {
     renderHook(() =>
-      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
     )
 
     await waitFor(() => {
       expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledWith({ force: false })
     })
     expect(syncActions.pushToSyncAndRefresh).not.toHaveBeenCalled()
-    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
   })
 
   it('does neither while another tab owns the lease, even when dirty', () => {
@@ -99,31 +95,33 @@ describe('useAutoPullSync tab coordination', () => {
     )
 
     renderHook(() =>
-      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
     )
 
-    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
     expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
     expect(syncActions.pushToSyncAndRefresh).not.toHaveBeenCalled()
   })
 
-  it('periodically rechecks remote metadata while local edits remain dirty', async () => {
+  it('conditionally pushes every three minutes while local edits remain dirty', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
 
     renderHook(() =>
-      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
     )
 
     await act(async () => Promise.resolve())
     expect(syncActions.pushToSyncAndRefresh).toHaveBeenCalledTimes(1)
-    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000 + 59_999)
     })
+    expect(syncActions.pushToSyncAndRefresh).toHaveBeenCalledTimes(1)
 
-    expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalledTimes(15)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    expect(syncActions.pushToSyncAndRefresh).toHaveBeenCalledTimes(2)
     expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
   })
 
@@ -132,7 +130,7 @@ describe('useAutoPullSync tab coordination', () => {
     vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
 
     renderHook(() =>
-      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
     )
 
     await act(async () => Promise.resolve())
@@ -149,13 +147,13 @@ describe('useAutoPullSync tab coordination', () => {
     expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(2)
   })
 
-  it('retries dirty detection after a recent clean auto-pull used the throttle', async () => {
+  it('uses the latest dirty state at the next three-minute reconciliation', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
 
     const { rerender } = renderHook(
       ({ localDirty }) =>
-        useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty }),
+        useAutoSync({ connected: true, targetName: '/inbox.md', localDirty }),
       { initialProps: { localDirty: false } },
     )
 
@@ -163,14 +161,35 @@ describe('useAutoPullSync tab coordination', () => {
     expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
 
     rerender({ localDirty: true })
-    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
+    expect(syncActions.pushToSyncAndRefresh).not.toHaveBeenCalled()
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
+      await vi.advanceTimersByTimeAsync(3 * 60 * 1000)
     })
 
-    expect(syncActions.detectRemoteChangeWhileDirty).toHaveBeenCalledTimes(1)
+    expect(syncActions.pushToSyncAndRefresh).toHaveBeenCalledTimes(1)
     expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries a failed dirty push at the next three-minute reconciliation', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
+    syncActions.pushToSyncAndRefresh
+      .mockRejectedValueOnce(new Error('Network failed.'))
+      .mockResolvedValueOnce({ status: 'pushed' })
+
+    renderHook(() =>
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+    )
+
+    await act(async () => Promise.resolve())
+    expect(syncActions.recordSyncAttention).toHaveBeenCalledWith('push', 'Network failed.')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3 * 60 * 1000)
+    })
+
+    expect(syncActions.pushToSyncAndRefresh).toHaveBeenCalledTimes(2)
   })
 
   it('refreshes on focus after 15 seconds backgrounded, bypassing the normal throttle', async () => {
@@ -178,7 +197,7 @@ describe('useAutoPullSync tab coordination', () => {
     vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
 
     renderHook(() =>
-      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
     )
 
     await act(async () => Promise.resolve())
@@ -208,7 +227,7 @@ describe('useAutoPullSync tab coordination', () => {
     visibilityState.mockReturnValue('visible')
 
     renderHook(() =>
-      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
     )
 
     await act(async () => Promise.resolve())
@@ -234,7 +253,7 @@ describe('useAutoPullSync tab coordination', () => {
     vi.setSystemTime(new Date('2026-07-15T12:00:00Z'))
 
     renderHook(() =>
-      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
     )
 
     await act(async () => Promise.resolve())
@@ -246,13 +265,12 @@ describe('useAutoPullSync tab coordination', () => {
     await act(async () => Promise.resolve())
 
     expect(syncActions.pushToSyncAndRefresh).toHaveBeenCalledTimes(2)
-    expect(syncActions.detectRemoteChangeWhileDirty).not.toHaveBeenCalled()
     expect(syncActions.pullFromSyncAndRefresh).not.toHaveBeenCalled()
   })
 
   it('conditionally pushes on reconnect while dirty', async () => {
     renderHook(() =>
-      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
     )
 
     await act(async () => Promise.resolve())
@@ -270,12 +288,40 @@ describe('useAutoPullSync tab coordination', () => {
     })
 
     renderHook(() =>
-      useAutoPullSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: true }),
     )
 
     await waitFor(() => {
       expect(syncActions.recordSyncAttention).toHaveBeenCalledWith('push', 'Remote changed.')
     })
     expect(syncActions.blockedPushMessage).toHaveBeenCalledWith('remote_changed')
+  })
+
+  it('queues one reconciliation when another trigger arrives in flight', async () => {
+    let resolveFirstPull: ((value: { status: 'noop' }) => void) | undefined
+    syncActions.pullFromSyncAndRefresh
+      .mockImplementationOnce(
+        () =>
+          new Promise<{ status: 'noop' }>((resolve) => {
+            resolveFirstPull = resolve
+          }),
+      )
+      .mockResolvedValue({ status: 'noop' })
+
+    renderHook(() =>
+      useAutoSync({ connected: true, targetName: '/inbox.md', localDirty: false }),
+    )
+
+    await waitFor(() => {
+      expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+    })
+    act(() => window.dispatchEvent(new Event('online')))
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveFirstPull?.({ status: 'noop' })
+    })
+
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(2)
   })
 })

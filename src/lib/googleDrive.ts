@@ -11,7 +11,7 @@ import {
 import type { GoogleDriveState } from './googleDriveState'
 import { markSyncLocalDirty } from './syncDirty'
 import { hashSyncContent } from './syncHash'
-import type { SyncProvider, SyncPullOptions, SyncRemoteCheck, SyncStatus } from './sync'
+import type { SyncProvider, SyncPullOptions, SyncStatus } from './sync'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3'
@@ -295,21 +295,6 @@ export const getGoogleDriveStatus = async (): Promise<SyncStatus> => {
   }
 }
 
-// Content-free check used while local edits are dirty (pull is suppressed then):
-// fetch the known file's metadata only (no folder creation, no download) and
-// compare its version to the last one we synced.
-export const checkGoogleDriveRemote = async (): Promise<SyncRemoteCheck> => {
-  const state = await getGoogleDriveState()
-  if (!state.connected || !state.lastRemoteVersion || !state.fileId) {
-    return { status: 'unknown' as const }
-  }
-  const metadata = await fetchDriveFile(state.fileId)
-  if (!metadata) return { status: 'changed' as const, reason: 'remote_missing' as const }
-  return metadata.version === state.lastRemoteVersion
-    ? { status: 'unchanged' as const }
-    : { status: 'changed' as const, reason: 'remote_changed' as const }
-}
-
 export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
   const state = await getGoogleDriveState()
   const force = options.force ?? false
@@ -426,6 +411,5 @@ export const googleDriveProvider = {
   getStatus: getGoogleDriveStatus,
   pull: pullFromGoogleDrive,
   push: pushToGoogleDrive,
-  checkRemote: checkGoogleDriveRemote,
   disconnect: disconnectGoogleDrive,
 } satisfies SyncProvider

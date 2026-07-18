@@ -69,7 +69,7 @@ vi.mock('../hooks/useKeyboardOffsetCssVar', () => ({ useKeyboardOffsetCssVar: vi
 vi.mock('../hooks/useTabSyncState', () => ({
   useTabSyncState: () => stores.tabSync,
 }))
-vi.mock('./app-shell/useAutoPullSync', () => ({ useAutoPullSync: vi.fn() }))
+vi.mock('./app-shell/useAutoSync', () => ({ useAutoSync: vi.fn() }))
 vi.mock('./app-shell/BottomTrayRow', () => ({
   default: ({
     showMobileNewChatButton,

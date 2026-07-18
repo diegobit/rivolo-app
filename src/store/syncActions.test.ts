@@ -4,7 +4,6 @@ const sync = vi.hoisted(() => ({
   getActiveProviderStatus: vi.fn(),
   pullFromSync: vi.fn(),
   pushToSync: vi.fn(),
-  checkActiveProviderRemote: vi.fn(),
 }))
 const coordinator = vi.hoisted(() => ({
   claimPrimaryTabForSync: vi.fn(),
@@ -38,9 +37,9 @@ vi.mock('./useSyncStore', () => ({
 }))
 
 import {
-  detectRemoteChangeWhileDirty,
   pullFromSyncAndRefresh,
   pushToSyncAndRefresh,
+  recordSyncAttention,
   scheduleAutoPushToSync,
 } from './syncActions'
 
@@ -54,7 +53,6 @@ describe('sync action tab coordination', () => {
     sync.pullFromSync.mockResolvedValue({ status: 'noop' })
     sync.pushToSync.mockResolvedValue({ status: 'pushed' })
     sync.getActiveProviderStatus.mockResolvedValue({ localDirty: false })
-    sync.checkActiveProviderRemote.mockResolvedValue({ status: 'unknown' })
   })
 
   afterEach(() => {
@@ -123,58 +121,12 @@ describe('sync action tab coordination', () => {
     expect(sync.pushToSync).toHaveBeenCalled()
     expect(stores.setSyncAttention).toHaveBeenCalledWith(null)
   })
-})
 
-describe('detectRemoteChangeWhileDirty', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    stores.syncAttention = null
-    coordinator.getTabSyncBlockReason.mockReturnValue(null)
-    sync.checkActiveProviderRemote.mockResolvedValue({ status: 'unknown' })
-  })
+  it('does not refresh an identical attention item', () => {
+    stores.syncAttention = { operation: 'push', message: 'Remote changed.', at: 1 }
 
-  it('raises sync attention when the remote changed while dirty', async () => {
-    sync.checkActiveProviderRemote.mockResolvedValue({ status: 'changed', reason: 'remote_changed' })
+    recordSyncAttention('push', 'Remote changed.')
 
-    await detectRemoteChangeWhileDirty()
-
-    expect(stores.setSyncAttention).toHaveBeenCalledWith(
-      expect.objectContaining({
-        operation: 'pull',
-        message: expect.stringContaining('changed on another device'),
-      }),
-    )
-  })
-
-  it('raises sync attention when the remote file went missing while dirty', async () => {
-    sync.checkActiveProviderRemote.mockResolvedValue({ status: 'changed', reason: 'remote_missing' })
-
-    await detectRemoteChangeWhileDirty()
-
-    expect(stores.setSyncAttention).toHaveBeenCalledWith(
-      expect.objectContaining({
-        operation: 'pull',
-        message: expect.stringContaining('was removed on another device'),
-      }),
-    )
-  })
-
-  it('stays quiet when the remote is unchanged', async () => {
-    sync.checkActiveProviderRemote.mockResolvedValue({ status: 'unchanged' })
-
-    await detectRemoteChangeWhileDirty()
-
-    expect(stores.setSyncAttention).not.toHaveBeenCalled()
-  })
-
-  it('does not even check the remote in a secondary tab', async () => {
-    coordinator.getTabSyncBlockReason.mockReturnValue(
-      'Sync is paused in this tab because another Rivolo tab is active.',
-    )
-
-    await detectRemoteChangeWhileDirty()
-
-    expect(sync.checkActiveProviderRemote).not.toHaveBeenCalled()
     expect(stores.setSyncAttention).not.toHaveBeenCalled()
   })
 })
