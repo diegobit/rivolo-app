@@ -4,7 +4,7 @@ import SegmentedControl from '../components/SegmentedControl'
 import AppearanceSection from '../components/settings/AppearanceSection'
 import DataSection, { type CloudVersionHistory } from '../components/settings/DataSection'
 import LlmSection from '../components/settings/LlmSection'
-import SetupNoticeBanner from '../components/settings/SetupNoticeBanner'
+import AttentionBanner from '../components/settings/AttentionBanner'
 import SyncSection from '../components/settings/SyncSection'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
 import { getBodyFontChoice, getFontPreset } from '../lib/fonts'
@@ -13,10 +13,12 @@ import { DEFAULT_DROPBOX_PATH } from '../lib/dropbox'
 import { prepareGoogleDriveAuth } from '../lib/googleDriveAuth'
 import { isProviderReady } from '../lib/llm/readiness'
 import { getSetupNotices } from '../lib/setupAttention'
+import { buildAttentionItems } from '../lib/attention'
 import { DEFAULT_GOOGLE_DRIVE_FILE_NAME, getGoogleDrivePath } from '../lib/googleDriveState'
 import { claimPrimaryTabForSync } from '../lib/tabSyncCoordinator'
 import type { SyncProviderId } from '../lib/sync'
 import { useTabSyncState } from '../hooks/useTabSyncState'
+import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
 import { useSyncProviderActions } from './settings/useSyncProviderActions'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
@@ -90,6 +92,7 @@ export default function Settings() {
   const setActiveSyncProvider = useSyncStore((state) => state.setActiveProvider)
   const syncing = useSyncStore((state) => state.syncing)
   const syncAttention = useSyncStore((state) => state.syncAttention)
+  const persistFailureMessage = useDatabasePersistFailure()
   const tabSync = useTabSyncState()
 
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -303,6 +306,11 @@ export default function Settings() {
     syncNeedsSetup: activeProvider === null,
     dismissed: dismissedSetupNotices,
   })
+  const attentionItems = buildAttentionItems({
+    persistFailureMessage,
+    syncAttentionMessage: syncAttention?.message ?? null,
+    setupNotices,
+  })
 
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -335,16 +343,20 @@ export default function Settings() {
       </header>
 
       {initialLoadDone &&
-        setupNotices.map((notice) => (
-          <SetupNoticeBanner
-            key={notice.id}
-            notice={notice}
-            onOpen={() => scrollToSection(notice.settingsSectionId)}
-            onDismiss={() => {
-              void dismissSetupNotice(notice.id).catch((error) => {
-                console.error('[Setup reminder dismissal failed]', error)
-              })
-            }}
+        attentionItems.map((item) => (
+          <AttentionBanner
+            key={item.id}
+            item={item}
+            onOpen={() => scrollToSection(item.settingsSectionId)}
+            onDismiss={
+              item.dismissibleSetupNoticeId
+                ? () => {
+                    void dismissSetupNotice(item.dismissibleSetupNoticeId!).catch((error) => {
+                      console.error('[Setup reminder dismissal failed]', error)
+                    })
+                  }
+                : undefined
+            }
           />
         ))}
 

@@ -1,16 +1,12 @@
-import type { SetupNotice } from '../../lib/setupAttention'
+import type { AttentionItem } from '../../lib/attention'
 
-type SetupNoticeBannerProps = {
-  notice: SetupNotice
+type AttentionBannerProps = {
+  item: AttentionItem
   onOpen: () => void
-  onDismiss: () => void
+  onDismiss?: () => void
 }
 
-export default function SetupNoticeBanner({
-  notice,
-  onOpen,
-  onDismiss,
-}: SetupNoticeBannerProps) {
+export default function AttentionBanner({ item, onOpen, onDismiss }: AttentionBannerProps) {
   return (
     <div className="mx-3 flex overflow-hidden rounded-xl border border-amber-200 bg-amber-50 text-amber-800 sm:mx-0">
       <button
@@ -31,14 +27,14 @@ export default function SetupNoticeBanner({
           <circle cx="10" cy="13.5" r="0.75" fill="currentColor" stroke="none" />
         </svg>
         <span className="min-w-0 flex-1">
-          <span className="block font-semibold">{notice.title}</span>
-          <span className="mt-0.5 block">{notice.description}</span>
+          <span className="block font-semibold">{item.title}</span>
+          <span className="mt-0.5 block">{item.description}</span>
         </span>
       </button>
       <button
         type="button"
         className="flex w-11 shrink-0 self-stretch items-center justify-center outline-none transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-300"
-        aria-label={`Open ${notice.title}`}
+        aria-label={`Open ${item.title}`}
         onClick={onOpen}
       >
         <svg
@@ -54,22 +50,24 @@ export default function SetupNoticeBanner({
           />
         </svg>
       </button>
-      <button
-        type="button"
-        className="flex w-11 shrink-0 self-stretch items-center justify-center outline-none transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-300"
-        aria-label={`Dismiss ${notice.title}`}
-        title="Dismiss reminder"
-        onClick={onDismiss}
-      >
-        <svg
-          className="h-4 w-4"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
+      {onDismiss && (
+        <button
+          type="button"
+          className="flex w-11 shrink-0 self-stretch items-center justify-center outline-none transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-300"
+          aria-label={`Dismiss ${item.title}`}
+          title="Dismiss reminder"
+          onClick={onDismiss}
         >
-          <path d="M4.3 4.3a1 1 0 0 1 1.4 0l4.3 4.29 4.3-4.3a1 1 0 1 1 1.4 1.42L11.42 10l4.3 4.3a1 1 0 0 1-1.42 1.4L10 11.42l-4.3 4.3a1 1 0 0 1-1.4-1.42L8.58 10l-4.3-4.3a1 1 0 0 1 .02-1.4Z" />
-        </svg>
-      </button>
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M4.3 4.3a1 1 0 0 1 1.4 0l4.3 4.29 4.3-4.3a1 1 0 1 1 1.4 1.42L11.42 10l4.3 4.3a1 1 0 0 1-1.42 1.4L10 11.42l-4.3 4.3a1 1 0 0 1-1.4-1.42L8.58 10l-4.3-4.3a1 1 0 0 1 .02-1.4Z" />
+          </svg>
+        </button>
+      )}
     </div>
   )
 }

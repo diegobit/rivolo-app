@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import type { AttentionItem } from '../../lib/attention'
 import type { SetupNoticeId } from '../../lib/setupAttention'
-
-export type AttentionItem = {
-  id: string
-  title: string
-  description: string
-  settingsSectionId: 'settings-ai' | 'settings-sync' | 'settings-data'
-  dismissibleSetupNoticeId?: SetupNoticeId
-}
 
 type AttentionPopoverProps = {
   items: AttentionItem[]

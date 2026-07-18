@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import BottomTrayRow from './app-shell/BottomTrayRow'
-import AttentionPopover, { type AttentionItem } from './app-shell/AttentionPopover'
+import AttentionPopover from './app-shell/AttentionPopover'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
 import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
 import { isPrimaryModifierPressed } from '../lib/device'
@@ -12,6 +12,7 @@ import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
 import { useAutoPullSync } from './app-shell/useAutoPullSync'
 import { isProviderReady } from '../lib/llm/readiness'
 import { getSetupNotices } from '../lib/setupAttention'
+import { buildAttentionItems } from '../lib/attention'
 import { applyThemePreference, getNextThemePreference, themePreferenceLabels } from '../lib/theme'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useDaysStore } from '../store/useDaysStore'
@@ -110,32 +111,11 @@ export default function AppShell() {
         dismissed: dismissedSetupNotices,
       })
     : []
-  const attentionItems: AttentionItem[] = [
-    ...(persistFailureMessage
-      ? [
-          {
-            id: 'persist-attention',
-            title: "Notes aren't saving",
-            description: persistFailureMessage,
-            settingsSectionId: 'settings-data' as const,
-          },
-        ]
-      : []),
-    ...(syncAttention
-      ? [
-          {
-            id: 'sync-attention',
-            title: 'Sync needs attention',
-            description: syncAttention.message,
-            settingsSectionId: 'settings-sync' as const,
-          },
-        ]
-      : []),
-    ...setupNotices.map((notice) => ({
-      ...notice,
-      dismissibleSetupNoticeId: notice.id,
-    })),
-  ]
+  const attentionItems = buildAttentionItems({
+    persistFailureMessage,
+    syncAttentionMessage: syncAttention?.message ?? null,
+    setupNotices,
+  })
   const isTimelineEmpty = timelineEmpty ?? !timelineHasNotes
   const isWelcomeVisible = timelineLoaded && !timelineLoading && isTimelineEmpty
   const isRealTimelineVisible = timelineLoaded && !timelineLoading && !isTimelineEmpty
