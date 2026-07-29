@@ -29,9 +29,9 @@ const highlightStyle = HighlightStyle.define([
   },
 ])
 
-const buildTagDecorations = (text: string) => {
+export const findTagHighlightRanges = (text: string) => {
   const ranges: Array<{ from: number; to: number; className: string }> = []
-  const tagRegex = /(^|[^A-Za-z0-9_])([#@][A-Za-z0-9_/-]+)/g
+  const tagRegex = /(^|[^\p{L}\p{M}\p{N}_])([#@][\p{L}\p{M}\p{N}_/-]+)/gu
   let match = tagRegex.exec(text)
 
   while (match) {
@@ -44,8 +44,14 @@ const buildTagDecorations = (text: string) => {
     match = tagRegex.exec(text)
   }
 
+  return ranges
+}
+
+const buildTagDecorations = (text: string) => {
+  const ranges = findTagHighlightRanges(text)
+
   const todoRegex = /(^|\n)(\s*- \[[ xX]\])/g
-  match = todoRegex.exec(text)
+  let match = todoRegex.exec(text)
 
   while (match) {
     const prefixLength = match[1].length
