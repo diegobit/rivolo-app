@@ -14,6 +14,7 @@ import { isProviderReady } from '../lib/llm/readiness'
 import { getSetupNotices } from '../lib/setupAttention'
 import { buildAttentionItems } from '../lib/attention'
 import { applyThemePreference, getNextThemePreference, themePreferenceLabels } from '../lib/theme'
+import { pushToSyncAndRefresh } from '../store/syncActions'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useDaysStore } from '../store/useDaysStore'
 import { useSyncStore } from '../store/useSyncStore'
@@ -344,6 +345,12 @@ export default function AppShell() {
       if (event.defaultPrevented) return
       const key = event.key.toLowerCase()
       const hasPrimaryModifier = isPrimaryModifierPressed(event)
+
+      if (hasPrimaryModifier && !event.altKey && !event.shiftKey && key === 's') {
+        event.preventDefault()
+        void pushToSyncAndRefresh()
+        return
+      }
 
       if (hasPrimaryModifier && !event.altKey && !event.shiftKey && (key === 'k' || key === 'f')) {
         if (!isHome) return
