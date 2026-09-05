@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getTodayId } from '../../lib/dates'
 import type { ChatMessage as LlmMessage } from '../../lib/llm'
 import { hasAssistantPayloadContent, parseAssistantPayload, stripCodeFences, type AssistantPayload } from '../../lib/assistantPayload'
-import { createStreamTagParser, toCitationMarker, type StreamTagPiece } from '../../lib/llm/streamTagParser'
+import { CITATION_MARKER_REGEX, createStreamTagParser, toCitationMarker, type StreamTagPiece } from '../../lib/llm/streamTagParser'
 import { DAILY_ANALYST_SYSTEM_PROMPT } from '../../lib/llm/systemPrompts'
 import { validateActiveLlmConfig, type ActiveLlmConfig } from '../../lib/llm/types'
 import { buildContextDays, formatContext } from '../../lib/llmContext'
@@ -302,25 +302,30 @@ export const useTimelineChat = ({
           }
         }
 
-        const citations = (payload?.citations ?? []).filter((citation) => {
-          const content = contextMap.get(citation.day)
-          if (!content) return false
-
-          if (content.includes(citation.quote)) {
-            return true
-          }
-
-          const normalizedQuote = normalizeCitationText(citation.quote)
-          if (!normalizedQuote) {
-            return false
-          }
-
-          const normalizedContent = normalizeCitationText(content)
-          return normalizedContent.includes(normalizedQuote)
-        })
-
         const parsedFallback = parseAssistantPayload(finalResponseText || responseText)
-        const fallbackAnswer = parsedFallback?.answer ?? stripCodeFences(finalResponseText || responseText)
+        const finalPayload = payload ?? parsedFallback
+        const citationIndexes = new Map<number, number>()
+        const citations: Citation[] = []
+        for (const [originalIndex, citation] of (finalPayload?.citations ?? []).entries()) {
+          const content = contextMap.get(citation.day)
+          if (!content) continue
+
+          if (!content.includes(citation.quote)) {
+            const normalizedQuote = normalizeCitationText(citation.quote)
+            if (!normalizedQuote || !normalizeCitationText(content).includes(normalizedQuote)) {
+              continue
+            }
+          }
+
+          citationIndexes.set(originalIndex, citations.length)
+          citations.push(citation)
+        }
+
+        const answer = finalPayload?.answer ?? stripCodeFences(finalResponseText || responseText)
+        const finalAnswer = answer.replace(CITATION_MARKER_REGEX, (_marker, indexText: string) => {
+          const index = citationIndexes.get(Number(indexText))
+          return index === undefined ? '' : toCitationMarker(index)
+        })
         const inserts = payload?.inserts ?? []
         const insert = inserts.length === 1 ? inserts[0] : null
         const insertTargetDay = insert ? (insert.targetDay ?? getTodayId()) : null
@@ -343,7 +348,7 @@ export const useTimelineChat = ({
             message.id === assistantId
               ? {
                   ...message,
-                  content: payload?.answer ?? fallbackAnswer ?? responseText,
+                  content: finalAnswer,
                   meta: {
                     citations,
                     insertText: insert?.text ?? null,
