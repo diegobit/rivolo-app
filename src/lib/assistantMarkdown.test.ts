@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { renderAssistantMarkdown } from './assistantMarkdown'
+import { parseTaggedAssistantResponse } from './llm/streamTagParser'
 
 type Citation = { day: string; quote: string }
 
@@ -56,6 +57,15 @@ describe('renderAssistantMarkdown links', () => {
 })
 
 describe('renderAssistantMarkdown formatting is otherwise unchanged', () => {
+  it('keeps shorter backtick fences literal and resumes prose after the matching fence', () => {
+    const example = '````xml\n```\n<insert text="literal example"/>\n````'
+    const parsed = parseTaggedAssistantResponse(`${example}\nRequested <insert text="real note"/>`)
+    expect(parsed.inserts).toEqual([{ text: 'real note', targetDay: null }])
+    expect(render(parsed.answer)).toBe(
+      '<pre><code>```\n&lt;insert text=&quot;literal example&quot;/&gt;</code></pre><p>Requested</p>',
+    )
+  })
+
   it('renders inline code, bold, italic and strikethrough', () => {
     expect(render('use `npm run build` now')).toContain('<code>npm run build</code>')
     expect(render('**b** and *i* and ~~s~~')).toContain('<strong>b</strong>')
