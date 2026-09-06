@@ -228,7 +228,7 @@ const parseNotes = (
 
   return {
     source: toSource(path, downloaded.metadata),
-    warnings: parsed.warnings,
+    warnings: downloaded.content.trim() ? parsed.warnings : [],
     days: sortDaysDescending(days),
   }
 }

@@ -288,6 +288,11 @@ export class ProviderProfileRepository {
           encrypted_refresh_token = excluded.encrypted_refresh_token,
           updated_at = excluded.updated_at,
           revoked_at = NULL
+        WHERE mcp_provider_profiles.revoked_at IS NOT NULL
+          OR (
+            mcp_provider_profiles.dropbox_path IS excluded.dropbox_path
+            AND mcp_provider_profiles.google_file_id IS excluded.google_file_id
+          )
         RETURNING ${PROFILE_METADATA_COLUMNS}`,
       )
       .bind(
@@ -307,7 +312,11 @@ export class ProviderProfileRepository {
       )
       .first<ProviderProfileRow>()
 
-    if (!row) throw new Error('Provider profile was not persisted.')
+    if (!row) {
+      throw new ProviderProfileValidationError(
+        'Disable Agent access in the browser where it is enabled before selecting a different file. Existing agents must reconnect.',
+      )
+    }
     return toMetadata(row)
   }
 

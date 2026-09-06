@@ -387,3 +387,12 @@ describe('createDropboxNotesAdapter', () => {
     expect((error as Error).message).not.toContain('secret-token')
   })
 })
+
+it.each(['', ' \n\t'])('writes the first note to an empty Dropbox file (%j)', async (content) => {
+  const fetchMock = makeFetch(download(content, 'rev-1'), json(metadata('rev-2')))
+  const result = await createDropboxNotesAdapter({ authorizedFetch: fetchMock, path: PATH }).addToDay({
+    day_id: '2026-07-16', content_md: 'first note', operation_id: 'operation-empty',
+  })
+  expect(result).toMatchObject({ created: true, day: { contentMd: 'first note' } })
+  expect(parseMarkdown(String(call(fetchMock, 1)[1]?.body)).days[0]?.contentMd).toBe('first note')
+})

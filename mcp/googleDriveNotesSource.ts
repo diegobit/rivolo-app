@@ -298,6 +298,10 @@ export const createGoogleDriveNotesSource = (
         uploaded.headRevisionId !== undefined &&
         current.headRevisionId !== uploaded.headRevisionId)
 
+    // A later writer may already have retained this addition. Replaying onto
+    // its revision could duplicate it, so leave that revision untouched.
+    if (currentMovedAfterUpload) return { status: 'inconclusive' }
+
     const uploadVersionDistance = versionDistance(uploaded.version, before.version)
     const suspiciousUpload =
       uploadVersionDistance === null
@@ -306,7 +310,7 @@ export const createGoogleDriveNotesSource = (
 
     const revisions = await listRevisions()
     if (!revisions || !before.headRevisionId || !uploaded.headRevisionId) {
-      return currentMovedAfterUpload || suspiciousUpload
+      return suspiciousUpload
         ? { status: 'inconclusive' }
         : { status: 'none' }
     }
@@ -314,17 +318,9 @@ export const createGoogleDriveNotesSource = (
     const beforeIndex = revisions.findIndex((revision) => revision.id === before.headRevisionId)
     const uploadedIndex = revisions.findIndex((revision) => revision.id === uploaded.headRevisionId)
     if (beforeIndex === -1 || uploadedIndex === -1 || uploadedIndex <= beforeIndex) {
-      return currentMovedAfterUpload || suspiciousUpload
+      return suspiciousUpload
         ? { status: 'inconclusive' }
         : { status: 'none' }
-    }
-
-    if (currentMovedAfterUpload) {
-      const currentIndex = revisions.findIndex((revision) => revision.id === current.headRevisionId)
-      if (currentIndex <= uploadedIndex) {
-        return { status: 'inconclusive' }
-      }
-      return { status: 'recoverable', revisionId: revisions[currentIndex].id }
     }
 
     if (uploadedIndex - beforeIndex === 1) {
@@ -351,7 +347,7 @@ export const createGoogleDriveNotesSource = (
 
   const applyWrite = (source: string, input: AddToDayInput, modifiedTime?: string) => {
     const parsed = toDays(source, modifiedTime)
-    const unsafeWarning = parsed.warnings[0]
+    const unsafeWarning = source.trim() ? parsed.warnings[0] : undefined
     if (unsafeWarning) {
       throw new Error(
         `Google Drive notes cannot be written safely: ${unsafeWarning} Repair the Markdown structure in Rivolo first.`,
