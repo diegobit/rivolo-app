@@ -7,6 +7,8 @@ import { todoKeymap, todoPointerHandler } from '../../lib/editor/todoExtensions'
 import { editorHighlights } from '../../lib/editorHighlights'
 import type { Day } from '../../lib/dayRepository'
 
+export type DayCardSkin = 'lines' | 'inset' | 'fade' | 'wave' | 'bands' | 'bold' | 'meander'
+
 type DayEditorCardProps = {
   day: Day
   shouldMountEditor: boolean
@@ -15,6 +17,7 @@ type DayEditorCardProps = {
   isYesterday: boolean
   isTomorrow: boolean
   heroReveal: boolean
+  mobileSkin: DayCardSkin | null
   title: string
   humanDate: string
   datePart: string
@@ -221,6 +224,7 @@ const DayEditorCard = memo(({
   isYesterday,
   isTomorrow,
   heroReveal,
+  mobileSkin,
   title,
   humanDate,
   datePart,
@@ -347,17 +351,24 @@ const DayEditorCard = memo(({
     [day.dayId, registerDayRef],
   )
 
+  let surfaceClasses: string
+  if (mobileSkin === 'bands') {
+    surfaceClasses = 'rounded-none bg-[var(--theme-surface-strong)]'
+  } else if (mobileSkin) {
+    surfaceClasses = 'relative rounded-none bg-transparent'
+  } else if (isFuture) {
+    surfaceClasses =
+      'day-editor-card-future rounded-[4px] border border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.03)] hover:border-slate-300/60'
+  } else {
+    surfaceClasses =
+      'rounded-[4px] border border-slate-200/60 bg-white shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] hover:border-slate-300/60'
+  }
+
   return (
     <div
       ref={handleContainerRef}
       data-scroll-target={isToday ? 'today' : undefined}
-      className={`day-editor-card scroll-anchor group rounded-[4px] border p-4 transition ${
-        heroReveal ? 'hero-reveal' : ''
-      } ${
-        isFuture
-          ? 'day-editor-card-future border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.03)] hover:border-slate-300/60'
-          : 'border-slate-200/60 bg-white shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] hover:border-slate-300/60'
-      }`}
+      className={`day-editor-card scroll-anchor group p-4 transition ${heroReveal ? 'hero-reveal' : ''} ${surfaceClasses}`}
     >
       <DayEditorCardHeader
         day={day}
@@ -394,7 +405,11 @@ const DayEditorCard = memo(({
           />
         ) : (
           <button
-            className="block min-h-[34px] w-full cursor-text rounded-xl border border-slate-100 bg-white px-2 py-1 text-left text-[0.98rem] leading-6 text-[var(--theme-editor-text)] transition hover:border-slate-200"
+            className={`block min-h-[34px] w-full cursor-text rounded-xl px-2 py-1 text-left text-[0.98rem] leading-6 text-[var(--theme-editor-text)] transition ${
+              mobileSkin
+                ? 'border border-transparent bg-transparent hover:border-transparent'
+                : 'border border-slate-100 bg-white hover:border-slate-200'
+            }`}
             type="button"
             aria-label={`Edit note for ${day.dayId}`}
             onClick={() => onRequestEditorMount(day.dayId, 'end')}

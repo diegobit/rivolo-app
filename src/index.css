@@ -1079,6 +1079,106 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
   scroll-margin-top: 80px;
 }
 
+/* Mobile day-separator exploration (?dayskin=lines|inset|fade|wave|bands|bold). */
+@media (max-width: 699px) {
+  [data-day-skin='lines'] .day-editor-card + .day-editor-card::before,
+  [data-day-skin='inset'] .day-editor-card + .day-editor-card::before,
+  [data-day-skin='fade'] .day-editor-card + .day-editor-card::before,
+  [data-day-skin='wave'] .day-editor-card + .day-editor-card::before,
+  [data-day-skin='bold'] .day-editor-card + .day-editor-card::before {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+  }
+
+  /* (a) full-bleed hairline */
+  [data-day-skin='lines'] .day-editor-card + .day-editor-card::before {
+    top: -6.5px;
+    height: 1px;
+    left: -1rem;
+    right: -1rem;
+    background-color: var(--theme-border);
+  }
+
+  /* (b) short centered divider */
+  [data-day-skin='inset'] .day-editor-card + .day-editor-card::before {
+    top: -6.5px;
+    height: 1px;
+    left: 50%;
+    width: 2.5rem;
+    transform: translateX(-50%);
+    background-color: var(--theme-border);
+  }
+
+  /* (d) almost full width, ends fade out */
+  [data-day-skin='fade'] .day-editor-card + .day-editor-card::before {
+    top: -6.5px;
+    height: 1px;
+    left: -0.5rem;
+    right: -0.5rem;
+    background: linear-gradient(
+      to right,
+      transparent,
+      var(--theme-border) 22%,
+      var(--theme-border) 78%,
+      transparent
+    );
+  }
+
+  /* (e) water ripple: one stretched sine with faded ends, thin + translucent */
+  [data-day-skin='wave'] .day-editor-card + .day-editor-card::before {
+    top: -10px;
+    height: 8px;
+    left: -1rem;
+    right: -1rem;
+    background-color: var(--theme-accent-text);
+    opacity: 0.5;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27390%27%20height%3D%278%27%20viewBox%3D%270%200%20390%208%27%20preserveAspectRatio%3D%27none%27%3E%3Cdefs%3E%3ClinearGradient%20id%3D%27g%27%20x1%3D%270%27%20y1%3D%270%27%20x2%3D%271%27%20y2%3D%270%27%3E%3Cstop%20offset%3D%270%27%20stop-color%3D%27%23fff%27%20stop-opacity%3D%270%27%2F%3E%3Cstop%20offset%3D%270.12%27%20stop-color%3D%27%23fff%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%270.88%27%20stop-color%3D%27%23fff%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%271%27%20stop-color%3D%27%23fff%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Cpath%20d%3D%27M0%204%20Q%207.5%201.5%2015%204%20T%2030%204%20T%2045%204%20T%2060%204%20T%2075%204%20T%2090%204%20T%20105%204%20T%20120%204%20T%20135%204%20T%20150%204%20T%20165%204%20T%20180%204%20T%20195%204%20T%20210%204%20T%20225%204%20T%20240%204%20T%20255%204%20T%20270%204%20T%20285%204%20T%20300%204%20T%20315%204%20T%20330%204%20T%20345%204%20T%20360%204%20T%20375%204%20T%20390%204%27%20fill%3D%27none%27%20stroke%3D%27url%28%23g%29%27%20stroke-width%3D%271.2%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27390%27%20height%3D%278%27%20viewBox%3D%270%200%20390%208%27%20preserveAspectRatio%3D%27none%27%3E%3Cdefs%3E%3ClinearGradient%20id%3D%27g%27%20x1%3D%270%27%20y1%3D%270%27%20x2%3D%271%27%20y2%3D%270%27%3E%3Cstop%20offset%3D%270%27%20stop-color%3D%27%23fff%27%20stop-opacity%3D%270%27%2F%3E%3Cstop%20offset%3D%270.12%27%20stop-color%3D%27%23fff%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%270.88%27%20stop-color%3D%27%23fff%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%271%27%20stop-color%3D%27%23fff%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Cpath%20d%3D%27M0%204%20Q%207.5%201.5%2015%204%20T%2030%204%20T%2045%204%20T%2060%204%20T%2075%204%20T%2090%204%20T%20105%204%20T%20120%204%20T%20135%204%20T%20150%204%20T%20165%204%20T%20180%204%20T%20195%204%20T%20210%204%20T%20225%204%20T%20240%204%20T%20255%204%20T%20270%204%20T%20285%204%20T%20300%204%20T%20315%204%20T%20330%204%20T%20345%204%20T%20360%204%20T%20375%204%20T%20390%204%27%20fill%3D%27none%27%20stroke%3D%27url%28%23g%29%27%20stroke-width%3D%271.2%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E");
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+  }
+
+  /* (f) bold accent bar */
+  [data-day-skin='bold'] .day-editor-card + .day-editor-card::before {
+    top: -8px;
+    height: 4px;
+    left: -1rem;
+    right: -1rem;
+    background: linear-gradient(
+      to right,
+      var(--theme-accent),
+      rgb(var(--theme-accent-rgb) / 0.5) 45%,
+      rgb(var(--theme-accent-rgb) / 0) 85%
+    );
+  }
+
+  [data-day-skin='bold'] .day-editor-card .day-title span:first-child {
+    color: var(--theme-accent-text);
+  }
+
+  /* (g) meander: river station + oxbow (Cursor proposal) */
+  [data-day-skin='meander'] .day-editor-card:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 1rem;
+    bottom: -11px;
+    width: 5rem;
+    height: 10px;
+    pointer-events: none;
+    background-color: var(--theme-accent-text);
+    opacity: 0.82;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='12' viewBox='0 0 80 12' fill='none'%3E%3Crect x='0' y='1' width='3' height='10' rx='1.5' fill='%23fff'/%3E%3Cpath d='M8 6 C 18 6, 18 2.2, 28 2.2 S 38 9.8, 48 9.8 S 62 6, 76 6' stroke='%23fff' stroke-width='1.75' stroke-linecap='round'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='12' viewBox='0 0 80 12' fill='none'%3E%3Crect x='0' y='1' width='3' height='10' rx='1.5' fill='%23fff'/%3E%3Cpath d='M8 6 C 18 6, 18 2.2, 28 2.2 S 38 9.8, 48 9.8 S 62 6, 76 6' stroke='%23fff' stroke-width='1.75' stroke-linecap='round'/%3E%3C/svg%3E");
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+  }
+}
+
 html[data-theme='dark'] img[src$='.svg']:not(.icon-on-accent) {
   filter: var(--theme-icon-filter);
 }

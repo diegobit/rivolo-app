@@ -3,7 +3,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
 import BottomTrayPortal from '../components/BottomTrayPortal'
-import DayEditorCard from '../components/timeline/DayEditorCard'
+import DayEditorCard, { type DayCardSkin } from '../components/timeline/DayEditorCard'
 import EmptyStateHero from '../components/timeline/EmptyStateHero'
 import ChatMessageList from '../components/timeline/ChatMessageList'
 import { isIOS, isPrimaryModifierPressed } from '../lib/device'
@@ -374,6 +374,19 @@ export default function Timeline() {
   const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
+  const requestedDaySkin = useMemo<DayCardSkin | null>(() => {
+    if (typeof window === 'undefined') return null
+    const value = new URLSearchParams(window.location.search).get('dayskin')
+    const knownSkins: DayCardSkin[] = ['lines', 'inset', 'fade', 'wave', 'bands', 'bold', 'meander']
+    return knownSkins.find((skin) => skin === value) ?? null
+  }, [])
+  const requestedDayShell = useMemo<'inset' | 'flush' | null>(() => {
+    if (typeof window === 'undefined') return null
+    const value = new URLSearchParams(window.location.search).get('dayshell')
+    return value === 'inset' || value === 'flush' ? value : null
+  }, [])
+  const activeDaySkin = isNarrowViewportMode ? requestedDaySkin : null
+  const activeDayShell = isNarrowViewportMode ? requestedDayShell : null
   const searchResultsRef = useRef<DaySearchResult[]>([])
 
   const hasRestoredScroll = useRef(false)
@@ -1624,7 +1637,17 @@ export default function Timeline() {
       )}
 
       {!loading && !hasNoNotes && !showMatchedLineResults && activeItems.length > 0 && (
-        <div className="space-y-3">
+        <div
+          className={`space-y-3 ${
+            activeDayShell === 'inset'
+              ? 'mx-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-[0_18px_40px_-30px_rgb(var(--theme-shadow-color)/0.55)]'
+              : activeDayShell === 'flush'
+                ? 'rounded-[18px] bg-[var(--theme-surface)] shadow-[0_18px_40px_-30px_rgb(var(--theme-shadow-color)/0.45)]'
+                : ''
+          }`}
+          data-day-skin={activeDaySkin ?? undefined}
+          data-day-shell={activeDayShell ?? undefined}
+        >
           {activeItems.map((item) => {
             if (item.type === 'add-today') {
               return (
@@ -1717,6 +1740,7 @@ export default function Timeline() {
                 isYesterday={isYesterday}
                 isTomorrow={isTomorrow}
                 heroReveal={isHeroRevealActive && isToday}
+                mobileSkin={activeDaySkin}
                 title={title}
                 humanDate={humanDate}
                 datePart={datePart}
