@@ -445,6 +445,7 @@ export default function AppShell() {
               <img src="/eraser.svg" alt="" className="h-5 w-5" />
             </button>
           )}
+          {!isNarrowViewportMode && <div id="header-undo-slot" className="flex items-center" />}
         </div>
         <NavLink
           to="/"

@@ -1768,6 +1768,20 @@ export default function Timeline() {
     </>
   )
 
+  const undoDeleteButton = (
+    <button
+      className="group inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-2 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white"
+      type="button"
+      onClick={handleUndoDelete}
+    >
+      <span
+        aria-hidden="true"
+        className="h-3.5 w-3.5 bg-current [mask-image:url('/arrow-u-up-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/arrow-u-up-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
+      />
+      UNDO
+    </button>
+  )
+
   return (
     <div>
       {searchPillsContent ? <BottomTrayPortal containerId="bottom-tray-pills">{searchPillsContent}</BottomTrayPortal> : null}
@@ -1803,7 +1817,20 @@ export default function Timeline() {
         timelineContent
       )}
 
-      {pendingDeleteDayId && !hasNoNotes && (
+      {pendingDeleteDayId && !hasNoNotes && !isNarrowViewportMode && (
+        <BottomTrayPortal containerId="header-undo-slot">
+          <div
+            className="flex h-9 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] pl-3 pr-1.5 shadow-sm"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="text-sm font-medium text-[var(--theme-text-soft)]">Day deleted</span>
+            {undoDeleteButton}
+          </div>
+        </BottomTrayPortal>
+      )}
+
+      {pendingDeleteDayId && !hasNoNotes && isNarrowViewportMode && (
         <div className="pointer-events-none fixed left-0 top-[calc(env(safe-area-inset-top)+3.7rem)] z-40 px-3">
           <div
             className="pointer-events-auto flex w-[min(12rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-[0_14px_28px_-18px_rgba(15,23,42,0.45)] backdrop-blur-sm"
@@ -1811,17 +1838,7 @@ export default function Timeline() {
             aria-live="polite"
           >
             <span className="truncate text-sm font-medium text-slate-700">Day deleted</span>
-            <button
-              className="group inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-2 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white"
-              type="button"
-              onClick={handleUndoDelete}
-            >
-              <span
-                aria-hidden="true"
-                className="h-3.5 w-3.5 bg-current [mask-image:url('/arrow-u-up-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/arrow-u-up-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
-              />
-              UNDO
-            </button>
+            {undoDeleteButton}
           </div>
         </div>
       )}
