@@ -64,12 +64,31 @@ const MatchedLineResultCard = memo(({
   const dayLabel = getMatchedResultDayLabel(day.dayId, todayId)
 
   return (
-    <section className="scroll-anchor relative rounded-[4px] border border-slate-200/60 bg-white px-3 py-2.5 pr-14 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition hover:border-slate-300/60">
+    <section
+      tabIndex={0}
+      className="scroll-anchor relative cursor-pointer rounded-[4px] border border-slate-200/60 bg-white px-3 py-2.5 pr-14 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition hover:border-slate-300/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]"
+      onClick={(event) => {
+        const target = event.target as HTMLElement
+        if (target.closest('button[aria-label="Toggle todo"]')) return
+        onOpen(day.dayId, openQuote)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          const target = event.target as HTMLElement
+          if (target.closest('button[aria-label="Toggle todo"]')) return
+          event.preventDefault()
+          onOpen(day.dayId, openQuote)
+        }
+      }}
+    >
       <button
         className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700 sm:h-9 sm:w-9"
         type="button"
         aria-label={`Open note for ${dayLabel}`}
-        onClick={() => onOpen(day.dayId, openQuote)}
+        onClick={(event) => {
+          event.stopPropagation()
+          onOpen(day.dayId, openQuote)
+        }}
       >
         <img src="/arrow-square-in.svg" alt="" className="h-5 w-5" />
       </button>

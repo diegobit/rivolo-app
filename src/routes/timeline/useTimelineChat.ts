@@ -445,7 +445,12 @@ export const useTimelineChat = ({
     if (isNarrowViewport) {
       setChatPanelOpen(false)
       document.getElementById('chat-input')?.blur()
+      return
     }
+
+    requestAnimationFrame(() => {
+      document.getElementById('chat-input')?.focus()
+    })
   }, [isNarrowViewport, sending, setChatPanelOpen, setMessages])
 
   return {

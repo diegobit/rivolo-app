@@ -6,13 +6,12 @@ type BottomTrayRowProps = {
   searchButton: ReactNode
   modeToggleButton: ReactNode
   trayCenter: ReactNode
+  showLauncherButtons: boolean
+  launcherSpread: boolean
   showMobileChatTogglePill: boolean
   chatPanelOpen: boolean
   onToggleChatPanel: () => void
   showScrollToToday: boolean
-  showDesktopChatEdgeHandle: boolean
-  desktopChatPanelOpen: boolean
-  onToggleDesktopChatPanel: () => void
   onScrollToToday: () => void
 }
 
@@ -22,42 +21,58 @@ export default function BottomTrayRow({
   searchButton,
   modeToggleButton,
   trayCenter,
+  showLauncherButtons,
+  launcherSpread,
   showMobileChatTogglePill,
   chatPanelOpen,
   onToggleChatPanel,
   showScrollToToday,
-  showDesktopChatEdgeHandle,
-  desktopChatPanelOpen,
-  onToggleDesktopChatPanel,
   onScrollToToday,
 }: BottomTrayRowProps) {
   const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.5rem] sm:top-[-3.1rem]'
-  const trayRowAlignmentClass = mode === 'timeline' ? 'items-center' : 'items-end'
-  const modeToggleOffsetClassName = mode === 'timeline' ? '' : 'mb-1.5 sm:mb-3'
+  // The launcher pair (lens bottom-left, AI bottom-right) owns the row on
+  // desktop in every mode and on timeline mode everywhere else. The tray
+  // composer only appears on narrow viewports in chat/search mode.
+  const showTraySlot = !showLauncherButtons
+  const trayRowAlignmentClass = showTraySlot ? 'items-end' : 'items-center'
+  const trayRowJustifyClass = showLauncherButtons
+    ? launcherSpread
+      ? 'justify-between'
+      : 'justify-center'
+    : 'justify-center'
+  const modeToggleOffsetClassName = showTraySlot ? 'mb-1.5 sm:mb-3' : ''
+  // While the launcher pair is spread, keep scroll-to-today clear of the AI
+  // button pinned at the row's right edge (40px button + 12px gap).
+  const scrollToTodayRightClass = launcherSpread
+    ? 'right-[3.25rem]'
+    : `${showMobileChatTogglePill ? 'right-[67px]' : 'right-[15px]'} sm:right-0`
 
   return (
     <>
       <div
         className={`app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-[var(--theme-blur-surface)] backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.75)_20%,black_80%)] ${
-          mode === 'search' ? 'bottom-tray-blur-search' : ''
+          mode === 'search' && !launcherSpread ? 'bottom-tray-blur-search' : ''
         }`}
       />
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-[var(--theme-blur-surface)] backdrop-blur-md" />
 
-      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${trayRowAlignmentClass} justify-center gap-2 px-2 sm:gap-3 sm:px-0`}>
-        {mode === 'timeline' ? (
+      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${trayRowAlignmentClass} ${trayRowJustifyClass} gap-2 px-2 sm:gap-3 sm:px-0`}>
+        {showLauncherButtons ? (
           <>
-            <Fragment key="chat-btn">{chatButton}</Fragment>
             <Fragment key="search-btn">{searchButton}</Fragment>
+            <Fragment key="chat-btn">{chatButton}</Fragment>
           </>
         ) : (
-          <>
-            <Fragment key="mode-toggle-btn">
-              <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>
-            </Fragment>
-            <Fragment key="tray">{trayCenter}</Fragment>
-          </>
+          <Fragment key="mode-toggle-btn">
+            <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>
+          </Fragment>
         )}
+        {/*
+          The tray slot stays mounted in every mode (AppShell hides it while the
+          launcher buttons own the row) so #bottom-tray keeps a stable identity
+          for the BottomTrayPortal targets across viewport and mode changes.
+        */}
+        <Fragment key="tray">{trayCenter}</Fragment>
 
         {showMobileChatTogglePill && (
           <button
@@ -81,9 +96,7 @@ export default function BottomTrayRow({
         {showScrollToToday && (
           <button
             type="button"
-            className={`absolute ${mobileScrollToTodayTopClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:right-0 sm:h-10 sm:w-10 ${
-              showMobileChatTogglePill ? 'right-[67px]' : 'right-[15px]'
-            }`}
+            className={`absolute ${mobileScrollToTodayTopClass} ${scrollToTodayRightClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:h-10 sm:w-10`}
             aria-label="Scroll to Today"
             onClick={onScrollToToday}
           >
@@ -91,23 +104,6 @@ export default function BottomTrayRow({
           </button>
         )}
       </div>
-
-      {showDesktopChatEdgeHandle && (
-        <button
-          type="button"
-          className="timeline-chat-edge-handle fixed top-1/2 z-30 hidden h-16 w-8 -translate-y-1/2 items-center justify-center rounded-l-full border border-r-0 border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-[-10px_0_22px_-20px_rgb(var(--theme-shadow-color)/0.50)] hover:border-[var(--theme-border-strong)] sm:inline-flex"
-          aria-label={desktopChatPanelOpen ? 'Hide chat' : 'Show chat'}
-          onClick={onToggleDesktopChatPanel}
-        >
-          <span className="-translate-x-[1px]">
-            <img
-              src="/caret-left.svg"
-              alt=""
-              className={`h-5 w-5 opacity-70 transition-transform translate-x-[2px] duration-200 ${desktopChatPanelOpen ? 'rotate-180' : ''}`}
-            />
-          </span>
-        </button>
-      )}
     </>
   )
 }

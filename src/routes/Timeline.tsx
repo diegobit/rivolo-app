@@ -48,6 +48,8 @@ export type SearchResultMode = 'whole-day' | 'matched-lines'
 
 type TrayInputProps = {
   mode: TrayInputMode
+  draftText: string
+  onDraftTextChange: (value: string) => void
   sending: boolean
   chatError: string | null
   onChatSubmit: (value: string) => Promise<void>
@@ -67,12 +69,13 @@ const CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX = CHAT_TEXTAREA_MIN_HEIGHT_PX
 
 const TrayInput = memo(({
   mode,
+  draftText,
+  onDraftTextChange,
   sending,
   chatError,
   onChatSubmit,
   onSearchTextChange,
 }: TrayInputProps) => {
-  const [draftText, setDraftText] = useState('')
   const debounceRef = useRef<number | null>(null)
   const prevModeRef = useRef<TrayInputMode>(mode)
   const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -141,9 +144,9 @@ const TrayInput = memo(({
       return
     }
 
-    setDraftText('')
+    onDraftTextChange('')
     await onChatSubmit(trimmed)
-  }, [draftText, mode, onChatSubmit, sending])
+  }, [draftText, mode, onChatSubmit, onDraftTextChange, sending])
 
   useEffect(() => {
     if (mode !== 'search') return
@@ -186,7 +189,7 @@ const TrayInput = memo(({
       window.clearTimeout(debounceRef.current)
       debounceRef.current = null
     }
-    setDraftText('')
+    onDraftTextChange('')
     onSearchTextChange('')
   }
 
@@ -219,7 +222,7 @@ const TrayInput = memo(({
               placeholder={inputConfig.placeholder}
               value={draftText}
               onChange={(event) => {
-                setDraftText(event.target.value)
+                onDraftTextChange(event.target.value)
               }}
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' || event.shiftKey) {
@@ -249,7 +252,7 @@ const TrayInput = memo(({
               placeholder={inputConfig.placeholder}
               value={draftText}
               onChange={(event) => {
-                setDraftText(event.target.value)
+                onDraftTextChange(event.target.value)
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -340,6 +343,7 @@ export default function Timeline() {
   const loadSyncState = useSyncStore((state) => state.loadState)
   const syncStatus = useSyncStore((state) => state.status)
   const mode = useUIStore((state) => state.mode)
+  const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
@@ -357,6 +361,11 @@ export default function Timeline() {
     },
     [setSearchText],
   )
+
+  // Drafts live here so the desktop chat composer and the tray input keep
+  // their own text when their components unmount on mode switches.
+  const [chatDraftText, setChatDraftText] = useState('')
+  const [searchDraftText, setSearchDraftText] = useState('')
 
   useEffect(() => {
     setChatMessageCount(messages.length)
@@ -463,10 +472,16 @@ export default function Timeline() {
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
-  const hasSearchIntent = mode === 'search' && (Boolean(searchQuery) || Boolean(searchFilter))
-  const isTimelineVisible = mode !== 'search' || !hasSearchIntent
+  // Desktop search renders results inside the floating left card and never
+  // filters the timeline; only the narrow-viewport tray search filters it.
+  const isDesktopSearchCardOpen = mode === 'search' && !isNarrowViewportMode
+  const isMobileSearchMode = mode === 'search' && isNarrowViewportMode
+  const hasSearchIntent = isMobileSearchMode && (Boolean(searchQuery) || Boolean(searchFilter))
+  // Only the narrow-viewport search ever hides the timeline: hasSearchIntent
+  // already implies mode === 'search', so this is simply !hasSearchIntent.
+  const isTimelineVisible = !hasSearchIntent
   const hasChatMessages = messages.length > 0
-  const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode && hasChatMessages
+  const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode
   const showDesktopChatPanel = showDesktopChatMode && desktopChatPanelOpen
   const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
   const todayId = getTodayId()
@@ -1410,7 +1425,10 @@ export default function Timeline() {
   const showSearchError = hasSearchIntent && !searchLoading && Boolean(searchError)
   const showMatchedLineResults = hasSearchIntent && searchResultMode === 'matched-lines'
   const matchedLineResultItems = useMemo<MatchedLineResultItem[]>(() => {
-    if (!showMatchedLineResults) {
+    // Computed for every search result block: the narrow-viewport main list
+    // renders them in matched-lines mode, and the desktop search card renders
+    // them (whole-day mode collapses them to the first block per day).
+    if (mode !== 'search') {
       return []
     }
 
@@ -1466,16 +1484,54 @@ export default function Timeline() {
     }
 
     return items
-  }, [showMatchedLineResults, visibleSearchResults])
+  }, [mode, visibleSearchResults])
+
+  const searchCardResultItems = useMemo<MatchedLineResultItem[]>(() => {
+    if (!isDesktopSearchCardOpen) {
+      return []
+    }
+
+    // Whole-day mode collapses the matched blocks to one result card per day
+    // (its first matched block); matched-lines mode shows every block.
+    if (searchResultMode === 'whole-day') {
+      const seenDayIds = new Set<string>()
+      return matchedLineResultItems.filter((item) => {
+        if (seenDayIds.has(item.day.dayId)) {
+          return false
+        }
+
+        seenDayIds.add(item.day.dayId)
+        return true
+      })
+    }
+
+    return matchedLineResultItems
+  }, [isDesktopSearchCardOpen, matchedLineResultItems, searchResultMode])
+
+  const hasCardSearchIntent = isDesktopSearchCardOpen && (Boolean(searchQuery) || Boolean(searchFilter))
+  const cardNoSearchResults =
+    hasCardSearchIntent &&
+    !searchLoading &&
+    visibleSearchResults.length === 0 &&
+    !searchError
+  const showCardSearchError = hasCardSearchIntent && !searchLoading && Boolean(searchError)
 
   const handleOpenMatchedLineResult = useCallback(
     (dayId: string, quote: string) => {
-      setSearchResultMode('whole-day')
+      // Narrow viewports keep the filtered search view and expand the day in
+      // place; on desktop the search card closes so the unfiltered timeline
+      // can move to (and highlight) the matched note.
+      if (isNarrowViewportMode) {
+        setSearchResultMode('whole-day')
+      } else {
+        setMode('timeline')
+      }
+
       requestAnimationFrame(() => {
         void handleCitationClick({ day: dayId, quote })
       })
     },
-    [handleCitationClick],
+    [handleCitationClick, isNarrowViewportMode, setMode],
   )
 
   const handleToggleMatchedLineTodo = useCallback(
@@ -1549,10 +1605,14 @@ export default function Timeline() {
       />
     ) : null
 
+  // The tray composer only renders on narrow viewports; on desktop both the
+  // chat composer and the search field live inside their floating cards.
   const trayContent =
-    mode === 'timeline' ? null : (
+    mode === 'timeline' || !isNarrowViewportMode ? null : (
       <TrayInput
         mode={mode}
+        draftText={mode === 'chat' ? chatDraftText : searchDraftText}
+        onDraftTextChange={mode === 'chat' ? setChatDraftText : setSearchDraftText}
         sending={sending}
         chatError={chatError}
         onChatSubmit={handleChatSend}
@@ -1784,37 +1844,156 @@ export default function Timeline() {
 
   return (
     <div>
-      {searchPillsContent ? <BottomTrayPortal containerId="bottom-tray-pills">{searchPillsContent}</BottomTrayPortal> : null}
+      {searchPillsContent && isMobileSearchMode ? (
+        <BottomTrayPortal containerId="bottom-tray-pills">{searchPillsContent}</BottomTrayPortal>
+      ) : null}
       {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
 
-      {showDesktopChatMode ? (
-        <div className={`timeline-chat-layout ${showDesktopChatPanel ? 'is-chat-open' : 'is-chat-closed'}`}>
-          <div className="timeline-chat-main">{timelineContent}</div>
+      {timelineContent}
 
-          <aside className="timeline-chat-sidebar" aria-hidden={!showDesktopChatPanel}>
-            <div className="timeline-chat-sidebar-inner">
-              <button
-                type="button"
-                className="-mt-0.5 inline-flex h-9 items-center gap-2 self-start rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={handleNewChat}
-                disabled={sending}
-              >
-                <img src="/eraser.svg" alt="" className="h-3.5 w-3.5 opacity-80" />
-                New chat
-              </button>
-              <ChatMessageList
-                messages={messages}
-                onAssistantMarkdownClick={handleAssistantMarkdownClick}
-                onAssistantMarkdownKeyDown={handleAssistantMarkdownKeyDown}
-                onChatInsert={(message) => {
-                  void handleChatInsert(message)
-                }}
-              />
+      {/* Desktop chat card */}
+      {!isNarrowViewportMode && (
+        <aside
+          id="desktop-chat-card"
+          className={`timeline-floating-card timeline-chat-sidebar ${showDesktopChatPanel ? 'is-chat-open' : 'is-chat-closed'}`}
+          aria-labelledby="desktop-chat-title"
+          aria-hidden={!showDesktopChatPanel}
+          inert={!showDesktopChatPanel}
+        >
+          <div className="timeline-chat-sidebar-inner">
+            <header className="timeline-chat-sidebar-header">
+              <h2 id="desktop-chat-title" className="timeline-chat-sidebar-title">
+                Chat
+              </h2>
+              <div className="timeline-chat-sidebar-actions">
+                <button
+                  type="button"
+                  className="timeline-chat-sidebar-icon-button"
+                  aria-label="New chat"
+                  title="New chat"
+                  onClick={handleNewChat}
+                  disabled={sending}
+                >
+                  <img src="/pencil-simple-line.svg" alt="" className="h-5 w-5 opacity-80" />
+                </button>
+                <button
+                  type="button"
+                  className="timeline-chat-sidebar-icon-button"
+                  aria-label="Close chat"
+                  title="Close chat"
+                  onClick={() => {
+                    document.getElementById('chat-input')?.blur()
+                    setMode('timeline')
+                  }}
+                >
+                  <img src="/plus.svg" alt="" className="h-4 w-4 rotate-45 opacity-80" />
+                </button>
+              </div>
+            </header>
+            <div className="timeline-chat-sidebar-messages">
+              {hasChatMessages ? (
+                <ChatMessageList
+                  messages={messages}
+                  onAssistantMarkdownClick={handleAssistantMarkdownClick}
+                  onAssistantMarkdownKeyDown={handleAssistantMarkdownKeyDown}
+                  onChatInsert={(message) => {
+                    void handleChatInsert(message)
+                  }}
+                />
+              ) : (
+                <p className="timeline-chat-sidebar-empty">What can I help with?</p>
+              )}
             </div>
-          </aside>
-        </div>
-      ) : (
-        timelineContent
+            <div className="timeline-chat-sidebar-composer">
+              <div className="timeline-chat-composer-field">
+                <TrayInput
+                  mode="chat"
+                  draftText={chatDraftText}
+                  onDraftTextChange={setChatDraftText}
+                  sending={sending}
+                  chatError={chatError}
+                  onChatSubmit={handleChatSend}
+                  onSearchTextChange={handleSearchTextChange}
+                />
+              </div>
+            </div>
+          </div>
+        </aside>
+      )}
+
+      {/* Desktop search card (lens): overlays the timeline instead of
+          filtering it; opening a result closes the card and moves the
+          unfiltered timeline to the match. */}
+      {isDesktopSearchCardOpen && (
+        <aside
+          id="desktop-search-card"
+          className="timeline-floating-card timeline-search-sidebar"
+          aria-labelledby="desktop-search-title"
+        >
+          <div className="timeline-chat-sidebar-inner">
+            <header className="timeline-chat-sidebar-header">
+              <h2 id="desktop-search-title" className="timeline-chat-sidebar-title">
+                Search
+              </h2>
+              <div className="timeline-chat-sidebar-actions">
+                <button
+                  type="button"
+                  className="timeline-chat-sidebar-icon-button"
+                  aria-label="Close search"
+                  title="Close search"
+                  onClick={() => setMode('timeline')}
+                >
+                  <img src="/plus.svg" alt="" className="h-4 w-4 rotate-45 opacity-80" />
+                </button>
+              </div>
+            </header>
+            <div className="timeline-search-sidebar-composer">
+              <div className="timeline-chat-composer-field">
+                <TrayInput
+                  mode="search"
+                  draftText={searchDraftText}
+                  onDraftTextChange={setSearchDraftText}
+                  sending={sending}
+                  chatError={chatError}
+                  onChatSubmit={handleChatSend}
+                  onSearchTextChange={handleSearchTextChange}
+                />
+              </div>
+            </div>
+            <div className="timeline-search-sidebar-pills">{searchPillsContent}</div>
+            <div className="timeline-search-sidebar-results">
+              {showCardSearchError && (
+                <p className="timeline-search-sidebar-status timeline-search-sidebar-status-error">{searchError}</p>
+              )}
+              {cardNoSearchResults && !showCardSearchError && (
+                <p className="timeline-search-sidebar-status">No results</p>
+              )}
+              {searchCardResultItems.length > 0 && (
+                <div className="space-y-3">
+                  {searchCardResultItems.map(
+                    ({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex }) => (
+                      <MatchedLineResultCard
+                        key={key}
+                        day={day}
+                        block={block}
+                        openQuote={openQuote}
+                        hasMore={hasMore}
+                        blockIndex={blockIndex}
+                        sourceLineIndex={sourceLineIndex}
+                        enableTodoToggle={searchFilter === 'open-todos'}
+                        todayId={todayId}
+                        contentTextStyle={matchedResultsTextStyle}
+                        searchQuery={searchQuery}
+                        onOpen={handleOpenMatchedLineResult}
+                        onToggleTodo={handleToggleMatchedLineTodo}
+                      />
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </aside>
       )}
 
       {pendingDeleteDayId && !hasNoNotes && !isNarrowViewportMode && (

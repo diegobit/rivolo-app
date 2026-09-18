@@ -21,8 +21,15 @@ const getDefaultChatPanelsOpen = () => {
   return !isNarrowViewport()
 }
 
+// Desktop homes start on the plain timeline with the two launcher buttons;
+// narrow viewports keep the chat composer in the tray as before.
+const getDefaultMode = () => {
+  if (typeof window === 'undefined') return 'chat'
+  return isNarrowViewport() ? 'chat' : 'timeline'
+}
+
 export const useUIStore = create<UIState>((set) => ({
-  mode: 'chat',
+  mode: getDefaultMode(),
   chatPanelOpen: getDefaultChatPanelsOpen(),
   desktopChatPanelOpen: getDefaultChatPanelsOpen(),
   chatMessageCount: 0,
