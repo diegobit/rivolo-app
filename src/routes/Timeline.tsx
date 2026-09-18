@@ -1491,22 +1491,8 @@ export default function Timeline() {
       return []
     }
 
-    // Whole-day mode collapses the matched blocks to one result card per day
-    // (its first matched block); matched-lines mode shows every block.
-    if (searchResultMode === 'whole-day') {
-      const seenDayIds = new Set<string>()
-      return matchedLineResultItems.filter((item) => {
-        if (seenDayIds.has(item.day.dayId)) {
-          return false
-        }
-
-        seenDayIds.add(item.day.dayId)
-        return true
-      })
-    }
-
     return matchedLineResultItems
-  }, [isDesktopSearchCardOpen, matchedLineResultItems, searchResultMode])
+  }, [isDesktopSearchCardOpen, matchedLineResultItems])
 
   const hasCardSearchIntent = isDesktopSearchCardOpen && (Boolean(searchQuery) || Boolean(searchFilter))
   const cardNoSearchResults =
@@ -1519,19 +1505,17 @@ export default function Timeline() {
   const handleOpenMatchedLineResult = useCallback(
     (dayId: string, quote: string) => {
       // Narrow viewports keep the filtered search view and expand the day in
-      // place; on desktop the search card closes so the unfiltered timeline
-      // can move to (and highlight) the matched note.
+      // place. On desktop the card stays open so several results can be opened
+      // in a row; only the unfiltered timeline behind it moves to the match.
       if (isNarrowViewportMode) {
         setSearchResultMode('whole-day')
-      } else {
-        setMode('timeline')
       }
 
       requestAnimationFrame(() => {
         void handleCitationClick({ day: dayId, quote })
       })
     },
-    [handleCitationClick, isNarrowViewportMode, setMode],
+    [handleCitationClick, isNarrowViewportMode],
   )
 
   const handleToggleMatchedLineTodo = useCallback(
@@ -1593,11 +1577,12 @@ export default function Timeline() {
   const chatMessages = useMemo(() => [...messages].reverse(), [messages])
   const canToggleMatchedResultTodos = showMatchedLineResults && searchFilter === 'open-todos'
 
-  const searchPillsContent =
+  const renderSearchPills = (showResultMode: boolean) =>
     mode === 'search' ? (
       <SearchModePills
         searchFilter={searchFilter}
         resultMode={searchResultMode}
+        showResultMode={showResultMode}
         onSearchFilterChange={setSearchFilter}
         onToggleResultMode={() => {
           setSearchResultMode((current) => (current === 'whole-day' ? 'matched-lines' : 'whole-day'))
@@ -1844,8 +1829,8 @@ export default function Timeline() {
 
   return (
     <div>
-      {searchPillsContent && isMobileSearchMode ? (
-        <BottomTrayPortal containerId="bottom-tray-pills">{searchPillsContent}</BottomTrayPortal>
+      {isMobileSearchMode ? (
+        <BottomTrayPortal containerId="bottom-tray-pills">{renderSearchPills(true)}</BottomTrayPortal>
       ) : null}
       {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
 
@@ -1947,20 +1932,6 @@ export default function Timeline() {
                 </button>
               </div>
             </header>
-            <div className="timeline-search-sidebar-composer">
-              <div className="timeline-chat-composer-field">
-                <TrayInput
-                  mode="search"
-                  draftText={searchDraftText}
-                  onDraftTextChange={setSearchDraftText}
-                  sending={sending}
-                  chatError={chatError}
-                  onChatSubmit={handleChatSend}
-                  onSearchTextChange={handleSearchTextChange}
-                />
-              </div>
-            </div>
-            <div className="timeline-search-sidebar-pills">{searchPillsContent}</div>
             <div className="timeline-search-sidebar-results">
               {showCardSearchError && (
                 <p className="timeline-search-sidebar-status timeline-search-sidebar-status-error">{searchError}</p>
@@ -1991,6 +1962,20 @@ export default function Timeline() {
                   )}
                 </div>
               )}
+            </div>
+            <div className="timeline-search-sidebar-pills">{renderSearchPills(false)}</div>
+            <div className="timeline-search-sidebar-composer">
+              <div className="timeline-chat-composer-field">
+                <TrayInput
+                  mode="search"
+                  draftText={searchDraftText}
+                  onDraftTextChange={setSearchDraftText}
+                  sending={sending}
+                  chatError={chatError}
+                  onChatSubmit={handleChatSend}
+                  onSearchTextChange={handleSearchTextChange}
+                />
+              </div>
             </div>
           </div>
         </aside>

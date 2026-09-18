@@ -35,16 +35,10 @@ export default function BottomTrayRow({
   // composer only appears on narrow viewports in chat/search mode.
   const showTraySlot = !showLauncherButtons
   const trayRowAlignmentClass = showTraySlot ? 'items-end' : 'items-center'
-  const trayRowJustifyClass = showLauncherButtons
-    ? launcherSpread
-      ? 'justify-between'
-      : 'justify-center'
-    : 'justify-center'
+  const trayRowJustifyClass = 'justify-center'
   const modeToggleOffsetClassName = showTraySlot ? 'mb-1.5 sm:mb-3' : ''
-  // While the launcher pair is spread, keep scroll-to-today clear of the AI
-  // button pinned at the row's right edge (40px button + 12px gap).
   const scrollToTodayRightClass = launcherSpread
-    ? 'right-[3.25rem]'
+    ? 'right-0'
     : `${showMobileChatTogglePill ? 'right-[67px]' : 'right-[15px]'} sm:right-0`
 
   return (
@@ -58,10 +52,12 @@ export default function BottomTrayRow({
 
       <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${trayRowAlignmentClass} ${trayRowJustifyClass} gap-2 px-2 sm:gap-3 sm:px-0`}>
         {showLauncherButtons ? (
-          <>
+          // On desktop CSS lifts this pair out of the row and pins it to the
+          // viewport centre, so a card opening never shifts the buttons.
+          <div className={launcherSpread ? 'bottom-tray-launchers' : 'flex items-center gap-2 sm:gap-3'}>
             <Fragment key="search-btn">{searchButton}</Fragment>
             <Fragment key="chat-btn">{chatButton}</Fragment>
-          </>
+          </div>
         ) : (
           <Fragment key="mode-toggle-btn">
             <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>

@@ -875,9 +875,10 @@
     }
 
     .timeline-floating-card {
+      --desktop-card-bottom-inset: 5.75rem;
       position: fixed;
       top: calc(env(safe-area-inset-top) + 4.75rem);
-      bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + var(--desktop-chat-sidebar-inset));
+      bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + var(--desktop-card-bottom-inset));
       width: min(var(--desktop-chat-sidebar-width), calc(100vw - 2 * var(--desktop-chat-sidebar-inset)));
       overflow: hidden;
       background: var(--theme-surface);
@@ -1010,12 +1011,12 @@
 
     .timeline-search-sidebar-composer {
       flex-shrink: 0;
-      padding: 0.25rem 1.1rem 0.75rem;
+      padding: 0 1.1rem 1.15rem;
     }
 
     .timeline-search-sidebar-pills {
       flex-shrink: 0;
-      padding: 0 1.1rem 0.6rem;
+      padding: 0.35rem 1.1rem 0.6rem;
     }
 
     .timeline-search-sidebar-pills > div {
@@ -1031,7 +1032,7 @@
       min-height: 0;
       overflow-y: auto;
       overscroll-behavior-y: contain;
-      padding: 0.25rem 1.1rem 1.25rem;
+      padding: 0.5rem 1.1rem 0.25rem;
     }
 
     .timeline-search-sidebar-status {
@@ -1081,6 +1082,7 @@
     }
 
     .timeline-floating-card {
+      --desktop-card-bottom-inset: var(--desktop-chat-sidebar-inset);
       top: calc(env(safe-area-inset-top) + var(--desktop-chat-sidebar-inset));
     }
   }
@@ -1178,28 +1180,18 @@
      the row shrinks to the space the card leaves free, so the lens and AI
      buttons never overlap a card. These rules live outside @layer components
      so they win over the Tailwind left-0 utility on the row. */
-  .app-shell-root[data-desktop-search-sidebar-open='true'] .bottom-tray-row {
-    left: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
-    width: min(calc((100vw - var(--desktop-chat-sidebar-width) - 2 * var(--desktop-chat-sidebar-inset)) * 0.96), 620px);
-    transition:
-      left 260ms cubic-bezier(0.22, 1, 0.36, 1),
-      width 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .app-shell-root[data-desktop-chat-sidebar-open='true'] .bottom-tray-row {
-    right: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
-    width: min(calc((100vw - var(--desktop-chat-sidebar-width) - 2 * var(--desktop-chat-sidebar-inset)) * 0.96), 620px);
-    transition:
-      right 260ms cubic-bezier(0.22, 1, 0.36, 1),
-      width 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  /* These card-open transitions are unlayered, so the reduced-motion guard
-     must be unlayered too (the @layer components guard cannot win here). */
-  @media (prefers-reduced-motion: reduce) {
-    .app-shell-root[data-desktop-search-sidebar-open='true'] .bottom-tray-row,
-    .app-shell-root[data-desktop-chat-sidebar-open='true'] .bottom-tray-row {
-      transition: none;
+  /* Pinned to the viewport centre, outside the tray row, so opening or closing a
+     card never shifts the pair. Unlayered to beat the row's Tailwind utilities. */
+  @media (min-width: 700px) {
+    .bottom-tray-launchers {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1.5rem);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      z-index: 30;
     }
   }
 

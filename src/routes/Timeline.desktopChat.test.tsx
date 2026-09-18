@@ -314,14 +314,14 @@ describe('Timeline desktop search card', () => {
     openSearchCard()
 
     typeQuery('hello')
-    await waitForResults(1)
+    await waitForResults(2)
     expect(searchDays).toHaveBeenCalledWith('hello', { filter: null })
 
     // The timeline keeps showing every day instead of filtering to results.
     expect(screen.getAllByTestId('day-editor-card')).toHaveLength(2)
   })
 
-  it('closing the card on a result returns to the unfiltered timeline', async () => {
+  it('opening a result keeps the card open and the timeline unfiltered', async () => {
     vi.mocked(searchDays).mockResolvedValue([
       { day: todayDay, matchedBlocks: ['hello world'], blockKind: 'line' },
     ])
@@ -333,13 +333,13 @@ describe('Timeline desktop search card', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Open note for/ }))
 
-    expect(useUIStore.getState().mode).toBe('timeline')
-    expect(screen.queryByRole('heading', { name: 'Search' })).not.toBeInTheDocument()
-    expect(screen.queryByPlaceholderText('Search all days')).not.toBeInTheDocument()
+    expect(useUIStore.getState().mode).toBe('search')
+    expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
+    expect(getSearchInput()).toBeInTheDocument()
     expect(screen.getAllByTestId('day-editor-card')).toHaveLength(2)
   })
 
-  it('clicking the result card body closes the card; the row is not a keyboard tab stop', async () => {
+  it('clicking the result card body keeps the card open; the row is not a keyboard tab stop', async () => {
     vi.mocked(searchDays).mockResolvedValue([
       { day: todayDay, matchedBlocks: ['hello world'], blockKind: 'line' },
     ])
@@ -355,14 +355,8 @@ describe('Timeline desktop search card', () => {
 
     fireEvent.click(cardSection!)
 
-    expect(useUIStore.getState().mode).toBe('timeline')
-
-    openSearchCard()
-    await waitForResults(1)
-
-    const reopenedSection = screen.getByRole('button', { name: /Open note for/ }).closest('section')
-    fireEvent.keyDown(reopenedSection!, { key: 'Enter' })
     expect(useUIStore.getState().mode).toBe('search')
+    expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
   })
 
   it('toggling a todo in a text-search result does not navigate or close the card', async () => {
@@ -405,7 +399,7 @@ describe('Timeline desktop search card', () => {
     expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
   })
 
-  it('shows one result per day in whole-day mode and every match in lines mode', async () => {
+  it('lists every match and offers no Days/Lines toggle', async () => {
     vi.mocked(searchDays).mockResolvedValue([
       { day: todayDay, matchedBlocks: ['hello world', 'hello again'], blockKind: 'line' },
     ])
@@ -413,13 +407,9 @@ describe('Timeline desktop search card', () => {
     openSearchCard()
 
     typeQuery('hello')
-    // Whole-day mode collapses the two matched blocks into one result card.
-    await waitForResults(1)
-
-    fireEvent.click(screen.getByRole('button', { name: /Toggle result mode/ }))
-
-    // Lines mode shows every matched block.
     await waitForResults(2)
+
+    expect(screen.queryByRole('button', { name: /Toggle result mode/ })).not.toBeInTheDocument()
   })
 
   it('shows No results in the card when nothing matches', async () => {

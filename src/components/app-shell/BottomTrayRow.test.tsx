@@ -45,16 +45,17 @@ describe('BottomTrayRow', () => {
     expect(screen.getByTestId('bottom-tray')).toBeInTheDocument()
   })
 
-  it('spreads the launcher pair to the row corners on desktop', () => {
-    renderRow({ launcherSpread: true })
+  it('hands the launcher pair to the viewport-pinned container on desktop', () => {
+    const { container } = renderRow({ launcherSpread: true })
 
-    expect(getRow()).toHaveClass('justify-between')
+    expect(container.querySelector('.bottom-tray-launchers')).not.toBeNull()
   })
 
-  it('centers the launcher pair on narrow viewports', () => {
-    renderRow({ launcherSpread: false })
+  it('keeps the launcher pair inside the row on narrow viewports', () => {
+    const { container } = renderRow({ launcherSpread: false })
 
-    expect(getRow()).toHaveClass('justify-center')
+    expect(container.querySelector('.bottom-tray-launchers')).toBeNull()
+    expect(getRow()).toContainElement(screen.getByRole('button', { name: 'Search' }))
   })
 
   it('renders the mode toggle and tray composer instead of the launcher pair in mobile input modes', () => {
@@ -66,10 +67,10 @@ describe('BottomTrayRow', () => {
     expect(screen.queryByRole('button', { name: 'Chat' })).not.toBeInTheDocument()
   })
 
-  it('keeps scroll-to-today clear of the spread AI button', () => {
+  it('keeps scroll-to-today at the row edge once the launchers leave the row', () => {
     renderRow({ launcherSpread: true, showScrollToToday: true })
 
-    expect(screen.getByRole('button', { name: 'Scroll to Today' })).toHaveClass('right-[3.25rem]')
+    expect(screen.getByRole('button', { name: 'Scroll to Today' })).toHaveClass('right-0')
   })
 
   it('keeps the mobile scroll-to-today position when the pair is centered', () => {
@@ -77,6 +78,5 @@ describe('BottomTrayRow', () => {
 
     const button = screen.getByRole('button', { name: 'Scroll to Today' })
     expect(button).toHaveClass('right-[15px]')
-    expect(button).not.toHaveClass('right-[3.25rem]')
   })
 })
