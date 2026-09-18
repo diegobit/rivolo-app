@@ -44,3 +44,6 @@ perf/
 
 # Agentic-QA scratch output (regenerated per run; never part of the tracked suite)
 tests/agentic-qa-tests/runs/
+
+# Browser automation screenshots
+screenshots/
