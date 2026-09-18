@@ -339,7 +339,7 @@ describe('Timeline desktop search card', () => {
     expect(screen.getAllByTestId('day-editor-card')).toHaveLength(2)
   })
 
-  it('clicking the result card body or pressing Enter on it activates and closes the card', async () => {
+  it('clicking the result card body closes the card; the row is not a keyboard tab stop', async () => {
     vi.mocked(searchDays).mockResolvedValue([
       { day: todayDay, matchedBlocks: ['hello world'], blockKind: 'line' },
     ])
@@ -349,22 +349,40 @@ describe('Timeline desktop search card', () => {
     typeQuery('hello')
     await waitForResults(1)
 
-    // Click on the section row itself, not the open button
     const cardSection = screen.getByRole('button', { name: /Open note for/ }).closest('section')
     expect(cardSection).toBeInTheDocument()
-    expect(cardSection).toHaveAttribute('tabIndex', '0')
+    expect(cardSection).not.toHaveAttribute('tabindex')
 
     fireEvent.click(cardSection!)
 
     expect(useUIStore.getState().mode).toBe('timeline')
 
-    // Reopen and test Enter key
     openSearchCard()
     await waitForResults(1)
 
     const reopenedSection = screen.getByRole('button', { name: /Open note for/ }).closest('section')
     fireEvent.keyDown(reopenedSection!, { key: 'Enter' })
-    expect(useUIStore.getState().mode).toBe('timeline')
+    expect(useUIStore.getState().mode).toBe('search')
+  })
+
+  it('toggling a todo in a text-search result does not navigate or close the card', async () => {
+    const todoDay = makeDay(todayId, '- [ ] Buy milk and cookies')
+    vi.mocked(searchDays).mockResolvedValue([
+      { day: todoDay, matchedBlocks: ['- [ ] Buy milk and cookies'], blockKind: 'line' },
+    ])
+    renderTimeline()
+    openSearchCard()
+
+    typeQuery('Buy milk')
+    await waitForResults(1)
+
+    const todoButton = screen.getByRole('button', { name: 'Toggle todo' })
+    expect(todoButton).toHaveTextContent('[ ]')
+    fireEvent.click(todoButton)
+
+    expect(useUIStore.getState().mode).toBe('search')
+    expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Toggle todo' })).toHaveTextContent('[x]')
   })
 
   it('toggling a todo in search results does not navigate or close the card', async () => {

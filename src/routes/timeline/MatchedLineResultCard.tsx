@@ -65,20 +65,11 @@ const MatchedLineResultCard = memo(({
 
   return (
     <section
-      tabIndex={0}
-      className="scroll-anchor relative cursor-pointer rounded-[4px] border border-slate-200/60 bg-white px-3 py-2.5 pr-14 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition hover:border-slate-300/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]"
+      className="scroll-anchor relative cursor-pointer rounded-[4px] border border-slate-200/60 bg-white px-3 py-2.5 pr-14 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition hover:border-slate-300/60"
       onClick={(event) => {
         const target = event.target as HTMLElement
         if (target.closest('button[aria-label="Toggle todo"]')) return
         onOpen(day.dayId, openQuote)
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          const target = event.target as HTMLElement
-          if (target.closest('button[aria-label="Toggle todo"]')) return
-          event.preventDefault()
-          onOpen(day.dayId, openQuote)
-        }
       }}
     >
       <button

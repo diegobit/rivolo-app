@@ -41,6 +41,17 @@ describe('ShortcutsPopover', () => {
     expect(trigger).toHaveFocus()
   })
 
+  it('marks Escape as handled so other listeners can skip it', () => {
+    renderPopover(true)
+
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    const stopSpy = vi.spyOn(event, 'stopPropagation')
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(stopSpy).toHaveBeenCalled()
+  })
+
   it('can be opened from the keyboard', async () => {
     const onToggle = renderPopover(false)
     const trigger = screen.getByRole('button', { name: 'Shortcuts' })

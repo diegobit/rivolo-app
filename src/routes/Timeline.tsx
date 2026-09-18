@@ -1980,7 +1980,7 @@ export default function Timeline() {
                         hasMore={hasMore}
                         blockIndex={blockIndex}
                         sourceLineIndex={sourceLineIndex}
-                        enableTodoToggle={searchFilter === 'open-todos'}
+                        enableTodoToggle
                         todayId={todayId}
                         contentTextStyle={matchedResultsTextStyle}
                         searchQuery={searchQuery}

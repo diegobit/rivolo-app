@@ -164,7 +164,7 @@ export default function AppShell() {
       aria-label={chatButtonLabel}
       title={chatButtonLabel}
       aria-expanded={isDesktopHome && mode === 'chat' && desktopChatPanelOpen}
-      aria-controls="desktop-chat-card"
+      aria-controls={isDesktopHome && mode === 'chat' && desktopChatPanelOpen ? 'desktop-chat-card' : undefined}
     >
       <img src="/sparkle.svg" alt="" className="h-5 w-5" />
     </button>
@@ -189,7 +189,7 @@ export default function AppShell() {
       aria-label={isDesktopHome && mode === 'search' ? 'Hide search' : 'Search'}
       title={isDesktopHome && mode === 'search' ? 'Hide search' : 'Search'}
       aria-expanded={isDesktopHome && mode === 'search'}
-      aria-controls="desktop-search-card"
+      aria-controls={isDesktopHome && mode === 'search' ? 'desktop-search-card' : undefined}
     >
       <img src="/magnifying-glass.svg" alt="" className="h-5 w-5" />
     </button>
@@ -410,11 +410,6 @@ export default function AppShell() {
         const nextMode = key === 'k' ? 'chat' : 'search'
         const inputId = nextMode === 'chat' ? 'chat-input' : 'search-input'
         if (mode === nextMode) {
-          if (nextMode === 'chat' && !isNarrowViewportMode && !desktopChatPanelOpen) {
-            focusComposerOnPanelOpenRef.current = true
-            setDesktopChatPanelOpen(true)
-            return
-          }
           document.getElementById(inputId)?.focus()
           return
         }
@@ -445,7 +440,7 @@ export default function AppShell() {
 
     window.addEventListener('keydown', handleKeydown, true)
     return () => window.removeEventListener('keydown', handleKeydown, true)
-  }, [desktopChatPanelOpen, isDesktopHome, isHome, isNarrowViewportMode, mode, setDesktopChatPanelOpen, setMode])
+  }, [isDesktopHome, isHome, isNarrowViewportMode, mode, setDesktopChatPanelOpen, setMode])
 
   useEffect(() => {
     if (!isDesktopHome) return
@@ -455,6 +450,7 @@ export default function AppShell() {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      if (event.defaultPrevented) return
       event.preventDefault()
       setMode('timeline')
       if (isSearchOpen) {

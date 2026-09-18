@@ -1073,8 +1073,11 @@
     }
 
     .app-shell-fixed-right-aware {
+      left: var(--desktop-search-shift);
       right: var(--desktop-chat-shift);
-      transition: right 260ms cubic-bezier(0.22, 1, 0.36, 1);
+      transition:
+        left 260ms cubic-bezier(0.22, 1, 0.36, 1),
+        right 260ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     .timeline-floating-card {
@@ -1191,19 +1194,11 @@
       width 260ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .app-shell-root[data-desktop-search-sidebar-open='true'] .app-shell-fixed-right-aware {
-    left: var(--desktop-search-shift);
-    transition:
-      left 260ms cubic-bezier(0.22, 1, 0.36, 1),
-      right 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
   /* These card-open transitions are unlayered, so the reduced-motion guard
      must be unlayered too (the @layer components guard cannot win here). */
   @media (prefers-reduced-motion: reduce) {
     .app-shell-root[data-desktop-search-sidebar-open='true'] .bottom-tray-row,
-    .app-shell-root[data-desktop-chat-sidebar-open='true'] .bottom-tray-row,
-    .app-shell-root[data-desktop-search-sidebar-open='true'] .app-shell-fixed-right-aware {
+    .app-shell-root[data-desktop-chat-sidebar-open='true'] .bottom-tray-row {
       transition: none;
     }
   }
@@ -1215,6 +1210,15 @@
       height: 2.75rem;
       width: 2.75rem;
     }
+  }
+}
+
+@media (min-width: 1080px) {
+  /* Header/tray use Tailwind left-0 (utilities). Unlayered left wins so they
+     shift with --desktop-search-shift when the left card reserves space.
+     Below 1080px the cards overlay under the header instead. */
+  .app-shell-fixed-right-aware {
+    left: var(--desktop-search-shift);
   }
 }
 

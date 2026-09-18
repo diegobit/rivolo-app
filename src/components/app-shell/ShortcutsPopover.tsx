@@ -22,12 +22,14 @@ export default function ShortcutsPopover({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
       onToggle()
       triggerRef.current?.focus()
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [onToggle, showShortcuts])
 
   return (

@@ -465,25 +465,37 @@ describe('AppShell attention and stale tab states', () => {
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
   })
 
-  it('reopens the closed desktop chat card with the chat shortcut', () => {
+  it('focuses the chat composer when the chat shortcut is pressed while chat is already open', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.ui.mode = 'chat'
-    stores.ui.desktopChatPanelOpen = false
+    stores.ui.desktopChatPanelOpen = true
+    stores.ui.setMode.mockClear()
+    stores.ui.setDesktopChatPanelOpen.mockClear()
     vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
 
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <Routes>
-          <Route path="/" element={<AppShell />}>
-            <Route index element={<div>Timeline content</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    )
+    const composer = document.createElement('textarea')
+    composer.id = 'chat-input'
+    document.body.appendChild(composer)
 
-    fireEvent.keyDown(window, { key: 'k', metaKey: true })
+    try {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<AppShell />}>
+              <Route index element={<div>Timeline content</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>,
+      )
 
-    expect(stores.ui.setDesktopChatPanelOpen).toHaveBeenCalledWith(true)
+      fireEvent.keyDown(window, { key: 'k', metaKey: true })
+
+      expect(stores.ui.setMode).not.toHaveBeenCalled()
+      expect(stores.ui.setDesktopChatPanelOpen).not.toHaveBeenCalled()
+      expect(document.activeElement).toBe(composer)
+    } finally {
+      composer.remove()
+    }
   })
 
   it('toggles the desktop chat card with the sidebar shortcut while it is open', () => {
@@ -656,8 +668,8 @@ describe('AppShell launcher mode buttons', () => {
     expect(buttons[1]).toHaveAccessibleName('Chat')
     expect(buttons[0]).toHaveAttribute('type', 'button')
     expect(buttons[1]).toHaveAttribute('type', 'button')
-    expect(buttons[0]).toHaveAttribute('aria-controls', 'desktop-search-card')
-    expect(buttons[1]).toHaveAttribute('aria-controls', 'desktop-chat-card')
+    expect(buttons[0]).not.toHaveAttribute('aria-controls')
+    expect(buttons[1]).not.toHaveAttribute('aria-controls')
     expect(buttons[0]).toHaveAttribute('aria-expanded', 'false')
     expect(buttons[1]).toHaveAttribute('aria-expanded', 'false')
 
@@ -675,6 +687,7 @@ describe('AppShell launcher mode buttons', () => {
 
     const searchBtn = screen.getByRole('button', { name: 'Hide search' })
     expect(searchBtn).toHaveAttribute('aria-expanded', 'true')
+    expect(searchBtn).toHaveAttribute('aria-controls', 'desktop-search-card')
     fireEvent.click(searchBtn)
 
     expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('timeline')
@@ -687,6 +700,7 @@ describe('AppShell launcher mode buttons', () => {
 
     const chatBtn = screen.getByRole('button', { name: 'Hide chat' })
     expect(chatBtn).toHaveAttribute('aria-expanded', 'true')
+    expect(chatBtn).toHaveAttribute('aria-controls', 'desktop-chat-card')
     fireEvent.click(chatBtn)
 
     expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('timeline')
@@ -725,10 +739,12 @@ describe('AppShell launcher mode buttons', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
     expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('chat')
+    expect(screen.getByRole('button', { name: 'Chat' })).not.toHaveAttribute('aria-controls')
 
     stores.ui.setMode.mockClear()
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
     expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('search')
+    expect(screen.getByRole('button', { name: 'Search' })).not.toHaveAttribute('aria-controls')
   })
 
   it('opens chat and sets desktop panel open from AI button in timeline mode', () => {
