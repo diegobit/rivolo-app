@@ -860,10 +860,18 @@
 
   @media (min-width: 700px) {
     .app-shell-root {
-      --desktop-chat-sidebar-width: clamp(400px, 32vw, 480px);
+      --desktop-chat-sidebar-width: clamp(260px, 34vw, 400px);
       --desktop-chat-sidebar-inset: 20px;
       --desktop-chat-shift: 0px;
       --desktop-search-shift: 0px;
+    }
+
+    /* Below 1080px the card and the timeline narrow together so neither is
+       squeezed out; from 1080px up there is room for the roomier card. */
+    @media (min-width: 1080px) {
+      .app-shell-root {
+        --desktop-chat-sidebar-width: clamp(400px, 32vw, 480px);
+      }
     }
 
     .app-shell-fixed-header-width {
@@ -874,11 +882,34 @@
       width: min(calc((100vw - var(--desktop-chat-shift, 0px) - var(--desktop-search-shift, 0px)) * 0.96), 620px);
     }
 
+    .app-shell-root {
+      padding-right: var(--desktop-chat-shift);
+      padding-left: var(--desktop-search-shift);
+      transition:
+        padding-right 260ms cubic-bezier(0.22, 1, 0.36, 1),
+        padding-left 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .app-shell-root[data-desktop-chat-sidebar-open='true'] {
+      --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
+    }
+
+    .app-shell-root[data-desktop-search-sidebar-open='true'] {
+      --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
+    }
+
+    .app-shell-fixed-right-aware {
+      left: var(--desktop-search-shift);
+      right: var(--desktop-chat-shift);
+      transition:
+        left 260ms cubic-bezier(0.22, 1, 0.36, 1),
+        right 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
     .timeline-floating-card {
-      --desktop-card-bottom-inset: 5.75rem;
       position: fixed;
-      top: calc(env(safe-area-inset-top) + 4.75rem);
-      bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + var(--desktop-card-bottom-inset));
+      top: calc(env(safe-area-inset-top) + var(--desktop-chat-sidebar-inset));
+      bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + var(--desktop-chat-sidebar-inset));
       width: min(var(--desktop-chat-sidebar-width), calc(100vw - 2 * var(--desktop-chat-sidebar-inset)));
       overflow: hidden;
       background: var(--theme-surface);
@@ -1054,39 +1085,6 @@
     }
   }
 
-  @media (min-width: 1080px) {
-    .app-shell-root {
-      --desktop-chat-shift: 0px;
-      --desktop-search-shift: 0px;
-      padding-right: var(--desktop-chat-shift);
-      padding-left: var(--desktop-search-shift);
-      transition:
-        padding-right 260ms cubic-bezier(0.22, 1, 0.36, 1),
-        padding-left 260ms cubic-bezier(0.22, 1, 0.36, 1);
-    }
-
-    .app-shell-root[data-desktop-chat-sidebar-open='true'] {
-      --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
-    }
-
-    .app-shell-root[data-desktop-search-sidebar-open='true'] {
-      --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
-    }
-
-    .app-shell-fixed-right-aware {
-      left: var(--desktop-search-shift);
-      right: var(--desktop-chat-shift);
-      transition:
-        left 260ms cubic-bezier(0.22, 1, 0.36, 1),
-        right 260ms cubic-bezier(0.22, 1, 0.36, 1);
-    }
-
-    .timeline-floating-card {
-      --desktop-card-bottom-inset: var(--desktop-chat-sidebar-inset);
-      top: calc(env(safe-area-inset-top) + var(--desktop-chat-sidebar-inset));
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .app-shell-root,
     .app-shell-fixed-right-aware,
@@ -1176,10 +1174,6 @@
     bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1.5rem);
   }
 
-  /* While a desktop card is open, the launcher pair keeps its corner spots but
-     the row shrinks to the space the card leaves free, so the lens and AI
-     buttons never overlap a card. These rules live outside @layer components
-     so they win over the Tailwind left-0 utility on the row. */
   /* Pinned to the viewport centre, outside the tray row, so opening or closing a
      card never shifts the pair. Unlayered to beat the row's Tailwind utilities. */
   @media (min-width: 700px) {
@@ -1205,10 +1199,9 @@
   }
 }
 
-@media (min-width: 1080px) {
-  /* Header/tray use Tailwind left-0 (utilities). Unlayered left wins so they
-     shift with --desktop-search-shift when the left card reserves space.
-     Below 1080px the cards overlay under the header instead. */
+@media (min-width: 700px) {
+  /* Header/tray use Tailwind left-0 (utilities); this unlayered left wins so they
+     shift with --desktop-search-shift when the left card reserves space. */
   .app-shell-fixed-right-aware {
     left: var(--desktop-search-shift);
   }

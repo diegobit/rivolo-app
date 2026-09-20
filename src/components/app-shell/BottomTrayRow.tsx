@@ -54,7 +54,9 @@ export default function BottomTrayRow({
         {showLauncherButtons ? (
           // On desktop CSS lifts this pair out of the row and pins it to the
           // viewport centre, so a card opening never shifts the buttons.
-          <div className={launcherSpread ? 'bottom-tray-launchers' : 'flex items-center gap-2 sm:gap-3'}>
+          <div
+            className={`flex items-center gap-2 sm:gap-3 ${launcherSpread ? 'bottom-tray-launchers' : ''}`}
+          >
             <Fragment key="search-btn">{searchButton}</Fragment>
             <Fragment key="chat-btn">{chatButton}</Fragment>
           </div>

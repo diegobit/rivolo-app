@@ -96,6 +96,16 @@ vi.mock('../lib/dayRepository', () => ({
 vi.mock('../components/timeline/DayEditorCard', () => ({
   default: () => <div data-testid="day-editor-card" />,
 }))
+// Captures the navigation the search card triggers: without this, a no-op
+// handleOpenMatchedLineResult would satisfy every "card stays open" assertion.
+const handleCitationClick = vi.fn().mockResolvedValue(undefined)
+vi.mock('./timeline/useCitationNavigation', () => ({
+  useCitationNavigation: () => ({
+    handleCitationClick,
+    handleAssistantMarkdownClick: vi.fn(),
+    handleAssistantMarkdownKeyDown: vi.fn(),
+  }),
+}))
 vi.mock('../components/timeline/EmptyStateHero', () => ({
   default: () => <div data-testid="empty-state-hero" />,
 }))
@@ -331,8 +341,12 @@ describe('Timeline desktop search card', () => {
     typeQuery('hello')
     await waitForResults(1)
 
+    handleCitationClick.mockClear()
     fireEvent.click(screen.getByRole('button', { name: /Open note for/ }))
 
+    await waitFor(() => {
+      expect(handleCitationClick).toHaveBeenCalledWith({ day: todayId, quote: 'hello world' })
+    })
     expect(useUIStore.getState().mode).toBe('search')
     expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
     expect(getSearchInput()).toBeInTheDocument()
@@ -353,8 +367,12 @@ describe('Timeline desktop search card', () => {
     expect(cardSection).toBeInTheDocument()
     expect(cardSection).not.toHaveAttribute('tabindex')
 
+    handleCitationClick.mockClear()
     fireEvent.click(cardSection!)
 
+    await waitFor(() => {
+      expect(handleCitationClick).toHaveBeenCalledWith({ day: todayId, quote: 'hello world' })
+    })
     expect(useUIStore.getState().mode).toBe('search')
     expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
   })

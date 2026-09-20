@@ -27,7 +27,7 @@ const renderRow = (overrides: Partial<Parameters<typeof BottomTrayRow>[0]> = {})
   )
 
 const getRow = () => {
-  const row = screen.getByRole('button', { name: 'Search' }).parentElement
+  const row = document.querySelector('.bottom-tray-row')
   if (!(row instanceof HTMLElement)) {
     throw new Error('bottom tray row not found')
   }
@@ -48,7 +48,10 @@ describe('BottomTrayRow', () => {
   it('hands the launcher pair to the viewport-pinned container on desktop', () => {
     const { container } = renderRow({ launcherSpread: true })
 
-    expect(container.querySelector('.bottom-tray-launchers')).not.toBeNull()
+    const launchers = container.querySelector('.bottom-tray-launchers')
+    expect(launchers).not.toBeNull()
+    expect(launchers).toContainElement(screen.getByRole('button', { name: 'Search' }))
+    expect(launchers).toContainElement(screen.getByRole('button', { name: 'Chat' }))
   })
 
   it('keeps the launcher pair inside the row on narrow viewports', () => {
@@ -56,6 +59,7 @@ describe('BottomTrayRow', () => {
 
     expect(container.querySelector('.bottom-tray-launchers')).toBeNull()
     expect(getRow()).toContainElement(screen.getByRole('button', { name: 'Search' }))
+    expect(getRow()).toHaveClass('justify-center')
   })
 
   it('renders the mode toggle and tray composer instead of the launcher pair in mobile input modes', () => {
