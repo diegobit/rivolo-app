@@ -4,6 +4,7 @@ import { EditorView, keymap } from '@codemirror/view'
 import type { Extension } from '@codemirror/state'
 import { createHighlightPlugin } from '../../lib/editor/searchHighlight'
 import { todoKeymap, todoPointerHandler } from '../../lib/editor/todoExtensions'
+import { wrapSelectionOnDelimiter } from '../../lib/editor/wrapSelection'
 import { editorHighlights } from '../../lib/editorHighlights'
 import type { Day } from '../../lib/dayRepository'
 
@@ -317,6 +318,7 @@ const DayEditorCard = memo(({
       clearActiveLine,
       EditorView.lineWrapping,
       writingAssistAttributes,
+      wrapSelectionOnDelimiter,
       navigationKeymap,
       todoKeymap,
       todoPointerHandler,
