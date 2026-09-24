@@ -14,15 +14,18 @@ type ChatMessageListProps = {
 const copiedResetDelayMs = 2000
 
 function AssistantCopyButton({ text, mobile }: { text: string; mobile: boolean }) {
-  const [copied, setCopied] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const resetTimeoutRef = useRef<number | null>(null)
+  const isMountedRef = useRef(true)
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    isMountedRef.current = true
+
+    return () => {
+      isMountedRef.current = false
       if (resetTimeoutRef.current !== null) window.clearTimeout(resetTimeoutRef.current)
-    },
-    [],
-  )
+    }
+  }, [])
 
   return (
     <button
@@ -33,23 +36,27 @@ function AssistantCopyButton({ text, mobile }: { text: string; mobile: boolean }
       aria-label="Copy message"
       onClick={() => {
         void copyTextToClipboard(text).then((didCopy) => {
-          if (!didCopy) return
-          setCopied(true)
+          if (!isMountedRef.current) return
+          setStatus(didCopy ? 'copied' : 'failed')
           if (resetTimeoutRef.current !== null) window.clearTimeout(resetTimeoutRef.current)
-          resetTimeoutRef.current = window.setTimeout(() => setCopied(false), copiedResetDelayMs)
+          resetTimeoutRef.current = window.setTimeout(() => setStatus('idle'), copiedResetDelayMs)
         })
       }}
     >
-      {copied ? (
+      {status === 'copied' ? (
         <svg viewBox="0 0 256 256" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
           <path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z" />
+        </svg>
+      ) : status === 'failed' ? (
+        <svg viewBox="0 0 256 256" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+          <path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z" />
         </svg>
       ) : (
         <svg viewBox="0 0 256 256" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
           <path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z" />
         </svg>
       )}
-      <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
+      <span aria-live="polite">{status === 'copied' ? 'Copied' : status === 'failed' ? 'Copy failed' : 'Copy'}</span>
     </button>
   )
 }

@@ -26,4 +26,21 @@ describe('copyTextToClipboard', () => {
 
     await expect(copyTextToClipboard('hello')).resolves.toBe(false)
   })
+
+  it('cleans up the fallback textarea and restores focus when execCommand throws', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn().mockImplementation(() => {
+        throw new Error('copy unavailable')
+      }),
+    })
+    const trigger = document.createElement('button')
+    document.body.appendChild(trigger)
+    trigger.focus()
+
+    await expect(copyTextToClipboard('hello')).resolves.toBe(false)
+    expect(document.querySelector('textarea')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
 })

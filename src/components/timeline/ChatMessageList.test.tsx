@@ -82,4 +82,42 @@ describe('ChatMessageList copy button', () => {
 
     expect(screen.queryByRole('button', { name: 'Copy message' })).not.toBeInTheDocument()
   })
+
+  it('reports a failed copy instead of confirming it', async () => {
+    writeText.mockRejectedValue(new Error('denied'))
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: vi.fn().mockReturnValue(false) })
+    renderMessage({ id: 'assistant-4', role: 'assistant', content: 'Hello there.' })
+
+    const copyButton = screen.getByRole('button', { name: 'Copy message' })
+    await userEvent.click(copyButton)
+
+    expect(copyButton).toHaveTextContent('Copy failed')
+    expect(copyButton).not.toHaveTextContent('Copied')
+  })
+
+  it('ignores a clipboard result that arrives after unmount', async () => {
+    let resolveWrite: (() => void) | undefined
+    writeText.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveWrite = resolve
+        }),
+    )
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout')
+    const { unmount } = render(
+      <ChatMessageList
+        messages={[{ id: 'assistant-5', role: 'assistant', content: 'Hello there.' }]}
+        onAssistantMarkdownClick={vi.fn()}
+        onAssistantMarkdownKeyDown={vi.fn()}
+        onChatInsert={vi.fn()}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Copy message' }))
+    unmount()
+    resolveWrite?.()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(setTimeoutSpy).not.toHaveBeenCalledWith(expect.any(Function), 2000)
+  })
 })
