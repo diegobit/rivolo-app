@@ -78,7 +78,7 @@ export default function ChatMessageList({
           <div
             className={`group space-y-2 text-m ${
               message.role === 'user'
-                ? 'max-w-[85%] rounded-2xl bg-[var(--theme-accent)] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
+                ? 'max-w-[85%] rounded-[20px] bg-[var(--theme-accent)] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
                 : 'w-full max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
             }`}
           >
