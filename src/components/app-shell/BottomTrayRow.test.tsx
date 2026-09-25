@@ -88,14 +88,15 @@ describe('BottomTrayRow', () => {
     expect(screen.queryByRole('button', { name: 'Chat' })).not.toBeInTheDocument()
   })
 
-  it('lifts scroll-to-today clear of the desktop launcher capsule', () => {
-    renderRow({ launcherSpread: true, showScrollToToday: true, mode: 'chat' })
+  it('centres scroll-to-today above the desktop launcher capsule', () => {
+    const { container } = renderRow({ launcherSpread: true, showScrollToToday: true, mode: 'chat' })
 
-    // The capsule is fixed outside the zero-height row, so only this offset keeps
-    // the button above it; the real overlap is measured in the browser.
+    // Rendered inside the capsule so it is centred on it and moves with it; the
+    // real geometry is measured in the browser.
     const button = screen.getByRole('button', { name: 'Scroll to Today' })
-    expect(button).toHaveClass('right-0', 'top-[-6.25rem]')
-    expect(button).not.toHaveClass('sm:top-[-3.1rem]')
+    expect(container.querySelector('.bottom-tray-launchers')).toContainElement(button)
+    expect(button).toHaveClass('left-1/2', '-translate-x-1/2', 'bottom-[calc(100%+10px)]')
+    expect(button).not.toHaveClass('sm:right-0')
   })
 
   it('keeps the mobile scroll-to-today position when the pair is centered', () => {
@@ -103,5 +104,6 @@ describe('BottomTrayRow', () => {
 
     const button = screen.getByRole('button', { name: 'Scroll to Today' })
     expect(button).toHaveClass('right-[15px]', 'sm:top-[-3.1rem]')
+    expect(getRow()).toContainElement(button)
   })
 })

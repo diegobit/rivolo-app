@@ -29,14 +29,7 @@ export default function BottomTrayRow({
   showScrollToToday,
   onScrollToToday,
 }: BottomTrayRowProps) {
-  // On desktop the launcher capsule is fixed outside the row, which leaves the
-  // row with no height, so the offset has to clear the capsule itself (50px,
-  // 54px on coarse pointers) instead of the buttons that used to fill the row.
-  const scrollToTodayTopClass = launcherSpread
-    ? 'top-[-6.25rem]'
-    : mode === 'search'
-      ? 'top-[-6rem] sm:top-[-3.1rem]'
-      : 'top-[-3.5rem] sm:top-[-3.1rem]'
+  const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.5rem] sm:top-[-3.1rem]'
   // The launcher pair (lens bottom-left, AI bottom-right) owns the row on
   // desktop in every mode and on timeline mode everywhere else. The tray
   // composer only appears on narrow viewports in chat/search mode.
@@ -44,9 +37,23 @@ export default function BottomTrayRow({
   const trayRowAlignmentClass = showTraySlot ? 'items-end' : 'items-center'
   const trayRowJustifyClass = 'justify-center'
   const modeToggleOffsetClassName = showTraySlot ? 'mb-1.5 sm:mb-3' : ''
-  const scrollToTodayRightClass = launcherSpread
-    ? 'right-0'
-    : `${showMobileChatTogglePill ? 'right-[67px]' : 'right-[15px]'} sm:right-0`
+  const mobileScrollToTodayRightClass = `${showMobileChatTogglePill ? 'right-[67px]' : 'right-[15px]'} sm:right-0`
+  // On desktop it sits centred just above the launcher capsule (it is rendered
+  // inside it), so it moves with the capsule and never lands under it.
+  const scrollToTodayPositionClass = launcherSpread
+    ? 'bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2'
+    : `${mobileScrollToTodayTopClass} ${mobileScrollToTodayRightClass}`
+  const scrollToTodayButton = showScrollToToday ? (
+    <button
+      type="button"
+      className={`absolute ${scrollToTodayPositionClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:h-10 sm:w-10`}
+      aria-label="Scroll to Today"
+      title="Scroll to Today"
+      onClick={onScrollToToday}
+    >
+      <img src="/arrow-line-up.svg" alt="" className="h-5 w-5" />
+    </button>
+  ) : null
 
   return (
     <>
@@ -68,6 +75,7 @@ export default function BottomTrayRow({
           >
             <Fragment key="search-btn">{searchButton}</Fragment>
             <Fragment key="chat-btn">{chatButton}</Fragment>
+            {launcherSpread && scrollToTodayButton}
           </div>
         ) : (
           <Fragment key="mode-toggle-btn">
@@ -100,16 +108,7 @@ export default function BottomTrayRow({
           </button>
         )}
 
-        {showScrollToToday && (
-          <button
-            type="button"
-            className={`absolute ${scrollToTodayTopClass} ${scrollToTodayRightClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:h-10 sm:w-10`}
-            aria-label="Scroll to Today"
-            onClick={onScrollToToday}
-          >
-            <img src="/arrow-line-up.svg" alt="" className="h-5 w-5" />
-          </button>
-        )}
+        {!launcherSpread && scrollToTodayButton}
       </div>
     </>
   )

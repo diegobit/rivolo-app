@@ -1859,7 +1859,7 @@ export default function Timeline() {
                   onClick={handleNewChat}
                   disabled={sending}
                 >
-                  <img src="/pencil-simple-line.svg" alt="" className="h-5 w-5 opacity-80" />
+                  <img src="/eraser.svg" alt="" className="h-5 w-5 opacity-80" />
                 </button>
                 <button
                   type="button"

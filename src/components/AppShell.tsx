@@ -167,7 +167,7 @@ export default function AppShell() {
         setMode('chat')
       }}
       aria-label={chatButtonLabel}
-      title={chatButtonLabel}
+      title={isDesktopHome ? `${chatButtonLabel} (${launcherShortcutModifier.trim()}${isApplePlatform() ? '' : '+'}K)` : chatButtonLabel}
       aria-expanded={isDesktopHome && mode === 'chat' && desktopChatPanelOpen}
       aria-controls={isDesktopHome && mode === 'chat' && desktopChatPanelOpen ? 'desktop-chat-card' : undefined}
     >
@@ -194,7 +194,11 @@ export default function AppShell() {
         setMode('search')
       }}
       aria-label={isDesktopHome && mode === 'search' ? 'Hide search' : 'Search'}
-      title={isDesktopHome && mode === 'search' ? 'Hide search' : 'Search'}
+      title={
+        isDesktopHome
+          ? `${mode === 'search' ? 'Hide search' : 'Search'} (${launcherShortcutModifier.trim()}${isApplePlatform() ? '' : '+'}F)`
+          : 'Search'
+      }
       aria-expanded={isDesktopHome && mode === 'search'}
       aria-controls={isDesktopHome && mode === 'search' ? 'desktop-search-card' : undefined}
     >

@@ -1246,19 +1246,17 @@
     font-weight: 600;
   }
 
-  /* Inside the capsule the halves have no border of their own, not even the
-     Tailwind hover border; the hover fill and the thumb carry the state. */
+  /* Inside the capsule the halves have no fill or border of their own, not even
+     Tailwind's hover styles; only the thumb marks a half. */
   .bottom-tray-launchers .bottom-tray-launcher-button:hover {
     border-color: transparent;
-  }
-
-  .bottom-tray-launchers .bottom-tray-launcher-button:not([aria-expanded='true']):hover {
-    background: var(--theme-hover);
-  }
-
-  /* The thumb is the open state; hover must not paint over it. */
-  .bottom-tray-launchers .bottom-tray-launcher-button[aria-expanded='true'] {
     background: transparent;
+  }
+
+  /* Same focus ring as the floating cards' header buttons. */
+  .bottom-tray-launchers .bottom-tray-launcher-button:focus-visible {
+    outline: 2px solid var(--theme-accent);
+    outline-offset: 2px;
   }
 
   .bottom-tray-launchers .bottom-tray-launcher-button img {
