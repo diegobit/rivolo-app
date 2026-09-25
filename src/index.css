@@ -977,6 +977,17 @@
     .touch-actions {
       display: none;
     }
+
+    .hover-reveal {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .group:hover .hover-reveal,
+    .group:focus-within .hover-reveal {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
 
   @media (hover: none) {
