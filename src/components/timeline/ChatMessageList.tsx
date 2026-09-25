@@ -13,7 +13,7 @@ type ChatMessageListProps = {
 
 const copiedResetDelayMs = 2000
 
-function AssistantCopyButton({ text, mobile }: { text: string; mobile: boolean }) {
+function AssistantCopyButton({ text }: { text: string }) {
   const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const resetTimeoutRef = useRef<number | null>(null)
   const isMountedRef = useRef(true)
@@ -30,10 +30,15 @@ function AssistantCopyButton({ text, mobile }: { text: string; mobile: boolean }
   return (
     <button
       type="button"
-      className={`hover-reveal inline-flex min-h-11 items-center gap-1.5 rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 text-xs font-semibold text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:text-[var(--theme-text)] sm:h-8 sm:min-h-0 ${
-        mobile ? '' : 'hover:-translate-y-[1px] hover:shadow-md'
+      className={`hover-reveal -ml-2 inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:text-[var(--theme-text)] sm:-ml-2.5 sm:h-9 sm:w-9 ${
+        status === 'copied'
+          ? 'text-[var(--theme-accent-text)]'
+          : status === 'failed'
+            ? 'text-[var(--theme-danger-text)]'
+            : ''
       }`}
       aria-label="Copy message"
+      title="Copy message"
       onClick={() => {
         void copyTextToClipboard(text).then((didCopy) => {
           if (!isMountedRef.current) return
@@ -44,19 +49,21 @@ function AssistantCopyButton({ text, mobile }: { text: string; mobile: boolean }
       }}
     >
       {status === 'copied' ? (
-        <svg viewBox="0 0 256 256" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+        <svg viewBox="0 0 256 256" className="h-4 w-4" fill="currentColor" aria-hidden="true">
           <path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z" />
         </svg>
       ) : status === 'failed' ? (
-        <svg viewBox="0 0 256 256" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+        <svg viewBox="0 0 256 256" className="h-4 w-4" fill="currentColor" aria-hidden="true">
           <path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z" />
         </svg>
       ) : (
-        <svg viewBox="0 0 256 256" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
-          <path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z" />
+        <svg viewBox="0 0 256 256" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+          <path d="M184,64H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H184a8,8,0,0,0,8-8V72A8,8,0,0,0,184,64Zm-8,144H48V80H176ZM224,40V184a8,8,0,0,1-16,0V48H72a8,8,0,0,1,0-16H216A8,8,0,0,1,224,40Z" />
         </svg>
       )}
-      <span aria-live="polite">{status === 'copied' ? 'Copied' : status === 'failed' ? 'Copy failed' : 'Copy'}</span>
+      <span className="sr-only" aria-live="polite">
+        {status === 'copied' ? 'Copied' : status === 'failed' ? 'Copy failed' : 'Copy'}
+      </span>
     </button>
   )
 }
@@ -78,7 +85,7 @@ export default function ChatMessageList({
           <div
             className={`group space-y-2 text-m ${
               message.role === 'user'
-                ? 'max-w-[85%] rounded-2xl bg-[var(--theme-accent)] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
+                ? 'max-w-[85%] rounded-[20px] bg-[var(--theme-accent)] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
                 : 'w-full max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
             }`}
           >
@@ -102,7 +109,7 @@ export default function ChatMessageList({
             ) : null}
 
             {message.role === 'assistant' && !message.meta?.isStreaming && message.content?.trim() ? (
-              <AssistantCopyButton text={message.content} mobile={mobile} />
+              <AssistantCopyButton text={message.content} />
             ) : null}
 
             {message.role === 'assistant' &&
