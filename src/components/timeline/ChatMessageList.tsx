@@ -31,7 +31,7 @@ function MessageCopyButton({ text, align }: { text: string; align: 'start' | 'en
     <button
       type="button"
       className={`hover-reveal inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:text-[var(--theme-text)] sm:h-9 sm:w-9 ${
-        align === 'end' ? '-mr-2 sm:-mr-2.5' : '-ml-2 sm:-ml-2.5'
+        align === 'end' ? '-mr-1 sm:-mr-1.5' : '-ml-2 sm:-ml-2.5'
       } ${
         status === 'copied'
           ? 'text-[var(--theme-accent-text)]'
@@ -87,7 +87,7 @@ export default function ChatMessageList({
           <div
             className={`group text-m ${
               message.role === 'user'
-                ? 'flex max-w-[85%] flex-col items-end space-y-2'
+                ? 'flex max-w-[85%] flex-col items-end space-y-1'
                 : 'w-full max-w-full space-y-2 text-left'
             }`}
           >
