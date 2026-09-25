@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import BottomTrayRow from './app-shell/BottomTrayRow'
-import BottomTrayPortal from './BottomTrayPortal'
 import AttentionPopover from './app-shell/AttentionPopover'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
 import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
@@ -60,6 +60,7 @@ export default function AppShell() {
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
   const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
+  const mobileChatHeaderSlot = useUIStore((state) => state.mobileChatHeaderSlot)
   const timelineEmpty = useUIStore((state) => state.timelineEmpty)
   const tabSync = useTabSyncState()
   const [showShortcuts, setShowShortcuts] = useState(false)
@@ -529,13 +530,9 @@ export default function AppShell() {
             : ''
         }`}
       />
-      {headerRidesInMobileChat ? (
-        <BottomTrayPortal key="mobile-chat-header" containerId="mobile-chat-header-slot">
-          {headerBar}
-        </BottomTrayPortal>
-      ) : (
-        headerBar
-      )}
+      {headerRidesInMobileChat && mobileChatHeaderSlot
+        ? createPortal(headerBar, mobileChatHeaderSlot)
+        : headerBar}
 
       <main
         inert={tabSync.databaseStale}

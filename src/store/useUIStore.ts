@@ -9,11 +9,14 @@ type UIState = {
   desktopChatPanelOpen: boolean
   chatMessageCount: number
   timelineEmpty: boolean | null
+  // Set by the mobile chat overlay so the app header can render inside its scroller.
+  mobileChatHeaderSlot: HTMLElement | null
   setMode: (mode: Mode) => void
   setChatPanelOpen: (open: boolean) => void
   setDesktopChatPanelOpen: (open: boolean) => void
   setChatMessageCount: (count: number) => void
   setTimelineEmpty: (empty: boolean | null) => void
+  setMobileChatHeaderSlot: (slot: HTMLElement | null) => void
 }
 
 const getDefaultChatPanelsOpen = () => {
@@ -27,6 +30,7 @@ export const useUIStore = create<UIState>((set) => ({
   desktopChatPanelOpen: getDefaultChatPanelsOpen(),
   chatMessageCount: 0,
   timelineEmpty: null,
+  mobileChatHeaderSlot: null,
   setMode: (mode) =>
     set((state) => ({
       mode,
@@ -37,4 +41,5 @@ export const useUIStore = create<UIState>((set) => ({
   setDesktopChatPanelOpen: (open) => set({ desktopChatPanelOpen: open }),
   setChatMessageCount: (count) => set({ chatMessageCount: count }),
   setTimelineEmpty: (empty) => set({ timelineEmpty: empty }),
+  setMobileChatHeaderSlot: (slot) => set({ mobileChatHeaderSlot: slot }),
 }))

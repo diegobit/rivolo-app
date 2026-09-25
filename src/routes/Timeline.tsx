@@ -342,6 +342,7 @@ export default function Timeline() {
   const mode = useUIStore((state) => state.mode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
+  const setMobileChatHeaderSlot = useUIStore((state) => state.setMobileChatHeaderSlot)
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
   const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const setChatMessageCount = useUIStore((state) => state.setChatMessageCount)
@@ -1874,7 +1875,7 @@ export default function Timeline() {
               />
               {/* Rendered last so flex-col-reverse puts the app header above the oldest
                   message; mb-auto pins it to the top while the thread is still short. */}
-              <div id="mobile-chat-header-slot" className="mb-auto shrink-0" />
+              <div ref={setMobileChatHeaderSlot} className="mb-auto shrink-0" />
             </div>
           </div>
         </>
