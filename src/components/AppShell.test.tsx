@@ -46,6 +46,8 @@ const stores = vi.hoisted(() => ({
     chatMessageCount: 0,
     timelineEmpty: null as boolean | null,
     setTimelineEmpty: vi.fn(),
+    mobileChatHeaderSlot: null as HTMLElement | null,
+    setMobileChatHeaderSlot: vi.fn(),
   },
   viewport: {
     isNarrow: false,
@@ -148,6 +150,7 @@ describe('AppShell attention and stale tab states', () => {
     stores.ui.desktopChatPanelOpen = false
     stores.ui.chatMessageCount = 0
     stores.ui.timelineEmpty = null
+    stores.ui.mobileChatHeaderSlot = null
     stores.viewport.isNarrow = false
   })
 
@@ -570,5 +573,83 @@ describe('AppShell attention and stale tab states', () => {
     act(() => flushRaf())
 
     expect(screen.queryByTestId('scroll-to-today-visible')).not.toBeInTheDocument()
+  })
+})
+
+describe('AppShell header handoff to the mobile chat overlay', () => {
+  beforeEach(() => {
+    installMatchMedia(false)
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.days = { loaded: true, loading: false, days: [{}] }
+    stores.sync.activeProvider = 'dropbox'
+    stores.sync.syncAttention = null
+    stores.settings.llmSecrets = { gemini: { apiKey: 'k' } }
+    stores.ui.mode = 'chat'
+    stores.ui.chatPanelOpen = true
+    stores.ui.mobileChatHeaderSlot = null
+    stores.viewport.isNarrow = true
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const renderShell = () =>
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+  // The overlay publishes its slot from a commit-phase ref, so AppShell can render
+  // before the slot exists. Every step below must still show exactly one header:
+  // an earlier version looked the slot up by id once and lost the header for good
+  // when the two components updated in separate commits (e.g. desktop -> mobile resize).
+  it('keeps exactly one header while the slot appears and disappears', () => {
+    const { rerender, container } = renderShell()
+    const rerenderShell = () =>
+      rerender(
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<AppShell />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+    const slot = document.createElement('div')
+    container.append(slot)
+
+    expect(container.querySelectorAll('header')).toHaveLength(1)
+    expect(slot.querySelector('header')).toBeNull()
+
+    act(() => {
+      stores.ui.mobileChatHeaderSlot = slot
+    })
+    rerenderShell()
+
+    expect(container.querySelectorAll('header')).toHaveLength(1)
+    expect(slot.querySelector('header')).not.toBeNull()
+
+    act(() => {
+      stores.ui.mobileChatHeaderSlot = null
+    })
+    rerenderShell()
+
+    expect(container.querySelectorAll('header')).toHaveLength(1)
+    expect(slot.querySelector('header')).toBeNull()
+  })
+
+  it('leaves the header in place on a wide viewport even if a slot is published', () => {
+    stores.viewport.isNarrow = false
+    const slot = document.createElement('div')
+
+    const { container } = renderShell()
+    container.append(slot)
+    stores.ui.mobileChatHeaderSlot = slot
+
+    expect(container.querySelectorAll('header')).toHaveLength(1)
+    expect(slot.querySelector('header')).toBeNull()
   })
 })
