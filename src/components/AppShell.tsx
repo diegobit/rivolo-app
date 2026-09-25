@@ -4,7 +4,7 @@ import BottomTrayRow from './app-shell/BottomTrayRow'
 import AttentionPopover from './app-shell/AttentionPopover'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
 import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
-import { isPrimaryModifierPressed } from '../lib/device'
+import { isApplePlatform, isPrimaryModifierPressed } from '../lib/device'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
@@ -134,8 +134,13 @@ export default function AppShell() {
 
   if (isHome && isWelcomeVisible && !sawWelcome) setSawWelcome(true)
 
-  const chatButtonLabel =
-    isDesktopHome && mode === 'chat' && desktopChatPanelOpen ? 'Hide chat' : 'Chat'
+  // Desktop shows the launcher's name, so its accessible name has to match it.
+  const chatButtonLabel = isDesktopHome
+    ? mode === 'chat' && desktopChatPanelOpen
+      ? 'Hide Ask AI'
+      : 'Ask AI'
+    : 'Chat'
+  const launcherShortcutModifier = isApplePlatform() ? '⌘' : 'Ctrl '
 
   const chatButton = (
     <button
@@ -167,6 +172,8 @@ export default function AppShell() {
       aria-controls={isDesktopHome && mode === 'chat' && desktopChatPanelOpen ? 'desktop-chat-card' : undefined}
     >
       <img src="/sparkle.svg" alt="" className="h-5 w-5" />
+      <span className="launcher-label" aria-hidden="true">Ask AI</span>
+      <kbd className="launcher-kbd" aria-hidden="true">{launcherShortcutModifier}K</kbd>
     </button>
   )
 
@@ -192,6 +199,8 @@ export default function AppShell() {
       aria-controls={isDesktopHome && mode === 'search' ? 'desktop-search-card' : undefined}
     >
       <img src="/magnifying-glass.svg" alt="" className="h-5 w-5" />
+      <span className="launcher-label" aria-hidden="true">Search</span>
+      <kbd className="launcher-kbd" aria-hidden="true">{launcherShortcutModifier}F</kbd>
     </button>
   )
 

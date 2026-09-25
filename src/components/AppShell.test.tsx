@@ -663,9 +663,12 @@ describe('AppShell launcher mode buttons', () => {
   it('opens chat or search from the launcher buttons on desktop timeline mode in Search then Chat order', () => {
     render(renderHome())
 
-    const buttons = screen.getAllByRole('button', { name: /Search|Chat/ })
+    const buttons = screen.getAllByRole('button', { name: /^(Search|Ask AI)$/ })
     expect(buttons[0]).toHaveAccessibleName('Search')
-    expect(buttons[1]).toHaveAccessibleName('Chat')
+    expect(buttons[1]).toHaveAccessibleName('Ask AI')
+    // Desktop launchers carry visible labels that match their accessible names.
+    expect(buttons[0]).toHaveTextContent('Search')
+    expect(buttons[1]).toHaveTextContent('Ask AI')
     expect(buttons[0]).toHaveAttribute('type', 'button')
     expect(buttons[1]).toHaveAttribute('type', 'button')
     expect(buttons[0]).not.toHaveAttribute('aria-controls')
@@ -676,7 +679,7 @@ describe('AppShell launcher mode buttons', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
     expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('search')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask AI' }))
     expect(stores.ui.setMode).toHaveBeenLastCalledWith('chat')
     expect(stores.ui.setMode).toHaveBeenCalledTimes(2)
   })
@@ -698,7 +701,7 @@ describe('AppShell launcher mode buttons', () => {
     stores.ui.desktopChatPanelOpen = true
     render(renderHome())
 
-    const chatBtn = screen.getByRole('button', { name: 'Hide chat' })
+    const chatBtn = screen.getByRole('button', { name: 'Hide Ask AI' })
     expect(chatBtn).toHaveAttribute('aria-expanded', 'true')
     expect(chatBtn).toHaveAttribute('aria-controls', 'desktop-chat-card')
     fireEvent.click(chatBtn)
@@ -752,7 +755,7 @@ describe('AppShell launcher mode buttons', () => {
     stores.ui.desktopChatPanelOpen = false
     render(renderHome())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask AI' }))
 
     expect(stores.ui.setDesktopChatPanelOpen).toHaveBeenCalledWith(true)
     expect(stores.ui.setMode).toHaveBeenCalledWith('chat')
@@ -776,7 +779,7 @@ describe('AppShell launcher mode buttons', () => {
     stores.ui.desktopChatPanelOpen = true
     render(renderHome())
 
-    const chatLauncher = screen.getByRole('button', { name: 'Hide chat' })
+    const chatLauncher = screen.getByRole('button', { name: 'Hide Ask AI' })
     expect(chatLauncher).toBeInTheDocument()
 
     fireEvent.keyDown(window, { key: 'Escape' })

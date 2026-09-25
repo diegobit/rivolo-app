@@ -55,7 +55,9 @@ export default function BottomTrayRow({
           // On desktop CSS lifts this pair out of the row and pins it to the
           // viewport centre, so a card opening never shifts the buttons.
           <div
-            className={`flex items-center gap-2 sm:gap-3 ${launcherSpread ? 'bottom-tray-launchers' : ''}`}
+            className={`flex items-center ${launcherSpread ? 'bottom-tray-launchers' : 'gap-2 sm:gap-3'}`}
+            // Tells the capsule which half the sliding thumb sits behind.
+            data-open={launcherSpread && (mode === 'search' || mode === 'chat') ? mode : undefined}
           >
             <Fragment key="search-btn">{searchButton}</Fragment>
             <Fragment key="chat-btn">{chatButton}</Fragment>

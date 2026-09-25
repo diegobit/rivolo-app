@@ -1174,29 +1174,135 @@
     bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1.5rem);
   }
 
-  /* Pinned to the viewport centre, outside the tray row, so opening or closing a
-     card never shifts the pair. Unlayered to beat the row's Tailwind utilities. */
-  @media (min-width: 700px) {
-    .bottom-tray-launchers {
-      position: fixed;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1.5rem);
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      z-index: 30;
+  /* The launchers form one capsule pinned to the viewport centre, outside the
+     tray row, so opening or closing a card never shifts them. A raised thumb
+     slides behind whichever half's card is open. The descendant selectors
+     outrank the buttons' Tailwind utilities. */
+  .bottom-tray-launchers {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1.5rem);
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 4px;
+    border: 1px solid var(--theme-border);
+    border-radius: 9999px;
+    background:
+      radial-gradient(ellipse 60% 140% at 92% 100%, rgb(22 164 236 / 0.16), transparent 70%),
+      var(--theme-surface-soft);
+    box-shadow:
+      0 10px 30px -12px rgb(var(--theme-shadow-color) / 0.35),
+      0 2px 6px -2px rgb(var(--theme-shadow-color) / 0.12);
+    z-index: 30;
+  }
+
+  .bottom-tray-launchers::before {
+    content: '';
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 4px;
+    width: calc(50% - 4px);
+    border-radius: 9999px;
+    background: var(--theme-surface);
+    box-shadow:
+      0 1px 2px rgb(var(--theme-shadow-color) / 0.1),
+      0 4px 14px -4px rgb(var(--theme-shadow-color) / 0.28);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 180ms ease;
+  }
+
+  .bottom-tray-launchers[data-open]::before {
+    opacity: 1;
+  }
+
+  .bottom-tray-launchers[data-open='chat']::before {
+    transform: translateX(100%);
+  }
+
+  html[data-theme='dark'] .bottom-tray-launchers::before {
+    background: #2a3340;
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.4),
+      0 4px 14px -4px rgb(0 0 0 / 0.6);
+  }
+
+  .bottom-tray-launchers .bottom-tray-launcher-button {
+    position: relative;
+    z-index: 1;
+    width: 48px;
+    height: 40px;
+    gap: 8px;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--theme-text);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* Inside the capsule the halves have no border of their own, not even the
+     Tailwind hover border; the hover fill and the thumb carry the state. */
+  .bottom-tray-launchers .bottom-tray-launcher-button:hover {
+    border-color: transparent;
+  }
+
+  .bottom-tray-launchers .bottom-tray-launcher-button:not([aria-expanded='true']):hover {
+    background: var(--theme-hover);
+  }
+
+  /* The thumb is the open state; hover must not paint over it. */
+  .bottom-tray-launchers .bottom-tray-launcher-button[aria-expanded='true'] {
+    background: transparent;
+  }
+
+  .bottom-tray-launchers .bottom-tray-launcher-button img {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Coarse-pointer (touch) desktops keep 44px launcher targets. */
+  @media (pointer: coarse) {
+    .bottom-tray-launchers .bottom-tray-launcher-button {
+      height: 44px;
     }
   }
 
-  /* Coarse-pointer (touch) desktops keep 44px launcher targets; the sm:h-10
-     utility would otherwise shrink them to 40px. */
-  @media (pointer: coarse) {
-    .bottom-tray-launcher-button {
-      height: 2.75rem;
-      width: 2.75rem;
+  @media (min-width: 1150px) {
+    .bottom-tray-launchers .bottom-tray-launcher-button {
+      width: 132px;
+    }
+
+    .bottom-tray-launchers .launcher-label {
+      display: inline;
     }
   }
+
+  /* Shortcut hints only where there is likely a physical keyboard. */
+  @media (min-width: 1150px) and (hover: hover) and (pointer: fine) {
+    .bottom-tray-launchers .launcher-kbd {
+      display: inline;
+      font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      opacity: 0.45;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bottom-tray-launchers::before {
+      transition: none;
+    }
+  }
+}
+
+/* Labels and hints are desktop-capsule only; the mobile launchers stay icons. */
+.launcher-label,
+.launcher-kbd {
+  display: none;
 }
 
 @media (min-width: 700px) {

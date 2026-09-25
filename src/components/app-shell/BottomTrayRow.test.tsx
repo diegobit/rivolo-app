@@ -7,24 +7,25 @@ const searchButton = <button type="button" aria-label="Search" />
 const modeToggleButton = <button type="button" aria-label="Switch mode" />
 const trayCenter = <div data-testid="bottom-tray" />
 
-const renderRow = (overrides: Partial<Parameters<typeof BottomTrayRow>[0]> = {}) =>
-  render(
-    <BottomTrayRow
-      mode="timeline"
-      chatButton={chatButton}
-      searchButton={searchButton}
-      modeToggleButton={modeToggleButton}
-      trayCenter={trayCenter}
-      showLauncherButtons
-      launcherSpread={false}
-      showMobileChatTogglePill={false}
-      chatPanelOpen={false}
-      onToggleChatPanel={() => undefined}
-      showScrollToToday={false}
-      onScrollToToday={() => undefined}
-      {...overrides}
-    />,
-  )
+type BottomTrayRowProps = Parameters<typeof BottomTrayRow>[0]
+
+const baseProps: BottomTrayRowProps = {
+  mode: 'timeline',
+  chatButton,
+  searchButton,
+  modeToggleButton,
+  trayCenter,
+  showLauncherButtons: true,
+  launcherSpread: false,
+  showMobileChatTogglePill: false,
+  chatPanelOpen: false,
+  onToggleChatPanel: () => undefined,
+  showScrollToToday: false,
+  onScrollToToday: () => undefined,
+}
+
+const renderRow = (overrides: Partial<BottomTrayRowProps> = {}) =>
+  render(<BottomTrayRow {...baseProps} {...overrides} />)
 
 const getRow = () => {
   const row = document.querySelector('.bottom-tray-row')
@@ -52,6 +53,22 @@ describe('BottomTrayRow', () => {
     expect(launchers).not.toBeNull()
     expect(launchers).toContainElement(screen.getByRole('button', { name: 'Search' }))
     expect(launchers).toContainElement(screen.getByRole('button', { name: 'Chat' }))
+  })
+
+  it('marks which card is open so the capsule thumb sits behind that half', () => {
+    const { container, rerender } = renderRow({ launcherSpread: true, mode: 'timeline' })
+    const launchers = () => container.querySelector('.bottom-tray-launchers')
+
+    expect(launchers()).not.toHaveAttribute('data-open')
+
+    rerender(<BottomTrayRow {...baseProps} launcherSpread mode="search" />)
+    expect(launchers()).toHaveAttribute('data-open', 'search')
+
+    rerender(<BottomTrayRow {...baseProps} launcherSpread mode="chat" />)
+    expect(launchers()).toHaveAttribute('data-open', 'chat')
+
+    rerender(<BottomTrayRow {...baseProps} launcherSpread mode="timeline" />)
+    expect(launchers()).not.toHaveAttribute('data-open')
   })
 
   it('keeps the launcher pair inside the row on narrow viewports', () => {
