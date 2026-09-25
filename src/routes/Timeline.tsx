@@ -342,6 +342,7 @@ export default function Timeline() {
   const mode = useUIStore((state) => state.mode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
+  const setMobileChatHeaderSlot = useUIStore((state) => state.setMobileChatHeaderSlot)
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
   const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const setChatMessageCount = useUIStore((state) => state.setChatMessageCount)
@@ -1858,7 +1859,7 @@ export default function Timeline() {
               ref={mobileChatScrollRef}
               className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
               style={{
-                paddingTop: 'calc(env(safe-area-inset-top) + 4rem)',
+                paddingTop: 'env(safe-area-inset-top)',
                 paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
                 scrollPaddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
               }}
@@ -1872,6 +1873,9 @@ export default function Timeline() {
                   void handleChatInsert(message)
                 }}
               />
+              {/* Rendered last so flex-col-reverse puts the app header above the oldest
+                  message; mb-auto pins it to the top while the thread is still short. */}
+              <div ref={setMobileChatHeaderSlot} className="mb-auto shrink-0" />
             </div>
           </div>
         </>
