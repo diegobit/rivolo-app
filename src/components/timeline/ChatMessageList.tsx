@@ -13,7 +13,7 @@ type ChatMessageListProps = {
 
 const copiedResetDelayMs = 2000
 
-function AssistantCopyButton({ text }: { text: string }) {
+function MessageCopyButton({ text, align }: { text: string; align: 'start' | 'end' }) {
   const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const resetTimeoutRef = useRef<number | null>(null)
   const isMountedRef = useRef(true)
@@ -30,7 +30,9 @@ function AssistantCopyButton({ text }: { text: string }) {
   return (
     <button
       type="button"
-      className={`hover-reveal -ml-2 inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:text-[var(--theme-text)] sm:-ml-2.5 sm:h-9 sm:w-9 ${
+      className={`hover-reveal inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:text-[var(--theme-text)] sm:h-9 sm:w-9 ${
+        align === 'end' ? '-mr-1 sm:-mr-1.5' : '-ml-2 sm:-ml-2.5'
+      } ${
         status === 'copied'
           ? 'text-[var(--theme-accent-text)]'
           : status === 'failed'
@@ -83,21 +85,23 @@ export default function ChatMessageList({
           className={`${mobile ? 'flex px-1' : 'flex'} ${message.role === 'user' ? 'justify-end' : 'justify-center'}`}
         >
           <div
-            className={`group space-y-2 text-m ${
+            className={`group text-m ${
               message.role === 'user'
-                ? 'max-w-[85%] rounded-[20px] bg-[var(--theme-accent)] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
-                : 'w-full max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
+                ? 'flex max-w-[85%] flex-col items-end space-y-1'
+                : 'w-full max-w-full space-y-2 text-left'
             }`}
           >
             {message.role === 'assistant' ? (
               <div
-                className="assistant-markdown"
+                className="assistant-markdown w-full rounded-none bg-transparent px-0 py-0 text-slate-700 shadow-none"
                 onClick={(event) => onAssistantMarkdownClick(message, event)}
                 onKeyDown={(event) => onAssistantMarkdownKeyDown(message, event)}
                 dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '', message.meta?.citations ?? []) }}
               />
             ) : (
-              <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+              <div className="rounded-[20px] bg-[var(--theme-accent)] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]">
+                <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+              </div>
             )}
 
             {message.role === 'assistant' && message.meta?.isStreaming ? (
@@ -108,8 +112,8 @@ export default function ChatMessageList({
               </div>
             ) : null}
 
-            {message.role === 'assistant' && !message.meta?.isStreaming && message.content?.trim() ? (
-              <AssistantCopyButton text={message.content} />
+            {!message.meta?.isStreaming && message.content?.trim() ? (
+              <MessageCopyButton text={message.content} align={message.role === 'user' ? 'end' : 'start'} />
             ) : null}
 
             {message.role === 'assistant' &&

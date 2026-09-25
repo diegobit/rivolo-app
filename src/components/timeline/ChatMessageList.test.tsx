@@ -77,8 +77,19 @@ describe('ChatMessageList copy button', () => {
     expect(screen.queryByRole('button', { name: 'Copy message' })).not.toBeInTheDocument()
   })
 
-  it('offers no copy for user messages', () => {
-    renderMessage({ id: 'user-1', role: 'user', content: 'Hi' })
+  it('copies a user message and confirms', async () => {
+    renderMessage({ id: 'user-1', role: 'user', content: 'Hi there.' })
+
+    expect(screen.getByText('Hi there.')).toBeInTheDocument()
+    const copyButton = screen.getByRole('button', { name: 'Copy message' })
+    await userEvent.click(copyButton)
+
+    expect(writeText).toHaveBeenCalledWith('Hi there.')
+    expect(copyButton).toHaveTextContent('Copied')
+  })
+
+  it('offers no copy for an empty user message', () => {
+    renderMessage({ id: 'user-2', role: 'user', content: '' })
 
     expect(screen.queryByRole('button', { name: 'Copy message' })).not.toBeInTheDocument()
   })
