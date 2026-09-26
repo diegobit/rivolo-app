@@ -505,6 +505,30 @@ describe('Timeline desktop search card', () => {
     expect(document.activeElement).toBe(getResultOpenButtons()[50])
   })
 
+  it('opens the exact occurrence of a repeated section heading', async () => {
+    const sectionsDay = makeDay(todayId, '# apple heading\nfirst body\nfiller\n# apple heading\nsecond body')
+    vi.mocked(searchDays).mockResolvedValue([
+      {
+        day: sectionsDay,
+        matchedBlocks: ['# apple heading\nfirst body\nfiller', '# apple heading\nsecond body'],
+        blockKind: 'section',
+      },
+    ])
+    renderTimeline()
+    openSearchCard()
+    typeQuery('apple')
+    await waitForResults(2)
+    handleCitationClick.mockClear()
+
+    fireEvent.click(getResultOpenButtons()[1])
+
+    await waitFor(() => {
+      expect(handleCitationClick).toHaveBeenCalledWith(
+        expect.objectContaining({ day: todayId, lineIndex: 3 }),
+      )
+    })
+  })
+
   it('toggling a todo in a text-search result does not navigate or close the card', async () => {
     const todoDay = makeDay(todayId, '- [ ] Buy milk and cookies')
     vi.mocked(searchDays).mockResolvedValue([

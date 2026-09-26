@@ -17,4 +17,11 @@ describe('getMatchedBlockLineIndexes', () => {
   it('does not reuse a line once every occurrence has been taken', () => {
     expect(getMatchedBlockLineIndexes('only once', ['only once', 'only once'])).toEqual([0, -1])
   })
+
+  it('maps many identical lines to consecutive occurrences', () => {
+    const note = Array.from({ length: 1000 }, () => 'same line').join('\n')
+    const blocks = Array.from({ length: 1000 }, () => 'same line')
+
+    expect(getMatchedBlockLineIndexes(note, blocks)).toEqual(Array.from({ length: 1000 }, (_, index) => index))
+  })
 })

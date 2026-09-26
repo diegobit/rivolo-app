@@ -5,20 +5,27 @@ export type RenderSyntaxLineOptions = {
 }
 
 // Maps each matched block to its line in the note, taking repeated lines in
-// order. Lines are indexed once so a note with many matches stays linear.
+// order. Lines are indexed once and each text keeps a cursor into its
+// occurrences, so the work stays linear even when every line is the same.
 export const getMatchedBlockLineIndexes = (contentMd: string, matchedBlocks: string[]) => {
-  const lineIndexesByText = new Map<string, number[]>()
+  const occurrencesByText = new Map<string, { indexes: number[]; next: number }>()
   contentMd.split('\n').forEach((line, index) => {
     const normalizedLine = line.trimEnd()
-    const indexes = lineIndexesByText.get(normalizedLine)
-    if (indexes) {
-      indexes.push(index)
+    const occurrences = occurrencesByText.get(normalizedLine)
+    if (occurrences) {
+      occurrences.indexes.push(index)
     } else {
-      lineIndexesByText.set(normalizedLine, [index])
+      occurrencesByText.set(normalizedLine, { indexes: [index], next: 0 })
     }
   })
 
-  return matchedBlocks.map((block) => lineIndexesByText.get(block.trimEnd())?.shift() ?? -1)
+  return matchedBlocks.map((block) => {
+    const occurrences = occurrencesByText.get(block.trimEnd())
+    if (!occurrences || occurrences.next >= occurrences.indexes.length) return -1
+    const index = occurrences.indexes[occurrences.next]
+    occurrences.next += 1
+    return index
+  })
 }
 
 export const highlightQueryText = (text: string, query: string, keyPrefix: string) => {

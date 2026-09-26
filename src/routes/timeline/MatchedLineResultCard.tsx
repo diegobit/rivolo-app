@@ -10,7 +10,10 @@ export type MatchedLineResultItem = {
   openQuote: string
   hasMore: boolean
   blockIndex: number
+  // The line holding a todo marker, for toggling it; null for sections.
   sourceLineIndex: number | null
+  // The line to open at, so repeated identical matches open where they are.
+  openLineIndex: number | null
 }
 
 const getMatchedResultDayLabel = (dayId: string, todayId: string) => {
@@ -41,6 +44,7 @@ const MatchedLineResultCard = memo(({
   hasMore,
   blockIndex,
   sourceLineIndex,
+  openLineIndex,
   enableTodoToggle,
   todayId,
   contentTextStyle,
@@ -54,6 +58,7 @@ const MatchedLineResultCard = memo(({
   hasMore: boolean
   blockIndex: number
   sourceLineIndex: number | null
+  openLineIndex: number | null
   enableTodoToggle: boolean
   todayId: string
   contentTextStyle: React.CSSProperties
@@ -74,7 +79,7 @@ const MatchedLineResultCard = memo(({
         if (target.closest('button[aria-label="Toggle todo"]')) return
         // A click that ends a text selection is the user copying, not opening.
         if (window.getSelection()?.toString()) return
-        onOpen(day.dayId, openQuote, sourceLineIndex ?? undefined)
+        onOpen(day.dayId, openQuote, openLineIndex ?? undefined)
       }}
     >
       <button
@@ -84,7 +89,7 @@ const MatchedLineResultCard = memo(({
         aria-describedby={snippetId}
         onClick={(event) => {
           event.stopPropagation()
-          onOpen(day.dayId, openQuote, sourceLineIndex ?? undefined)
+          onOpen(day.dayId, openQuote, openLineIndex ?? undefined)
         }}
       >
         <img src="/arrow-square-in.svg" alt="" className="h-5 w-5" />

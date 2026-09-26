@@ -1501,6 +1501,14 @@ export default function Timeline() {
     const items: MatchedLineResultItem[] = []
     for (const { day, matchedBlocks, blockKind } of visibleSearchResults) {
       const lineIndexes = blockKind === 'line' ? getMatchedBlockLineIndexes(day.contentMd, matchedBlocks) : null
+      // A section opens at its heading, so repeated headings are located the same way.
+      const sectionHeadingLineIndexes =
+        blockKind === 'section'
+          ? getMatchedBlockLineIndexes(
+              day.contentMd,
+              matchedBlocks.map((block) => getHeadingPreviewFromSectionBlock(block)?.headingLine || block.split('\n')[0]),
+            )
+          : null
 
       matchedBlocks.forEach((block, index) => {
         if (!block.trim()) {
@@ -1537,6 +1545,9 @@ export default function Timeline() {
               : null
             : null
 
+        const headingLineIndex = sectionHeadingLineIndexes?.[index] ?? -1
+        const sectionHeadingLineIndex = headingLineIndex >= 0 ? headingLineIndex : null
+
         items.push({
           key: `${day.dayId}-${blockKind}-${index}`,
           day,
@@ -1545,6 +1556,7 @@ export default function Timeline() {
           hasMore,
           blockIndex: index,
           sourceLineIndex: matchedLineIndex,
+          openLineIndex: blockKind === 'section' ? sectionHeadingLineIndex : matchedLineIndex,
         })
       })
     }
@@ -1782,7 +1794,7 @@ export default function Timeline() {
       {/* Main List */}
       {!loading && !hasNoNotes && showMatchedLineResults && matchedLineResultItems.length > 0 && (
         <div className="space-y-3">
-          {matchedLineResultItems.map(({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex }) => (
+          {matchedLineResultItems.map(({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex, openLineIndex }) => (
             <MatchedLineResultCard
               key={key}
               day={day}
@@ -1791,6 +1803,7 @@ export default function Timeline() {
               hasMore={hasMore}
               blockIndex={blockIndex}
               sourceLineIndex={sourceLineIndex}
+                        openLineIndex={openLineIndex}
               enableTodoToggle={canToggleMatchedResultTodos}
               todayId={todayId}
               contentTextStyle={matchedResultsTextStyle}
@@ -2091,7 +2104,7 @@ export default function Timeline() {
                 // Results from the previous query stay visible, dimmed, while a new one runs.
                 <div className={`space-y-3 ${searchLoading ? 'is-pending' : ''}`}>
                   {visibleCardResultItems.map(
-                    ({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex }) => (
+                    ({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex, openLineIndex }) => (
                       <MatchedLineResultCard
                         key={key}
                         day={day}
@@ -2100,6 +2113,7 @@ export default function Timeline() {
                         hasMore={hasMore}
                         blockIndex={blockIndex}
                         sourceLineIndex={sourceLineIndex}
+                        openLineIndex={openLineIndex}
                         enableTodoToggle
                         todayId={todayId}
                         contentTextStyle={matchedResultsTextStyle}
