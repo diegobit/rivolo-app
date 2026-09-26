@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useId } from 'react'
 import type { Day } from '../../lib/dayRepository'
 import { addDays, formatHumanDate, parseDayId } from '../../lib/dates'
 import { renderSyntaxLine } from './syntaxHighlight'
@@ -62,6 +62,9 @@ const MatchedLineResultCard = memo(({
   onToggleTodo: (dayId: string, blockIndex: number, sourceLineIndex: number) => void
 }) => {
   const dayLabel = getMatchedResultDayLabel(day.dayId, todayId)
+  // Several matches can share a day, so each Open button is described by its
+  // own snippet to tell them apart.
+  const snippetId = useId()
 
   return (
     <section
@@ -69,13 +72,16 @@ const MatchedLineResultCard = memo(({
       onClick={(event) => {
         const target = event.target as HTMLElement
         if (target.closest('button[aria-label="Toggle todo"]')) return
+        // A click that ends a text selection is the user copying, not opening.
+        if (window.getSelection()?.toString()) return
         onOpen(day.dayId, openQuote)
       }}
     >
       <button
-        className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700 sm:h-9 sm:w-9"
+        className="result-open-button absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700 sm:h-9 sm:w-9"
         type="button"
         aria-label={`Open note for ${dayLabel}`}
+        aria-describedby={snippetId}
         onClick={(event) => {
           event.stopPropagation()
           onOpen(day.dayId, openQuote)
@@ -88,7 +94,7 @@ const MatchedLineResultCard = memo(({
           {dayLabel}
         </p>
       </div>
-      <div className="space-y-0" style={contentTextStyle}>
+      <div id={snippetId} className="space-y-0" style={contentTextStyle}>
         {block.split('\n').map((line, lineIndex) => (
           <p key={`${day.dayId}-${lineIndex}`} className="m-0 whitespace-pre-wrap break-words px-[2px] pl-[6px] text-[var(--theme-editor-text)]">
             {line

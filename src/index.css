@@ -1067,6 +1067,28 @@
       white-space: normal;
     }
 
+    /* Touch screens wide enough for the desktop cards get 44px targets inside
+       them; the controls come from the tray, which sizes them down for mice. */
+    @media (pointer: coarse) {
+      .timeline-search-sidebar-pills button,
+      .timeline-floating-card .tray-input-clear,
+      .timeline-floating-card .result-open-button {
+        min-height: 44px;
+        min-width: 44px;
+      }
+
+      /* The todo marker keeps its inline look; only its tap area grows. */
+      .timeline-floating-card button[aria-label='Toggle todo'] {
+        position: relative;
+      }
+
+      .timeline-floating-card button[aria-label='Toggle todo']::after {
+        content: '';
+        position: absolute;
+        inset: -10px -6px;
+      }
+    }
+
     @media (max-height: 520px) {
       .timeline-chat-sidebar-header {
         padding-top: 0.6rem;

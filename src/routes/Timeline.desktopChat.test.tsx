@@ -382,6 +382,39 @@ describe('Timeline desktop search card', () => {
     expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
   })
 
+  it('does not open a note when the click ends a text selection in the result', async () => {
+    vi.mocked(searchDays).mockResolvedValue([
+      { day: todayDay, matchedBlocks: ['hello world'], blockKind: 'line' },
+    ])
+    renderTimeline()
+    openSearchCard()
+    typeQuery('hello')
+    await waitForResults(1)
+    const cardSection = screen.getByRole('button', { name: /Open note for/ }).closest('section')!
+    const selection = vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => 'hello' } as Selection)
+    handleCitationClick.mockClear()
+
+    fireEvent.click(cardSection)
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+
+    expect(handleCitationClick).not.toHaveBeenCalled()
+    selection.mockRestore()
+  })
+
+  it('describes each Open button with its own match, so same-day matches differ', async () => {
+    vi.mocked(searchDays).mockResolvedValue([
+      { day: todayDay, matchedBlocks: ['hello world', 'hello again'], blockKind: 'line' },
+    ])
+    renderTimeline()
+    openSearchCard()
+    typeQuery('hello')
+    await waitForResults(2)
+
+    const [first, second] = getResultOpenButtons()
+    expect(first).toHaveAccessibleDescription(/hello world/)
+    expect(second).toHaveAccessibleDescription(/hello again/)
+  })
+
   it('toggling a todo in a text-search result does not navigate or close the card', async () => {
     const todoDay = makeDay(todayId, '- [ ] Buy milk and cookies')
     vi.mocked(searchDays).mockResolvedValue([

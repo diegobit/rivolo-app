@@ -303,7 +303,7 @@ const TrayInput = memo(({
           <div className="flex h-11 w-11 shrink-0 items-center justify-center sm:h-10 sm:w-10">
             {hasSearchText ? (
               <button
-                className="group flex h-11 w-11 items-center justify-center rounded-full hover:bg-slate-500 sm:h-8 sm:w-8"
+                className="tray-input-clear group flex h-11 w-11 items-center justify-center rounded-full hover:bg-slate-500 sm:h-8 sm:w-8"
                 type="button"
                 aria-label="Clear search"
                 onClick={handleClearSearch}
