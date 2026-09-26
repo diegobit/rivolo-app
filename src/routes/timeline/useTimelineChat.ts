@@ -18,9 +18,7 @@ type UseTimelineChatParams = {
   activeLlmConfig: ActiveLlmConfig
   isNarrowViewport: boolean
   chatPanelOpen: boolean
-  desktopChatPanelOpen: boolean
   setChatPanelOpen: (open: boolean) => void
-  setDesktopChatPanelOpen: (open: boolean) => void
   onInsertNote: (targetDay: string, text: string) => Promise<void>
 }
 
@@ -39,9 +37,7 @@ export const useTimelineChat = ({
   activeLlmConfig,
   isNarrowViewport,
   chatPanelOpen,
-  desktopChatPanelOpen,
   setChatPanelOpen,
-  setDesktopChatPanelOpen,
   onInsertNote,
 }: UseTimelineChatParams) => {
   const [sending, setSending] = useState(false)
@@ -59,10 +55,6 @@ export const useTimelineChat = ({
 
       if (isNarrowViewport && !chatPanelOpen) {
         setChatPanelOpen(true)
-      }
-
-      if (!isNarrowViewport && !desktopChatPanelOpen) {
-        setDesktopChatPanelOpen(true)
       }
 
       setChatError(null)
@@ -388,10 +380,8 @@ export const useTimelineChat = ({
       activeLlmConfig,
       allowWebSearch,
       chatPanelOpen,
-      desktopChatPanelOpen,
       isNarrowViewport,
       onInsertNote,
-      setDesktopChatPanelOpen,
       setChatPanelOpen,
       setMessages,
     ],

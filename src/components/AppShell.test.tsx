@@ -41,8 +41,6 @@ const stores = vi.hoisted(() => ({
     setMode: vi.fn(),
     chatPanelOpen: false,
     setChatPanelOpen: vi.fn(),
-    desktopChatPanelOpen: false,
-    setDesktopChatPanelOpen: vi.fn(),
     chatMessageCount: 0,
     timelineEmpty: null as boolean | null,
     setTimelineEmpty: vi.fn(),
@@ -145,7 +143,6 @@ describe('AppShell attention and stale tab states', () => {
     stores.sync.syncAttention = null
     stores.ui.mode = 'timeline'
     stores.ui.chatPanelOpen = false
-    stores.ui.desktopChatPanelOpen = false
     stores.ui.chatMessageCount = 0
     stores.ui.timelineEmpty = null
     stores.viewport.isNarrow = false
@@ -468,9 +465,7 @@ describe('AppShell attention and stale tab states', () => {
   it('focuses the chat composer when the chat shortcut is pressed while chat is already open', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.ui.mode = 'chat'
-    stores.ui.desktopChatPanelOpen = true
     stores.ui.setMode.mockClear()
-    stores.ui.setDesktopChatPanelOpen.mockClear()
     vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
 
     const composer = document.createElement('textarea')
@@ -491,7 +486,6 @@ describe('AppShell attention and stale tab states', () => {
       fireEvent.keyDown(window, { key: 'k', metaKey: true })
 
       expect(stores.ui.setMode).not.toHaveBeenCalled()
-      expect(stores.ui.setDesktopChatPanelOpen).not.toHaveBeenCalled()
       expect(document.activeElement).toBe(composer)
     } finally {
       composer.remove()
@@ -501,7 +495,6 @@ describe('AppShell attention and stale tab states', () => {
   it('toggles the desktop chat card with the sidebar shortcut while it is open', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.ui.mode = 'chat'
-    stores.ui.desktopChatPanelOpen = true
     vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
 
     render(
@@ -647,12 +640,10 @@ describe('AppShell launcher mode buttons', () => {
     stores.sync.activeProvider = 'google-drive'
     stores.ui.mode = 'timeline'
     stores.ui.chatPanelOpen = false
-    stores.ui.desktopChatPanelOpen = false
     stores.ui.chatMessageCount = 0
     stores.ui.timelineEmpty = null
     stores.viewport.isNarrow = false
     stores.ui.setMode.mockClear()
-    stores.ui.setDesktopChatPanelOpen.mockClear()
   })
 
   afterEach(() => {
@@ -698,7 +689,6 @@ describe('AppShell launcher mode buttons', () => {
 
   it('clicking the AI button while the chat card is open returns to the timeline', () => {
     stores.ui.mode = 'chat'
-    stores.ui.desktopChatPanelOpen = true
     render(renderHome())
 
     const chatBtn = screen.getByRole('button', { name: 'Hide Ask AI' })
@@ -723,7 +713,6 @@ describe('AppShell launcher mode buttons', () => {
     )
 
     stores.ui.mode = 'chat'
-    stores.ui.desktopChatPanelOpen = true
     view.rerender(renderHome())
 
     expect(document.querySelector('.app-shell-root')).toHaveAttribute(
@@ -750,14 +739,12 @@ describe('AppShell launcher mode buttons', () => {
     expect(screen.getByRole('button', { name: 'Search' })).not.toHaveAttribute('aria-controls')
   })
 
-  it('opens chat and sets desktop panel open from AI button in timeline mode', () => {
+  it('opens chat from the AI button in timeline mode', () => {
     stores.ui.mode = 'timeline'
-    stores.ui.desktopChatPanelOpen = false
     render(renderHome())
 
     fireEvent.click(screen.getByRole('button', { name: 'Ask AI' }))
 
-    expect(stores.ui.setDesktopChatPanelOpen).toHaveBeenCalledWith(true)
     expect(stores.ui.setMode).toHaveBeenCalledWith('chat')
   })
 
@@ -776,7 +763,6 @@ describe('AppShell launcher mode buttons', () => {
 
   it('closes open chat card on Escape and returns focus to AI chat launcher', () => {
     stores.ui.mode = 'chat'
-    stores.ui.desktopChatPanelOpen = true
     render(renderHome())
 
     const chatLauncher = screen.getByRole('button', { name: 'Hide Ask AI' })
@@ -788,18 +774,17 @@ describe('AppShell launcher mode buttons', () => {
     expect(document.activeElement).toBe(chatLauncher)
   })
 
-  it('sets desktopChatPanelOpen true when narrow viewport flips to wide while in chat mode', () => {
+  it('treats chat mode as an open chat card once a narrow viewport flips to wide', () => {
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'
-    stores.ui.desktopChatPanelOpen = false
     const view = render(renderHome())
-
-    expect(stores.ui.setDesktopChatPanelOpen).not.toHaveBeenCalled()
 
     stores.viewport.isNarrow = false
     view.rerender(renderHome())
 
-    expect(stores.ui.setDesktopChatPanelOpen).toHaveBeenCalledWith(true)
+    // Desktop card visibility is derived from the mode, so there is no stale
+    // closed state left over from the narrow layout.
+    expect(screen.getByRole('button', { name: 'Hide Ask AI' })).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('opens search from the timeline with the find shortcut and switches cards with the mode shortcuts', () => {

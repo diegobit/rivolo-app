@@ -346,8 +346,6 @@ export default function Timeline() {
   const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
-  const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
-  const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const setChatMessageCount = useUIStore((state) => state.setChatMessageCount)
   const setTimelineEmpty = useUIStore((state) => state.setTimelineEmpty)
   const messages = useChatStore((state) => state.messages)
@@ -482,7 +480,7 @@ export default function Timeline() {
   const isTimelineVisible = !hasSearchIntent
   const hasChatMessages = messages.length > 0
   const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode
-  const showDesktopChatPanel = showDesktopChatMode && desktopChatPanelOpen
+  const showDesktopChatPanel = showDesktopChatMode
   const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
@@ -776,9 +774,7 @@ export default function Timeline() {
     activeLlmConfig,
     isNarrowViewport: isNarrowViewportMode,
     chatPanelOpen,
-    desktopChatPanelOpen,
     setChatPanelOpen,
-    setDesktopChatPanelOpen,
     onInsertNote: handleChatInsertNote,
   })
 
@@ -1425,10 +1421,9 @@ export default function Timeline() {
   const showSearchError = hasSearchIntent && !searchLoading && Boolean(searchError)
   const showMatchedLineResults = hasSearchIntent && searchResultMode === 'matched-lines'
   const matchedLineResultItems = useMemo<MatchedLineResultItem[]>(() => {
-    // Computed for every search result block: the narrow-viewport main list
-    // renders them in matched-lines mode, and the desktop search card renders
-    // them (whole-day mode collapses them to the first block per day).
-    if (mode !== 'search') {
+    // One item per matched block, for the narrow-viewport list in matched-lines
+    // mode and for the desktop search card, which always lists every match.
+    if (!showMatchedLineResults && !isDesktopSearchCardOpen) {
       return []
     }
 
@@ -1484,15 +1479,7 @@ export default function Timeline() {
     }
 
     return items
-  }, [mode, visibleSearchResults])
-
-  const searchCardResultItems = useMemo<MatchedLineResultItem[]>(() => {
-    if (!isDesktopSearchCardOpen) {
-      return []
-    }
-
-    return matchedLineResultItems
-  }, [isDesktopSearchCardOpen, matchedLineResultItems])
+  }, [isDesktopSearchCardOpen, showMatchedLineResults, visibleSearchResults])
 
   const hasCardSearchIntent = isDesktopSearchCardOpen && (Boolean(searchQuery) || Boolean(searchFilter))
   const cardNoSearchResults =
@@ -1906,9 +1893,8 @@ export default function Timeline() {
         </aside>
       )}
 
-      {/* Desktop search card (lens): overlays the timeline instead of
-          filtering it; opening a result closes the card and moves the
-          unfiltered timeline to the match. */}
+      {/* Desktop search card: it never filters the timeline. Opening a result
+          keeps the card open and moves the unfiltered timeline to the match. */}
       {isDesktopSearchCardOpen && (
         <aside
           id="desktop-search-card"
@@ -1939,9 +1925,9 @@ export default function Timeline() {
               {cardNoSearchResults && !showCardSearchError && (
                 <p className="timeline-search-sidebar-status">No results</p>
               )}
-              {searchCardResultItems.length > 0 && (
+              {matchedLineResultItems.length > 0 && (
                 <div className="space-y-3">
-                  {searchCardResultItems.map(
+                  {matchedLineResultItems.map(
                     ({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex }) => (
                       <MatchedLineResultCard
                         key={key}

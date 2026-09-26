@@ -39,8 +39,6 @@ const stores = vi.hoisted(() => ({
     setMode: vi.fn(),
     chatPanelOpen: false,
     setChatPanelOpen: vi.fn(),
-    desktopChatPanelOpen: true,
-    setDesktopChatPanelOpen: vi.fn(),
     chatMessageCount: 0,
     timelineEmpty: false as boolean | null,
     setTimelineEmpty: vi.fn(),

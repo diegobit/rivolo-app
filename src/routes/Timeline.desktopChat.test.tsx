@@ -141,7 +141,7 @@ describe('Timeline desktop chat card', () => {
     stores.days.days = []
     stores.days.loading = false
     useChatStore.setState({ messages: [] })
-    useUIStore.setState({ mode: 'chat', desktopChatPanelOpen: true, chatPanelOpen: false, chatMessageCount: 0 })
+    useUIStore.setState({ mode: 'chat', chatPanelOpen: false, chatMessageCount: 0 })
   })
 
   afterEach(() => {
@@ -212,7 +212,7 @@ describe('Timeline desktop chat card', () => {
         updatedAt: 0,
       },
     ]
-    useUIStore.setState({ mode: 'timeline', desktopChatPanelOpen: true })
+    useUIStore.setState({ mode: 'timeline' })
     renderTimeline()
 
     const initialEditorElement = screen.getByTestId('day-editor-card')
@@ -275,7 +275,7 @@ describe('Timeline desktop search card', () => {
     stores.days.days = [todayDay, olderDay]
     stores.days.loading = false
     useChatStore.setState({ messages: [] })
-    useUIStore.setState({ mode: 'timeline', desktopChatPanelOpen: true, chatPanelOpen: false, chatMessageCount: 0 })
+    useUIStore.setState({ mode: 'timeline', chatPanelOpen: false, chatMessageCount: 0 })
     vi.mocked(searchDays).mockReset().mockResolvedValue([])
   })
 

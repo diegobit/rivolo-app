@@ -56,8 +56,6 @@ export default function AppShell() {
   const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
-  const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
-  const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const timelineEmpty = useUIStore((state) => state.timelineEmpty)
   const tabSync = useTabSyncState()
@@ -88,7 +86,6 @@ export default function AppShell() {
     }
   }
   const focusModeInputAfterSwitchRef = useRef(false)
-  const focusComposerOnPanelOpenRef = useRef(false)
   const searchButtonRef = useRef<HTMLButtonElement | null>(null)
   const chatButtonRef = useRef<HTMLButtonElement | null>(null)
   const showBackButton = location.pathname === '/settings' || location.pathname === '/privacy'
@@ -98,7 +95,6 @@ export default function AppShell() {
   const isDesktopHome = isHome && !isNarrowViewportMode
   const isDesktopChatMode = isDesktopHome && mode === 'chat'
   const isDesktopSearchCardOpen = isDesktopHome && mode === 'search'
-  const isDesktopChatSidebarOpen = isDesktopChatMode && desktopChatPanelOpen
   const showTrayRow = isHome
   // Desktop keeps the lens + AI launcher buttons in every mode (each one toggles
   // its own floating card); narrow viewports keep the toggle + tray composer.
@@ -136,7 +132,7 @@ export default function AppShell() {
 
   // Desktop shows the launcher's name, so its accessible name has to match it.
   const chatButtonLabel = isDesktopHome
-    ? mode === 'chat' && desktopChatPanelOpen
+    ? mode === 'chat'
       ? 'Hide Ask AI'
       : 'Ask AI'
     : 'Chat'
@@ -159,8 +155,6 @@ export default function AppShell() {
             setMode('timeline')
             return
           }
-          focusComposerOnPanelOpenRef.current = true
-          setDesktopChatPanelOpen(true)
           setMode('chat')
           return
         }
@@ -168,8 +162,8 @@ export default function AppShell() {
       }}
       aria-label={chatButtonLabel}
       title={isDesktopHome ? `${chatButtonLabel} (${launcherShortcutModifier.trim()}${isApplePlatform() ? '' : '+'}K)` : chatButtonLabel}
-      aria-expanded={isDesktopHome && mode === 'chat' && desktopChatPanelOpen}
-      aria-controls={isDesktopHome && mode === 'chat' && desktopChatPanelOpen ? 'desktop-chat-card' : undefined}
+      aria-expanded={isDesktopChatMode}
+      aria-controls={isDesktopChatMode ? 'desktop-chat-card' : undefined}
     >
       <img src="/sparkle.svg" alt="" className="h-5 w-5" />
       <span className="launcher-label" aria-hidden="true">Ask AI</span>
@@ -428,10 +422,6 @@ export default function AppShell() {
         }
 
         focusModeInputAfterSwitchRef.current = true
-        if (nextMode === 'chat' && !isNarrowViewportMode) {
-          focusComposerOnPanelOpenRef.current = true
-          setDesktopChatPanelOpen(true)
-        }
         setMode(nextMode)
         return
       }
@@ -444,8 +434,6 @@ export default function AppShell() {
           setMode('timeline')
           return
         }
-        focusComposerOnPanelOpenRef.current = true
-        setDesktopChatPanelOpen(true)
         setMode('chat')
         return
       }
@@ -453,12 +441,12 @@ export default function AppShell() {
 
     window.addEventListener('keydown', handleKeydown, true)
     return () => window.removeEventListener('keydown', handleKeydown, true)
-  }, [isDesktopHome, isHome, isNarrowViewportMode, mode, setDesktopChatPanelOpen, setMode])
+  }, [isDesktopHome, isHome, mode, setMode])
 
   useEffect(() => {
     if (!isDesktopHome) return
     const isSearchOpen = mode === 'search'
-    const isChatOpen = mode === 'chat' && desktopChatPanelOpen
+    const isChatOpen = mode === 'chat'
     if (!isSearchOpen && !isChatOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -475,24 +463,7 @@ export default function AppShell() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [desktopChatPanelOpen, isDesktopHome, mode, setMode])
-
-  const prevNarrowViewportRef = useRef(isNarrowViewportMode)
-  useEffect(() => {
-    const wasNarrow = prevNarrowViewportRef.current
-    prevNarrowViewportRef.current = isNarrowViewportMode
-
-    if (wasNarrow && !isNarrowViewportMode && mode === 'chat') {
-      setDesktopChatPanelOpen(true)
-    }
-  }, [isNarrowViewportMode, mode, setDesktopChatPanelOpen])
-
-  useEffect(() => {
-    if (!focusComposerOnPanelOpenRef.current) return
-    if (!isHome || isNarrowViewportMode || !desktopChatPanelOpen) return
-    focusComposerOnPanelOpenRef.current = false
-    document.getElementById('chat-input')?.focus()
-  }, [desktopChatPanelOpen, isHome, isNarrowViewportMode])
+  }, [isDesktopHome, mode, setMode])
 
   useEffect(() => {
     if (!isHome) return
@@ -511,7 +482,7 @@ export default function AppShell() {
   return (
     <div
       className="app-shell-root min-h-full text-[var(--theme-text)]"
-      data-desktop-chat-sidebar-open={isDesktopChatSidebarOpen ? 'true' : 'false'}
+      data-desktop-chat-sidebar-open={isDesktopChatMode ? 'true' : 'false'}
       data-desktop-search-sidebar-open={isDesktopSearchCardOpen ? 'true' : 'false'}
     >
       {/* Fixed header with blur */}
