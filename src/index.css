@@ -1129,10 +1129,20 @@
     }
 
     .timeline-search-sidebar-status {
-      margin: auto 0;
+      padding: 0 0.25rem;
       color: var(--theme-text-muted);
+      font-size: 0.8rem;
+    }
+
+    .timeline-search-sidebar-status.is-message {
+      margin: auto 0;
       font-size: 0.95rem;
       text-align: center;
+    }
+
+    .timeline-search-sidebar-results .is-pending {
+      opacity: 0.55;
+      transition: opacity 150ms ease;
     }
 
     .timeline-search-sidebar-status-error {

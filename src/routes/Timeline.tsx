@@ -1,4 +1,5 @@
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
@@ -1536,6 +1537,44 @@ export default function Timeline() {
     visibleSearchResults.length === 0 &&
     !searchError
   const showCardSearchError = hasCardSearchIntent && !searchLoading && Boolean(searchError)
+  const cardMatchCount = matchedLineResultItems.length
+  // One always-mounted live region, so screen readers hear every change.
+  const cardSearchStatus = !hasCardSearchIntent
+    ? ''
+    : searchLoading
+      ? 'Searching…'
+      : showCardSearchError
+        ? (searchError ?? '')
+        : cardNoSearchResults
+          ? 'No results'
+          : `${cardMatchCount} ${cardMatchCount === 1 ? 'match' : 'matches'}`
+  const isCardSearchMessage = showCardSearchError || cardNoSearchResults
+
+  // ArrowDown from the search field reaches the first result; the arrow keys
+  // then move between results, and ArrowUp from the first returns to the field.
+  const handleSearchCardKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    const target = event.target as HTMLElement
+    const openButtons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('.result-open-button')]
+    if (target.id === 'search-input') {
+      if (event.key === 'ArrowDown' && openButtons.length > 0) {
+        event.preventDefault()
+        openButtons[0].focus()
+      }
+      return
+    }
+
+    const index = openButtons.indexOf(target as HTMLButtonElement)
+    if (index === -1) return
+    event.preventDefault()
+    if (event.key === 'ArrowDown') {
+      openButtons[Math.min(index + 1, openButtons.length - 1)].focus()
+    } else if (index === 0) {
+      document.getElementById('search-input')?.focus()
+    } else {
+      openButtons[index - 1].focus()
+    }
+  }, [])
 
   const handleOpenMatchedLineResult = useCallback(
     (dayId: string, quote: string) => {
@@ -1948,6 +1987,7 @@ export default function Timeline() {
           id="desktop-search-card"
           className="timeline-floating-card timeline-search-sidebar"
           aria-labelledby="desktop-search-title"
+          onKeyDown={handleSearchCardKeyDown}
         >
           <div className="timeline-chat-sidebar-inner">
             <header className="timeline-chat-sidebar-header">
@@ -1969,15 +2009,18 @@ export default function Timeline() {
                 </button>
               </div>
             </header>
-            <div className="timeline-search-sidebar-results">
-              {showCardSearchError && (
-                <p className="timeline-search-sidebar-status timeline-search-sidebar-status-error">{searchError}</p>
-              )}
-              {cardNoSearchResults && !showCardSearchError && (
-                <p className="timeline-search-sidebar-status">No results</p>
-              )}
+            <div className="timeline-search-sidebar-results" aria-busy={searchLoading || undefined}>
+              <p
+                role="status"
+                className={`timeline-search-sidebar-status ${isCardSearchMessage ? 'is-message' : ''} ${
+                  showCardSearchError ? 'timeline-search-sidebar-status-error' : ''
+                }`}
+              >
+                {cardSearchStatus}
+              </p>
               {matchedLineResultItems.length > 0 && (
-                <div className="space-y-3">
+                // Results from the previous query stay visible, dimmed, while a new one runs.
+                <div className={`space-y-3 ${searchLoading ? 'is-pending' : ''}`}>
                   {matchedLineResultItems.map(
                     ({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex }) => (
                       <MatchedLineResultCard

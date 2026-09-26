@@ -415,6 +415,46 @@ describe('Timeline desktop search card', () => {
     expect(second).toHaveAccessibleDescription(/hello again/)
   })
 
+  it('announces the match count and No results through one status region', async () => {
+    vi.mocked(searchDays).mockResolvedValue([
+      { day: todayDay, matchedBlocks: ['hello world', 'hello again'], blockKind: 'line' },
+    ])
+    renderTimeline()
+    openSearchCard()
+    typeQuery('hello')
+    await waitForResults(2)
+
+    expect(screen.getByRole('status')).toHaveTextContent('2 matches')
+
+    vi.mocked(searchDays).mockResolvedValue([])
+    typeQuery('zzz')
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('No results')
+    })
+  })
+
+  it('moves from the search field into the results with the arrow keys and back', async () => {
+    vi.mocked(searchDays).mockResolvedValue([
+      { day: todayDay, matchedBlocks: ['hello world', 'hello again'], blockKind: 'line' },
+    ])
+    renderTimeline()
+    openSearchCard()
+    typeQuery('hello')
+    await waitForResults(2)
+    const [first, second] = getResultOpenButtons()
+    getSearchInput().focus()
+
+    fireEvent.keyDown(getSearchInput(), { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(first)
+
+    fireEvent.keyDown(first, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(second)
+
+    fireEvent.keyDown(second, { key: 'ArrowUp' })
+    fireEvent.keyDown(first, { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(getSearchInput())
+  })
+
   it('toggling a todo in a text-search result does not navigate or close the card', async () => {
     const todoDay = makeDay(todayId, '- [ ] Buy milk and cookies')
     vi.mocked(searchDays).mockResolvedValue([
