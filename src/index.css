@@ -1112,24 +1112,6 @@
       }
     }
 
-    @media (max-height: 520px) {
-      .timeline-chat-sidebar-header {
-        padding-top: 0.6rem;
-        padding-bottom: 0.4rem;
-      }
-
-      /* Keep room for at least one row of results or messages. */
-      .timeline-chat-sidebar-messages,
-      .timeline-search-sidebar-results {
-        min-height: 4.5rem;
-      }
-
-      .timeline-search-sidebar-pills > div {
-        flex-wrap: nowrap;
-        overflow-x: auto;
-      }
-    }
-
     .timeline-search-sidebar-pills {
       flex-shrink: 0;
       padding: 0.35rem 1.1rem 0.6rem;
@@ -1191,6 +1173,37 @@
 
     .timeline-search-sidebar-status-error {
       color: var(--theme-danger-text);
+    }
+    /* Short cards (a landscape phone, the on-screen keyboard). This block
+       comes last in the desktop rules so it overrides them. While typing,
+       the header and the filters step aside for the results; a long chat
+       draft scrolls inside the composer instead of pushing Send out. */
+    @media (max-height: 520px) {
+      .timeline-chat-sidebar-header {
+        padding-top: 0.6rem;
+        padding-bottom: 0.4rem;
+      }
+
+      .timeline-floating-card:focus-within .timeline-chat-sidebar-header,
+      .timeline-floating-card:focus-within .timeline-search-sidebar-pills {
+        display: none;
+      }
+
+      .timeline-chat-sidebar-messages,
+      .timeline-search-sidebar-results {
+        min-height: 4.5rem;
+      }
+
+      .timeline-search-sidebar-pills > div {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+      }
+
+      /* The composer sets its height limit and overflow inline. */
+      .timeline-floating-card textarea {
+        max-height: 4.5rem !important;
+        overflow-y: auto !important;
+      }
     }
   }
 
