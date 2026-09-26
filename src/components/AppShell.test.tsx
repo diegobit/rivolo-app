@@ -774,6 +774,57 @@ describe('AppShell launcher mode buttons', () => {
     expect(document.activeElement).toBe(chatLauncher)
   })
 
+  it('leaves Escape to a focused day note and keeps the card open', () => {
+    stores.ui.mode = 'search'
+    render(renderHome())
+    const note = document.createElement('div')
+    note.contentEditable = 'true'
+    note.tabIndex = 0
+    document.body.appendChild(note)
+    note.focus()
+
+    fireEvent.keyDown(note, { key: 'Escape' })
+
+    expect(stores.ui.setMode).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(note)
+    note.remove()
+  })
+
+  it('moves focus to the Ask AI launcher when the chat shortcut closes a focused composer', () => {
+    stores.ui.mode = 'chat'
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    render(renderHome())
+    const card = document.createElement('aside')
+    card.id = 'desktop-chat-card'
+    const composer = document.createElement('textarea')
+    card.appendChild(composer)
+    document.body.appendChild(card)
+    composer.focus()
+
+    fireEvent.keyDown(window, { key: 's', metaKey: true, shiftKey: true })
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide Ask AI' }))
+    card.remove()
+  })
+
+  it('leaves focus in a day note when the chat shortcut closes the card', () => {
+    stores.ui.mode = 'chat'
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    render(renderHome())
+    const note = document.createElement('div')
+    note.contentEditable = 'true'
+    note.tabIndex = 0
+    document.body.appendChild(note)
+    note.focus()
+
+    fireEvent.keyDown(window, { key: 's', metaKey: true, shiftKey: true })
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+    expect(document.activeElement).toBe(note)
+    note.remove()
+  })
+
   it('treats chat mode as an open chat card once a narrow viewport flips to wide', () => {
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'

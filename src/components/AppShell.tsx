@@ -5,6 +5,7 @@ import AttentionPopover from './app-shell/AttentionPopover'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
 import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
 import { isApplePlatform, isPrimaryModifierPressed } from '../lib/device'
+import { focusLauncher, isFocusOwnedByCard } from './app-shell/desktopCards'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
@@ -86,8 +87,6 @@ export default function AppShell() {
     }
   }
   const focusModeInputAfterSwitchRef = useRef(false)
-  const searchButtonRef = useRef<HTMLButtonElement | null>(null)
-  const chatButtonRef = useRef<HTMLButtonElement | null>(null)
   const showBackButton = location.pathname === '/settings' || location.pathname === '/privacy'
   const backTarget = location.pathname === '/privacy' ? '/settings' : '/'
   const isHome = location.pathname === '/'
@@ -140,8 +139,8 @@ export default function AppShell() {
 
   const chatButton = (
     <button
-      ref={chatButtonRef}
       type="button"
+      data-launcher="chat"
       className={`${trayIconButton} bottom-tray-launcher-button ${
         mode === 'chat' ? 'bg-[var(--theme-active)]' : ''
       }`}
@@ -173,8 +172,8 @@ export default function AppShell() {
 
   const searchButton = (
     <button
-      ref={searchButtonRef}
       type="button"
+      data-launcher="search"
       className={`${trayIconButton} bottom-tray-launcher-button ${
         mode === 'search' ? 'bg-[var(--theme-active)]' : ''
       }`}
@@ -430,8 +429,9 @@ export default function AppShell() {
         if (!isDesktopHome) return
         event.preventDefault()
         if (mode === 'chat') {
-          document.getElementById('chat-input')?.blur()
+          const moveFocus = isFocusOwnedByCard('chat')
           setMode('timeline')
+          if (moveFocus) focusLauncher('chat')
           return
         }
         setMode('chat')
@@ -449,16 +449,15 @@ export default function AppShell() {
     const isChatOpen = mode === 'chat'
     if (!isSearchOpen && !isChatOpen) return
 
+    const openCard = isSearchOpen ? 'search' : 'chat'
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (event.defaultPrevented) return
+      // Escape while typing in a note belongs to the note, not to the card.
+      if (!isFocusOwnedByCard(openCard)) return
       event.preventDefault()
       setMode('timeline')
-      if (isSearchOpen) {
-        searchButtonRef.current?.focus()
-      } else if (isChatOpen) {
-        chatButtonRef.current?.focus()
-      }
+      focusLauncher(openCard)
     }
 
     window.addEventListener('keydown', handleKeyDown)

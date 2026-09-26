@@ -19,6 +19,7 @@ import type { Day, DaySearchResult, SearchFilter } from '../lib/dayRepository'
 import { appendToDay, searchDays } from '../lib/dayRepository'
 import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
+import { focusLauncher } from '../components/app-shell/desktopCards'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
 import { useEditorMountWindow } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
@@ -1854,8 +1855,8 @@ export default function Timeline() {
                   aria-label="Close chat"
                   title="Close chat"
                   onClick={() => {
-                    document.getElementById('chat-input')?.blur()
                     setMode('timeline')
+                    focusLauncher('chat')
                   }}
                 >
                   <img src="/plus.svg" alt="" className="h-4 w-4 rotate-45 opacity-80" />
@@ -1912,7 +1913,10 @@ export default function Timeline() {
                   className="timeline-chat-sidebar-icon-button"
                   aria-label="Close search"
                   title="Close search"
-                  onClick={() => setMode('timeline')}
+                  onClick={() => {
+                    setMode('timeline')
+                    focusLauncher('search')
+                  }}
                 >
                   <img src="/plus.svg" alt="" className="h-4 w-4 rotate-45 opacity-80" />
                 </button>

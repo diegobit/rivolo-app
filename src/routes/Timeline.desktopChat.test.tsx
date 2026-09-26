@@ -175,13 +175,18 @@ describe('Timeline desktop chat card', () => {
     })
   })
 
-  it('blurs the composer and hides the card when it is closed', () => {
+  it('returns focus to the Ask AI launcher and hides the card when it is closed', () => {
+    // AppShell renders the real launchers; stand one in for it here.
+    const launcher = document.createElement('button')
+    launcher.dataset.launcher = 'chat'
+    document.body.appendChild(launcher)
     renderTimeline()
     getComposer().focus()
 
     fireEvent.click(screen.getByRole('button', { name: 'Close chat' }))
 
-    expect(document.activeElement).not.toBe(getComposer())
+    expect(document.activeElement).toBe(launcher)
+    launcher.remove()
     expect(useUIStore.getState().mode).toBe('timeline')
     expect(document.querySelector('.timeline-chat-sidebar')).toHaveClass('is-chat-closed')
     expect(document.querySelector('.timeline-chat-sidebar')).toHaveAttribute('inert')
@@ -440,6 +445,20 @@ describe('Timeline desktop search card', () => {
       expect(screen.getByText('No results')).toBeInTheDocument()
     })
     expect(screen.getAllByTestId('day-editor-card')).toHaveLength(2)
+  })
+
+  it('returns focus to the Search launcher when the card is closed with its X', () => {
+    const launcher = document.createElement('button')
+    launcher.dataset.launcher = 'search'
+    document.body.appendChild(launcher)
+    renderTimeline()
+    openSearchCard()
+    getSearchInput().focus()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close search' }))
+
+    expect(document.activeElement).toBe(launcher)
+    launcher.remove()
   })
 
   it('keeps the search draft when the card closes and reopens', () => {
