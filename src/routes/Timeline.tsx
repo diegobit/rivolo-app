@@ -449,6 +449,13 @@ export default function Timeline() {
     })
   }, [])
 
+  // Results come from the database, so an edited note changes which blocks
+  // match only once it is saved; searching again then keeps the card current.
+  const [savedNotesRevision, setSavedNotesRevision] = useState(0)
+  const handleDaySaved = useCallback(() => {
+    setSavedNotesRevision((revision) => revision + 1)
+  }, [])
+
   const {
     clearDaySaveToken,
     discardPendingDaySave,
@@ -461,6 +468,7 @@ export default function Timeline() {
     canSync,
     updateDayContent,
     onAutoPush: handleAutoPush,
+    onDaySaved: handleDaySaved,
   })
 
   const {
@@ -792,7 +800,8 @@ export default function Timeline() {
     return () => {
       cancelled = true
     }
-  }, [mode, searchFilter, searchQuery])
+    // savedNotesRevision re-runs the search once an edited note is saved.
+  }, [mode, savedNotesRevision, searchFilter, searchQuery])
 
   // --- Handlers ---
 
