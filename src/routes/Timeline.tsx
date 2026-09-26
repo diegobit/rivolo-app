@@ -213,6 +213,9 @@ const TrayInput = memo(({
     }
     onDraftTextChange('')
     onSearchTextChange('')
+    // The Clear button disappears with the text; keep focus in the field
+    // instead of dropping it on the page.
+    document.getElementById(inputConfig.id)?.focus()
   }
 
   const showChatError = Boolean(chatError) && mode === 'chat'

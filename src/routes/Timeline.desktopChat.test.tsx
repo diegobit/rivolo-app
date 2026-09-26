@@ -550,6 +550,17 @@ describe('Timeline desktop search card', () => {
     launcher.remove()
   })
 
+  it('keeps focus in the search field after Clear search', () => {
+    renderTimeline()
+    openSearchCard()
+    typeQuery('hello')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+
+    expect(getSearchInput()).toHaveValue('')
+    expect(document.activeElement).toBe(getSearchInput())
+  })
+
   it('keeps the search draft when the card closes and reopens', () => {
     renderTimeline()
     openSearchCard()
