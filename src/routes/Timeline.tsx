@@ -22,6 +22,7 @@ import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
 import { focusLauncher } from '../components/app-shell/desktopCards'
 import { useStickToBottom } from './timeline/useStickToBottom'
+import { keepEditedDayInResults } from './timeline/searchResults'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
 import { useEditorMountWindow } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
@@ -67,6 +68,7 @@ type TrayInputConfig = {
 }
 
 const SEARCH_CARD_PAGE_SIZE = 50
+
 const CHAT_TEXTAREA_MIN_HEIGHT_PX = 40
 const CHAT_TEXTAREA_MAX_HEIGHT_PX = 136
 const CHAT_TEXTAREA_EXPANDED_DELTA_PX = 4
@@ -434,6 +436,10 @@ export default function Timeline() {
 
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
+  const isNarrowViewportModeRef = useRef(isNarrowViewportMode)
+  useEffect(() => {
+    isNarrowViewportModeRef.current = isNarrowViewportMode
+  }, [isNarrowViewportMode])
   const dayRefs = useRef(new Map<string, HTMLDivElement>())
   const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
   const mobileChatScrollRef = useRef<HTMLDivElement | null>(null)
@@ -797,7 +803,10 @@ export default function Timeline() {
       try {
         const data = await searchDays(searchQuery, { filter: searchFilter })
         if (cancelled) return
-        setSearchResults(data)
+        const editedDayId = isNarrowViewportModeRef.current
+          ? ([...editorRefs.current.entries()].find(([, view]) => view.hasFocus)?.[0] ?? null)
+          : null
+        setSearchResults((previous) => keepEditedDayInResults(data, previous, editedDayId))
       } catch {
         if (cancelled) return
         setSearchError('Search failed. Try again.')
