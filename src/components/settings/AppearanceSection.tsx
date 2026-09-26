@@ -239,7 +239,7 @@ export default function AppearanceSection({
           {advanced && (
             <SettingsToggle
               checked={highlightInputMode}
-              label="Highlight input mode"
+              label="Highlight input mode (mobile only)"
               onChange={onHighlightInputModeChange}
             />
           )}
