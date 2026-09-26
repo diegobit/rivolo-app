@@ -1021,9 +1021,16 @@
   box-shadow: 0 6px 18px rgb(var(--theme-shadow-color) / 0.16);
 }
 
+.bottom-tray-blur,
+.bottom-tray-blur-tail {
+  background: var(--tray-veil, var(--theme-blur-surface));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
 .bottom-tray-blur {
   bottom: var(--keyboard-offset, 0px);
-  height: calc(var(--bottom-tray-height, 3.5rem) + env(safe-area-inset-bottom) + 3rem);
+  height: calc(var(--bottom-tray-height, 3.5rem) + env(safe-area-inset-bottom) + 3.5rem);
 }
 
 .bottom-tray-blur.bottom-tray-blur-search {
@@ -1052,9 +1059,16 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
 }
 
 @media (hover: none) {
+  /* 472e49b turned these off on touch because the backdrop-filter was bugged on iOS.
+     Keep the filter off, but keep the colour half: without it content runs into the tray
+     with no fade at all. An opaque page colour stands in for the blur. It flattens the
+     wallpaper inside the band, which is invisible even at thoughts-high because the band
+     is a soft gradient and day cards are opaque over most of it. */
   .bottom-tray-blur,
   .bottom-tray-blur-tail {
-    display: none;
+    --tray-veil: var(--theme-page);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .bottom-tray-row {
