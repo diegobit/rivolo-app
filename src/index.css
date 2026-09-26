@@ -1098,9 +1098,16 @@
     @media (pointer: coarse) {
       .timeline-search-sidebar-pills button,
       .timeline-floating-card .tray-input-clear,
-      .timeline-floating-card .result-open-button {
+      .timeline-floating-card .result-open-button,
+      .timeline-floating-card button[aria-label='Send'] {
         min-height: 44px;
         min-width: 44px;
+      }
+
+      /* Full-width text buttons only need the height. */
+      .timeline-floating-card .timeline-search-show-more,
+      .timeline-floating-card .timeline-chat-jump-latest {
+        min-height: 44px;
       }
 
       /* The todo marker keeps its inline look; only its tap area grows. */
@@ -1218,6 +1225,10 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .timeline-search-sidebar-results .is-pending {
+      transition: none;
+    }
+
     .app-shell-root,
     .app-shell-fixed-right-aware,
     .timeline-floating-card,
