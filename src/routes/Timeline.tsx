@@ -68,6 +68,15 @@ const CHAT_TEXTAREA_MAX_HEIGHT_PX = 136
 const CHAT_TEXTAREA_EXPANDED_DELTA_PX = 4
 const CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX = CHAT_TEXTAREA_MIN_HEIGHT_PX
 
+// One line of text plus vertical padding, derived from styles rather than from
+// the current content: a remounted composer may already hold a multiline draft.
+const measureSingleLineHeight = (textarea: HTMLTextAreaElement) => {
+  const style = window.getComputedStyle(textarea)
+  const height =
+    parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+  return Number.isFinite(height) && height > 0 ? height : CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX
+}
+
 const TrayInput = memo(({
   mode,
   draftText,
@@ -80,7 +89,6 @@ const TrayInput = memo(({
   const debounceRef = useRef<number | null>(null)
   const prevModeRef = useRef<TrayInputMode>(mode)
   const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null)
-  const chatTextareaSingleLineHeightRef = useRef(0)
   const isChatMode = mode === 'chat'
   const hasSearchText = draftText.trim().length > 0
   const trayFieldClassName =
@@ -110,22 +118,14 @@ const TrayInput = memo(({
 
     textarea.style.height = 'auto'
     const measuredHeight = textarea.scrollHeight
-    if (chatTextareaSingleLineHeightRef.current === 0 || !draftText.trim()) {
-      chatTextareaSingleLineHeightRef.current = measuredHeight
-    }
-
-    const baselineSingleLineHeight =
-      chatTextareaSingleLineHeightRef.current > 0
-        ? chatTextareaSingleLineHeightRef.current
-        : CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX
-    const singleLineCeiling = baselineSingleLineHeight + CHAT_TEXTAREA_EXPANDED_DELTA_PX
+    const singleLineCeiling = measureSingleLineHeight(textarea) + CHAT_TEXTAREA_EXPANDED_DELTA_PX
     const nextHeight = Math.min(
       measuredHeight <= singleLineCeiling ? CHAT_TEXTAREA_MIN_HEIGHT_PX : measuredHeight,
       CHAT_TEXTAREA_MAX_HEIGHT_PX,
     )
     textarea.style.height = `${nextHeight}px`
     textarea.style.overflowY = textarea.scrollHeight > CHAT_TEXTAREA_MAX_HEIGHT_PX ? 'auto' : 'hidden'
-  }, [draftText])
+  }, [])
 
   useLayoutEffect(() => {
     if (!isChatMode) {
@@ -134,6 +134,24 @@ const TrayInput = memo(({
 
     syncChatTextareaHeight()
   }, [draftText, isChatMode, syncChatTextareaHeight])
+
+  // A width change (moving between the tray and a card, or the card narrowing)
+  // rewraps the draft, so the height has to be measured again.
+  useEffect(() => {
+    const textarea = chatTextareaRef.current
+    if (!isChatMode || !textarea || typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    let lastWidth = textarea.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (textarea.clientWidth === lastWidth) return
+      lastWidth = textarea.clientWidth
+      syncChatTextareaHeight()
+    })
+    observer.observe(textarea)
+    return () => observer.disconnect()
+  }, [isChatMode, syncChatTextareaHeight])
 
   const submitChatDraft = useCallback(async () => {
     if (mode !== 'chat' || sending) {
@@ -382,6 +400,26 @@ export default function Timeline() {
   const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
+
+  // Crossing the narrow breakpoint moves the composer between the tray and a
+  // card, remounting it. The window resize event fires before the media query
+  // change re-renders anything, so note which composer had focus there and
+  // give focus back once the new one is mounted.
+  const refocusComposerAfterFlipRef = useRef<string | null>(null)
+  useEffect(() => {
+    const rememberFocusedComposer = () => {
+      const id = document.activeElement?.id
+      refocusComposerAfterFlipRef.current = id === 'chat-input' || id === 'search-input' ? id : null
+    }
+    window.addEventListener('resize', rememberFocusedComposer)
+    return () => window.removeEventListener('resize', rememberFocusedComposer)
+  }, [])
+  useEffect(() => {
+    const id = refocusComposerAfterFlipRef.current
+    if (!id) return
+    refocusComposerAfterFlipRef.current = null
+    requestAnimationFrame(() => document.getElementById(id)?.focus())
+  }, [isNarrowViewportMode])
   const searchResultsRef = useRef<DaySearchResult[]>([])
 
   const hasRestoredScroll = useRef(false)
