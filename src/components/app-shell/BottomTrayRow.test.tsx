@@ -55,6 +55,21 @@ describe('BottomTrayRow', () => {
     expect(launchers).toContainElement(screen.getByRole('button', { name: 'Chat' }))
   })
 
+  const launcherOrder = () =>
+    screen.getAllByRole('button', { name: /^(Search|Chat)$/ }).map((button) => button.getAttribute('aria-label'))
+
+  it('orders the desktop launchers Search then Ask AI, mirroring the cards', () => {
+    renderRow({ launcherSpread: true })
+
+    expect(launcherOrder()).toEqual(['Search', 'Chat'])
+  })
+
+  it('keeps the mobile launcher order from main: Chat then Search', () => {
+    renderRow({ launcherSpread: false })
+
+    expect(launcherOrder()).toEqual(['Chat', 'Search'])
+  })
+
   it('marks which card is open so the capsule thumb sits behind that half', () => {
     const { container, rerender } = renderRow({ launcherSpread: true, mode: 'timeline' })
     const launchers = () => container.querySelector('.bottom-tray-launchers')

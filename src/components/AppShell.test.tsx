@@ -651,12 +651,14 @@ describe('AppShell launcher mode buttons', () => {
     vi.unstubAllGlobals()
   })
 
-  it('opens chat or search from the launcher buttons on desktop timeline mode in Search then Chat order', () => {
+  it('opens chat or search from the desktop launcher buttons', () => {
+    // BottomTrayRow is mocked here; the real launcher order is covered in its own tests.
     render(renderHome())
 
-    const buttons = screen.getAllByRole('button', { name: /^(Search|Ask AI)$/ })
-    expect(buttons[0]).toHaveAccessibleName('Search')
-    expect(buttons[1]).toHaveAccessibleName('Ask AI')
+    const buttons = [
+      screen.getByRole('button', { name: 'Search' }),
+      screen.getByRole('button', { name: 'Ask AI' }),
+    ]
     // Desktop launchers carry visible labels that match their accessible names.
     expect(buttons[0]).toHaveTextContent('Search')
     expect(buttons[1]).toHaveTextContent('Ask AI')

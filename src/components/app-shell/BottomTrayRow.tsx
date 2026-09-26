@@ -73,8 +73,18 @@ export default function BottomTrayRow({
             // Tells the capsule which half the sliding thumb sits behind.
             data-open={launcherSpread && (mode === 'search' || mode === 'chat') ? mode : undefined}
           >
-            <Fragment key="search-btn">{searchButton}</Fragment>
-            <Fragment key="chat-btn">{chatButton}</Fragment>
+            {launcherSpread ? (
+              // Desktop mirrors the cards: search opens on the left, chat on the right.
+              <>
+                <Fragment key="search-btn">{searchButton}</Fragment>
+                <Fragment key="chat-btn">{chatButton}</Fragment>
+              </>
+            ) : (
+              <>
+                <Fragment key="chat-btn">{chatButton}</Fragment>
+                <Fragment key="search-btn">{searchButton}</Fragment>
+              </>
+            )}
             {launcherSpread && scrollToTodayButton}
           </div>
         ) : (
