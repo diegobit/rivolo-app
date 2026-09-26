@@ -1010,7 +1010,10 @@
       }
     }
 
+    /* Scrolling to the latest message is managed in JS; the browser's own
+       scroll anchoring would fight it on reflow. */
     .timeline-chat-sidebar-messages {
+      overflow-anchor: none;
       display: flex;
       flex: 1 1 auto;
       flex-direction: column;

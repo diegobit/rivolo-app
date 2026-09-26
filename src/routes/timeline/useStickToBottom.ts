@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 // Within this distance of the end, the reader counts as following the latest.
 const AT_BOTTOM_THRESHOLD_PX = 48
@@ -11,7 +11,12 @@ const AT_BOTTOM_THRESHOLD_PX = 48
 export const useStickToBottom = (active: boolean, contentKey: string) => {
   const ref = useRef<HTMLDivElement | null>(null)
   const [following, setFollowing] = useState(true)
+  const followingRef = useRef(true)
   const [seenContentKey, setSeenContentKey] = useState(contentKey)
+
+  useEffect(() => {
+    followingRef.current = following
+  }, [following])
 
   const scrollToBottom = useCallback(() => {
     const element = ref.current
@@ -40,6 +45,19 @@ export const useStickToBottom = (active: boolean, contentKey: string) => {
     if (!active || !following || !ref.current) return
     ref.current.scrollTop = ref.current.scrollHeight
   }, [active, contentKey, following])
+
+  // Layout changes (a narrower window rewrapping messages, a taller composer
+  // shrinking the list) move the end without any content change. Re-anchor so
+  // the reflow is not mistaken for the reader scrolling up.
+  useEffect(() => {
+    const element = ref.current
+    if (!active || !element || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      if (followingRef.current) element.scrollTop = element.scrollHeight
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [active])
 
   return {
     ref,
