@@ -803,8 +803,12 @@ export default function Timeline() {
       try {
         const data = await searchDays(searchQuery, { filter: searchFilter })
         if (cancelled) return
+        // view.hasFocus is false whenever the window is unfocused, which is
+        // exactly when pending edits are saved (switching apps mid-edit), so
+        // check the editor's own element instead.
         const editedDayId = isNarrowViewportModeRef.current
-          ? ([...editorRefs.current.entries()].find(([, view]) => view.hasFocus)?.[0] ?? null)
+          ? ([...editorRefs.current.entries()].find(([, view]) => view.dom.contains(document.activeElement))?.[0] ??
+            null)
           : null
         setSearchResults((previous) => keepEditedDayInResults(data, previous, editedDayId))
       } catch {
@@ -1597,6 +1601,8 @@ export default function Timeline() {
     setCardResultPage({ key: cardResultsKey, limit: cardResultLimit + SEARCH_CARD_PAGE_SIZE })
   }, [cardResultLimit, cardResultsKey])
   const showMoreCardResultsRef = useRef<HTMLButtonElement | null>(null)
+  // Set by ArrowDown past the last loaded result; focused once the page renders.
+  const focusCardResultAfterLoadRef = useRef<number | null>(null)
   useEffect(() => {
     const pendingIndex = focusCardResultAfterLoadRef.current
     if (pendingIndex === null) return
@@ -1614,7 +1620,6 @@ export default function Timeline() {
     return () => observer.disconnect()
   }, [hiddenCardResultCount, showMoreCardResults])
 
-  const focusCardResultAfterLoadRef = useRef<number | null>(null)
   // ArrowDown from the search field reaches the first result; the arrow keys
   // then move between results, and ArrowUp from the first returns to the field.
   const handleSearchCardKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
@@ -1803,7 +1808,7 @@ export default function Timeline() {
               hasMore={hasMore}
               blockIndex={blockIndex}
               sourceLineIndex={sourceLineIndex}
-                        openLineIndex={openLineIndex}
+              openLineIndex={openLineIndex}
               enableTodoToggle={canToggleMatchedResultTodos}
               todayId={todayId}
               contentTextStyle={matchedResultsTextStyle}
