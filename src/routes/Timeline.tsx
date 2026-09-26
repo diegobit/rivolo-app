@@ -1586,6 +1586,13 @@ export default function Timeline() {
   }, [cardResultLimit, cardResultsKey])
   const showMoreCardResultsRef = useRef<HTMLButtonElement | null>(null)
   useEffect(() => {
+    const pendingIndex = focusCardResultAfterLoadRef.current
+    if (pendingIndex === null) return
+    focusCardResultAfterLoadRef.current = null
+    const openButtons = document.querySelectorAll<HTMLButtonElement>('#desktop-search-card .result-open-button')
+    openButtons[pendingIndex]?.focus()
+  }, [visibleCardResultItems.length])
+  useEffect(() => {
     const button = showMoreCardResultsRef.current
     if (!button || typeof IntersectionObserver === 'undefined') return
     const observer = new IntersectionObserver((entries) => {
@@ -1595,6 +1602,7 @@ export default function Timeline() {
     return () => observer.disconnect()
   }, [hiddenCardResultCount, showMoreCardResults])
 
+  const focusCardResultAfterLoadRef = useRef<number | null>(null)
   // ArrowDown from the search field reaches the first result; the arrow keys
   // then move between results, and ArrowUp from the first returns to the field.
   const handleSearchCardKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
@@ -1613,6 +1621,13 @@ export default function Timeline() {
     if (index === -1) return
     event.preventDefault()
     if (event.key === 'ArrowDown') {
+      const showMore = event.currentTarget.querySelector<HTMLButtonElement>('.timeline-search-show-more')
+      if (index === openButtons.length - 1 && showMore) {
+        // Past the last loaded result: load the next page and continue there.
+        focusCardResultAfterLoadRef.current = index + 1
+        showMore.click()
+        return
+      }
       openButtons[Math.min(index + 1, openButtons.length - 1)].focus()
     } else if (index === 0) {
       document.getElementById('search-input')?.focus()

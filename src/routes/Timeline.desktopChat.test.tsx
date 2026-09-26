@@ -489,6 +489,22 @@ describe('Timeline desktop search card', () => {
     })
   })
 
+  it('keeps ArrowDown going past the first page of results', async () => {
+    const blocks = Array.from({ length: 60 }, (_, index) => `hello line ${index}`)
+    vi.mocked(searchDays).mockResolvedValue([{ day: todayDay, matchedBlocks: blocks, blockKind: 'line' }])
+    renderTimeline()
+    openSearchCard()
+    typeQuery('hello')
+    await waitForResults(50)
+    const lastLoaded = getResultOpenButtons()[49]
+    lastLoaded.focus()
+
+    fireEvent.keyDown(lastLoaded, { key: 'ArrowDown' })
+
+    await waitForResults(60)
+    expect(document.activeElement).toBe(getResultOpenButtons()[50])
+  })
+
   it('toggling a todo in a text-search result does not navigate or close the card', async () => {
     const todoDay = makeDay(todayId, '- [ ] Buy milk and cookies')
     vi.mocked(searchDays).mockResolvedValue([
