@@ -55,7 +55,8 @@ type TrayInputProps = {
   onDraftTextChange: (value: string) => void
   sending: boolean
   chatError: string | null
-  onChatSubmit: (value: string) => Promise<void>
+  // Resolves false when the draft was rejected (e.g. no provider configured).
+  onChatSubmit: (value: string) => Promise<boolean>
   onSearchTextChange: (value: string) => void
 }
 
@@ -167,7 +168,10 @@ const TrayInput = memo(({
     }
 
     onDraftTextChange('')
-    await onChatSubmit(trimmed)
+    const sent = await onChatSubmit(trimmed)
+    // Rejection is immediate, before anything else could be typed, so the
+    // draft can simply be put back.
+    if (!sent) onDraftTextChange(draftText)
   }, [draftText, mode, onChatSubmit, onDraftTextChange, sending])
 
   useEffect(() => {
