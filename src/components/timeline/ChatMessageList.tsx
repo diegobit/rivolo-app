@@ -26,8 +26,8 @@ export default function ChatMessageList({
           <div
             className={`space-y-2 text-m ${
               message.role === 'user'
-                ? 'max-w-[85%] rounded-2xl bg-[var(--theme-accent)] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
-                : 'w-full max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
+                ? 'min-w-0 max-w-[85%] rounded-2xl bg-[var(--theme-accent)] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]'
+                : 'w-full min-w-0 max-w-full rounded-none bg-transparent px-0 py-0 text-left text-slate-700 shadow-none'
             }`}
           >
             {message.role === 'assistant' ? (
@@ -38,7 +38,7 @@ export default function ChatMessageList({
                 dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '', message.meta?.citations ?? []) }}
               />
             ) : (
-              <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+              <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message.content || '...'}</p>
             )}
 
             {message.role === 'assistant' && message.meta?.isStreaming ? (

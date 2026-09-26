@@ -672,6 +672,8 @@
     color: var(--theme-text-soft);
     line-height: 1.6;
     word-break: break-word;
+    /* Long unbroken tokens (URLs, hashes) wrap instead of widening the chat. */
+    overflow-wrap: anywhere;
   }
 
   .assistant-markdown > * + * {
