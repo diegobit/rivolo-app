@@ -307,6 +307,23 @@ const EDITOR_PIN_TTL_MS = 20_000
 const EDITOR_PIN_PRUNE_INTERVAL_MS = 4_000
 const LOG_SCOPE = 'TimelinePerf'
 
+// One treatment for both ends of the mobile chat thread, at two depths, because the two edges
+// do different jobs. The top passes behind header icons that must stay legible, so it goes
+// fully clear. The bottom passes behind the floating input, where a glimpse of the last reply
+// is useful context, so it only dips to 0.6. The bottom stops track --keyboard-offset so the fade
+// rides up with the tray when the keyboard opens.
+const MOBILE_CHAT_TRAY_EDGE = 'var(--keyboard-offset, 0px) - env(safe-area-inset-bottom)'
+const MOBILE_CHAT_FADE_MASK = [
+  'linear-gradient(to bottom,',
+  'transparent 0,',
+  'transparent calc(env(safe-area-inset-top) + 3.5rem),',
+  'rgba(0,0,0,0.55) calc(env(safe-area-inset-top) + 4.5rem),',
+  `black calc(env(safe-area-inset-top) + 5.5rem),`,
+  `black calc(100% - ${MOBILE_CHAT_TRAY_EDGE} - 6.5rem),`,
+  `rgba(0,0,0,0.6) calc(100% - ${MOBILE_CHAT_TRAY_EDGE} - 3.75rem),`,
+  'rgba(0,0,0,0.6) 100%)',
+].join(' ')
+
 // --- Component ---
 
 export default function Timeline() {
@@ -1858,7 +1875,11 @@ export default function Timeline() {
               ref={mobileChatScrollRef}
               className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
               style={{
-                paddingTop: 'calc(env(safe-area-inset-top) + 4rem)',
+                maskImage: MOBILE_CHAT_FADE_MASK,
+                WebkitMaskImage: MOBILE_CHAT_FADE_MASK,
+                // Matches where MOBILE_CHAT_TOP_FADE turns fully opaque, so the oldest
+                // message is never parked half-faded at the top of the thread.
+                paddingTop: 'calc(env(safe-area-inset-top) + 5.5rem)',
                 paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
                 scrollPaddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
               }}
