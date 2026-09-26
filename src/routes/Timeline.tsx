@@ -21,6 +21,7 @@ import { appendToDay, searchDays } from '../lib/dayRepository'
 import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
 import { focusLauncher } from '../components/app-shell/desktopCards'
+import { useStickToBottom } from './timeline/useStickToBottom'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
 import { useEditorMountWindow } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
@@ -530,6 +531,10 @@ export default function Timeline() {
   const hasChatMessages = messages.length > 0
   const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode
   const showDesktopChatPanel = showDesktopChatMode
+  const lastChatMessage = messages[messages.length - 1]
+  // Grows with every new message and every streamed chunk of the last one.
+  const chatContentKey = `${messages.length}:${lastChatMessage?.content.length ?? 0}:${lastChatMessage?.meta?.isStreaming ? 1 : 0}`
+  const chatScroll = useStickToBottom(showDesktopChatPanel, chatContentKey)
   const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
@@ -1973,7 +1978,11 @@ export default function Timeline() {
                 </button>
               </div>
             </header>
-            <div className="timeline-chat-sidebar-messages">
+            <div
+              ref={chatScroll.ref}
+              className="timeline-chat-sidebar-messages"
+              onScroll={chatScroll.onScroll}
+            >
               {hasChatMessages ? (
                 <ChatMessageList
                   messages={messages}
@@ -1985,6 +1994,11 @@ export default function Timeline() {
                 />
               ) : (
                 <p className="timeline-chat-sidebar-empty">What can I help with?</p>
+              )}
+              {chatScroll.hasUnseen && (
+                <button type="button" className="timeline-chat-jump-latest" onClick={chatScroll.scrollToBottom}>
+                  New messages ↓
+                </button>
               )}
             </div>
             <div className="timeline-chat-sidebar-composer">
