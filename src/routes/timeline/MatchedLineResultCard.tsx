@@ -58,7 +58,7 @@ const MatchedLineResultCard = memo(({
   todayId: string
   contentTextStyle: React.CSSProperties
   searchQuery: string
-  onOpen: (dayId: string, quote: string) => void
+  onOpen: (dayId: string, quote: string, lineIndex?: number) => void
   onToggleTodo: (dayId: string, blockIndex: number, sourceLineIndex: number) => void
 }) => {
   const dayLabel = getMatchedResultDayLabel(day.dayId, todayId)
@@ -74,7 +74,7 @@ const MatchedLineResultCard = memo(({
         if (target.closest('button[aria-label="Toggle todo"]')) return
         // A click that ends a text selection is the user copying, not opening.
         if (window.getSelection()?.toString()) return
-        onOpen(day.dayId, openQuote)
+        onOpen(day.dayId, openQuote, sourceLineIndex ?? undefined)
       }}
     >
       <button
@@ -84,7 +84,7 @@ const MatchedLineResultCard = memo(({
         aria-describedby={snippetId}
         onClick={(event) => {
           event.stopPropagation()
-          onOpen(day.dayId, openQuote)
+          onOpen(day.dayId, openQuote, sourceLineIndex ?? undefined)
         }}
       >
         <img src="/arrow-square-in.svg" alt="" className="h-5 w-5" />

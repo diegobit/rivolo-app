@@ -1613,7 +1613,7 @@ export default function Timeline() {
   }, [])
 
   const handleOpenMatchedLineResult = useCallback(
-    (dayId: string, quote: string) => {
+    (dayId: string, quote: string, lineIndex?: number) => {
       // Narrow viewports keep the filtered search view and expand the day in
       // place. On desktop the card stays open so several results can be opened
       // in a row; only the unfiltered timeline behind it moves to the match.
@@ -1622,7 +1622,7 @@ export default function Timeline() {
       }
 
       requestAnimationFrame(() => {
-        void handleCitationClick({ day: dayId, quote })
+        void handleCitationClick({ day: dayId, quote, lineIndex })
       })
     },
     [handleCitationClick, isNarrowViewportMode],

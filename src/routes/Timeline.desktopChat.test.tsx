@@ -350,7 +350,7 @@ describe('Timeline desktop search card', () => {
     fireEvent.click(screen.getByRole('button', { name: /Open note for/ }))
 
     await waitFor(() => {
-      expect(handleCitationClick).toHaveBeenCalledWith({ day: todayId, quote: 'hello world' })
+      expect(handleCitationClick).toHaveBeenCalledWith({ day: todayId, quote: 'hello world', lineIndex: 0 })
     })
     expect(useUIStore.getState().mode).toBe('search')
     expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
@@ -376,7 +376,7 @@ describe('Timeline desktop search card', () => {
     fireEvent.click(cardSection!)
 
     await waitFor(() => {
-      expect(handleCitationClick).toHaveBeenCalledWith({ day: todayId, quote: 'hello world' })
+      expect(handleCitationClick).toHaveBeenCalledWith({ day: todayId, quote: 'hello world', lineIndex: 0 })
     })
     expect(useUIStore.getState().mode).toBe('search')
     expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
@@ -469,6 +469,24 @@ describe('Timeline desktop search card', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show 20 more' }))
     await waitForResults(120)
     expect(screen.queryByRole('button', { name: /more$/ })).not.toBeInTheDocument()
+  })
+
+  it('opens the exact occurrence when a day repeats the same matched line', async () => {
+    const repeatedDay = makeDay(todayId, 'apple repeated\nfiller\napple repeated')
+    vi.mocked(searchDays).mockResolvedValue([
+      { day: repeatedDay, matchedBlocks: ['apple repeated', 'apple repeated'], blockKind: 'line' },
+    ])
+    renderTimeline()
+    openSearchCard()
+    typeQuery('apple')
+    await waitForResults(2)
+    handleCitationClick.mockClear()
+
+    fireEvent.click(getResultOpenButtons()[1])
+
+    await waitFor(() => {
+      expect(handleCitationClick).toHaveBeenCalledWith({ day: todayId, quote: 'apple repeated', lineIndex: 2 })
+    })
   })
 
   it('toggling a todo in a text-search result does not navigate or close the card', async () => {
