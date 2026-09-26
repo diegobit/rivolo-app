@@ -219,7 +219,7 @@ const TrayInput = memo(({
       <form className="flex items-end gap-3" onSubmit={handleSubmit}>
         <div className="relative flex-1">
           <p
-            className={`absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
+            className={`tray-input-error absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
               showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
             }`}
             aria-hidden={!showChatError}

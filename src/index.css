@@ -937,11 +937,15 @@
       pointer-events: auto;
     }
 
+    /* When a card is too short for its controls (a landscape phone, the
+       on-screen keyboard) the card scrolls as a whole and the composer stays
+       pinned to its bottom edge, so the field being typed in never leaves it. */
     .timeline-chat-sidebar-inner {
       display: flex;
       flex-direction: column;
       height: 100%;
-      overflow: hidden;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
     }
 
     .timeline-chat-sidebar-header {
@@ -1023,8 +1027,12 @@
     }
 
     .timeline-chat-sidebar-composer {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
       flex-shrink: 0;
       padding: 0.9rem 1.5rem 1.15rem;
+      background: var(--theme-surface);
     }
 
     .timeline-chat-composer-field {
@@ -1041,8 +1049,40 @@
     }
 
     .timeline-search-sidebar-composer {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
       flex-shrink: 0;
       padding: 0 1.1rem 1.15rem;
+      background: var(--theme-surface);
+    }
+
+    /* The tray's error badge is a single unbreakable line; inside a card it
+       wraps within the composer and grows upwards. */
+    .timeline-floating-card .tray-input-error {
+      top: auto;
+      bottom: calc(100% + 0.5rem);
+      max-width: 100%;
+      border-radius: 1rem;
+      white-space: normal;
+    }
+
+    @media (max-height: 520px) {
+      .timeline-chat-sidebar-header {
+        padding-top: 0.6rem;
+        padding-bottom: 0.4rem;
+      }
+
+      /* Keep room for at least one row of results or messages. */
+      .timeline-chat-sidebar-messages,
+      .timeline-search-sidebar-results {
+        min-height: 4.5rem;
+      }
+
+      .timeline-search-sidebar-pills > div {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+      }
     }
 
     .timeline-search-sidebar-pills {
