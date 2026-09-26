@@ -99,6 +99,7 @@ export default function AppShell() {
   const showMobileChatTogglePill =
     isNarrowViewportMode && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
   const showDesktopChatEdgeHandle = !isNarrowViewportMode && isDesktopChatModeWithMessages
+  const mobileChatOverlayOpen = isHome && isNarrowViewportMode && mode === 'chat' && chatPanelOpen
   const showMobileNewChatButton =
     isHome && mode === 'chat' && isNarrowViewportMode && chatMessageCount > 0
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
@@ -539,6 +540,7 @@ export default function AppShell() {
           modeToggleButton={modeToggleButton}
           trayCenter={trayCenter}
           showMobileChatTogglePill={showMobileChatTogglePill}
+          hideTrayBlur={mobileChatOverlayOpen}
           chatPanelOpen={chatPanelOpen}
           onToggleChatPanel={() => {
             if (chatPanelOpen) {
