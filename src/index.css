@@ -1140,6 +1140,27 @@
       text-align: center;
     }
 
+    .timeline-search-show-more {
+      align-self: center;
+      min-height: 2.25rem;
+      padding: 0 1rem;
+      border: 1px solid var(--theme-border);
+      border-radius: 9999px;
+      background: var(--theme-surface);
+      color: var(--theme-text-soft);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .timeline-search-show-more:hover {
+      background: var(--theme-hover);
+    }
+
+    .timeline-search-show-more:focus-visible {
+      outline: 2px solid var(--theme-accent);
+      outline-offset: 2px;
+    }
+
     .timeline-search-sidebar-results .is-pending {
       opacity: 0.55;
       transition: opacity 150ms ease;

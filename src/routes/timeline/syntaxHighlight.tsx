@@ -4,26 +4,21 @@ export type RenderSyntaxLineOptions = {
   onToggleTodo?: () => void
 }
 
+// Maps each matched block to its line in the note, taking repeated lines in
+// order. Lines are indexed once so a note with many matches stays linear.
 export const getMatchedBlockLineIndexes = (contentMd: string, matchedBlocks: string[]) => {
-  const normalizedLines = contentMd.split('\n').map((line) => line.trimEnd())
-  const usedIndexes = new Set<number>()
-
-  return matchedBlocks.map((block) => {
-    const normalizedBlock = block.trimEnd()
-
-    for (let index = 0; index < normalizedLines.length; index += 1) {
-      if (usedIndexes.has(index)) {
-        continue
-      }
-
-      if (normalizedLines[index] === normalizedBlock) {
-        usedIndexes.add(index)
-        return index
-      }
+  const lineIndexesByText = new Map<string, number[]>()
+  contentMd.split('\n').forEach((line, index) => {
+    const normalizedLine = line.trimEnd()
+    const indexes = lineIndexesByText.get(normalizedLine)
+    if (indexes) {
+      indexes.push(index)
+    } else {
+      lineIndexesByText.set(normalizedLine, [index])
     }
-
-    return -1
   })
+
+  return matchedBlocks.map((block) => lineIndexesByText.get(block.trimEnd())?.shift() ?? -1)
 }
 
 export const highlightQueryText = (text: string, query: string, keyPrefix: string) => {

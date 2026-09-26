@@ -455,6 +455,22 @@ describe('Timeline desktop search card', () => {
     expect(document.activeElement).toBe(getSearchInput())
   })
 
+  it('renders a large result set a page at a time', async () => {
+    const blocks = Array.from({ length: 120 }, (_, index) => `hello line ${index}`)
+    vi.mocked(searchDays).mockResolvedValue([{ day: todayDay, matchedBlocks: blocks, blockKind: 'line' }])
+    renderTimeline()
+    openSearchCard()
+    typeQuery('hello')
+    await waitForResults(50)
+
+    expect(screen.getByRole('status')).toHaveTextContent('120 matches')
+    fireEvent.click(screen.getByRole('button', { name: 'Show 50 more' }))
+    await waitForResults(100)
+    fireEvent.click(screen.getByRole('button', { name: 'Show 20 more' }))
+    await waitForResults(120)
+    expect(screen.queryByRole('button', { name: /more$/ })).not.toBeInTheDocument()
+  })
+
   it('toggling a todo in a text-search result does not navigate or close the card', async () => {
     const todoDay = makeDay(todayId, '- [ ] Buy milk and cookies')
     vi.mocked(searchDays).mockResolvedValue([

@@ -64,6 +64,7 @@ type TrayInputConfig = {
   enterKeyHint: 'send' | 'search'
 }
 
+const SEARCH_CARD_PAGE_SIZE = 50
 const CHAT_TEXTAREA_MIN_HEIGHT_PX = 40
 const CHAT_TEXTAREA_MAX_HEIGHT_PX = 136
 const CHAT_TEXTAREA_EXPANDED_DELTA_PX = 4
@@ -1550,6 +1551,29 @@ export default function Timeline() {
           : `${cardMatchCount} ${cardMatchCount === 1 ? 'match' : 'matches'}`
   const isCardSearchMessage = showCardSearchError || cardNoSearchResults
 
+  // Large result sets render a page at a time; the rest load as the list is
+  // scrolled to its end. The page count resets only for a new query or filter,
+  // so a refresh after an edit does not collapse a list the user has scrolled.
+  const cardResultsKey = `${searchQuery}\u0000${searchFilter ?? ''}`
+  const [cardResultPage, setCardResultPage] = useState({ key: cardResultsKey, limit: SEARCH_CARD_PAGE_SIZE })
+  const cardResultLimit = cardResultPage.key === cardResultsKey ? cardResultPage.limit : SEARCH_CARD_PAGE_SIZE
+  const visibleCardResultItems =
+    cardMatchCount > cardResultLimit ? matchedLineResultItems.slice(0, cardResultLimit) : matchedLineResultItems
+  const hiddenCardResultCount = cardMatchCount - visibleCardResultItems.length
+  const showMoreCardResults = useCallback(() => {
+    setCardResultPage({ key: cardResultsKey, limit: cardResultLimit + SEARCH_CARD_PAGE_SIZE })
+  }, [cardResultLimit, cardResultsKey])
+  const showMoreCardResultsRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    const button = showMoreCardResultsRef.current
+    if (!button || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) showMoreCardResults()
+    })
+    observer.observe(button)
+    return () => observer.disconnect()
+  }, [hiddenCardResultCount, showMoreCardResults])
+
   // ArrowDown from the search field reaches the first result; the arrow keys
   // then move between results, and ArrowUp from the first returns to the field.
   const handleSearchCardKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
@@ -2021,7 +2045,7 @@ export default function Timeline() {
               {matchedLineResultItems.length > 0 && (
                 // Results from the previous query stay visible, dimmed, while a new one runs.
                 <div className={`space-y-3 ${searchLoading ? 'is-pending' : ''}`}>
-                  {matchedLineResultItems.map(
+                  {visibleCardResultItems.map(
                     ({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex }) => (
                       <MatchedLineResultCard
                         key={key}
@@ -2041,6 +2065,16 @@ export default function Timeline() {
                     ),
                   )}
                 </div>
+              )}
+              {hiddenCardResultCount > 0 && (
+                <button
+                  ref={showMoreCardResultsRef}
+                  type="button"
+                  className="timeline-search-show-more"
+                  onClick={showMoreCardResults}
+                >
+                  Show {Math.min(hiddenCardResultCount, SEARCH_CARD_PAGE_SIZE)} more
+                </button>
               )}
             </div>
             <div className="timeline-search-sidebar-pills">{renderSearchPills(false)}</div>
