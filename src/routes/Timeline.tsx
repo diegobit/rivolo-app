@@ -310,7 +310,7 @@ const LOG_SCOPE = 'TimelinePerf'
 // One treatment for both ends of the mobile chat thread, at two depths, because the two edges
 // do different jobs. The top passes behind header icons that must stay legible, so it goes
 // fully clear. The bottom passes behind the floating input, where a glimpse of the last reply
-// is useful context, so it stops at 0.35. The bottom stops track --keyboard-offset so the fade
+// is useful context, so it only dips to 0.6. The bottom stops track --keyboard-offset so the fade
 // rides up with the tray when the keyboard opens.
 const MOBILE_CHAT_TRAY_EDGE = 'var(--keyboard-offset, 0px) - env(safe-area-inset-bottom)'
 const MOBILE_CHAT_FADE_MASK = [
@@ -320,8 +320,8 @@ const MOBILE_CHAT_FADE_MASK = [
   'rgba(0,0,0,0.55) calc(env(safe-area-inset-top) + 4.5rem),',
   `black calc(env(safe-area-inset-top) + 5.5rem),`,
   `black calc(100% - ${MOBILE_CHAT_TRAY_EDGE} - 6.5rem),`,
-  `rgba(0,0,0,0.35) calc(100% - ${MOBILE_CHAT_TRAY_EDGE} - 3.75rem),`,
-  'rgba(0,0,0,0.35) 100%)',
+  `rgba(0,0,0,0.6) calc(100% - ${MOBILE_CHAT_TRAY_EDGE} - 3.75rem),`,
+  'rgba(0,0,0,0.6) 100%)',
 ].join(' ')
 
 // --- Component ---
