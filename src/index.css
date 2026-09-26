@@ -1185,8 +1185,8 @@
       color: var(--theme-danger-text);
     }
     /* Short cards (a landscape phone, the on-screen keyboard). This block
-       comes last in the desktop rules so it overrides them. While typing,
-       the header and the filters step aside for the results; a long chat
+       comes last in the desktop rules so it overrides them. With the keyboard
+       up, the header and the filters step aside for the results; a long chat
        draft scrolls inside the composer instead of pushing Send out. */
     @media (max-height: 520px) {
       .timeline-chat-sidebar-header {
@@ -1194,8 +1194,16 @@
         padding-bottom: 0.4rem;
       }
 
-      .timeline-floating-card:focus-within .timeline-chat-sidebar-header,
-      .timeline-floating-card:focus-within .timeline-search-sidebar-pills {
+      /* Only while the on-screen keyboard is up for the card's own text field.
+         Keyed to the field rather than any focus in the card, since pressing a
+         header button or a filter focuses it, and hiding it then would swallow
+         the click. A hardware keyboard leaves the card room for everything. */
+      body[data-keyboard-open='true']
+        .timeline-floating-card:has(.timeline-chat-composer-field textarea:focus)
+        .timeline-chat-sidebar-header,
+      body[data-keyboard-open='true']
+        .timeline-floating-card:has(.timeline-chat-composer-field textarea:focus)
+        .timeline-search-sidebar-pills {
         display: none;
       }
 
@@ -1209,8 +1217,8 @@
         overflow-x: auto;
       }
 
-      /* The composer sets its height limit and overflow inline. */
-      .timeline-floating-card textarea {
+      /* The chat composer sets its height limit and overflow inline. */
+      .timeline-chat-sidebar-composer textarea {
         max-height: 4.5rem !important;
         overflow-y: auto !important;
       }
