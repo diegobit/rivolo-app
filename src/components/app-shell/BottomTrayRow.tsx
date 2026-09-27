@@ -30,6 +30,9 @@ export default function BottomTrayRow({
   const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.5rem] sm:top-[-3.1rem]'
   const trayRowAlignmentClass = mode === 'timeline' ? 'items-center' : 'items-end'
   const modeToggleOffsetClassName = mode === 'timeline' ? '' : 'mb-1.5 sm:mb-3'
+  // Timeline on mobile home shows only the dock; every other combination has
+  // controls of its own (launchers, mode toggle + composer, or the search field).
+  const hasTrayControls = !mobileChatDock || mode !== 'timeline'
 
   return (
     <>
@@ -43,23 +46,30 @@ export default function BottomTrayRow({
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20" />
 
       <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row fixed left-0 z-30 mx-auto flex ${mobileChatDock ? 'flex-col' : trayRowAlignmentClass} justify-center gap-2 px-2 sm:gap-3 sm:px-0`}>
-        {/* The tray's own controls fade out with the welcome hero, but the mobile
-            dock stays: it is the only navigation on mobile home. */}
-        <div className={`hero-ui-fade-down flex w-full justify-center gap-2 ${mobileChatDock ? '' : 'items-center'}`}>
-          {mode === 'timeline' && !mobileChatDock ? (
-            <>
-              <Fragment key="chat-btn">{chatButton}</Fragment>
-              <Fragment key="search-btn">{searchButton}</Fragment>
-            </>
-          ) : mode !== 'timeline' ? (
-            <>
-              <Fragment key="mode-toggle-btn">
-                {!mobileChatDock && <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>}
-              </Fragment>
-              <Fragment key="tray">{mobileChatDock ? <div className="w-full">{trayCenter}</div> : trayCenter}</Fragment>
-            </>
-          ) : null}
-        </div>
+        {/* On desktop the tray controls fade out with the welcome hero. On mobile
+            home they must stay operable (the dock's Chat needs a composer even in
+            the empty state), so the fade class is desktop-only. */}
+        {hasTrayControls && (
+          <div
+            className={`${mobileChatDock ? '' : 'hero-ui-fade-down'} flex w-full justify-center gap-2 ${
+              mobileChatDock ? '' : 'items-center'
+            }`}
+          >
+            {mode === 'timeline' ? (
+              <>
+                <Fragment key="chat-btn">{chatButton}</Fragment>
+                <Fragment key="search-btn">{searchButton}</Fragment>
+              </>
+            ) : (
+              <>
+                <Fragment key="mode-toggle-btn">
+                  {!mobileChatDock && <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>}
+                </Fragment>
+                <Fragment key="tray">{mobileChatDock ? <div className="w-full">{trayCenter}</div> : trayCenter}</Fragment>
+              </>
+            )}
+          </div>
+        )}
 
         {mobileChatDock && (
           <div className="w-full">{mobileChatDock}</div>

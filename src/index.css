@@ -1157,7 +1157,11 @@ html[data-theme='dark'] .dock-capsule-thumb {
   height: 4rem;
 }
 
-body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-row,
+/* While a day editor is focused the on-screen keyboard owns the bottom of the
+   screen: hide the tray's controls and veils, but keep the mobile dock mounted so
+   navigation never disappears. */
+body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-row .hero-ui-fade-down,
+body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-row button[aria-label='Scroll to Today'],
 body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur,
 body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-tail {
   display: none;
