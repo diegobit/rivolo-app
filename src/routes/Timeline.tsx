@@ -2030,6 +2030,7 @@ export default function Timeline() {
             <div
               ref={chatScroll.ref}
               className="timeline-chat-sidebar-messages"
+              data-following={chatScroll.following ? 'true' : 'false'}
               onScroll={chatScroll.onScroll}
             >
               {hasChatMessages ? (

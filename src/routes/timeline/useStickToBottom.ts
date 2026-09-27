@@ -30,8 +30,10 @@ export const useStickToBottom = (active: boolean, contentKey: string) => {
     const element = ref.current
     if (!element) return
     const atBottom = element.scrollHeight - element.scrollTop - element.clientHeight <= AT_BOTTOM_THRESHOLD_PX
+    // A reader leaving the bottom has seen everything up to now, even content
+    // that arrived without moving the list (e.g. a stream finishing in place).
+    if (atBottom || followingRef.current) setSeenContentKey(contentKey)
     setFollowing(atBottom)
-    if (atBottom) setSeenContentKey(contentKey)
   }, [contentKey])
 
   // Opening the list starts at the latest message; the resulting scroll event
@@ -62,6 +64,7 @@ export const useStickToBottom = (active: boolean, contentKey: string) => {
   return {
     ref,
     onScroll,
+    following,
     hasUnseen: active && !following && contentKey !== seenContentKey,
     scrollToBottom,
   }

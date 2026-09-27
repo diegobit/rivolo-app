@@ -58,4 +58,18 @@ describe('useStickToBottom', () => {
     fireEvent.scroll(list)
     expect(screen.queryByText('unseen')).not.toBeInTheDocument()
   })
+
+  it('does not flag content the reader saw before scrolling up', () => {
+    const view = render(<List contentKey="1" />)
+    const list = screen.getByTestId('list')
+
+    // Content arrives while following, with no scroll event (the end did not move).
+    act(() => {
+      view.rerender(<List contentKey="2" />)
+    })
+    list.scrollTop = 100
+    fireEvent.scroll(list)
+
+    expect(screen.queryByText('unseen')).not.toBeInTheDocument()
+  })
 })

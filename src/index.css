@@ -1010,10 +1010,7 @@
       }
     }
 
-    /* Scrolling to the latest message is managed in JS; the browser's own
-       scroll anchoring would fight it on reflow. */
     .timeline-chat-sidebar-messages {
-      overflow-anchor: none;
       display: flex;
       flex: 1 1 auto;
       flex-direction: column;
@@ -1022,6 +1019,13 @@
       overflow-y: auto;
       overscroll-behavior-y: contain;
       padding: 0.5rem 1.5rem 1.5rem;
+    }
+
+    /* While following the latest message, the end is kept in view in JS and the
+       browser's scroll anchoring would fight it on reflow. A reader who scrolled
+       up keeps anchoring, so a resize keeps their place. */
+    .timeline-chat-sidebar-messages[data-following='true'] {
+      overflow-anchor: none;
     }
 
     /* Pinned to the bottom of the message list while newer messages are below. */
