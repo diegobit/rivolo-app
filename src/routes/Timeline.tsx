@@ -827,8 +827,9 @@ export default function Timeline() {
     return () => {
       cancelled = true
     }
-    // savedNotesRevision re-runs the search once an edited note is saved.
-  }, [mode, savedNotesRevision, searchFilter, searchQuery])
+    // savedNotesRevision re-runs the search once an edited note is saved;
+    // searchResultMode, so switching Days/Lines never shows a kept day's stale lines.
+  }, [mode, savedNotesRevision, searchFilter, searchQuery, searchResultMode])
 
   // --- Handlers ---
 
