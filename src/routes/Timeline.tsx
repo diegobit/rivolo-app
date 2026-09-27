@@ -340,6 +340,7 @@ export default function Timeline() {
   const loadSyncState = useSyncStore((state) => state.loadState)
   const syncStatus = useSyncStore((state) => state.status)
   const mode = useUIStore((state) => state.mode)
+  const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
