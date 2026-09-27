@@ -1213,9 +1213,13 @@
         min-height: 4.5rem;
       }
 
+      /* One sideways-scrolling row; the fade at the right edge shows there is
+         more, and the end padding lets the last pill clear it. */
       .timeline-search-sidebar-pills > div {
         flex-wrap: nowrap;
         overflow-x: auto;
+        padding-right: 1.5rem;
+        mask-image: linear-gradient(to right, black calc(100% - 1.5rem), transparent);
       }
 
       /* The chat composer sets its height limit and overflow inline. */
