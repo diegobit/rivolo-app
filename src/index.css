@@ -1194,16 +1194,13 @@
         padding-bottom: 0.4rem;
       }
 
-      /* Only while the on-screen keyboard is up for the card's own text field.
-         Keyed to the field rather than any focus in the card, since pressing a
-         header button or a filter focuses it, and hiding it then would swallow
-         the click. A hardware keyboard leaves the card room for everything. */
-      body[data-keyboard-open='true']
-        .timeline-floating-card:has(.timeline-chat-composer-field textarea:focus)
-        .timeline-chat-sidebar-header,
-      body[data-keyboard-open='true']
-        .timeline-floating-card:has(.timeline-chat-composer-field textarea:focus)
-        .timeline-search-sidebar-pills {
+      /* Only while the on-screen keyboard is up; a hardware keyboard leaves the
+         card room for everything. Keyed to the keyboard flag alone, never to
+         focus: a tap moves focus on press, and anything that showed or hid then
+         would shift the card under the finger and lose the tap. The flag only
+         clears once the keyboard has closed, after the tap is over. */
+      body[data-keyboard-open='true'] .timeline-floating-card .timeline-chat-sidebar-header,
+      body[data-keyboard-open='true'] .timeline-floating-card .timeline-search-sidebar-pills {
         display: none;
       }
 
