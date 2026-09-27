@@ -101,7 +101,6 @@ export default function AppShell() {
   const launcherSpread = !isNarrowViewportMode
   const showMobileChatTogglePill =
     isNarrowViewportMode && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
-  const mobileChatOverlayOpen = isHome && isNarrowViewportMode && mode === 'chat' && chatPanelOpen
   const showMobileNewChatButton =
     isHome && mode === 'chat' && isNarrowViewportMode && chatMessageCount > 0
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
@@ -625,7 +624,6 @@ export default function AppShell() {
           showLauncherButtons={showLauncherButtons}
           launcherSpread={launcherSpread}
           showMobileChatTogglePill={showMobileChatTogglePill}
-          hideTrayBlur={mobileChatOverlayOpen}
           chatPanelOpen={chatPanelOpen}
           onToggleChatPanel={() => {
             if (chatPanelOpen) {
