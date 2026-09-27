@@ -1044,6 +1044,7 @@ export default function Timeline() {
     setHighlightedQuote,
     isNarrowViewportMode,
     setChatPanelOpen,
+    setMode,
   })
 
   const handleRetryLoad = useCallback(() => {

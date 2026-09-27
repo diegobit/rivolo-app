@@ -29,6 +29,16 @@ export default function MobileChatDock({
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const sheetRef = useRef<HTMLDivElement | null>(null)
 
+  const menuStatusId = 'mobile-chat-menu-status'
+  const menuStatus = [
+    attentionItems.length > 0
+      ? `${attentionItems.length} ${attentionItems.length === 1 ? 'item needs' : 'items need'} attention`
+      : '',
+    databaseStale ? 'Reload needed' : '',
+  ]
+    .filter(Boolean)
+    .join('. ')
+
   const closeMenu = () => {
     setIsMenuOpen(false)
     menuButtonRef.current?.focus({ preventScroll: true })
@@ -91,24 +101,30 @@ export default function MobileChatDock({
           ref={menuButtonRef}
           type="button"
           className={dockButtonClass}
+          aria-label="Menu"
+          aria-describedby={menuStatus ? menuStatusId : undefined}
           aria-expanded={isMenuOpen}
           aria-haspopup="dialog"
           aria-controls={isMenuOpen ? 'mobile-chat-menu' : undefined}
           onClick={() => setIsMenuOpen(true)}
         >
           <img src="/dots-three.svg" alt="" className="h-5 w-5" />
-          Menu
+          <span aria-hidden="true">Menu</span>
           {attentionItems.length > 0 && (
-            <span className="absolute right-1 top-0 min-w-5 rounded-full bg-amber-100 px-1 text-[11px] font-bold text-amber-900">
+            <span
+              aria-hidden="true"
+              className="absolute right-1 top-0 min-w-5 rounded-full bg-amber-100 px-1 text-[11px] font-bold text-amber-900"
+            >
               {attentionItems.length}
             </span>
           )}
           {databaseStale && (
-            <span className="absolute left-1 top-0 h-2.5 w-2.5 rounded-full bg-amber-500">
-              <span className="sr-only">Reload needed</span>
-            </span>
+            <span aria-hidden="true" className="absolute left-1 top-0 h-2.5 w-2.5 rounded-full bg-amber-500" />
           )}
         </button>
+        <span id={menuStatusId} className="sr-only">
+          {menuStatus}
+        </span>
       </nav>
 
       {isMenuOpen && createPortal(
