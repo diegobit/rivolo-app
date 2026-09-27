@@ -307,11 +307,6 @@ const EDITOR_PIN_TTL_MS = 20_000
 const EDITOR_PIN_PRUNE_INTERVAL_MS = 4_000
 const LOG_SCOPE = 'TimelinePerf'
 
-// Fades the thread out behind the pinned header. The bottom edge is not this mask's job:
-// the shared tray veil covers it for the timeline and the chat alike.
-const MOBILE_CHAT_TOP_FADE =
-  'linear-gradient(to bottom, transparent 0, transparent calc(env(safe-area-inset-top) + 4.5rem), black calc(env(safe-area-inset-top) + 5.5rem))'
-
 // --- Component ---
 
 export default function Timeline() {
@@ -349,6 +344,7 @@ export default function Timeline() {
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
   const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
+  const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const setChatMessageCount = useUIStore((state) => state.setChatMessageCount)
   const setTimelineEmpty = useUIStore((state) => state.setTimelineEmpty)
   const messages = useChatStore((state) => state.messages)
@@ -444,14 +440,6 @@ export default function Timeline() {
     searchResultsRef.current = searchResults
   }, [searchResults])
 
-  useEffect(() => {
-    if (!isNarrowViewportMode) return
-    if (mode !== 'chat') return
-    if (messages.length > 0) return
-    if (!chatPanelOpen) return
-    setChatPanelOpen(false)
-  }, [chatPanelOpen, isNarrowViewportMode, messages.length, mode, setChatPanelOpen])
-
   const visibleDays = useMemo(
     () => (hiddenDeleteDayIds.size ? days.filter((day) => !hiddenDeleteDayIds.has(day.dayId)) : days),
     [days, hiddenDeleteDayIds],
@@ -473,7 +461,8 @@ export default function Timeline() {
   const hasChatMessages = messages.length > 0
   const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode && hasChatMessages
   const showDesktopChatPanel = showDesktopChatMode && desktopChatPanelOpen
-  const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
+  const showMobileChatOverlay =
+    mode === 'chat' && isNarrowViewportMode && (chatPanelOpen || chatMessageCount > 0)
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
@@ -608,6 +597,7 @@ export default function Timeline() {
       const target = event.target
       if (!(target instanceof Node)) return
       if (mobileChatScrollRef.current?.contains(target)) return
+      if (target instanceof Element && target.closest('[data-mobile-chat-menu]')) return
       event.preventDefault()
     }
 
@@ -657,7 +647,7 @@ export default function Timeline() {
       delete document.body.dataset.emptyState
     }
 
-    if (hasNoNotes && !isLogoAnimating) {
+    if (hasNoNotes && !isLogoAnimating && !showMobileChatOverlay) {
       document.body.dataset.heroWallpaper = 'true'
       document.body.dataset.heroUi = 'true'
       return
@@ -665,7 +655,7 @@ export default function Timeline() {
 
     delete document.body.dataset.heroWallpaper
     delete document.body.dataset.heroUi
-  }, [hasNoNotes, isLogoAnimating, setTimelineEmpty])
+  }, [hasNoNotes, isLogoAnimating, setTimelineEmpty, showMobileChatOverlay])
 
   useLayoutEffect(() => {
     if (hasNoNotes) return
@@ -1848,28 +1838,17 @@ export default function Timeline() {
         </div>
       )}
 
-      {/* Mobile chat overlay (Mode A) */}
+      {/* Mobile chat overlay */}
       {showMobileChatOverlay && (
         <>
-          <div className="fixed inset-0 z-20 sm:hidden">
-            <div
-              className="pointer-events-none absolute inset-0 bg-white/50 backdrop-blur-lg"
-              style={{
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-              }}
-            />
+          <div className="fixed inset-0 z-20 bg-[var(--theme-page)] sm:hidden">
             <div
               ref={mobileChatScrollRef}
               className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
               style={{
-                maskImage: MOBILE_CHAT_TOP_FADE,
-                WebkitMaskImage: MOBILE_CHAT_TOP_FADE,
-                // Matches where MOBILE_CHAT_TOP_FADE turns fully opaque, so the oldest
-                // message is never parked half-faded at the top of the thread.
-                paddingTop: 'calc(env(safe-area-inset-top) + 5.5rem)',
-                paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
-                scrollPaddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
+                paddingTop: '1rem',
+                paddingBottom: 'calc(var(--bottom-tray-height, 3.5rem) + var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 7rem)',
+                scrollPaddingBottom: 'calc(var(--bottom-tray-height, 3.5rem) + var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 7rem)',
               }}
             >
               <ChatMessageList

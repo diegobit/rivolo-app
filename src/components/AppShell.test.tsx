@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -72,20 +73,14 @@ vi.mock('../hooks/useTabSyncState', () => ({
 vi.mock('./app-shell/useAutoSync', () => ({ useAutoSync: vi.fn() }))
 vi.mock('./app-shell/BottomTrayRow', () => ({
   default: ({
-    showMobileNewChatButton,
-    onNewChat,
+    mobileChatDock,
     showScrollToToday,
   }: {
-    showMobileNewChatButton: boolean
-    onNewChat: () => void
+    mobileChatDock: ReactNode
     showScrollToToday: boolean
   }) => (
     <>
-      {showMobileNewChatButton ? (
-        <button type="button" aria-label="New chat" onClick={onNewChat}>
-          New chat
-        </button>
-      ) : null}
+      {mobileChatDock}
       {showScrollToToday ? <div data-testid="scroll-to-today-visible" /> : null}
     </>
   ),
@@ -359,7 +354,7 @@ describe('AppShell attention and stale tab states', () => {
     expect(screen.queryByRole('button', { name: 'Shortcuts' })).not.toBeInTheDocument()
   })
 
-  it('shows mobile new chat in the left header slot during chat', async () => {
+  it('hides the mobile header during chat and offers new chat from the dock menu', async () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'
@@ -377,12 +372,13 @@ describe('AppShell attention and stale tab states', () => {
       </MemoryRouter>,
     )
 
-    const newChatButton = screen.getByRole('button', { name: 'New chat' })
-    const { left } = getHeaderSlots()
+    expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
 
-    expect(left).toContainElement(newChatButton)
-
+    await userEvent.click(screen.getByRole('button', { name: /menu/i }))
+    const newChatButton = await screen.findByRole('button', { name: 'New chat' })
     await userEvent.click(newChatButton)
+
     expect(onNewChat).toHaveBeenCalledOnce()
 
     window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)

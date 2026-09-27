@@ -6,9 +6,7 @@ type BottomTrayRowProps = {
   searchButton: ReactNode
   modeToggleButton: ReactNode
   trayCenter: ReactNode
-  showMobileChatTogglePill: boolean
-  chatPanelOpen: boolean
-  onToggleChatPanel: () => void
+  mobileChatDock: ReactNode
   showScrollToToday: boolean
   showDesktopChatEdgeHandle: boolean
   desktopChatPanelOpen: boolean
@@ -22,9 +20,7 @@ export default function BottomTrayRow({
   searchButton,
   modeToggleButton,
   trayCenter,
-  showMobileChatTogglePill,
-  chatPanelOpen,
-  onToggleChatPanel,
+  mobileChatDock,
   showScrollToToday,
   showDesktopChatEdgeHandle,
   desktopChatPanelOpen,
@@ -53,37 +49,20 @@ export default function BottomTrayRow({
         ) : (
           <>
             <Fragment key="mode-toggle-btn">
-              <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>
+              {!mobileChatDock && <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>}
             </Fragment>
             <Fragment key="tray">{trayCenter}</Fragment>
           </>
         )}
 
-        {showMobileChatTogglePill && (
-          <button
-            type="button"
-            className="absolute right-[15px] top-[-3.5rem] inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:hidden"
-            aria-label={chatPanelOpen ? 'Hide chat' : 'Show chat'}
-            onClick={onToggleChatPanel}
-          >
-            {chatPanelOpen ? (
-              <img
-                src="/caret-left.svg"
-                alt=""
-                className="h-5 w-5 -rotate-90 opacity-70"
-              />
-            ) : (
-              <img src="/chats-teardrop.svg" alt="" className="h-5 w-5 opacity-75 transition-opacity duration-200" />
-            )}
-          </button>
+        {mobileChatDock && (
+          <div className="absolute bottom-full left-2 right-2 mb-2">{mobileChatDock}</div>
         )}
 
         {showScrollToToday && (
           <button
             type="button"
-            className={`absolute ${mobileScrollToTodayTopClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:right-0 sm:h-10 sm:w-10 ${
-              showMobileChatTogglePill ? 'right-[67px]' : 'right-[15px]'
-            }`}
+            className={`absolute ${mobileScrollToTodayTopClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:right-0 sm:h-10 sm:w-10 right-[15px]`}
             aria-label="Scroll to Today"
             onClick={onScrollToToday}
           >
