@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -71,20 +70,6 @@ vi.mock('../hooks/useTabSyncState', () => ({
   useTabSyncState: () => stores.tabSync,
 }))
 vi.mock('./app-shell/useAutoSync', () => ({ useAutoSync: vi.fn() }))
-vi.mock('./app-shell/BottomTrayRow', () => ({
-  default: ({
-    mobileChatDock,
-    showScrollToToday,
-  }: {
-    mobileChatDock: ReactNode
-    showScrollToToday: boolean
-  }) => (
-    <>
-      {mobileChatDock}
-      {showScrollToToday ? <div data-testid="scroll-to-today-visible" /> : null}
-    </>
-  ),
-}))
 vi.mock('./app-shell/ShortcutsPopover', () => ({
   default: ({ shortcutsRef }: { shortcutsRef: { current: HTMLDivElement | null } }) => (
     <div ref={shortcutsRef}>
@@ -326,39 +311,46 @@ describe('AppShell attention and stale tab states', () => {
     expect(stores.settings.updateThemePreference).toHaveBeenCalledExactlyOnceWith('system')
   })
 
-  it('uses mobile home header slots with settings on the right and no theme shortcut', () => {
+  it.each(['timeline', 'chat', 'search'] as const)('shows the mobile dock without a home header in %s mode', (mode) => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
     stores.sync.activeProvider = 'google-drive'
     stores.viewport.isNarrow = true
+    stores.ui.mode = mode
 
-    const renderShell = (initialEntry: string) => (
-      <MemoryRouter initialEntries={[initialEntry]}>
+    render(
+      <MemoryRouter initialEntries={['/']}>
         <Routes>
           <Route path="/" element={<AppShell />}>
             <Route index element={<div>Timeline content</div>} />
-            <Route path="settings" element={<div>Settings content</div>} />
-            <Route path="privacy" element={<div>Privacy content</div>} />
           </Route>
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter>,
     )
-    render(renderShell('/'))
 
-    const settingsLink = screen.getByRole('link', { name: 'Settings' })
-    const { left, right } = getHeaderSlots()
-
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Theme: System' })).not.toBeInTheDocument()
-    expect(left).toBeEmptyDOMElement()
-    expect(right).toContainElement(settingsLink)
     expect(screen.queryByRole('button', { name: 'Shortcuts' })).not.toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveClass('pt-4')
+    expect(screen.getByRole('main')).toHaveStyle({ paddingBottom: 'var(--mobile-home-bottom-clearance)' })
+    const dock = screen.getByRole('navigation', { name: 'Mobile navigation' })
+    expect(dock).toBeVisible()
+    expect(screen.getByRole('button', { name: mode === 'timeline' ? 'Today' : mode === 'chat' ? 'Chat' : 'Search' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Switch to/ })).not.toBeInTheDocument()
+    if (mode === 'timeline') {
+      expect(document.querySelector('#bottom-tray')).not.toBeInTheDocument()
+    } else {
+      expect(document.querySelector('#bottom-tray')).toBeInTheDocument()
+    }
   })
 
-  it('hides the mobile header during chat and offers new chat from the dock menu', async () => {
+  it('offers the Rivolo brand and new chat from the mobile menu before chat has messages', async () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'
-    stores.ui.chatMessageCount = 1
     const onNewChat = vi.fn()
     window.addEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
 
@@ -375,13 +367,34 @@ describe('AppShell attention and stale tab states', () => {
     expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /menu/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    expect(screen.getByRole('link', { name: 'Home' }).querySelector('img')).toHaveAttribute('src', '/logo.svg')
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
     const newChatButton = await screen.findByRole('button', { name: 'New chat' })
     await userEvent.click(newChatButton)
 
     expect(onNewChat).toHaveBeenCalledOnce()
 
     window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
+  })
+
+  it('keeps Menu as its accessible name when the tab needs reloading', async () => {
+    stores.viewport.isNarrow = true
+    stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
+    stores.sync.activeProvider = 'google-drive'
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const menuButton = screen.getByRole('button', { name: 'Menu' })
+    expect(menuButton).toHaveAccessibleDescription('Reload needed')
+    await userEvent.click(menuButton)
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
   })
 
   it('uses mobile route header slots with back on the left and no theme shortcut', () => {
@@ -498,6 +511,7 @@ describe('AppShell attention and stale tab states', () => {
 
   it('coalesces rapid scroll/resize events into a single rAF-scheduled update, preserving scroll-to-today visibility', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
 
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
     let scrollY = 0
@@ -552,12 +566,12 @@ describe('AppShell attention and stale tab states', () => {
 
     expect(rafSpy).toHaveBeenCalledTimes(1)
     expect(rectSpy).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('scroll-to-today-visible')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Scroll to Today' })).not.toBeInTheDocument()
 
     act(() => flushRaf())
 
     expect(rectSpy).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId('scroll-to-today-visible')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Scroll to Today' })).toBeInTheDocument()
 
     rafSpy.mockClear()
     rectSpy.mockClear()

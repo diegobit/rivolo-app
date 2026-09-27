@@ -1009,9 +1009,114 @@
   min-height: 2.25rem;
 }
 
-@media (max-width: 639px) {
-  #bottom-tray-pills[data-mode='search'] {
-    left: -3.25rem;
+@media (max-width: 699px) {
+  .app-shell-root[data-mobile-home='true'] {
+    --mobile-home-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 4rem + 0.5rem + 2rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
+  }
+
+  .app-shell-root[data-mobile-home='true'][data-mode='timeline'] {
+    --mobile-home-bottom-clearance: calc(4rem + 2rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
+  }
+
+  .app-shell-root[data-mobile-home='true'][data-mode='search'] {
+    --mobile-home-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 4rem + 0.5rem + 5rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
+  }
+
+  .bottom-tray-blur[data-mobile-dock='true'] {
+    height: calc(var(--bottom-tray-height, 3.5rem) + 4rem + 0.5rem + env(safe-area-inset-bottom) + 2.5rem);
+  }
+
+  .bottom-tray-blur[data-mobile-dock='true'][data-mode='timeline'] {
+    height: calc(4rem + env(safe-area-inset-bottom) + 2.5rem);
+  }
+
+  .bottom-tray-blur[data-mobile-dock='true'][data-mode='search'] {
+    height: calc(var(--bottom-tray-height, 3.5rem) + 4rem + 0.5rem + env(safe-area-inset-bottom) + 5.5rem);
+  }
+}
+
+/* Mobile destination dock. Same capsule + sliding-thumb language as the desktop
+   launchers (.bottom-tray-launchers), so the app reads as one system. */
+.dock-capsule {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  height: 4rem;
+  padding: 4px;
+  border: 1px solid var(--theme-border);
+  border-radius: 9999px;
+  background:
+    radial-gradient(ellipse 60% 140% at 92% 100%, rgb(22 164 236 / 0.05), transparent 70%),
+    var(--theme-surface-soft);
+  box-shadow:
+    0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
+    0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
+}
+
+.dock-capsule-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(25% - 2px);
+  border-radius: 9999px;
+  background: var(--theme-surface);
+  box-shadow:
+    0 1px 2px rgb(var(--theme-shadow-color) / 0.08),
+    0 3px 8px -4px rgb(var(--theme-shadow-color) / 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease;
+}
+
+.dock-capsule-thumb[data-visible='true'] {
+  opacity: 1;
+}
+
+html[data-theme='dark'] .dock-capsule-thumb {
+  background: #2a3340;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.4),
+    0 4px 14px -4px rgb(0 0 0 / 0.6);
+}
+
+.dock-capsule-button {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  color: var(--theme-text-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dock-capsule-button[aria-current='page'] {
+  color: var(--theme-text);
+}
+
+.dock-capsule-button > img {
+  width: 20px;
+  height: 20px;
+}
+
+.dock-capsule-button:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+  border-radius: 9999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-capsule-thumb {
+    transition: none;
   }
 }
 
@@ -1104,7 +1209,8 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
   scroll-margin-top: 80px;
 }
 
-html[data-theme='dark'] img[src$='.svg']:not(.icon-on-accent) {
+/* Recolor only monochrome black icon SVGs; keep colored brand assets (the logo) untouched. */
+html[data-theme='dark'] img[src$='.svg']:not(.icon-on-accent):not([src$='logo.svg']) {
   filter: var(--theme-icon-filter);
 }
 

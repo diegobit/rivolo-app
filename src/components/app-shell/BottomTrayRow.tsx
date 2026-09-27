@@ -37,26 +37,32 @@ export default function BottomTrayRow({
         className={`app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.6)_18%,black_72%)] ${
           mode === 'search' ? 'bottom-tray-blur-search' : ''
         }`}
+        data-mobile-dock={mobileChatDock ? 'true' : 'false'}
+        data-mode={mode}
       />
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20" />
 
-      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${trayRowAlignmentClass} justify-center gap-2 px-2 sm:gap-3 sm:px-0`}>
-        {mode === 'timeline' ? (
-          <>
-            <Fragment key="chat-btn">{chatButton}</Fragment>
-            <Fragment key="search-btn">{searchButton}</Fragment>
-          </>
-        ) : (
-          <>
-            <Fragment key="mode-toggle-btn">
-              {!mobileChatDock && <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>}
-            </Fragment>
-            <Fragment key="tray">{trayCenter}</Fragment>
-          </>
-        )}
+      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row fixed left-0 z-30 mx-auto flex ${mobileChatDock ? 'flex-col' : trayRowAlignmentClass} justify-center gap-2 px-2 sm:gap-3 sm:px-0`}>
+        {/* The tray's own controls fade out with the welcome hero, but the mobile
+            dock stays: it is the only navigation on mobile home. */}
+        <div className={`hero-ui-fade-down flex w-full justify-center gap-2 ${mobileChatDock ? '' : 'items-center'}`}>
+          {mode === 'timeline' && !mobileChatDock ? (
+            <>
+              <Fragment key="chat-btn">{chatButton}</Fragment>
+              <Fragment key="search-btn">{searchButton}</Fragment>
+            </>
+          ) : mode !== 'timeline' ? (
+            <>
+              <Fragment key="mode-toggle-btn">
+                {!mobileChatDock && <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>}
+              </Fragment>
+              <Fragment key="tray">{mobileChatDock ? <div className="w-full">{trayCenter}</div> : trayCenter}</Fragment>
+            </>
+          ) : null}
+        </div>
 
         {mobileChatDock && (
-          <div className="absolute bottom-full left-2 right-2 mb-2">{mobileChatDock}</div>
+          <div className="w-full">{mobileChatDock}</div>
         )}
 
         {showScrollToToday && (

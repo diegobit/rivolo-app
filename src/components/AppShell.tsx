@@ -55,7 +55,6 @@ export default function AppShell() {
   const activeProvider = useSyncStore((state) => state.activeProvider)
   const mode = useUIStore((state) => state.mode)
   const setMode = useUIStore((state) => state.setMode)
-  const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
   const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
@@ -96,8 +95,7 @@ export default function AppShell() {
     isHome && mode === 'chat' && !isNarrowViewportMode && chatMessageCount > 0
   const isDesktopChatSidebarOpen = isDesktopChatModeWithMessages && desktopChatPanelOpen
   const showTrayRow = isHome
-  const isMobileChatActive =
-    isHome && mode === 'chat' && isNarrowViewportMode && (chatPanelOpen || chatMessageCount > 0)
+  const isMobileHome = isHome && isNarrowViewportMode
   const showDesktopChatEdgeHandle = !isNarrowViewportMode && isDesktopChatModeWithMessages
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
   const showDesktopThemeButton = !isNarrowViewportMode && location.pathname !== '/settings'
@@ -322,7 +320,7 @@ export default function AppShell() {
       window.removeEventListener('resize', syncBottomTrayHeight)
       rootStyle.removeProperty('--bottom-tray-height')
     }
-  }, [showTrayRow])
+  }, [showTrayRow, mode, isMobileHome])
 
   useKeyboardOffsetCssVar()
   useAutoSync(syncStatus)
@@ -395,6 +393,8 @@ export default function AppShell() {
     <div
       className="app-shell-root min-h-full text-[var(--theme-text)]"
       data-desktop-chat-sidebar-open={isDesktopChatSidebarOpen ? 'true' : 'false'}
+      data-mobile-home={isMobileHome ? 'true' : 'false'}
+      data-mode={mode}
     >
       {/* Fixed header with blur */}
       <div
@@ -404,7 +404,7 @@ export default function AppShell() {
             : ''
         }`}
       />
-      {!isMobileChatActive && (
+      {!isMobileHome && (
         <header
           className="app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:mt-0 sm:px-0"
         >
@@ -512,9 +512,10 @@ export default function AppShell() {
 
       <main
         inert={tabSync.databaseStale}
-        className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 pt-0 sm:w-[min(96%,720px)] sm:pt-20 ${
+        className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 ${isMobileHome ? 'pt-4' : 'pt-0'} sm:w-[min(96%,720px)] sm:pt-20 ${
           showTrayRow ? 'pb-40' : 'pb-12'
         }`}
+        style={isMobileHome ? { paddingBottom: 'var(--mobile-home-bottom-clearance)' } : undefined}
       >
         <Outlet />
       </main>
@@ -526,7 +527,7 @@ export default function AppShell() {
           searchButton={searchButton}
           modeToggleButton={modeToggleButton}
           trayCenter={trayCenter}
-          mobileChatDock={isMobileChatActive ? (
+          mobileChatDock={isMobileHome ? (
             <MobileChatDock
               databaseStale={tabSync.databaseStale}
               attentionItems={attentionItems}
@@ -540,7 +541,7 @@ export default function AppShell() {
               }}
             />
           ) : null}
-          showScrollToToday={showScrollToToday && !isMobileChatActive}
+          showScrollToToday={showScrollToToday && (!isNarrowViewportMode || mode === 'timeline')}
           showDesktopChatEdgeHandle={showDesktopChatEdgeHandle}
           desktopChatPanelOpen={desktopChatPanelOpen}
           onToggleDesktopChatPanel={() => setDesktopChatPanelOpen(!desktopChatPanelOpen)}

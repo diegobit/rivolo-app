@@ -1828,13 +1828,13 @@ export default function Timeline() {
       )}
 
       {pendingDeleteDayId && !hasNoNotes && isNarrowViewportMode && (
-        <div className="pointer-events-none fixed left-0 top-[calc(env(safe-area-inset-top)+4.7rem)] z-40 px-3">
+        <div className="pointer-events-none fixed left-0 top-[calc(env(safe-area-inset-top)+1rem)] z-40 px-3">
           <div
-            className="pointer-events-auto flex w-[min(12rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-[0_14px_28px_-18px_rgba(15,23,42,0.45)] backdrop-blur-sm"
+            className="pointer-events-auto flex w-[min(12rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 shadow-[0_14px_28px_-18px_rgb(var(--theme-shadow-color)/0.45)]"
             role="status"
             aria-live="polite"
           >
-            <span className="truncate text-sm font-medium text-slate-700">Day deleted</span>
+            <span className="truncate text-sm font-medium text-[var(--theme-text-soft)]">Day deleted</span>
             {undoDeleteButton}
           </div>
         </div>
@@ -1849,8 +1849,8 @@ export default function Timeline() {
               className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
               style={{
                 paddingTop: '1rem',
-                paddingBottom: 'calc(var(--bottom-tray-height, 3.5rem) + var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 7rem)',
-                scrollPaddingBottom: 'calc(var(--bottom-tray-height, 3.5rem) + var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 7rem)',
+                paddingBottom: 'var(--mobile-home-bottom-clearance)',
+                scrollPaddingBottom: 'var(--mobile-home-bottom-clearance)',
               }}
             >
               <ChatMessageList
