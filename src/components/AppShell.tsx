@@ -484,12 +484,10 @@ export default function AppShell() {
       data-desktop-chat-sidebar-open={isDesktopChatMode ? 'true' : 'false'}
       data-desktop-search-sidebar-open={isDesktopSearchCardOpen ? 'true' : 'false'}
     >
-      {/* Fixed header with blur */}
+      {/* Fixed header blur: full width, fading out downwards (see .app-shell-header-blur) */}
       <div
-        className={`app-shell-fixed-right-aware pointer-events-none hidden left-0 z-20 h-16 transition-all sm:fixed sm:block ${
-          isScrolled
-            ? 'bg-[var(--theme-blur-surface)] shadow-[0_4px_12px_rgb(var(--theme-shadow-color)/0.10)] backdrop-blur-md'
-            : ''
+        className={`app-shell-header-blur pointer-events-none hidden inset-x-0 top-0 z-20 transition-all sm:fixed sm:block ${
+          isScrolled ? 'bg-[var(--theme-blur-surface)] backdrop-blur-md' : ''
         }`}
       />
       <header

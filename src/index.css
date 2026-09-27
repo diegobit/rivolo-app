@@ -1478,6 +1478,14 @@
   }
 }
 
+/* Spans the full width and fades out downwards, like the bottom tray's blur,
+   so it never ends in a hard line or stops short of a floating card. */
+.app-shell-header-blur {
+  height: 6.5rem;
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent);
+  mask-image: linear-gradient(to bottom, #000 45%, transparent);
+}
+
 .bottom-tray-blur-tail {
   bottom: calc(var(--keyboard-offset, 0px) - 4rem);
   height: 4rem;
