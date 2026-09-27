@@ -9,6 +9,9 @@ type BottomTrayRowProps = {
   showLauncherButtons: boolean
   launcherSpread: boolean
   showMobileChatTogglePill: boolean
+  // The mobile chat overlay masks its own scroller at both ends, so the tray veil would
+  // double up on pointer devices (on touch it is already off via `hover: none`).
+  hideTrayBlur: boolean
   chatPanelOpen: boolean
   onToggleChatPanel: () => void
   showScrollToToday: boolean
@@ -24,6 +27,7 @@ export default function BottomTrayRow({
   showLauncherButtons,
   launcherSpread,
   showMobileChatTogglePill,
+  hideTrayBlur,
   chatPanelOpen,
   onToggleChatPanel,
   showScrollToToday,
@@ -57,12 +61,16 @@ export default function BottomTrayRow({
 
   return (
     <>
-      <div
-        className={`app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-[var(--theme-blur-surface)] backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.75)_20%,black_80%)] ${
-          mode === 'search' && !launcherSpread ? 'bottom-tray-blur-search' : ''
-        }`}
-      />
-      <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-[var(--theme-blur-surface)] backdrop-blur-md" />
+      {!hideTrayBlur && (
+        <>
+          <div
+            className={`app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-[var(--theme-blur-surface)] backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.75)_20%,black_80%)] ${
+              mode === 'search' && !launcherSpread ? 'bottom-tray-blur-search' : ''
+            }`}
+          />
+          <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20 bg-[var(--theme-blur-surface)] backdrop-blur-md" />
+        </>
+      )}
 
       <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${trayRowAlignmentClass} ${trayRowJustifyClass} gap-2 px-2 sm:gap-3 sm:px-0`}>
         {showLauncherButtons ? (

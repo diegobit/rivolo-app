@@ -101,7 +101,7 @@ export default function AppShell() {
   const launcherSpread = !isNarrowViewportMode
   const showMobileChatTogglePill =
     isNarrowViewportMode && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
-  const showMobileChatHeaderBlur = isHome && isNarrowViewportMode && mode === 'chat' && chatPanelOpen
+  const mobileChatOverlayOpen = isHome && isNarrowViewportMode && mode === 'chat' && chatPanelOpen
   const showMobileNewChatButton =
     isHome && mode === 'chat' && isNarrowViewportMode && chatMessageCount > 0
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
@@ -495,12 +495,6 @@ export default function AppShell() {
       <header
         className="app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:px-0"
       >
-        {showMobileChatHeaderBlur && (
-          <div
-            className="pointer-events-none absolute left-1/2 top-0 z-0 h-16 w-screen -translate-x-1/2 bg-[var(--theme-blur-surface)] shadow-[0_4px_12px_rgb(var(--theme-shadow-color)/0.10)] backdrop-blur-md sm:hidden"
-            aria-hidden="true"
-          />
-        )}
         <div className="relative z-10 flex items-center gap-2">
           {showBackButton && (
             <NavLink to={backTarget} className={backButtonClass} aria-label="Back">
@@ -633,6 +627,7 @@ export default function AppShell() {
           showLauncherButtons={showLauncherButtons}
           launcherSpread={launcherSpread}
           showMobileChatTogglePill={showMobileChatTogglePill}
+          hideTrayBlur={mobileChatOverlayOpen}
           chatPanelOpen={chatPanelOpen}
           onToggleChatPanel={() => {
             if (chatPanelOpen) {
