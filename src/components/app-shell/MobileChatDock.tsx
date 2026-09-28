@@ -123,7 +123,7 @@ export default function MobileChatDock({
           {attentionItems.length > 0 && (
             <span
               aria-hidden="true"
-              className="absolute right-1 top-0 min-w-5 rounded-full bg-[var(--theme-warning-soft)] px-1 text-[11px] font-bold text-[var(--theme-warning-text)]"
+              className="absolute right-0.5 top-0 min-w-5 rounded-full border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] px-1 text-[11px] font-bold text-[var(--theme-warning-text)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.18)]"
             >
               {attentionItems.length}
             </span>
