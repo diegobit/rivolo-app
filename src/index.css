@@ -987,6 +987,15 @@
         color 160ms ease;
     }
 
+    /* An icon button that also carries its label, e.g. "New chat". */
+    .timeline-chat-sidebar-icon-button.timeline-chat-sidebar-text-button {
+      width: auto;
+      gap: 0.4rem;
+      padding: 0 0.75rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
     .timeline-chat-sidebar-icon-button:hover {
       border-color: var(--theme-border);
       background: var(--theme-hover);
@@ -1070,6 +1079,18 @@
       border-radius: 1.5rem;
       background: var(--theme-surface-soft);
       padding: 0.4rem 0.4rem 0.4rem 0.15rem;
+      transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        background-color 160ms ease;
+    }
+
+    /* A focused field brightens and takes a soft Rivolo-blue ring, so it is
+       clear where typing goes. */
+    .timeline-chat-composer-field:focus-within {
+      border-color: var(--theme-accent-border);
+      background: var(--theme-surface);
+      box-shadow: 0 0 0 3px rgb(var(--theme-accent-soft-rgb));
     }
 
     /* Desktop search card: mirrors the chat card's visual language anchored to the left edge. */
@@ -1238,7 +1259,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .timeline-search-sidebar-results .is-pending {
+    .timeline-search-sidebar-results .is-pending,
+    .timeline-chat-composer-field {
       transition: none;
     }
 

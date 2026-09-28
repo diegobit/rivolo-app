@@ -2011,13 +2011,12 @@ export default function Timeline() {
               <div className="timeline-chat-sidebar-actions">
                 <button
                   type="button"
-                  className="timeline-chat-sidebar-icon-button"
-                  aria-label="New chat"
-                  title="New chat"
+                  className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
                   onClick={handleNewChat}
                   disabled={sending}
                 >
-                  <img src="/eraser.svg" alt="" className="h-5 w-5 opacity-80" />
+                  <img src="/eraser.svg" alt="" className="h-4 w-4 opacity-80" />
+                  New chat
                 </button>
                 <button
                   type="button"
