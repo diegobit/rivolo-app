@@ -1039,8 +1039,9 @@
    launchers (.bottom-tray-launchers), so the app reads as one system. */
 .dock-capsule {
   /* Gentle AI glow rising from under the Chat destination (slot 2 of 4), fixed
-     there regardless of the thumb. */
-  --dock-glow: rgb(var(--theme-accent-rgb) / 0.07);
+     there regardless of the thumb. Uses the app's soft-blue token - the same
+     blue as the search pills - so it stays in the Rivolo palette in both themes
+     instead of desaturating to grey. */
   position: relative;
   display: flex;
   align-items: stretch;
@@ -1049,15 +1050,11 @@
   border: 1px solid var(--theme-border);
   border-radius: 9999px;
   background:
-    radial-gradient(ellipse 36% 130% at 37.5% 110%, var(--dock-glow), transparent 72%),
+    radial-gradient(ellipse 36% 130% at 37.5% 110%, rgb(var(--theme-accent-soft-rgb)), transparent 72%),
     var(--theme-surface-soft);
   box-shadow:
     0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
     0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
-}
-
-html[data-theme='dark'] .dock-capsule {
-  --dock-glow: rgb(var(--theme-accent-rgb) / 0.14);
 }
 
 .dock-capsule-thumb {
