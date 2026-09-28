@@ -411,6 +411,13 @@ export default function AppShell() {
         const nextMode = key === 'k' ? 'chat' : 'search'
         const inputId = nextMode === 'chat' ? 'chat-input' : 'search-input'
         if (mode === nextMode) {
+          // On desktop the shortcut toggles: pressed again from the card's own
+          // field, it closes the card, so repeated presses open and close it.
+          if (isDesktopHome && document.activeElement?.id === inputId) {
+            setMode('timeline')
+            focusLauncher(nextMode)
+            return
+          }
           document.getElementById(inputId)?.focus()
           return
         }

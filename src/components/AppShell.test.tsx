@@ -827,6 +827,46 @@ describe('AppShell launcher mode buttons', () => {
     note.remove()
   })
 
+  it.each([
+    ['k', 'chat', 'chat-input', 'Hide chat'],
+    ['f', 'search', 'search-input', 'Hide search'],
+  ] as const)(
+    'closes the desktop %s-shortcut card when its field already has focus',
+    (key, openMode, inputId, launcherName) => {
+      stores.ui.mode = openMode
+      vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+      render(renderHome())
+      const launcher = screen.getByRole('button', { name: launcherName })
+      const field = document.createElement('textarea')
+      field.id = inputId
+      document.body.appendChild(field)
+      field.focus()
+
+      fireEvent.keyDown(window, { key, metaKey: true })
+
+      expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+      expect(document.activeElement).toBe(launcher)
+      field.remove()
+    },
+  )
+
+  it('keeps the shortcut as focus-only on narrow viewports', () => {
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    render(renderHome())
+    const field = document.createElement('textarea')
+    field.id = 'chat-input'
+    document.body.appendChild(field)
+    field.focus()
+
+    fireEvent.keyDown(window, { key: 'k', metaKey: true })
+
+    expect(stores.ui.setMode).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(field)
+    field.remove()
+  })
+
   it('treats chat mode as an open chat card once a narrow viewport flips to wide', () => {
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'
