@@ -30,7 +30,7 @@ export default function BottomTrayRow({
   onScrollToToday,
 }: BottomTrayRowProps) {
   const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.5rem] sm:top-[-3.1rem]'
-  // The launchers (Search, then Ask AI) show on desktop in every mode and on
+  // The launchers (Search, then Chat) show on desktop in every mode and on
   // narrow viewports in timeline mode. The tray composer only appears on narrow
   // viewports in chat/search mode.
   const showTraySlot = !showLauncherButtons

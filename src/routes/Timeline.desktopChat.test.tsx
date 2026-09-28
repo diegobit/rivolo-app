@@ -175,7 +175,7 @@ describe('Timeline desktop chat card', () => {
     })
   })
 
-  it('returns focus to the Ask AI launcher and hides the card when it is closed', () => {
+  it('returns focus to the Chat launcher and hides the card when it is closed', () => {
     // AppShell renders the real launchers; stand one in for it here.
     const launcher = document.createElement('button')
     launcher.dataset.launcher = 'chat'

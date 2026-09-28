@@ -657,11 +657,11 @@ describe('AppShell launcher mode buttons', () => {
 
     const buttons = [
       screen.getByRole('button', { name: 'Search' }),
-      screen.getByRole('button', { name: 'Ask AI' }),
+      screen.getByRole('button', { name: 'Chat' }),
     ]
     // Desktop launchers carry visible labels that match their accessible names.
     expect(buttons[0]).toHaveTextContent('Search')
-    expect(buttons[1]).toHaveTextContent('Ask AI')
+    expect(buttons[1]).toHaveTextContent('Chat')
     expect(buttons[0]).toHaveAttribute('type', 'button')
     expect(buttons[1]).toHaveAttribute('type', 'button')
     expect(buttons[0]).not.toHaveAttribute('aria-controls')
@@ -672,7 +672,7 @@ describe('AppShell launcher mode buttons', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
     expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('search')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ask AI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
     expect(stores.ui.setMode).toHaveBeenLastCalledWith('chat')
     expect(stores.ui.setMode).toHaveBeenCalledTimes(2)
   })
@@ -693,7 +693,7 @@ describe('AppShell launcher mode buttons', () => {
     stores.ui.mode = 'chat'
     render(renderHome())
 
-    const chatBtn = screen.getByRole('button', { name: 'Hide Ask AI' })
+    const chatBtn = screen.getByRole('button', { name: 'Hide chat' })
     expect(chatBtn).toHaveAttribute('aria-expanded', 'true')
     expect(chatBtn).toHaveAttribute('aria-controls', 'desktop-chat-card')
     fireEvent.click(chatBtn)
@@ -745,7 +745,7 @@ describe('AppShell launcher mode buttons', () => {
     stores.ui.mode = 'timeline'
     render(renderHome())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ask AI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
 
     expect(stores.ui.setMode).toHaveBeenCalledWith('chat')
   })
@@ -767,7 +767,7 @@ describe('AppShell launcher mode buttons', () => {
     stores.ui.mode = 'chat'
     render(renderHome())
 
-    const chatLauncher = screen.getByRole('button', { name: 'Hide Ask AI' })
+    const chatLauncher = screen.getByRole('button', { name: 'Hide chat' })
     expect(chatLauncher).toBeInTheDocument()
 
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -792,7 +792,7 @@ describe('AppShell launcher mode buttons', () => {
     note.remove()
   })
 
-  it('moves focus to the Ask AI launcher when the chat shortcut closes a focused composer', () => {
+  it('moves focus to the Chat launcher when the chat shortcut closes a focused composer', () => {
     stores.ui.mode = 'chat'
     vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
     render(renderHome())
@@ -806,7 +806,7 @@ describe('AppShell launcher mode buttons', () => {
     fireEvent.keyDown(window, { key: 's', metaKey: true, shiftKey: true })
 
     expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide Ask AI' }))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide chat' }))
     card.remove()
   })
 
@@ -837,7 +837,7 @@ describe('AppShell launcher mode buttons', () => {
 
     // Desktop card visibility is derived from the mode, so there is no stale
     // closed state left over from the narrow layout.
-    expect(screen.getByRole('button', { name: 'Hide Ask AI' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Hide chat' })).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('opens search from the timeline with the find shortcut and switches cards with the mode shortcuts', () => {

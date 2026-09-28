@@ -58,7 +58,7 @@ describe('BottomTrayRow', () => {
   const launcherOrder = () =>
     screen.getAllByRole('button', { name: /^(Search|Chat)$/ }).map((button) => button.getAttribute('aria-label'))
 
-  it('orders the desktop launchers Search then Ask AI, mirroring the cards', () => {
+  it('orders the desktop launchers Search then Chat, mirroring the cards', () => {
     renderRow({ launcherSpread: true })
 
     expect(launcherOrder()).toEqual(['Search', 'Chat'])

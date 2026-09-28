@@ -128,12 +128,8 @@ export default function AppShell() {
 
   if (isHome && isWelcomeVisible && !sawWelcome) setSawWelcome(true)
 
-  // Desktop shows the launcher's name, so its accessible name has to match it.
-  const chatButtonLabel = isDesktopHome
-    ? mode === 'chat'
-      ? 'Hide Ask AI'
-      : 'Ask AI'
-    : 'Chat'
+  // The desktop launcher shows "Chat", so its accessible name matches the visible label.
+  const chatButtonLabel = isDesktopHome && mode === 'chat' ? 'Hide chat' : 'Chat'
   const launcherShortcutModifier = isApplePlatform() ? '⌘' : 'Ctrl '
 
   const chatButton = (
@@ -164,7 +160,7 @@ export default function AppShell() {
       aria-controls={isDesktopChatMode ? 'desktop-chat-card' : undefined}
     >
       <img src="/sparkle.svg" alt="" className="h-5 w-5" />
-      <span className="launcher-label" aria-hidden="true">Ask AI</span>
+      <span className="launcher-label" aria-hidden="true">Chat</span>
       <kbd className="launcher-kbd" aria-hidden="true">{launcherShortcutModifier}K</kbd>
     </button>
   )
