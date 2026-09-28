@@ -262,7 +262,7 @@ const TrayInput = memo(({
         </div>
         {mode === 'chat' && (
           <button
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm transition ${
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-sm transition sm:h-10 sm:w-10 ${
               draftText.trim() && !sending ? 'bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)]' : 'bg-slate-300'
             }`}
             type="submit"
@@ -278,7 +278,7 @@ const TrayInput = memo(({
           </button>
         )}
         {mode === 'search' && (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center sm:h-10 sm:w-10">
             {hasSearchText ? (
               <button
                 className="group flex h-11 w-11 items-center justify-center rounded-full hover:bg-slate-500 sm:h-8 sm:w-8"
@@ -1661,7 +1661,7 @@ export default function Timeline() {
                   }`}
                 >
                   <button
-                    className="add-day-label-button group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold opacity-70 transition-colors"
+                    className="add-day-label-button group inline-flex min-h-11 items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold opacity-70 transition-colors"
                     type="button"
                     onClick={() => void handleCreateDay(item.dayId)}
                   >
@@ -1765,7 +1765,7 @@ export default function Timeline() {
 
   const undoDeleteButton = (
     <button
-      className="group inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-2 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white"
+      className="group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-3 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white"
       type="button"
       onClick={handleUndoDelete}
     >

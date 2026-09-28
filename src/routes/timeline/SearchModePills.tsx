@@ -32,7 +32,7 @@ const SearchModePills = memo(({
     <div
       role="group"
       aria-label="Show results as"
-      className="capsule-segmented inline-flex h-10 shrink-0 items-center gap-0.5 text-xs font-semibold sm:h-8"
+      className="capsule-segmented inline-flex h-[50px] shrink-0 items-center gap-0.5 text-xs font-semibold sm:h-8"
     >
       <span aria-hidden="true" className="px-2 text-[10px] uppercase tracking-[0.05em]">
         Show
@@ -52,7 +52,7 @@ const SearchModePills = memo(({
     {searchFilter ? (
       <button
         data-active="true"
-        className={`capsule-chip group inline-flex h-10 shrink-0 items-center gap-2 pl-3.5 pr-2 text-xs font-semibold text-[var(--theme-text)] transition hover:border-[var(--theme-border-strong)] sm:h-8 ${chipFocusClass}`}
+        className={`capsule-chip group inline-flex h-11 shrink-0 items-center gap-2 pl-3.5 pr-2 text-xs font-semibold text-[var(--theme-text)] transition hover:border-[var(--theme-border-strong)] sm:h-8 ${chipFocusClass}`}
         type="button"
         onClick={() => onSearchFilterChange(null)}
         aria-label={`Remove ${SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label ?? 'filter'} filter`}
@@ -69,7 +69,7 @@ const SearchModePills = memo(({
       SEARCH_FILTER_OPTIONS.map((option) => (
         <button
           key={option.value}
-          className={`capsule-chip inline-flex h-10 shrink-0 items-center px-3.5 text-xs font-semibold text-[var(--theme-text-soft)] transition hover:border-[var(--theme-border-strong)] hover:text-[var(--theme-text)] sm:h-8 ${chipFocusClass}`}
+          className={`capsule-chip inline-flex h-11 shrink-0 items-center px-3.5 text-xs font-semibold text-[var(--theme-text-soft)] transition hover:border-[var(--theme-border-strong)] hover:text-[var(--theme-text)] sm:h-8 ${chipFocusClass}`}
           type="button"
           onClick={() => onSearchFilterChange(option.value)}
         >

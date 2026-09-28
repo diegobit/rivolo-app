@@ -1138,6 +1138,13 @@ html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
   color: var(--theme-text-muted);
 }
 
+/* Mobile keeps 44px halves (48px tray - 2px padding); the desktop chip stays 32px. */
+@media (max-width: 699px) {
+  .capsule-segmented {
+    padding: 2px;
+  }
+}
+
 .capsule-chip {
   background: var(--theme-surface);
 }
