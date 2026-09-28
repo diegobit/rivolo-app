@@ -1351,7 +1351,9 @@
   /* The launchers form one capsule pinned to the viewport centre, outside the
      tray row, so opening or closing a card never shifts them. A raised thumb
      slides behind whichever half's card is open. The descendant selectors
-     outrank the buttons' Tailwind utilities. */
+     outrank the buttons' Tailwind utilities. The AI glow matches the mobile
+     dock's (.dock-capsule on feat/mobile-chat-dock): the soft-blue token, fixed
+     under Chat, here the right half, centred at 75%. */
   .bottom-tray-launchers {
     position: fixed;
     left: 50%;
@@ -1364,7 +1366,7 @@
     border: 1px solid var(--theme-border);
     border-radius: 9999px;
     background:
-      radial-gradient(ellipse 60% 140% at 92% 100%, rgb(22 164 236 / 0.05), transparent 70%),
+      radial-gradient(ellipse 36% 130% at 75% 110%, rgb(var(--theme-accent-soft-rgb)), transparent 72%),
       var(--theme-surface-soft);
     box-shadow:
       0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
