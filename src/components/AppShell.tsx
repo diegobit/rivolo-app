@@ -5,7 +5,7 @@ import MobileChatDock from './app-shell/MobileChatDock'
 import AttentionPopover from './app-shell/AttentionPopover'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
 import { TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
-import { isPrimaryModifierPressed } from '../lib/device'
+import { isPrimaryModifierPressed, preferredScrollBehavior } from '../lib/device'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
@@ -68,6 +68,7 @@ export default function AppShell() {
   const [sawWelcome, setSawWelcome] = useState(false)
   const [postWelcomeAttentionReady, setPostWelcomeAttentionReady] = useState(false)
   const [isLogoCurrentFast, setIsLogoCurrentFast] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const logoCurrentTimerRef = useRef<number | null>(null)
@@ -84,7 +85,7 @@ export default function AppShell() {
     }, LOGO_FAST_CURRENT_RESET_MS)
 
     if (location.pathname === '/') {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({ top: 0, behavior: preferredScrollBehavior() })
     }
   }
   const focusModeInputAfterSwitchRef = useRef(false)
@@ -529,7 +530,7 @@ export default function AppShell() {
       )}
 
       <main
-        inert={tabSync.databaseStale}
+        inert={tabSync.databaseStale || mobileMenuOpen}
         className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 pt-0 sm:w-[min(96%,720px)] sm:pt-20 ${
           showTrayRow ? 'pb-40' : 'pb-12'
         }`}
@@ -549,6 +550,7 @@ export default function AppShell() {
             <MobileChatDock
               databaseStale={tabSync.databaseStale}
               syncing={syncing}
+              onMenuOpenChange={setMobileMenuOpen}
               attentionItems={attentionItems}
               onDismissSetupNotice={(noticeId) => {
                 void dismissSetupNotice(noticeId).catch((error) => {

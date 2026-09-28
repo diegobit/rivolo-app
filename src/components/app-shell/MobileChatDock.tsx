@@ -9,6 +9,7 @@ import { useUIStore } from '../../store/useUIStore'
 type MobileChatDockProps = {
   databaseStale: boolean
   syncing: boolean
+  onMenuOpenChange?: (open: boolean) => void
   attentionItems: AttentionItem[]
   onDismissSetupNotice: (noticeId: SetupNoticeId) => void
   onNavigate: () => void
@@ -28,6 +29,7 @@ const menuIconClass =
 export default function MobileChatDock({
   databaseStale,
   syncing,
+  onMenuOpenChange,
   attentionItems,
   onDismissSetupNotice,
   onNavigate,
@@ -59,6 +61,10 @@ export default function MobileChatDock({
     setIsMenuOpen(false)
     onNavigate()
   }
+
+  useEffect(() => {
+    onMenuOpenChange?.(isMenuOpen)
+  }, [isMenuOpen, onMenuOpenChange])
 
   useEffect(() => {
     if (!isMenuOpen) return
@@ -155,7 +161,7 @@ export default function MobileChatDock({
             type="button"
             tabIndex={-1}
             aria-hidden="true"
-            className="absolute inset-0 h-full w-full bg-black/40"
+            className="absolute inset-0 h-full w-full" style={{ background: 'var(--theme-scrim)' }}
             onClick={closeMenu}
           />
           <div
@@ -164,7 +170,7 @@ export default function MobileChatDock({
             data-mobile-chat-menu
             role="dialog"
             aria-modal="true"
-            aria-label="Chat menu"
+            aria-label="Menu"
             className="absolute inset-x-0 bottom-0 max-h-full overflow-y-auto overscroll-y-contain rounded-t-3xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-3 text-[var(--theme-text-soft)] shadow-lg"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
           >
@@ -237,7 +243,20 @@ export default function MobileChatDock({
                         type="button"
                         className="m-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg text-[var(--theme-warning-text)] outline-none transition hover:bg-[var(--theme-hover)] focus-visible:ring-2 focus-visible:ring-[var(--theme-warning-border)]"
                         aria-label={`Dismiss ${item.title}`}
-                        onClick={() => onDismissSetupNotice(item.dismissibleSetupNoticeId!)}
+                        onClick={(event) => {
+                          const rows = Array.from(
+                            sheetRef.current?.querySelectorAll<HTMLElement>('button, a[href]') ?? [],
+                          )
+                          const index = rows.indexOf(event.currentTarget)
+                          onDismissSetupNotice(item.dismissibleSetupNoticeId!)
+                          requestAnimationFrame(() => {
+                            const next = Array.from(
+                              sheetRef.current?.querySelectorAll<HTMLElement>('button, a[href]') ?? [],
+                            )
+                            const target = next[Math.min(index, next.length - 1)] ?? menuButtonRef.current
+                            target?.focus({ preventScroll: true })
+                          })
+                        }}
                       >
                         ×
                       </button>

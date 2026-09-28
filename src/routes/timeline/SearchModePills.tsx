@@ -1,18 +1,8 @@
 import { memo } from 'react'
 import type { SearchFilter } from '../../lib/dayRepository'
+import { SEARCH_FILTER_OPTIONS } from '../../lib/searchFilters'
 import type { SearchResultMode } from '../Timeline'
 
-type SearchFilterOption = {
-  value: SearchFilter
-  label: string
-}
-
-const SEARCH_FILTER_OPTIONS: SearchFilterOption[] = [
-  { value: 'open-todos', label: 'TODOs' },
-  { value: 'tags', label: '# Tags' },
-  { value: 'mentions', label: '@ Mentions' },
-  { value: 'headings', label: 'Sections' },
-]
 
 const chipFocusClass =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]'

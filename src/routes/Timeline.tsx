@@ -6,7 +6,7 @@ import BottomTrayPortal from '../components/BottomTrayPortal'
 import DayEditorCard from '../components/timeline/DayEditorCard'
 import EmptyStateHero from '../components/timeline/EmptyStateHero'
 import ChatMessageList from '../components/timeline/ChatMessageList'
-import { isIOS, isPrimaryModifierPressed } from '../lib/device'
+import { isIOS, isPrimaryModifierPressed, preferredScrollBehavior } from '../lib/device'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import {
@@ -14,6 +14,7 @@ import {
   TIMELINE_SCROLL_TODAY_EVENT,
 } from '../lib/timelineEvents'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
+import { SEARCH_FILTER_LABELS } from '../lib/searchFilters'
 import { debugLog, startDebugTimer } from '../lib/debugLogs'
 import type { Day, DaySearchResult, SearchFilter } from '../lib/dayRepository'
 import { appendToDay, searchDays } from '../lib/dayRepository'
@@ -882,7 +883,7 @@ export default function Timeline() {
       focusPosition?: 'start' | 'end',
       scrollBlock: ScrollLogicalPosition = 'center',
       focusScroll = true,
-      scrollBehavior: ScrollBehavior = 'smooth',
+      scrollBehavior: ScrollBehavior = preferredScrollBehavior(),
     ) => {
       let attempts = 0
       const maxAttempts = 12
@@ -1081,7 +1082,7 @@ export default function Timeline() {
       revealDay(todayId, undefined, 'start')
       return
     }
-    addTodayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    addTodayRef.current?.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'start' })
   }, [hasToday, revealDay, todayId])
 
   const handleNewTodayEntry = useCallback(async () => {
@@ -1584,14 +1585,32 @@ export default function Timeline() {
       )}
 
       {!loading && noSearchResults && (
-        <section className="flex min-h-[46vh] items-center justify-center">
-          <p className="text-base font-semibold text-slate-400">No results</p>
+        <section
+          className="flex min-h-[46vh] flex-col items-center justify-center gap-3 px-4 text-center"
+          aria-live="polite"
+        >
+          <p className="text-base font-semibold text-[var(--theme-text-muted)]">
+            {searchFilter
+              ? `No ${SEARCH_FILTER_LABELS[searchFilter]} matches${searchQuery.trim() ? ` for “${searchQuery.trim()}”` : ''}`
+              : searchQuery.trim()
+                ? `No results for “${searchQuery.trim()}”`
+                : 'No results'}
+          </p>
+          {searchFilter && (
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm font-semibold text-[var(--theme-text)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)]"
+              onClick={() => setSearchFilter(null)}
+            >
+              Clear filter
+            </button>
+          )}
         </section>
       )}
 
       {!loading && showSearchError && (
-        <section className="flex min-h-[46vh] items-center justify-center px-4 text-center">
-          <p className="text-base font-semibold text-rose-400">{searchError}</p>
+        <section className="flex min-h-[46vh] items-center justify-center px-4 text-center" aria-live="polite">
+          <p className="text-base font-semibold text-[var(--theme-danger-text)]">{searchError}</p>
         </section>
       )}
 

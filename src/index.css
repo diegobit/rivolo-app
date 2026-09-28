@@ -133,6 +133,8 @@
     --theme-surface: #ffffff;
     --theme-surface-rgb: 255 255 255;
     --theme-surface-soft: #f8fafc;
+    --theme-thumb: #ffffff;
+    --theme-scrim: rgb(15 23 42 / 0.40);
     --theme-surface-soft-rgb: 248 250 252;
     --theme-surface-elevated: #ffffff;
     --theme-surface-elevated-rgb: 255 255 255;
@@ -205,6 +207,8 @@
     --theme-surface: #111318;
     --theme-surface-rgb: 17 19 24;
     --theme-surface-soft: #0b0d12;
+    --theme-thumb: #2a3340;
+    --theme-scrim: rgb(0 0 0 / 0.55);
     --theme-surface-soft-rgb: 11 13 18;
     --theme-surface-elevated: #171a21;
     --theme-surface-elevated-rgb: 23 26 33;
@@ -1065,7 +1069,7 @@
   left: 4px;
   width: calc(25% - 2px);
   border-radius: 9999px;
-  background: var(--theme-surface);
+  background: var(--theme-thumb);
   box-shadow:
     0 1px 2px rgb(var(--theme-shadow-color) / 0.08),
     0 3px 8px -4px rgb(var(--theme-shadow-color) / 0.18);
@@ -1082,7 +1086,6 @@
 
 html[data-theme='dark'] .dock-capsule-thumb,
 html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
-  background: #2a3340;
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.4),
     0 4px 14px -4px rgb(0 0 0 / 0.6);
@@ -1161,7 +1164,7 @@ html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
 }
 
 .capsule-segment[aria-pressed='true'] {
-  background: var(--theme-surface);
+  background: var(--theme-thumb);
   color: var(--theme-text);
   box-shadow:
     0 1px 2px rgb(var(--theme-shadow-color) / 0.08),
