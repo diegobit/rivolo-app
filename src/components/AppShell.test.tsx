@@ -347,7 +347,7 @@ describe('AppShell attention and stale tab states', () => {
     }
   })
 
-  it('keeps the mobile tray controls operable under the welcome hero', () => {
+  it('keeps the welcome hero clean: the bottom bar fades out with it on mobile', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'
@@ -364,34 +364,8 @@ describe('AppShell attention and stale tab states', () => {
         </MemoryRouter>,
       )
 
-      // The hero fades the tray on desktop only; on mobile home the composer has
-      // to stay visible and tappable, otherwise the dock's Chat does nothing in
-      // the empty state.
-      expect(document.querySelector('.bottom-tray-row .hero-ui-fade-down')).toBeNull()
-      expect(document.querySelector('#bottom-tray')).toBeInTheDocument()
-    } finally {
-      delete document.body.dataset.heroUi
-    }
-  })
-
-  it('still fades the desktop tray controls under the welcome hero', () => {
-    stores.tabSync = { isPrimary: true, databaseStale: false }
-    stores.viewport.isNarrow = false
-    stores.ui.mode = 'chat'
-    document.body.dataset.heroUi = 'true'
-
-    try {
-      render(
-        <MemoryRouter initialEntries={['/']}>
-          <Routes>
-            <Route path="/" element={<AppShell />}>
-              <Route index element={<div>Timeline content</div>} />
-            </Route>
-          </Routes>
-        </MemoryRouter>,
-      )
-
-      expect(document.querySelector('.bottom-tray-row .hero-ui-fade-down')).not.toBeNull()
+      // The hero is clean: the row (composer + dock) fades out with it.
+      expect(document.querySelector('.bottom-tray-row')).toHaveClass('hero-ui-fade-down')
     } finally {
       delete document.body.dataset.heroUi
     }

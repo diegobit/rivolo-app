@@ -1038,6 +1038,9 @@
 /* Mobile destination dock. Same capsule + sliding-thumb language as the desktop
    launchers (.bottom-tray-launchers), so the app reads as one system. */
 .dock-capsule {
+  /* Gentle AI glow rising from under the Chat destination (slot 2 of 4), fixed
+     there regardless of the thumb. */
+  --dock-glow: rgb(var(--theme-accent-rgb) / 0.07);
   position: relative;
   display: flex;
   align-items: stretch;
@@ -1046,11 +1049,15 @@
   border: 1px solid var(--theme-border);
   border-radius: 9999px;
   background:
-    radial-gradient(ellipse 60% 140% at 92% 100%, rgb(22 164 236 / 0.05), transparent 70%),
+    radial-gradient(ellipse 36% 130% at 37.5% 110%, var(--dock-glow), transparent 72%),
     var(--theme-surface-soft);
   box-shadow:
     0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
     0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
+}
+
+html[data-theme='dark'] .dock-capsule {
+  --dock-glow: rgb(var(--theme-accent-rgb) / 0.14);
 }
 
 .dock-capsule-thumb {
@@ -1190,6 +1197,24 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
 
   #bottom-tray.bottom-tray-shell {
     box-shadow: 0 2px 8px rgb(var(--theme-shadow-color) / 0.22);
+  }
+}
+
+/* Mobile: the composer / search field should read as a sibling of the dock capsule:
+   same border and pill shape, one step more lift, and the soft shadow recipe instead
+   of the tight touch override above. */
+@media (max-width: 699px) {
+  #bottom-tray.bottom-tray-shell {
+    box-shadow:
+      0 8px 20px -10px rgb(var(--theme-shadow-color) / 0.26),
+      0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
+  }
+
+  html[data-theme='dark'] #bottom-tray.bottom-tray-shell {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 8px 20px -10px rgb(var(--theme-shadow-color) / 0.6),
+      0 1px 3px rgb(var(--theme-shadow-color) / 0.4);
   }
 }
 

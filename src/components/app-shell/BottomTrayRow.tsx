@@ -45,16 +45,11 @@ export default function BottomTrayRow({
       />
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20" />
 
-      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row fixed left-0 z-30 mx-auto flex ${mobileChatDock ? 'flex-col' : trayRowAlignmentClass} justify-center gap-2 px-2 sm:gap-3 sm:px-0`}>
-        {/* On desktop the tray controls fade out with the welcome hero. On mobile
-            home they must stay operable (the dock's Chat needs a composer even in
-            the empty state), so the fade class is desktop-only. */}
+      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${mobileChatDock ? 'flex-col' : trayRowAlignmentClass} justify-center gap-2 px-2 sm:gap-3 sm:px-0`}>
+        {/* The whole bottom area fades out under the welcome hero, so the hero
+            stays clean with no dock or composer. */}
         {hasTrayControls && (
-          <div
-            className={`${mobileChatDock ? '' : 'hero-ui-fade-down'} flex w-full justify-center gap-2 ${
-              mobileChatDock ? '' : 'items-center'
-            }`}
-          >
+          <div className={`flex w-full justify-center gap-2 ${mobileChatDock ? '' : 'items-center'}`}>
             {mode === 'timeline' ? (
               <>
                 <Fragment key="chat-btn">{chatButton}</Fragment>
