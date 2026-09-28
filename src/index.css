@@ -994,6 +994,25 @@
       padding: 0 0.75rem;
       font-size: 0.85rem;
       font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* The chat card's header holds two labelled buttons, which do not fit
+       beside the title below about 300px (windows under ~850px). There it keeps
+       just the icons; each button still has its aria-label and tooltip. */
+    .timeline-floating-card {
+      container-type: inline-size;
+    }
+
+    @container (max-width: 299px) {
+      .timeline-chat-sidebar .timeline-chat-sidebar-text-button {
+        width: 2.25rem;
+        padding: 0;
+      }
+
+      .timeline-chat-sidebar .timeline-chat-sidebar-button-label {
+        display: none;
+      }
     }
 
     .timeline-chat-sidebar-icon-button:hover {

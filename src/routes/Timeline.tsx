@@ -2012,15 +2012,17 @@ export default function Timeline() {
                 <button
                   type="button"
                   className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
+                  aria-label="New chat"
+                  title="New chat"
                   onClick={handleNewChat}
                   disabled={sending}
                 >
                   <img src="/eraser.svg" alt="" className="h-4 w-4 opacity-80" />
-                  New chat
+                  <span className="timeline-chat-sidebar-button-label">New chat</span>
                 </button>
                 <button
                   type="button"
-                  className="timeline-chat-sidebar-icon-button"
+                  className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
                   aria-label="Close chat"
                   title="Close chat"
                   onClick={() => {
@@ -2029,6 +2031,7 @@ export default function Timeline() {
                   }}
                 >
                   <img src="/plus.svg" alt="" className="h-4 w-4 rotate-45 opacity-80" />
+                  <span className="timeline-chat-sidebar-button-label">Close</span>
                 </button>
               </div>
             </header>
@@ -2090,7 +2093,7 @@ export default function Timeline() {
               <div className="timeline-chat-sidebar-actions">
                 <button
                   type="button"
-                  className="timeline-chat-sidebar-icon-button"
+                  className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
                   aria-label="Close search"
                   title="Close search"
                   onClick={() => {
@@ -2099,6 +2102,7 @@ export default function Timeline() {
                   }}
                 >
                   <img src="/plus.svg" alt="" className="h-4 w-4 rotate-45 opacity-80" />
+                  <span className="timeline-chat-sidebar-button-label">Close</span>
                 </button>
               </div>
             </header>
