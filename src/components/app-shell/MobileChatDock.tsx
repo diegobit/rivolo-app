@@ -8,6 +8,7 @@ import { useUIStore } from '../../store/useUIStore'
 
 type MobileChatDockProps = {
   databaseStale: boolean
+  syncing: boolean
   attentionItems: AttentionItem[]
   onDismissSetupNotice: (noticeId: SetupNoticeId) => void
   onNavigate: () => void
@@ -26,6 +27,7 @@ const menuIconClass =
 
 export default function MobileChatDock({
   databaseStale,
+  syncing,
   attentionItems,
   onDismissSetupNotice,
   onNavigate,
@@ -44,6 +46,7 @@ export default function MobileChatDock({
       ? `${attentionItems.length} ${attentionItems.length === 1 ? 'item needs' : 'items need'} attention`
       : '',
     databaseStale ? 'Reload needed' : '',
+    syncing ? 'Syncing' : '',
   ]
     .filter(Boolean)
     .join('. ')
@@ -120,7 +123,14 @@ export default function MobileChatDock({
           aria-controls={isMenuOpen ? 'mobile-chat-menu' : undefined}
           onClick={() => setIsMenuOpen(true)}
         >
-          <img src="/dots-three.svg" alt="" />
+          {syncing ? (
+            <span
+              aria-hidden="true"
+              className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--theme-accent-border)] border-t-[var(--theme-accent)] motion-reduce:animate-none"
+            />
+          ) : (
+            <img src="/menu-lines.svg" alt="" />
+          )}
           <span aria-hidden="true">Menu</span>
           {attentionItems.length > 0 && (
             <span

@@ -548,6 +548,7 @@ export default function AppShell() {
           mobileChatDock={isMobileHome ? (
             <MobileChatDock
               databaseStale={tabSync.databaseStale}
+              syncing={syncing}
               attentionItems={attentionItems}
               onDismissSetupNotice={(noticeId) => {
                 void dismissSetupNotice(noticeId).catch((error) => {
