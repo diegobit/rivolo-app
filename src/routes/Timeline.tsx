@@ -1830,7 +1830,11 @@ export default function Timeline() {
       {pendingDeleteDayId && !hasNoNotes && isNarrowViewportMode && (
         <div
           className="pointer-events-none fixed left-0 z-40 px-3"
-          style={{ bottom: 'calc(env(safe-area-inset-bottom) + var(--keyboard-offset, 0px) + 5rem)' }}
+          style={{
+            // Sit above the whole mobile bottom row (composer included in chat and
+            // search, dock only in timeline), not just above the dock.
+            bottom: 'var(--mobile-home-bottom-clearance, calc(env(safe-area-inset-bottom) + 5rem))',
+          }}
         >
           <div
             className="pointer-events-auto flex w-[min(12rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 shadow-[0_14px_28px_-18px_rgb(var(--theme-shadow-color)/0.45)]"
