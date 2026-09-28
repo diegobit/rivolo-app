@@ -55,6 +55,7 @@ export default function AppShell() {
   const activeProvider = useSyncStore((state) => state.activeProvider)
   const mode = useUIStore((state) => state.mode)
   const setMode = useUIStore((state) => state.setMode)
+  const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
   const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
@@ -96,6 +97,10 @@ export default function AppShell() {
   const isDesktopChatSidebarOpen = isDesktopChatModeWithMessages && desktopChatPanelOpen
   const showTrayRow = isHome
   const isMobileHome = isHome && isNarrowViewportMode
+  // The full-screen mobile chat renders its own brand bar, so the shell's logo
+  // header steps aside only while that overlay is up.
+  const showShellLogoHeader =
+    isMobileHome && !(mode === 'chat' && (chatPanelOpen || chatMessageCount > 0))
   const showDesktopChatEdgeHandle = !isNarrowViewportMode && isDesktopChatModeWithMessages
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
   const showDesktopThemeButton = !isNarrowViewportMode && location.pathname !== '/settings'
@@ -388,6 +393,35 @@ export default function AppShell() {
     })
   }, [isHome, isNarrowViewportMode, mode])
 
+  const logoLink = (
+    <NavLink
+      to="/"
+      className={`app-logo-link relative z-10 justify-self-center ${
+        isLogoCurrentFast ? 'logo-current-fast' : ''
+      }`}
+      aria-label="Home"
+      onClick={handleLogoClick}
+    >
+      <img src="/logo.svg" alt="Rivolo" className="app-logo h-10 w-auto" />
+      <svg
+        className="logo-current"
+        viewBox="0 0 120 12"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <g className="logo-current-back">
+          <g className="logo-current-boost">
+            <path d="M0 6 Q6 3,12 6 T24 6 T36 6 T48 6 T60 6 T72 6 T84 6 T96 6 T108 6 T120 6 T132 6 T144 6" />
+          </g>
+        </g>
+        <g className="logo-current-front">
+          <g className="logo-current-boost">
+            <path d="M0 6 Q6 2.5,12 6 T24 6 T36 6 T48 6 T60 6 T72 6 T84 6 T96 6 T108 6 T120 6 T132 6 T144 6" />
+          </g>
+        </g>
+      </svg>
+    </NavLink>
+  )
 
   return (
     <div
@@ -427,33 +461,7 @@ export default function AppShell() {
             )}
             {!isNarrowViewportMode && <div id="header-undo-slot" className="flex items-center" />}
           </div>
-          <NavLink
-            to="/"
-            className={`app-logo-link relative z-10 justify-self-center ${
-              isLogoCurrentFast ? 'logo-current-fast' : ''
-            }`}
-            aria-label="Home"
-            onClick={handleLogoClick}
-          >
-            <img src="/logo.svg" alt="Rivolo" className="app-logo h-10 w-auto" />
-            <svg
-              className="logo-current"
-              viewBox="0 0 120 12"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <g className="logo-current-back">
-                <g className="logo-current-boost">
-                  <path d="M0 6 Q6 3,12 6 T24 6 T36 6 T48 6 T60 6 T72 6 T84 6 T96 6 T108 6 T120 6 T132 6 T144 6" />
-                </g>
-              </g>
-              <g className="logo-current-front">
-                <g className="logo-current-boost">
-                  <path d="M0 6 Q6 2.5,12 6 T24 6 T36 6 T48 6 T60 6 T72 6 T84 6 T96 6 T108 6 T120 6 T132 6 T144 6" />
-                </g>
-              </g>
-            </svg>
-          </NavLink>
+          {logoLink}
           <div className="relative z-10 flex items-center justify-end gap-1 sm:gap-2">
             {tabSync.databaseStale ? (
               <button
@@ -510,9 +518,19 @@ export default function AppShell() {
         </header>
       )}
 
+      {/* Mobile home keeps the wordmark at the top but no controls: navigation
+          lives in the dock. Chat renders its own brand bar inside the overlay. */}
+      {showShellLogoHeader && (
+        <header className="app-shell-fixed-header-width relative left-0 z-30 mx-auto grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2">
+          <span />
+          {logoLink}
+          <span />
+        </header>
+      )}
+
       <main
         inert={tabSync.databaseStale}
-        className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 ${isMobileHome ? 'pt-4' : 'pt-0'} sm:w-[min(96%,720px)] sm:pt-20 ${
+        className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 pt-0 sm:w-[min(96%,720px)] sm:pt-20 ${
           showTrayRow ? 'pb-40' : 'pb-12'
         }`}
         style={isMobileHome ? { paddingBottom: 'var(--mobile-home-bottom-clearance)' } : undefined}

@@ -1850,12 +1850,17 @@ export default function Timeline() {
       {/* Mobile chat overlay */}
       {showMobileChatOverlay && (
         <>
-          <div className="fixed inset-0 z-20 bg-[var(--theme-page)] sm:hidden">
+          <div className="fixed inset-0 z-20 flex flex-col bg-[var(--theme-page)] sm:hidden">
+            {/* The wordmark stays at the top of the chat, above the thread, so no
+                message can ever run behind it. */}
+            <div className="mt-4 flex h-16 shrink-0 items-center justify-center">
+              <img src="/logo.svg" alt="Rivolo" className="h-10 w-auto" />
+            </div>
             <div
               ref={mobileChatScrollRef}
-              className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
+              className="relative flex min-h-0 flex-1 flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
               style={{
-                paddingTop: '1rem',
+                paddingTop: '0.5rem',
                 paddingBottom: 'var(--mobile-home-bottom-clearance)',
                 scrollPaddingBottom: 'var(--mobile-home-bottom-clearance)',
               }}

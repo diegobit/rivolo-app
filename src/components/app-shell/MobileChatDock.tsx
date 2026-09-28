@@ -20,7 +20,9 @@ const DOCK_MODES = [
 ] as const
 
 const menuRowClass =
-  'flex min-h-11 w-full items-center rounded-xl px-3 py-3 text-left text-sm font-semibold outline-none hover:bg-[var(--theme-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-border-strong)]'
+  'flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 text-left text-base font-semibold text-[var(--theme-text)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] outline-none transition-colors hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-accent-muted-text)]'
+const menuIconClass =
+  'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border'
 
 export default function MobileChatDock({
   databaseStale,
@@ -142,7 +144,7 @@ export default function MobileChatDock({
           <button
             type="button"
             tabIndex={-1}
-            aria-label="Close menu"
+            aria-hidden="true"
             className="absolute inset-0 h-full w-full bg-black/40"
             onClick={closeMenu}
           />
@@ -156,58 +158,84 @@ export default function MobileChatDock({
             className="absolute inset-x-0 bottom-0 max-h-full overflow-y-auto overscroll-y-contain rounded-t-3xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-3 text-[var(--theme-text-soft)] shadow-lg"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
           >
-            <Link
-              to="/"
-              className="mb-1 flex min-h-11 items-center justify-center border-b border-[var(--theme-border)]"
-              aria-label="Home"
-              onClick={navigate}
-            >
-              <img src="/logo.svg" alt="Rivolo" className="h-7 w-auto" />
-            </Link>
-            {databaseStale && (
+            <div className="mb-2 flex justify-center">
               <button
                 type="button"
-                className={`${menuRowClass} border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] text-[var(--theme-warning-text)]`}
-                onClick={() => window.location.reload()}
+                aria-label="Close menu"
+                onClick={closeMenu}
+                className="flex h-11 w-16 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface-soft)] text-[var(--theme-text-soft)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] outline-none transition-colors hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] focus-visible:ring-2 focus-visible:ring-[var(--theme-accent-muted-text)]"
               >
-                Reload
+                <img src="/caret-left.svg" alt="" className="h-5 w-5 -rotate-90" />
               </button>
-            )}
-            <button
-              type="button"
-              className={menuRowClass}
-              onClick={() => {
-                closeMenu()
-                window.dispatchEvent(new CustomEvent(TIMELINE_NEW_CHAT_EVENT))
-              }}
-            >
-              New chat
-            </button>
-            <Link to="/settings" className={menuRowClass} onClick={navigate}>
-              Settings
-            </Link>
-            {attentionItems.map((item) => (
-              <div key={item.id} className="mt-1 flex items-start rounded-xl bg-[var(--theme-warning-soft)]">
-                <Link
-                  to={`/settings#${item.settingsSectionId}`}
-                  className="min-h-11 min-w-0 flex-1 rounded-xl px-3 py-2 outline-none transition hover:bg-[var(--theme-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-warning-border)]"
-                  onClick={navigate}
+            </div>
+            <div className="space-y-2">
+              {databaseStale && (
+                <button
+                  type="button"
+                  className={`${menuRowClass} border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] text-[var(--theme-warning-text)]`}
+                  onClick={() => window.location.reload()}
                 >
-                  <span className="block text-sm font-semibold text-[var(--theme-warning-text)]">{item.title}</span>
-                  <span className="mt-0.5 block text-xs leading-5 text-[var(--theme-warning-text)]">{item.description}</span>
-                </Link>
-                {item.dismissibleSetupNoticeId && (
-                  <button
-                    type="button"
-                    className="m-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg text-[var(--theme-warning-text)] outline-none transition hover:bg-[var(--theme-hover)] focus-visible:ring-2 focus-visible:ring-[var(--theme-warning-border)]"
-                    aria-label={`Dismiss ${item.title}`}
-                    onClick={() => onDismissSetupNotice(item.dismissibleSetupNoticeId!)}
+                  <span
+                    aria-hidden="true"
+                    className={`${menuIconClass} border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)]`}
                   >
-                    ×
-                  </button>
-                )}
+                    <img src="/arrow-up.svg" alt="" className="h-5 w-5" />
+                  </span>
+                  <span>Reload</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className={menuRowClass}
+                onClick={() => {
+                  closeMenu()
+                  window.dispatchEvent(new CustomEvent(TIMELINE_NEW_CHAT_EVENT))
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`${menuIconClass} border-[var(--theme-accent-border)] bg-[var(--theme-accent-soft)]`}
+                >
+                  <img src="/pencil-simple-line.svg" alt="" className="h-5 w-5" />
+                </span>
+                <span>New chat</span>
+              </button>
+              <Link to="/settings" className={menuRowClass} onClick={navigate}>
+                <span
+                  aria-hidden="true"
+                  className={`${menuIconClass} border-[var(--theme-border)] bg-[var(--theme-surface-soft)]`}
+                >
+                  <img src="/gear.svg" alt="" className="h-5 w-5" />
+                </span>
+                <span>Settings</span>
+              </Link>
+            </div>
+            {attentionItems.length > 0 && (
+              <div className="mt-3 border-t border-[var(--theme-border)] pt-3">
+                {attentionItems.map((item) => (
+                  <div key={item.id} className="mt-1 flex items-start rounded-xl bg-[var(--theme-warning-soft)]">
+                    <Link
+                      to={`/settings#${item.settingsSectionId}`}
+                      className="min-h-11 min-w-0 flex-1 rounded-xl px-3 py-2 outline-none transition hover:bg-[var(--theme-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-warning-border)]"
+                      onClick={navigate}
+                    >
+                      <span className="block text-sm font-semibold text-[var(--theme-warning-text)]">{item.title}</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-[var(--theme-warning-text)]">{item.description}</span>
+                    </Link>
+                    {item.dismissibleSetupNoticeId && (
+                      <button
+                        type="button"
+                        className="m-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg text-[var(--theme-warning-text)] outline-none transition hover:bg-[var(--theme-hover)] focus-visible:ring-2 focus-visible:ring-[var(--theme-warning-border)]"
+                        aria-label={`Dismiss ${item.title}`}
+                        onClick={() => onDismissSetupNotice(item.dismissibleSetupNoticeId!)}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>,
         document.body,

@@ -311,7 +311,7 @@ describe('AppShell attention and stale tab states', () => {
     expect(stores.settings.updateThemePreference).toHaveBeenCalledExactlyOnceWith('system')
   })
 
-  it.each(['timeline', 'chat', 'search'] as const)('shows the mobile dock without a home header in %s mode', (mode) => {
+  it.each(['timeline', 'chat', 'search'] as const)('shows the mobile dock and no header controls in %s mode', (mode) => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
     stores.sync.activeProvider = 'google-drive'
@@ -328,12 +328,14 @@ describe('AppShell attention and stale tab states', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
+    // The top bar keeps the brand but has no controls: they live in the dock.
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Theme: System' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Shortcuts' })).not.toBeInTheDocument()
-    expect(screen.getByRole('main')).toHaveClass('pt-4')
+    // The brand is in the shell header whenever the full-screen chat is not up
+    // (with no messages there is no overlay, even in chat mode).
+    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveClass('pt-0')
     expect(screen.getByRole('main')).toHaveStyle({ paddingBottom: 'var(--mobile-home-bottom-clearance)' })
     const dock = screen.getByRole('navigation', { name: 'Mobile navigation' })
     expect(dock).toBeVisible()
@@ -345,6 +347,26 @@ describe('AppShell attention and stale tab states', () => {
     } else {
       expect(document.querySelector('#bottom-tray')).toBeInTheDocument()
     }
+  })
+
+  it('hands the brand to the full-screen chat overlay when a thread is up', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    stores.ui.chatMessageCount = 1
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible()
   })
 
   it('keeps the welcome hero clean: the bottom bar fades out with it on mobile', () => {
@@ -371,7 +393,7 @@ describe('AppShell attention and stale tab states', () => {
     }
   })
 
-  it('offers the Rivolo brand and new chat from the mobile menu before chat has messages', async () => {
+  it('offers new chat and settings from the mobile menu before chat has messages', async () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'
@@ -388,11 +410,13 @@ describe('AppShell attention and stale tab states', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
+    // The brand stays in the shell header; the sheet no longer repeats it.
+    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
-    expect(screen.getByRole('link', { name: 'Home' }).querySelector('img')).toHaveAttribute('src', '/logo.svg')
+    expect(document.querySelector('#mobile-chat-menu img[src="/logo.svg"]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Close menu' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
     const newChatButton = await screen.findByRole('button', { name: 'New chat' })
     await userEvent.click(newChatButton)
