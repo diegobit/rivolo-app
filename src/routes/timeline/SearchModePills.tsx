@@ -54,13 +54,14 @@ const SearchModePills = memo(({
     </button>
     {searchFilter ? (
       <button
+        data-active="true"
         className={`capsule-chip group inline-flex h-10 shrink-0 items-center gap-2 pl-3.5 pr-2 text-xs font-semibold text-[var(--theme-text)] transition hover:border-[var(--theme-border-strong)] sm:h-8 ${chipFocusClass}`}
         type="button"
         onClick={() => onSearchFilterChange(null)}
         aria-label={`Remove ${SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label ?? 'filter'} filter`}
       >
         {SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label}
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--theme-active)] text-[var(--theme-text-soft)] transition group-hover:bg-[var(--theme-border)] group-hover:text-[var(--theme-text)] sm:h-4 sm:w-4">
+        <span className="capsule-chip-disc flex h-5 w-5 items-center justify-center rounded-full bg-[var(--theme-active)] text-[var(--theme-text-soft)] transition group-hover:bg-[var(--theme-border)] group-hover:text-[var(--theme-text)] sm:h-4 sm:w-4">
           <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" aria-hidden="true">
             <path d="M4 4l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             <path d="M12 4L4 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
