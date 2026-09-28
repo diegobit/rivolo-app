@@ -1827,6 +1827,12 @@ export default function Timeline() {
             </div>
           </aside>
         </div>
+      ) : showMobileChatOverlay ? (
+        // The full-screen chat covers the timeline: keep it out of the tab order
+        // and away from assistive technology while it is up.
+        <div className="contents" inert>
+          {timelineContent}
+        </div>
       ) : (
         timelineContent
       )}

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { AttentionItem } from '../../lib/attention'
 import type { SetupNoticeId } from '../../lib/setupAttention'
-import { TIMELINE_NEW_CHAT_EVENT } from '../../lib/timelineEvents'
+import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../../lib/timelineEvents'
 import { useUIStore } from '../../store/useUIStore'
 
 type MobileChatDockProps = {
@@ -112,7 +112,15 @@ export default function MobileChatDock({
             type="button"
             className="dock-capsule-button"
             aria-current={mode === item.mode ? 'page' : undefined}
-            onClick={() => setMode(item.mode)}
+            onClick={() => {
+              setMode(item.mode)
+              if (item.mode === 'timeline') {
+                // "Today" must also bring today's note back on screen.
+                requestAnimationFrame(() => {
+                  window.dispatchEvent(new CustomEvent(TIMELINE_SCROLL_TODAY_EVENT))
+                })
+              }
+            }}
           >
             <img src={item.icon} alt="" />
             <span>{item.label}</span>
@@ -205,6 +213,8 @@ export default function MobileChatDock({
                 className={menuRowClass}
                 onClick={() => {
                   closeMenu()
+                  // Clear the thread and land in Chat, not wherever we were.
+                  setMode('chat')
                   window.dispatchEvent(new CustomEvent(TIMELINE_NEW_CHAT_EVENT))
                 }}
               >

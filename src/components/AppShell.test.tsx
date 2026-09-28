@@ -1,8 +1,8 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TIMELINE_NEW_CHAT_EVENT } from '../lib/timelineEvents'
+import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
 import AppShell from './AppShell'
 
 const stores = vi.hoisted(() => ({
@@ -367,6 +367,57 @@ describe('AppShell attention and stale tab states', () => {
 
     expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible()
+  })
+
+  it('brings today back on screen when the Today destination is tapped', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'search'
+    const onScrollToday = vi.fn()
+    window.addEventListener(TIMELINE_SCROLL_TODAY_EVENT, onScrollToday)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Today' }))
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+    await waitFor(() => expect(onScrollToday).toHaveBeenCalled())
+
+    window.removeEventListener(TIMELINE_SCROLL_TODAY_EVENT, onScrollToday)
+  })
+
+  it('opens Chat when New chat is used from another destination', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'search'
+    const onNewChat = vi.fn()
+    window.addEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'New chat' }))
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('chat')
+    expect(onNewChat).toHaveBeenCalledOnce()
+
+    window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
   })
 
   it('keeps the welcome hero clean: the bottom bar fades out with it on mobile', () => {
