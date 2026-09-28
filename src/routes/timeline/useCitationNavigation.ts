@@ -46,6 +46,19 @@ const findQuoteOffset = (text: string, quote: string) => {
   return normalizeCitationMatchText(text).indexOf(normalizeCitationMatchText(trimmedQuote))
 }
 
+// A search result knows the exact line it matched, so repeated identical lines
+// open at the right occurrence rather than the first. A line number computed
+// before an edit may be stale, so it is only trusted if the quote is still
+// on that line.
+export type CitationTarget = Citation & { lineIndex?: number }
+
+const findLineQuoteOffset = (view: EditorView, lineIndex: number, quote: string) => {
+  if (lineIndex < 0 || lineIndex >= view.state.doc.lines) return -1
+  const line = view.state.doc.line(lineIndex + 1)
+  const offsetInLine = findQuoteOffset(line.text, quote)
+  return offsetInLine < 0 ? -1 : line.from + offsetInLine
+}
+
 const getCitationScrollTopMargin = () => {
   if (typeof window === 'undefined') return 12
   if (isNarrowViewport()) return 12
@@ -66,7 +79,7 @@ export const useCitationNavigation = ({
   setChatPanelOpen,
 }: UseCitationNavigationParams) => {
   const scrollToCitationQuote = useCallback(
-    async (citation: Citation) => {
+    async (citation: CitationTarget) => {
       const maxAttempts = 20
       let attempts = 0
 
@@ -85,7 +98,9 @@ export const useCitationNavigation = ({
             return
           }
 
-          const quoteOffset = findQuoteOffset(view.state.doc.toString(), citation.quote)
+          const lineOffset =
+            citation.lineIndex === undefined ? -1 : findLineQuoteOffset(view, citation.lineIndex, citation.quote)
+          const quoteOffset = lineOffset >= 0 ? lineOffset : findQuoteOffset(view.state.doc.toString(), citation.quote)
           if (quoteOffset < 0) {
             resolve(false)
             return
@@ -110,7 +125,7 @@ export const useCitationNavigation = ({
   )
 
   const handleCitationClick = useCallback(
-    async (citation: Citation) => {
+    async (citation: CitationTarget) => {
       const wasLoaded = days.some((day) => day.dayId === citation.day)
       if (!wasLoaded) {
         await loadDay(citation.day)
