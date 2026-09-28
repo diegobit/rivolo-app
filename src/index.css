@@ -1081,7 +1081,7 @@
 }
 
 html[data-theme='dark'] .dock-capsule-thumb,
-html[data-theme='dark'] .capsule-segment[data-active='true'] {
+html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
   background: #2a3340;
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.4),
@@ -1153,7 +1153,7 @@ html[data-theme='dark'] .capsule-segment[data-active='true'] {
   color: var(--theme-accent-muted-text);
 }
 
-.capsule-segment[data-active='true'] {
+.capsule-segment[aria-pressed='true'] {
   background: var(--theme-surface);
   color: var(--theme-text);
   box-shadow:

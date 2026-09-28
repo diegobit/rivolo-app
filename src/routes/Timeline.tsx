@@ -1540,9 +1540,7 @@ export default function Timeline() {
         searchFilter={searchFilter}
         resultMode={searchResultMode}
         onSearchFilterChange={setSearchFilter}
-        onToggleResultMode={() => {
-          setSearchResultMode((current) => (current === 'whole-day' ? 'matched-lines' : 'whole-day'))
-        }}
+        onResultModeChange={setSearchResultMode}
       />
     ) : null
 
