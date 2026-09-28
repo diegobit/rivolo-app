@@ -521,7 +521,7 @@ export default function AppShell() {
       {/* Mobile home keeps the wordmark at the top but no controls: navigation
           lives in the dock. Chat renders its own brand bar inside the overlay. */}
       {showShellLogoHeader && (
-        <header className="app-shell-fixed-header-width relative left-0 z-30 mx-auto grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2">
+        <header className="app-shell-fixed-header-width relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2">
           <span />
           {logoLink}
           <span />
