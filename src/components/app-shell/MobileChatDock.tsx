@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import type { AttentionItem } from '../../lib/attention'
 import type { SetupNoticeId } from '../../lib/setupAttention'
 import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../../lib/timelineEvents'
+import { lockPageScroll } from '../../lib/pageScrollLock'
 import { useUIStore } from '../../store/useUIStore'
 
 type MobileChatDockProps = {
@@ -22,7 +23,7 @@ const DOCK_MODES = [
 ] as const
 
 const menuRowClass =
-  'flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 text-left text-base font-semibold text-[var(--theme-text)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] outline-none transition-colors hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-accent-muted-text)]'
+  'flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 text-left text-base font-semibold text-[var(--theme-text)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] outline-none transition-colors hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-accent-muted-text)] disabled:cursor-not-allowed disabled:opacity-60'
 const menuIconClass =
   'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border'
 
@@ -35,6 +36,7 @@ export default function MobileChatDock({
   onNavigate,
 }: MobileChatDockProps) {
   const mode = useUIStore((state) => state.mode)
+  const chatSending = useUIStore((state) => state.chatSending)
   const setMode = useUIStore((state) => state.setMode)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -69,7 +71,14 @@ export default function MobileChatDock({
   useEffect(() => {
     if (!isMenuOpen) return
 
-    const getRows = () => sheetRef.current?.querySelectorAll<HTMLElement>('button, a[href]')
+    const unlock = lockPageScroll()
+    const preventBackgroundTouch = (event: TouchEvent) => {
+      if (event.target instanceof Node && sheetRef.current?.contains(event.target)) return
+      event.preventDefault()
+    }
+    document.addEventListener('touchmove', preventBackgroundTouch, { passive: false })
+
+    const getRows = () => sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]')
     getRows()?.[0]?.focus({ preventScroll: true })
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -94,7 +103,11 @@ export default function MobileChatDock({
     }
 
     window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      document.removeEventListener('touchmove', preventBackgroundTouch)
+      unlock()
+    }
   }, [isMenuOpen])
 
   return (
@@ -211,6 +224,8 @@ export default function MobileChatDock({
               <button
                 type="button"
                 className={menuRowClass}
+                disabled={chatSending}
+                title={chatSending ? 'Available when the response finishes' : undefined}
                 onClick={() => {
                   closeMenu()
                   // Clear the thread and land in Chat, not wherever we were.
@@ -224,7 +239,7 @@ export default function MobileChatDock({
                 >
                   <img src="/pencil-simple-line.svg" alt="" className="h-5 w-5" />
                 </span>
-                <span>New chat</span>
+                <span>{chatSending ? 'New chat (response in progress)' : 'New chat'}</span>
               </button>
               <Link to="/settings" className={menuRowClass} onClick={navigate}>
                 <span
@@ -255,13 +270,13 @@ export default function MobileChatDock({
                         aria-label={`Dismiss ${item.title}`}
                         onClick={(event) => {
                           const rows = Array.from(
-                            sheetRef.current?.querySelectorAll<HTMLElement>('button, a[href]') ?? [],
+                            sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? [],
                           )
                           const index = rows.indexOf(event.currentTarget)
                           onDismissSetupNotice(item.dismissibleSetupNoticeId!)
                           requestAnimationFrame(() => {
                             const next = Array.from(
-                              sheetRef.current?.querySelectorAll<HTMLElement>('button, a[href]') ?? [],
+                              sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? [],
                             )
                             const target = next[Math.min(index, next.length - 1)] ?? menuButtonRef.current
                             target?.focus({ preventScroll: true })
