@@ -357,8 +357,8 @@ const DayEditorCard = memo(({
         heroReveal ? 'hero-reveal' : ''
       } ${
         isFuture
-          ? 'day-editor-card-future border-dashed border-slate-200/60 bg-white/70 shadow-[var(--theme-card-shadow-soft)] hover:border-slate-300/60'
-          : 'border-slate-200/60 bg-white shadow-[var(--theme-card-shadow)] hover:border-slate-300/60'
+          ? 'day-editor-card-future border-dashed border-slate-200/60 bg-white/70 [box-shadow:var(--theme-card-shadow-soft)] hover:border-slate-300/60'
+          : 'border-slate-200/60 bg-white [box-shadow:var(--theme-card-shadow)] hover:border-slate-300/60'
       }`}
     >
       <DayEditorCardHeader

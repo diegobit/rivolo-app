@@ -68,6 +68,8 @@ export default function MobileChatDock({
     onMenuOpenChange?.(isMenuOpen)
   }, [isMenuOpen, onMenuOpenChange])
 
+  useEffect(() => () => onMenuOpenChange?.(false), [onMenuOpenChange])
+
   useEffect(() => {
     if (!isMenuOpen) return
 

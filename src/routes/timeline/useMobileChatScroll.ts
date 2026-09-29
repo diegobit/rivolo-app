@@ -14,9 +14,14 @@ export function useMobileChatScroll(active: boolean, contentKey: string) {
   const pendingRef = useRef(false)
   const anchorRef = useRef<Anchor | null>(null)
   const idleTimerRef = useRef<number | null>(null)
+  const latestKeyRef = useRef(contentKey)
   const seenKeyRef = useRef(contentKey)
   const [following, setFollowing] = useState(true)
   const [hasUnseen, setHasUnseen] = useState(false)
+
+  useLayoutEffect(() => {
+    latestKeyRef.current = contentKey
+  }, [contentKey])
 
   const maxScroll = useCallback(() => {
     const element = scrollerRef.current
@@ -44,7 +49,7 @@ export function useMobileChatScroll(active: boolean, contentKey: string) {
     pendingRef.current = false
     if (followingRef.current) {
       scroller.scrollTop = maxScroll()
-      seenKeyRef.current = contentKey
+      seenKeyRef.current = latestKeyRef.current
       setHasUnseen(false)
     } else if (anchorRef.current?.element.isConnected) {
       const { element, top } = anchorRef.current
@@ -52,17 +57,17 @@ export function useMobileChatScroll(active: boolean, contentKey: string) {
       scroller.scrollTop = Math.max(0, Math.min(maxScroll(), scroller.scrollTop + nextTop - top))
       captureAnchor()
     }
-  }, [captureAnchor, contentKey, maxScroll])
+  }, [captureAnchor, maxScroll])
 
   const scrollToBottom = useCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
     followingRef.current = true
     setFollowing(true)
-    seenKeyRef.current = contentKey
+    seenKeyRef.current = latestKeyRef.current
     setHasUnseen(false)
     scroller.scrollTop = maxScroll()
-  }, [contentKey, maxScroll])
+  }, [maxScroll])
 
   const onScroll = useCallback(() => {
     const scroller = scrollerRef.current
@@ -72,7 +77,7 @@ export function useMobileChatScroll(active: boolean, contentKey: string) {
     followingRef.current = atBottom
     setFollowing(atBottom)
     if (atBottom) {
-      seenKeyRef.current = contentKey
+      seenKeyRef.current = latestKeyRef.current
       setHasUnseen(false)
     } else {
       captureAnchor()
@@ -85,7 +90,7 @@ export function useMobileChatScroll(active: boolean, contentKey: string) {
         if (pendingRef.current) reconcile()
       }, SCROLL_IDLE_MS)
     }
-  }, [captureAnchor, contentKey, maxScroll, reconcile])
+  }, [captureAnchor, maxScroll, reconcile])
 
   const onTouchStart = useCallback(() => {
     touchingRef.current = true
@@ -103,13 +108,15 @@ export function useMobileChatScroll(active: boolean, contentKey: string) {
 
   useLayoutEffect(() => {
     if (!active) return
+    // Position the chat before paint when its overlay opens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     scrollToBottom()
-    // Only overlay activation resets the reader's position.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active])
+  }, [active, scrollToBottom])
 
   useLayoutEffect(() => {
     if (!active) return
+    // Unseen state and scroll position must update with the rendered message.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!followingRef.current && contentKey !== seenKeyRef.current) setHasUnseen(true)
     reconcile()
   }, [active, contentKey, reconcile])
@@ -130,6 +137,10 @@ export function useMobileChatScroll(active: boolean, contentKey: string) {
       window.visualViewport?.removeEventListener('resize', reconcile)
       window.visualViewport?.removeEventListener('scroll', reconcile)
       if (idleTimerRef.current !== null) window.clearTimeout(idleTimerRef.current)
+      idleTimerRef.current = null
+      touchingRef.current = false
+      movingRef.current = false
+      pendingRef.current = false
     }
   }, [active, reconcile])
 

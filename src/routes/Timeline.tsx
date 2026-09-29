@@ -84,7 +84,7 @@ const TrayInput = memo(({
   const isChatMode = mode === 'chat'
   const hasSearchText = draftText.trim().length > 0
   const trayFieldClassName =
-    'block w-full h-10 rounded-full appearance-none bg-transparent py-2 pl-3 pr-3 text-base leading-6 text-[var(--theme-text)] outline-none placeholder:text-slate-400'
+    'block w-full h-10 appearance-none bg-transparent py-2 pl-3 pr-3 text-base leading-6 text-[var(--theme-text)] outline-none placeholder:text-slate-400'
 
   const inputConfig = useMemo<TrayInputConfig>(() => {
     if (isChatMode) {
@@ -1860,7 +1860,7 @@ export default function Timeline() {
 
       {pendingDeleteDayId && isNarrowViewportMode && (
         <div
-          className="pointer-events-none fixed left-0 z-40 px-3"
+          className="pointer-events-none fixed left-1/2 z-40 w-[min(96vw,620px)] -translate-x-1/2 px-2"
           style={{
             // Sit above the whole mobile bottom row (composer included in chat and
             // search, dock only in timeline), not just above the dock.
@@ -1915,7 +1915,7 @@ export default function Timeline() {
             {mobileChatScroll.hasUnseen && !mobileChatScroll.following && (
               <button
                 type="button"
-                className="absolute bottom-[var(--mobile-home-bottom-clearance)] left-1/2 z-10 min-h-11 -translate-x-1/2 rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm font-semibold text-[var(--theme-text)] shadow-[var(--theme-card-shadow-soft)]"
+                className="absolute bottom-[var(--mobile-home-bottom-clearance)] left-1/2 z-10 min-h-11 -translate-x-1/2 rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm font-semibold text-[var(--theme-text)] [box-shadow:var(--theme-card-shadow-soft)]"
                 onClick={mobileChatScroll.scrollToBottom}
               >
                 New messages
