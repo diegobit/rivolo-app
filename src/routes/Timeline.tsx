@@ -470,7 +470,10 @@ export default function Timeline() {
   const hasSearchIntent = mode === 'search' && (Boolean(searchQuery) || Boolean(searchFilter))
   const isTimelineVisible = mode !== 'search' || !hasSearchIntent
   const hasChatMessages = messages.length > 0
-  const mobileChatContentKey = messages.map((message) => `${message.id}:${message.content}:${message.meta?.isStreaming ?? false}`).join('\u0000')
+  const mobileChatContentKey = useMemo(
+    () => messages.map((message) => `${message.id}:${message.content}:${message.meta?.isStreaming ?? false}`).join('\u0000'),
+    [messages],
+  )
   const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode && hasChatMessages
   const showDesktopChatPanel = showDesktopChatMode && desktopChatPanelOpen
   const showMobileChatOverlay =
