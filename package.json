@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && tsc -p tsconfig.functions.json && vite build",
     "lint": "eslint .",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "node scripts/run-vitest.mjs run",
+    "test:watch": "node scripts/run-vitest.mjs",
     "mcp:build": "tsc -p tsconfig.mcp.json",
     "mcp:start": "node dist-mcp/mcp/index.js",
     "preview": "vite preview"
