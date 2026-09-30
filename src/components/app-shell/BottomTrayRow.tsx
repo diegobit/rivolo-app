@@ -29,7 +29,8 @@ export default function BottomTrayRow({
 }: BottomTrayRowProps) {
   const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.5rem] sm:top-[-3.1rem]'
   const trayRowAlignmentClass = mode === 'timeline' ? 'items-center' : 'items-end'
-  const modeToggleOffsetClassName = mode === 'timeline' ? '' : 'mb-1.5 sm:mb-3'
+  // The desktop tray has 12px padding and a 1px border below Send.
+  const modeToggleOffsetClassName = mode === 'timeline' ? '' : 'mb-[13px]'
   // Timeline on mobile home shows only the dock; every other combination has
   // controls of its own (launchers, mode toggle + composer, or the search field).
   const hasTrayControls = !mobileChatDock || mode !== 'timeline'
@@ -49,7 +50,7 @@ export default function BottomTrayRow({
         {/* The whole bottom area fades out under the welcome hero, so the hero
             stays clean with no dock or composer. */}
         {hasTrayControls && (
-          <div className={`flex w-full justify-center gap-2 ${mobileChatDock ? '' : 'items-center'}`}>
+          <div className={`flex w-full justify-center gap-2 ${mobileChatDock ? '' : mode === 'timeline' ? 'items-center' : 'items-end'}`}>
             {mode === 'timeline' ? (
               <>
                 <Fragment key="chat-btn">{chatButton}</Fragment>
