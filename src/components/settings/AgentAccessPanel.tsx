@@ -156,14 +156,6 @@ export default function AgentAccessPanel({
             online={online}
           />
 
-          <button
-            className={`${buttonDanger} min-h-11`}
-            type="button"
-            disabled={busy || !online}
-            onClick={() => void onDisable()}
-          >
-            {busy ? 'Disabling…' : 'Disable Agent access'}
-          </button>
           {view.message && (
             <p className="text-xs text-slate-500" role="status">
               {view.message}
@@ -190,13 +182,25 @@ export default function AgentAccessPanel({
             </div>
           </>
         )}
-        <button
-          className={`${buttonSecondary} min-h-11 w-full sm:w-auto`}
-          type="button"
-          onClick={() => void copySetupPrompt()}
-        >
-          Copy setup prompt
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {enabled && (
+            <button
+              className={`${buttonDanger} min-h-11`}
+              type="button"
+              disabled={busy || !online}
+              onClick={() => void onDisable()}
+            >
+              {busy ? 'Disabling…' : 'Disable Agent access'}
+            </button>
+          )}
+          <button
+            className={`${buttonSecondary} min-h-11 w-full sm:w-auto`}
+            type="button"
+            onClick={() => void copySetupPrompt()}
+          >
+            Copy setup prompt
+          </button>
+        </div>
         {copyStatus && (
           <p className="mt-1 text-xs text-slate-500" role="status">
             {copyStatus}

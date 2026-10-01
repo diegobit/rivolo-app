@@ -241,7 +241,7 @@ export default function SyncSection({
                       disabled={providerMutationDisabled}
                     >
                       {agentAccess?.boundToProvider
-                        ? `Disable Agent access & disconnect ${rowLabel}`
+                        ? `Disconnect ${rowLabel} (& disable Agent Access)`
                         : `Disconnect ${rowLabel}`}
                     </button>
                   ) : (
