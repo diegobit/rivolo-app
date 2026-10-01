@@ -56,7 +56,13 @@ describe('AgentAccessTokensPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Copy token' }))
     expect(writeText).toHaveBeenCalledWith(createdToken.token)
 
+    await user.click(screen.getByRole('button', { name: 'Copy setup prompt with token' }))
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('Authorization: Bearer rvl_one_time_secret'))
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('https://mcp.rivolo.app/mcp'))
+    expect(writeText.mock.calls.at(-1)?.[0]).not.toContain('<YOUR_RIVOLO_TOKEN>')
+
     await user.click(screen.getByRole('button', { name: 'I saved it — dismiss' }))
+    expect(screen.queryByRole('button', { name: 'Copy setup prompt with token' })).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue(createdToken.token)).not.toBeInTheDocument()
     expect(document.body.textContent).not.toContain(createdToken.token)
     expect(screen.getByText('Claude Desktop')).toBeInTheDocument()

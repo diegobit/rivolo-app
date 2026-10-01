@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import {
   RIVOLO_MCP_ENDPOINT,
-  agentAccessTargetLabel,
-  type AgentAccessProfile,
   type AgentAccessViewState,
 } from '../../lib/agentAccess'
 import { SYNC_PROVIDER_LABELS, type SyncProviderId } from '../../lib/syncState'
 import { buttonDanger, buttonPrimary, buttonSecondary } from '../../lib/ui'
+import { buildAgentSetupPrompt } from '../../lib/agentSetupPrompt'
 import AgentAccessTokensPanel from './AgentAccessTokensPanel'
 
 export type AgentAccessPanelProps = {
@@ -19,13 +18,6 @@ export type AgentAccessPanelProps = {
   onEnable: () => void | Promise<void>
   onDisable: () => void | Promise<void>
   onRetry: () => void | Promise<void>
-}
-
-const accountLabel = (profile: AgentAccessProfile) => {
-  if (profile.providerName && profile.providerEmail) {
-    return `${profile.providerName} (${profile.providerEmail})`
-  }
-  return profile.providerEmail ?? profile.providerName ?? profile.providerAccountId
 }
 
 export default function AgentAccessPanel({
@@ -60,13 +52,22 @@ export default function AgentAccessPanel({
     }
   }
 
+  const copySetupPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(buildAgentSetupPrompt())
+      setCopyStatus('Setup prompt copied. Replace the token placeholder before connecting.')
+    } catch {
+      setCopyStatus('Could not copy the setup prompt. Try again.')
+    }
+  }
+
   return (
-    <section
+    <details
       aria-labelledby={`agent-access-title-${provider}`}
-      className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+      className="group rounded-xl border border-slate-200 bg-slate-50 p-3"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id={`agent-access-title-${provider}`} className="text-sm font-semibold text-slate-700">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-sky-500 [&::-webkit-details-marker]:hidden">
+        <h3 id={`agent-access-title-${provider}`} className="flex-1 text-sm font-semibold text-slate-700">
           Agent access
         </h3>
         <span
@@ -80,11 +81,10 @@ export default function AgentAccessPanel({
         >
           {badgeLabel}
         </span>
-      </div>
-
-      <p className="mt-2 text-xs text-slate-500">
-        Agents see only the latest cloud-synced notes.
-      </p>
+        <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180">
+          <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </summary>
 
       {view.state === 'loading' && (
         <p className="mt-3 text-xs text-slate-500" role="status">
@@ -131,42 +131,24 @@ export default function AgentAccessPanel({
 
       {view.state === 'enabled' && (
         <div className="mt-3 space-y-3">
-          <dl className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-            <div className="min-w-0">
-              <dt className="font-semibold text-slate-500">Provider</dt>
-              <dd>{SYNC_PROVIDER_LABELS[view.profile.provider]}</dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="font-semibold text-slate-500">Account</dt>
-              <dd className="break-words">{accountLabel(view.profile)}</dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="font-semibold text-slate-500">Target</dt>
-              <dd className="break-words">{agentAccessTargetLabel(view.profile)}</dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="font-semibold text-slate-500">Notes timezone</dt>
-              <dd className="break-words">{view.profile.timeZone}</dd>
-            </div>
-            {advanced && (
-              <>
-                {view.profile.provider === 'google-drive' && (
-                  <div className="min-w-0">
-                    <dt className="font-semibold text-slate-500">Google file ID</dt>
-                    <dd className="break-all">{view.profile.target.fileId}</dd>
-                  </div>
-                )}
+          {advanced && (
+            <dl className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+              {view.profile.provider === 'google-drive' && (
                 <div className="min-w-0">
-                  <dt className="font-semibold text-slate-500">Profile ID</dt>
-                  <dd className="break-all">{view.profile.profileId}</dd>
+                  <dt className="font-semibold text-slate-500">Google file ID</dt>
+                  <dd className="break-all">{view.profile.target.fileId}</dd>
                 </div>
-                <div className="min-w-0">
-                  <dt className="font-semibold text-slate-500">Updated</dt>
-                  <dd>{new Date(view.profile.updatedAt).toLocaleString()}</dd>
-                </div>
-              </>
-            )}
-          </dl>
+              )}
+              <div className="min-w-0">
+                <dt className="font-semibold text-slate-500">Profile ID</dt>
+                <dd className="break-all">{view.profile.profileId}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="font-semibold text-slate-500">Updated</dt>
+                <dd>{new Date(view.profile.updatedAt).toLocaleString()}</dd>
+              </div>
+            </dl>
+          )}
 
           <AgentAccessTokensPanel
             key={view.profile.profileId}
@@ -190,26 +172,37 @@ export default function AgentAccessPanel({
         </div>
       )}
 
-      <div className="mt-3">
-        <div className="text-xs font-semibold text-slate-500">MCP endpoint</div>
-        <div className="mt-1 flex flex-col gap-2 sm:flex-row">
-          <code className="min-h-11 min-w-0 flex-1 break-all rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-            {RIVOLO_MCP_ENDPOINT}
-          </code>
-          <button
-            className={`${buttonSecondary} min-h-11 shrink-0`}
-            type="button"
-            onClick={() => void copyEndpoint()}
-          >
-            Copy endpoint
-          </button>
-        </div>
+      <div className="mt-3 space-y-3">
+        {advanced && (
+          <>
+            <div className="text-xs font-semibold text-slate-500">MCP endpoint</div>
+            <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+              <code className="min-h-11 min-w-0 flex-1 break-all rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                {RIVOLO_MCP_ENDPOINT}
+              </code>
+              <button
+                className={`${buttonSecondary} min-h-11 shrink-0`}
+                type="button"
+                onClick={() => void copyEndpoint()}
+              >
+                Copy endpoint
+              </button>
+            </div>
+          </>
+        )}
+        <button
+          className={`${buttonSecondary} min-h-11 w-full sm:w-auto`}
+          type="button"
+          onClick={() => void copySetupPrompt()}
+        >
+          Copy setup prompt
+        </button>
         {copyStatus && (
           <p className="mt-1 text-xs text-slate-500" role="status">
             {copyStatus}
           </p>
         )}
       </div>
-    </section>
+    </details>
   )
 }

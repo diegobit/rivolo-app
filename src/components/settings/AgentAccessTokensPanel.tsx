@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { buildAgentSetupPrompt } from '../../lib/agentSetupPrompt'
 import { buttonDanger, buttonPrimary, buttonSecondary } from '../../lib/ui'
 import { useAgentAccessTokens } from '../../routes/settings/useAgentAccessTokens'
 
@@ -28,11 +29,13 @@ export default function AgentAccessTokensPanel({
     if (await tokens.create(name)) setName('')
   }
 
-  const copyCreatedToken = async () => {
+  const copyCreatedToken = async (asPrompt = false) => {
     if (!tokens.createdToken) return
     try {
-      await navigator.clipboard.writeText(tokens.createdToken)
-      setCopyResult({ tokenKey, message: 'Copied.' })
+      await navigator.clipboard.writeText(
+        asPrompt ? buildAgentSetupPrompt(tokens.createdToken) : tokens.createdToken,
+      )
+      setCopyResult({ tokenKey, message: asPrompt ? 'Setup prompt copied with your token.' : 'Copied.' })
     } catch {
       setCopyResult({
         tokenKey,
@@ -73,13 +76,13 @@ export default function AgentAccessTokensPanel({
 
       {tokens.createdToken ? (
         <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
-          <p className="text-sm font-semibold text-amber-900">Copy this token now</p>
+          <p className="text-sm font-semibold text-amber-800">Copy this token now</p>
           <p className="mt-1 text-xs text-amber-800">
             It cannot be recovered after you dismiss it.
           </p>
           <label
             htmlFor={`created-agent-token-${profileId}`}
-            className="mt-3 block text-xs font-semibold text-amber-900"
+            className="mt-3 block text-xs font-semibold text-amber-800"
           >
             New access token
           </label>
@@ -91,13 +94,20 @@ export default function AgentAccessTokensPanel({
             spellCheck={false}
             onFocus={(event) => event.currentTarget.select()}
           />
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <div className="mt-2 flex flex-col flex-wrap gap-2 sm:flex-row">
             <button
               className={`${buttonPrimary} min-h-11`}
               type="button"
               onClick={() => void copyCreatedToken()}
             >
               Copy token
+            </button>
+            <button
+              className={`${buttonSecondary} min-h-11`}
+              type="button"
+              onClick={() => void copyCreatedToken(true)}
+            >
+              Copy setup prompt with token
             </button>
             <button
               className={`${buttonSecondary} min-h-11`}

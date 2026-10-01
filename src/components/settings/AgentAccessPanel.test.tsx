@@ -53,17 +53,22 @@ describe('AgentAccessPanel', () => {
       />,
     )
 
-    expect(screen.getByText('Agents see only the latest cloud-synced notes.')).toBeInTheDocument()
+    expect(screen.queryByText('Agents see only the latest cloud-synced notes.')).not.toBeInTheDocument()
+    expect(screen.getByText('Agent access').closest('details')).not.toHaveAttribute('open')
+    await userEvent.click(screen.getByText('Agent access'))
+    expect(screen.queryByRole('button', { name: 'Copy endpoint' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy setup prompt' })).toBeInTheDocument()
     const enable = screen.getByRole('button', { name: 'Enable for Dropbox' })
     expect(enable).toHaveClass('min-h-11')
     await userEvent.click(enable)
     expect(callbacks.onEnable).toHaveBeenCalledOnce()
   })
 
-  it('shows the bound provider, account, target, timezone, endpoint, and disable action', async () => {
+  it('omits repeated sync details and copies endpoint and setup prompt', async () => {
     render(
       <AgentAccessPanel
         provider="dropbox"
+        advanced
         view={{ state: 'enabled', profile, message: null }}
         busy={false}
         online
@@ -73,10 +78,11 @@ describe('AgentAccessPanel', () => {
     )
 
     expect(screen.getByText('Enabled')).toBeInTheDocument()
-    expect(screen.getByText('Dropbox')).toBeInTheDocument()
-    expect(screen.getByText('Person (person@example.com)')).toBeInTheDocument()
-    expect(screen.getByText('/Journal/inbox.md')).toBeInTheDocument()
-    expect(screen.getByText('Europe/Rome')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Agent access'))
+    expect(screen.queryByText('Provider')).not.toBeInTheDocument()
+    expect(screen.queryByText('Person (person@example.com)')).not.toBeInTheDocument()
+    expect(screen.queryByText('/Journal/inbox.md')).not.toBeInTheDocument()
+    expect(screen.queryByText('Europe/Rome')).not.toBeInTheDocument()
     expect(screen.getByText('https://mcp.rivolo.app/mcp')).toHaveClass('break-all')
 
     const copy = screen.getByRole('button', { name: 'Copy endpoint' })
@@ -85,11 +91,14 @@ describe('AgentAccessPanel', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://mcp.rivolo.app/mcp')
     expect(screen.getByRole('status')).toHaveTextContent('Copied.')
 
+    await userEvent.click(screen.getByRole('button', { name: 'Copy setup prompt' }))
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(expect.stringContaining('Authorization: Bearer <YOUR_RIVOLO_TOKEN>'))
+
     await userEvent.click(screen.getByRole('button', { name: 'Disable Agent access' }))
     expect(callbacks.onDisable).toHaveBeenCalledOnce()
   })
 
-  it('requires a ready cloud target and explains the missing target', () => {
+  it('requires a ready cloud target and explains the missing target', async () => {
     render(
       <AgentAccessPanel
         provider="google-drive"
@@ -101,6 +110,7 @@ describe('AgentAccessPanel', () => {
       />,
     )
 
+    await userEvent.click(screen.getByText('Agent access'))
     expect(screen.getByRole('button', { name: 'Enable for Google Drive' })).toBeDisabled()
     expect(
       screen.getByText('Sync this provider once before enabling Agent access.'),
@@ -123,6 +133,7 @@ describe('AgentAccessPanel', () => {
       />,
     )
 
+    await userEvent.click(screen.getByText('Agent access'))
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Agent access status could not be loaded.',
     )
