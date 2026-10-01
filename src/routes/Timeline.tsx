@@ -307,6 +307,11 @@ const EDITOR_PIN_TTL_MS = 20_000
 const EDITOR_PIN_PRUNE_INTERVAL_MS = 4_000
 const LOG_SCOPE = 'TimelinePerf'
 
+// Fades the thread out behind the pinned header. The bottom edge is not this mask's job:
+// the shared tray veil covers it for the timeline and the chat alike.
+const MOBILE_CHAT_TOP_FADE =
+  'linear-gradient(to bottom, transparent 0, transparent calc(env(safe-area-inset-top) + 4.5rem), black calc(env(safe-area-inset-top) + 5.5rem))'
+
 // --- Component ---
 
 export default function Timeline() {
@@ -1768,6 +1773,20 @@ export default function Timeline() {
     </>
   )
 
+  const undoDeleteButton = (
+    <button
+      className="group inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-2 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white"
+      type="button"
+      onClick={handleUndoDelete}
+    >
+      <span
+        aria-hidden="true"
+        className="h-3.5 w-3.5 bg-current [mask-image:url('/arrow-u-up-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/arrow-u-up-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
+      />
+      UNDO
+    </button>
+  )
+
   return (
     <div>
       {searchPillsContent ? <BottomTrayPortal containerId="bottom-tray-pills">{searchPillsContent}</BottomTrayPortal> : null}
@@ -1803,25 +1822,28 @@ export default function Timeline() {
         timelineContent
       )}
 
-      {pendingDeleteDayId && !hasNoNotes && (
-        <div className="pointer-events-none fixed left-0 top-[calc(env(safe-area-inset-top)+3.7rem)] z-40 px-3">
+      {pendingDeleteDayId && !hasNoNotes && !isNarrowViewportMode && (
+        <BottomTrayPortal containerId="header-undo-slot">
+          <div
+            className="flex h-9 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] pl-3 pr-1.5 shadow-sm"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="text-sm font-medium text-[var(--theme-text-soft)]">Day deleted</span>
+            {undoDeleteButton}
+          </div>
+        </BottomTrayPortal>
+      )}
+
+      {pendingDeleteDayId && !hasNoNotes && isNarrowViewportMode && (
+        <div className="pointer-events-none fixed left-0 top-[calc(env(safe-area-inset-top)+4.7rem)] z-40 px-3">
           <div
             className="pointer-events-auto flex w-[min(12rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-[0_14px_28px_-18px_rgba(15,23,42,0.45)] backdrop-blur-sm"
             role="status"
             aria-live="polite"
           >
             <span className="truncate text-sm font-medium text-slate-700">Day deleted</span>
-            <button
-              className="group inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-2 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white"
-              type="button"
-              onClick={handleUndoDelete}
-            >
-              <span
-                aria-hidden="true"
-                className="h-3.5 w-3.5 bg-current [mask-image:url('/arrow-u-up-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/arrow-u-up-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
-              />
-              UNDO
-            </button>
+            {undoDeleteButton}
           </div>
         </div>
       )}
@@ -1841,7 +1863,11 @@ export default function Timeline() {
               ref={mobileChatScrollRef}
               className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
               style={{
-                paddingTop: 'calc(env(safe-area-inset-top) + 4rem)',
+                maskImage: MOBILE_CHAT_TOP_FADE,
+                WebkitMaskImage: MOBILE_CHAT_TOP_FADE,
+                // Matches where MOBILE_CHAT_TOP_FADE turns fully opaque, so the oldest
+                // message is never parked half-faded at the top of the thread.
+                paddingTop: 'calc(env(safe-area-inset-top) + 5.5rem)',
                 paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
                 scrollPaddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
               }}

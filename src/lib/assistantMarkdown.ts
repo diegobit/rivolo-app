@@ -85,7 +85,7 @@ export const renderAssistantMarkdown = (value: string, citations: Citation[]) =>
   const lines = value.split('\n')
   const htmlLines: string[] = []
   const codeLines: string[] = []
-  let inCodeBlock = false
+  let fenceLength = 0
   let listType: 'ul' | 'ol' | null = null
 
   const closeList = () => {
@@ -113,19 +113,20 @@ export const renderAssistantMarkdown = (value: string, citations: Citation[]) =>
   for (const line of lines) {
     const trimmed = line.trim()
 
-    if (trimmed.startsWith('```')) {
+    const fence = trimmed.match(/^`{3,}/)
+    if (fence && (!fenceLength || fence[0].length >= fenceLength)) {
       closeList()
-      if (inCodeBlock) {
+      if (fenceLength) {
         flushCodeBlock()
-        inCodeBlock = false
+        fenceLength = 0
       } else {
-        inCodeBlock = true
+        fenceLength = fence[0].length
         codeLines.length = 0
       }
       continue
     }
 
-    if (inCodeBlock) {
+    if (fenceLength) {
       codeLines.push(line)
       continue
     }
@@ -170,7 +171,7 @@ export const renderAssistantMarkdown = (value: string, citations: Citation[]) =>
 
   closeList()
 
-  if (inCodeBlock) {
+  if (fenceLength) {
     flushCodeBlock()
   }
 

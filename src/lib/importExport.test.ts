@@ -1,8 +1,10 @@
 import vm from 'node:vm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate'
+import { addDays } from './dates'
 
 const mocks = vi.hoisted(() => ({
+  listAllDays: vi.fn(),
   listDays: vi.fn(),
   replaceDays: vi.fn(),
   saveDay: vi.fn(),
@@ -13,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('./dayRepository', () => ({
+  listAllDays: mocks.listAllDays,
   listDays: mocks.listDays,
   replaceDays: mocks.replaceDays,
   saveDay: mocks.saveDay,
@@ -44,6 +47,7 @@ ${content}`
 
 describe('importMarkdownToDb safety checks', () => {
   beforeEach(() => {
+    mocks.listAllDays.mockReset()
     mocks.listDays.mockReset()
     mocks.replaceDays.mockReset()
     mocks.saveDay.mockReset()
@@ -61,10 +65,82 @@ describe('importMarkdownToDb safety checks', () => {
       reasons: ['no-day-markers'],
     })
 
+    expect(mocks.listAllDays).not.toHaveBeenCalled()
     expect(mocks.listDays).not.toHaveBeenCalled()
     expect(mocks.replaceDays).not.toHaveBeenCalled()
     expect(mocks.saveDay).not.toHaveBeenCalled()
     expect(mocks.set).not.toHaveBeenCalled()
+  })
+
+  it('blocks zero-marker replacement even when confirmed', async () => {
+    const { importMarkdownToDb } = await import('./importExport')
+
+    await expect(
+      importMarkdownToDb('plain text only', { replace: true, allowUnsafeImport: true }),
+    ).rejects.toMatchObject({
+      name: 'ImportSafetyError',
+      reasons: ['no-day-markers'],
+    })
+
+    expect(mocks.listAllDays).not.toHaveBeenCalled()
+    expect(mocks.listDays).not.toHaveBeenCalled()
+    expect(mocks.replaceDays).not.toHaveBeenCalled()
+    expect(mocks.saveDay).not.toHaveBeenCalled()
+    expect(mocks.runBulkDatabaseMutation).not.toHaveBeenCalled()
+    expect(mocks.set).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, false, true])(
+    'blocks invalid-date-only replacement even when confirmed (allowUnsafeImport: %s)',
+    async (allowUnsafeImport) => {
+      const { importMarkdownToDb } = await import('./importExport')
+      const source = '<!-- day:2026-02-30 -->\nInvalid\n---\n\ntext'
+
+      await expect(
+        importMarkdownToDb(source, { replace: true, allowUnsafeImport }),
+      ).rejects.toMatchObject({
+        name: 'ImportSafetyError',
+        reasons: ['no-valid-days'],
+        warnings: ['Invalid day marker for 2026-02-30; skipping block.'],
+        deletedDayIds: [],
+      })
+
+      expect(mocks.listAllDays).not.toHaveBeenCalled()
+      expect(mocks.listDays).not.toHaveBeenCalled()
+      expect(mocks.replaceDays).not.toHaveBeenCalled()
+      expect(mocks.saveDay).not.toHaveBeenCalled()
+      expect(mocks.runBulkDatabaseMutation).not.toHaveBeenCalled()
+      expect(mocks.set).not.toHaveBeenCalled()
+    },
+  )
+
+  it('blocks invalid-date-only replacement when database is empty', async () => {
+    mocks.listAllDays.mockResolvedValue([])
+    const { importMarkdownToDb } = await import('./importExport')
+    const source = '<!-- day:2026-02-30 -->\nInvalid\n---\n\ntext'
+
+    await expect(
+      importMarkdownToDb(source, { replace: true, allowUnsafeImport: true }),
+    ).rejects.toMatchObject({
+      name: 'ImportSafetyError',
+      reasons: ['no-valid-days'],
+    })
+
+    expect(mocks.replaceDays).not.toHaveBeenCalled()
+    expect(mocks.set).not.toHaveBeenCalled()
+  })
+
+  it('allows replacement with a valid parsed day without rejecting for invalid days', async () => {
+    mocks.listAllDays.mockResolvedValue([])
+    const { importMarkdownToDb } = await import('./importExport')
+    const source = markdownDay('2026-07-01', 'valid content')
+
+    const result = await importMarkdownToDb(source, { replace: true })
+    expect(result.imported).toBe(1)
+    expect(mocks.replaceDays).toHaveBeenCalledWith(
+      [expect.objectContaining({ dayId: '2026-07-01', contentMd: 'valid content' })],
+      { markDirty: true },
+    )
   })
 
   it('imports nothing from a zero-marker file without replace', async () => {
@@ -95,7 +171,7 @@ ${markdownDay('2026-06-29', 'second')}`
   })
 
   it('imports duplicate day markers when explicitly allowed, keeping the last block', async () => {
-    mocks.listDays.mockResolvedValue([localDay('2026-06-29', 'current')])
+    mocks.listAllDays.mockResolvedValue([localDay('2026-06-29', 'current')])
     const { importMarkdownToDb } = await import('./importExport')
     const source = `${markdownDay('2026-06-29', 'first')}
 
@@ -121,7 +197,7 @@ ${markdownDay('2026-06-29', 'second')}`
 <!-- day:2026-01-01 -->
 \`\`\`
 prefix <!-- day:2024-12-31 --> suffix`
-    mocks.listDays.mockResolvedValue([localDay('2026-07-11', contentMd)])
+    mocks.listAllDays.mockResolvedValue([localDay('2026-07-11', contentMd)])
     const { exportMarkdownFromDb, importMarkdownToDb } = await import('./importExport')
 
     const exported = await exportMarkdownFromDb()
@@ -137,7 +213,7 @@ prefix <!-- day:2024-12-31 --> suffix`
   })
 
   it('blocks replacement that would delete local days unless explicitly allowed', async () => {
-    mocks.listDays.mockResolvedValue([
+    mocks.listAllDays.mockResolvedValue([
       localDay('2026-06-30', 'keep me'),
       localDay('2026-06-29', 'remote omits me'),
     ])
@@ -155,7 +231,7 @@ prefix <!-- day:2024-12-31 --> suffix`
   })
 
   it('reports every safety problem in one error', async () => {
-    mocks.listDays.mockResolvedValue([
+    mocks.listAllDays.mockResolvedValue([
       localDay('2026-06-30', 'keep me'),
       localDay('2026-06-28', 'remote omits me'),
     ])
@@ -175,7 +251,7 @@ ${markdownDay('2026-06-30', 'second')}`
 
   it('allows confirmed destructive replacement after writing the latest rollback backup', async () => {
     const events: string[] = []
-    mocks.listDays.mockResolvedValue([
+    mocks.listAllDays.mockResolvedValue([
       localDay('2026-06-30', 'local current'),
       localDay('2026-06-29', 'local only'),
     ])
@@ -214,7 +290,7 @@ ${markdownDay('2026-06-30', 'second')}`
   })
 
   it('prunes rollback backups to the ten most recent', async () => {
-    mocks.listDays.mockResolvedValue([localDay('2026-06-30', 'current')])
+    mocks.listAllDays.mockResolvedValue([localDay('2026-06-30', 'current')])
     const backup = (createdAt: number) => ({
       createdAt,
       contentMd: `# backup ${createdAt}`,
@@ -238,7 +314,7 @@ ${markdownDay('2026-06-30', 'second')}`
   })
 
   it('migrates the legacy single backup into the retention list', async () => {
-    mocks.listDays.mockResolvedValue([localDay('2026-06-30', 'current')])
+    mocks.listAllDays.mockResolvedValue([localDay('2026-06-30', 'current')])
     mocks.get.mockImplementation(async (key: string) =>
       key === 'rivolo.import.latestRollbackBackup'
         ? { createdAt: 50, contentMd: '# legacy backup', dayCount: 4 }
@@ -282,7 +358,7 @@ ${markdownDay('2026-06-30', 'second')}`
   })
 
   it('drops backups that no longer decompress instead of failing the import', async () => {
-    mocks.listDays.mockResolvedValue([localDay('2026-06-30', 'current')])
+    mocks.listAllDays.mockResolvedValue([localDay('2026-06-30', 'current')])
     const existing = [
       { createdAt: 200, contentMdGz: deflateSync(strToU8('# intact backup')), dayCount: 1 },
       { createdAt: 100, contentMdGz: new Uint8Array([1, 2, 3]), dayCount: 1 },
@@ -305,5 +381,63 @@ ${markdownDay('2026-06-30', 'second')}`
     const [key, saved] = mocks.set.mock.calls[0] as [string, { createdAt: number }[]]
     expect(key).toBe(IMPORT_ROLLBACK_BACKUPS_KEY)
     expect(saved.map((entry) => entry.createdAt)).toEqual([expect.any(Number), 200])
+  })
+
+  it('exports every stored day beyond 10000', async () => {
+    const sentinelDay = localDay('1999-12-31', 'oldest important archive')
+    const recentDays = Array.from({ length: 10000 }, (_, i) =>
+      localDay(addDays('2000-01-01', 9999 - i), `record ${9999 - i}`),
+    )
+    const allStoredDays = [...recentDays, sentinelDay]
+
+    // Limit-aware adapter: listDays is constrained to the requested limit, listAllDays is unconstrained
+    mocks.listDays.mockImplementation(async (limit = 60) => allStoredDays.slice(0, limit))
+    mocks.listAllDays.mockImplementation(async () => allStoredDays)
+
+    const { exportMarkdownFromDb } = await import('./importExport')
+    const exportedMd = await exportMarkdownFromDb()
+    const { parseMarkdown } = await import('./markdown')
+    const parsed = parseMarkdown(exportedMd)
+
+    expect(parsed.days).toHaveLength(10001)
+    const dayIds = new Set(parsed.days.map((d) => d.dayId))
+    expect(dayIds.size).toBe(10001)
+    const oldest = parsed.days.find((d) => d.dayId === '1999-12-31')
+    expect(oldest?.contentMd).toBe('oldest important archive')
+  })
+
+  it('includes the oldest day in replacement safety and rollback', async () => {
+    const sentinelDay = localDay('1999-12-31', 'oldest important archive')
+    const recentDays = Array.from({ length: 10000 }, (_, i) =>
+      localDay(addDays('2000-01-01', 9999 - i), `record ${9999 - i}`),
+    )
+    const allStoredDays = [...recentDays, sentinelDay]
+
+    mocks.listDays.mockImplementation(async (limit = 60) => allStoredDays.slice(0, limit))
+    mocks.listAllDays.mockImplementation(async () => allStoredDays)
+
+    const { IMPORT_ROLLBACK_BACKUPS_KEY, importMarkdownToDb } = await import('./importExport')
+    const { exportMarkdown } = await import('./markdown')
+
+    const source = exportMarkdown(recentDays)
+
+    await expect(importMarkdownToDb(source, { replace: true })).rejects.toMatchObject({
+      name: 'ImportSafetyError',
+      reasons: ['would-delete-local-days'],
+      deletedDayIds: expect.arrayContaining(['1999-12-31']),
+    })
+
+    await expect(
+      importMarkdownToDb(source, { replace: true, allowUnsafeImport: true }),
+    ).resolves.toEqual({ imported: 10000, warnings: [] })
+
+    expect(mocks.set).toHaveBeenCalledWith(
+      IMPORT_ROLLBACK_BACKUPS_KEY,
+      expect.arrayContaining([expect.objectContaining({ dayCount: 10001 })]),
+    )
+    const [, saved] = mocks.set.mock.calls[0] as [string, { contentMdGz: Uint8Array }[]]
+    const decompressed = strFromU8(inflateSync(saved[0].contentMdGz))
+    expect(decompressed).toContain('oldest important archive')
+    expect(decompressed).toContain('1999-12-31')
   })
 })

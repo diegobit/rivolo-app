@@ -1,5 +1,5 @@
 import { exportMarkdown, parseMarkdown } from './markdown'
-import { listDays, replaceDays, saveDay } from './dayRepository'
+import { listAllDays, replaceDays, saveDay } from './dayRepository'
 import { runBulkDatabaseMutation } from './db'
 import { formatDayTitle } from './dates'
 import { del, get, set } from 'idb-keyval'
@@ -92,7 +92,11 @@ export const saveRollbackBackup = async (contentMd: string) => {
   })
 }
 
-export type ImportSafetyReason = 'no-day-markers' | 'duplicate-day-markers' | 'would-delete-local-days'
+export type ImportSafetyReason =
+  | 'no-day-markers'
+  | 'no-valid-days'
+  | 'duplicate-day-markers'
+  | 'would-delete-local-days'
 
 export class ImportSafetyError extends Error {
   reasons: ImportSafetyReason[]
@@ -163,14 +167,20 @@ export const importMarkdownToDb = async (
   }
 
   // Replacing everything with nothing is never allowed, not even confirmed.
-  if (hasNoMarkers) {
-    throw new ImportSafetyError('Import aborted: the file contains no day markers.', {
-      reasons: ['no-day-markers'],
+  if (normalizedDays.length === 0) {
+    if (hasNoMarkers) {
+      throw new ImportSafetyError('Import aborted: the file contains no day markers.', {
+        reasons: ['no-day-markers'],
+        warnings,
+      })
+    }
+    throw new ImportSafetyError('Import aborted: the file contains no valid days.', {
+      reasons: ['no-valid-days'],
       warnings,
     })
   }
 
-  const currentDays = await listDays(10000)
+  const currentDays = await listAllDays()
   const nextDayIds = new Set(normalizedDays.map((day) => day.dayId))
   const deletedDayIds = currentDays
     .map((day) => day.dayId)
@@ -205,6 +215,6 @@ export const importMarkdownToDb = async (
 }
 
 export const exportMarkdownFromDb = async () => {
-  const days = await listDays(10000)
+  const days = await listAllDays()
   return exportMarkdown(days)
 }

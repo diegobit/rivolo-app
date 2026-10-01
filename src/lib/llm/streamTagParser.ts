@@ -206,6 +206,33 @@ const toResult = (pieces: StreamTagPiece[]): StreamTagParseResult => {
 
 export const createStreamTagParser = () => {
   let pendingTag: string | null = null
+  let fenceLength = 0
+  let inlineLength = 0
+  let backtickRun = 0
+  let runAtLineStart = false
+  let lineIsWhitespace = true
+  let literalFenceLine = false
+
+  // Resolve complete delimiter runs, never partial chunks. Fences open at a
+  // whitespace-only line prefix and close with at least the opening run length.
+  // Inline code closes only on an equal run. Fence delimiter lines stay literal
+  // through their newline, matching the renderer's treatment of those lines.
+  const finishBacktickRun = () => {
+    if (!backtickRun) return
+    if (runAtLineStart && backtickRun >= 3 && !inlineLength) {
+      if (!fenceLength) {
+        fenceLength = backtickRun
+        literalFenceLine = true
+      } else if (backtickRun >= fenceLength) {
+        fenceLength = 0
+        literalFenceLine = true
+      }
+    } else if (!fenceLength && !literalFenceLine) {
+      if (!inlineLength) inlineLength = backtickRun
+      else if (backtickRun === inlineLength) inlineLength = 0
+    }
+    backtickRun = 0
+  }
 
   const push = (chunk: string): StreamTagParseResult => {
     if (!chunk) {
@@ -233,7 +260,27 @@ export const createStreamTagParser = () => {
     }
 
     for (const char of chunk) {
+      const atLineStart = lineIsWhitespace
+      lineIsWhitespace = char === '\n' || (lineIsWhitespace && /\s/.test(char))
+
       if (pendingTag === null) {
+        if (char === '`') {
+          if (!backtickRun) runAtLineStart = atLineStart
+          backtickRun += 1
+          appendText(char)
+          continue
+        }
+
+        finishBacktickRun()
+        if (char === '\n') {
+          literalFenceLine = false
+          inlineLength = 0
+        }
+        if (fenceLength || inlineLength || literalFenceLine) {
+          appendText(char)
+          continue
+        }
+
         if (char === '<') {
           pendingTag = '<'
         } else {
@@ -289,6 +336,7 @@ export const createStreamTagParser = () => {
   }
 
   const flush = (): StreamTagParseResult => {
+    finishBacktickRun()
     if (!pendingTag) {
       return emptyResult()
     }

@@ -115,6 +115,47 @@ describe('useSyncProviderActions', () => {
     expect(result.current.pullRefused).toBe(false)
   })
 
+  it('does not offer Force pull for a remote file with no valid days', async () => {
+    const safetyError = Object.assign(
+      new Error('Import aborted: the file contains no valid days.'),
+      {
+        name: 'ImportSafetyError',
+        reasons: ['no-valid-days'],
+        warnings: ['Invalid day marker for 2026-02-30; skipping block.'],
+        deletedDayIds: [],
+      },
+    )
+    syncActions.pullFromSyncAndRefresh.mockRejectedValueOnce(safetyError)
+    const confirm = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirm)
+    const { result, setStatus } = setupActions(false)
+
+    await act(() => result.current.handlePull())
+
+    expect(confirm).not.toHaveBeenCalled()
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+    expect(setStatus).toHaveBeenLastCalledWith('Import aborted: the file contains no valid days.')
+    expect(result.current.pullRefused).toBe(false)
+  })
+
+  it('displays the error when handleForcePull is rejected with no valid days', async () => {
+    const safetyError = Object.assign(
+      new Error('Import aborted: the file contains no valid days.'),
+      {
+        name: 'ImportSafetyError',
+        reasons: ['no-valid-days'],
+        warnings: ['Invalid day marker for 2026-02-30; skipping block.'],
+        deletedDayIds: [],
+      },
+    )
+    syncActions.pullFromSyncAndRefresh.mockRejectedValueOnce(safetyError)
+    const { result, setStatus } = setupActions(false)
+
+    await act(() => result.current.handleForcePull())
+
+    expect(setStatus).toHaveBeenLastCalledWith('Import aborted: the file contains no valid days.')
+  })
+
   it('marks the pull refused on a dirty pull and clears it once the force pull succeeds', async () => {
     const { result } = setupActions(true)
     expect(result.current.pullRefused).toBe(false)

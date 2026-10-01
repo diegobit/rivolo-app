@@ -1,4 +1,4 @@
-import { checkActiveProviderRemote, getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
+import { getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../lib/syncState'
 import { claimPrimaryTabForSync, getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import { useDaysStore } from './useDaysStore'
@@ -44,7 +44,14 @@ const activeProviderLabel = () => {
 }
 
 export const recordSyncAttention = (operation: 'pull' | 'push', message: string) => {
-  useSyncStore.getState().setSyncAttention({ operation, message, at: Date.now() })
+  const state = useSyncStore.getState()
+  if (
+    state.syncAttention?.operation === operation &&
+    state.syncAttention.message === message
+  ) {
+    return
+  }
+  state.setSyncAttention({ operation, message, at: Date.now() })
 }
 
 const clearSyncAttention = () => {
@@ -61,26 +68,6 @@ export const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') 
   return reason === 'remote_missing'
     ? `${label} file is missing. Local data is safe — keep this device's notes to recreate it.`
     : `${label} changed remotely. Choose which copy to keep.`
-}
-
-export const remoteChangedWhileDirtyMessage = (reason: 'remote_missing' | 'remote_changed') => {
-  const label = activeProviderLabel()
-  return reason === 'remote_missing'
-    ? `${label} file was removed on another device. Your local notes are safe — keep this device's notes to recreate it.`
-    : `${label} changed on another device while you have unsynced local edits here. Choose which copy to keep — using the cloud version saves a local backup first.`
-}
-
-// Auto-pull is intentionally suppressed while local edits are dirty so unsynced
-// work is never overwritten — but that means a device could silently diverge if
-// another device advances the remote. This runs a content-free metadata check
-// and, on divergence, raises the existing sync-attention notice (which links to
-// the Push local / Pull remote recovery actions). Unchanged remote stays quiet.
-export const detectRemoteChangeWhileDirty = async () => {
-  if (!canRunAutoSync()) return
-  const check = await checkActiveProviderRemote()
-  if (check.status === 'changed') {
-    recordSyncAttention('pull', remoteChangedWhileDirtyMessage(check.reason))
-  }
 }
 
 export const pullFromSyncAndRefresh = async (options?: {

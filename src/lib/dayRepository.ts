@@ -42,6 +42,13 @@ export const listDays = async (limit = 60) => {
   return rows.map(mapRow)
 }
 
+export const listAllDays = async () => {
+  const rows = await queryAll<DayRow>(
+    'SELECT day_id, human_title, content_md, created_at, updated_at FROM days ORDER BY day_id DESC',
+  )
+  return rows.map(mapRow)
+}
+
 export const listDaysSince = async (cutoffDayId: string) => {
   const rows = await queryAll<DayRow>(
     `
@@ -186,23 +193,45 @@ export const moveDay = async (fromDayId: string, toDayId: string) => {
   return { day: await getDay(toDayId), conflict: false }
 }
 
+const appendQueues = new Map<string, Promise<void>>()
+
+const enqueueDayAppend = async <T>(dayId: string, operation: () => Promise<T>): Promise<T> => {
+  const previous = appendQueues.get(dayId) ?? Promise.resolve()
+
+  const current = previous.then(operation)
+  const tail = current
+    .then(() => {}, () => {})
+    .finally(() => {
+      if (appendQueues.get(dayId) === tail) {
+        appendQueues.delete(dayId)
+      }
+    })
+
+  appendQueues.set(dayId, tail)
+  return current
+}
+
 export const appendLineToDay = async (dayId: string, line: string) => {
   assertValidDayId(dayId)
-  const existing = await ensureDay(dayId)
-  const nextContent = existing.contentMd
-    ? `${existing.contentMd.replace(/\s+$/, '')}\n${line.trim()}`
-    : line.trim()
-  return saveDay(dayId, nextContent, existing.humanTitle)
+  return enqueueDayAppend(dayId, async () => {
+    const existing = await ensureDay(dayId)
+    const nextContent = existing.contentMd
+      ? `${existing.contentMd.replace(/\s+$/, '')}\n${line.trim()}`
+      : line.trim()
+    return saveDay(dayId, nextContent, existing.humanTitle)
+  })
 }
 
 export const appendToDay = async (dayId: string, text: string) => {
   assertValidDayId(dayId)
-  const existing = await ensureDay(dayId)
-  const trimmed = text.trim()
-  const nextContent = existing.contentMd
-    ? `${existing.contentMd}\n\n${trimmed}`
-    : trimmed
-  return saveDay(dayId, nextContent, existing.humanTitle)
+  return enqueueDayAppend(dayId, async () => {
+    const existing = await ensureDay(dayId)
+    const trimmed = text.trim()
+    const nextContent = existing.contentMd
+      ? `${existing.contentMd}\n\n${trimmed}`
+      : trimmed
+    return saveDay(dayId, nextContent, existing.humanTitle)
+  })
 }
 
 export const deleteDay = async (dayId: string) => {

@@ -151,7 +151,11 @@ export const useSyncProviderActions = ({
     try {
       await runPull({ force: false, allowUnsafeImport: false })
     } catch (error) {
-      if (isImportSafetyError(error) && !error.reasons.includes('no-day-markers')) {
+      if (
+        isImportSafetyError(error) &&
+        !error.reasons.includes('no-day-markers') &&
+        !error.reasons.includes('no-valid-days')
+      ) {
         setPullRefused(true)
         setStatus(
           `${error.message} Use “Force pull (overwrite local)” to replace local notes anyway — a rollback backup is saved first.`,

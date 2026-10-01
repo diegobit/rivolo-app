@@ -23,7 +23,7 @@ export default function EmptyStateHero({
         <span className="absolute -inset-6 rounded-full bg-white/70 blur-2xl" aria-hidden="true" />
         <img
           ref={heroLogoRef}
-          src="/logo.png"
+          src="/logo.svg"
           alt=""
           className={`hero-logo relative h-16 w-auto drop-shadow-[0_12px_30px_rgba(15,23,42,0.16)] transition-opacity duration-300 sm:h-20 ${
             isLogoAnimating ? 'opacity-0' : 'opacity-100'

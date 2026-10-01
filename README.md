@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/logo.png" alt="Rivolo" width="180" />
+  <img src="docs/logo.png" alt="Rivolo" width="180" />
 </p>
 
 <p align="center"><em>The no-notes notes app 💧</em></p>

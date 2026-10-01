@@ -186,6 +186,9 @@
     --theme-search-match: rgba(34, 179, 255, 0.15);
     --theme-icon-filter: none;
     --theme-wallpaper-filter: none;
+    --theme-wallpaper-light-opacity: 0.05;
+    --theme-wallpaper-medium-opacity: 0.1;
+    --theme-wallpaper-strong-opacity: 0.15;
     --theme-blur-surface: rgb(var(--theme-page-rgb) / 0.30);
   }
 
@@ -256,6 +259,9 @@
     --theme-search-match: rgba(34, 179, 255, 0.24);
     --theme-icon-filter: invert(92%) sepia(9%) saturate(524%) hue-rotate(179deg) brightness(105%) contrast(96%);
     --theme-wallpaper-filter: invert(1) hue-rotate(180deg) saturate(1.4) brightness(0.74) contrast(1.05);
+    --theme-wallpaper-light-opacity: 0.045;
+    --theme-wallpaper-medium-opacity: 0.16;
+    --theme-wallpaper-strong-opacity: 0.2;
     --theme-blur-surface: rgb(var(--theme-page-rgb) / 0.62);
   }
 
@@ -333,7 +339,7 @@
     background-size: cover;
     background-position: center;
     filter: var(--theme-wallpaper-filter);
-    opacity: 0.05;
+    opacity: var(--theme-wallpaper-light-opacity);
     transition:
       filter 600ms ease,
       opacity 600ms ease;
@@ -351,28 +357,28 @@
   }
 
   body[data-wallpaper='thoughts-medium']::after {
-    opacity: 0.1;
+    opacity: var(--theme-wallpaper-medium-opacity);
   }
 
   body[data-wallpaper='thoughts-high']::after {
-    opacity: 0.15;
+    opacity: var(--theme-wallpaper-strong-opacity);
   }
 
   body[data-hero-wallpaper='true']::after {
-    opacity: 0.15;
+    opacity: var(--theme-wallpaper-strong-opacity);
   }
 
   html[data-theme='dark'] body[data-wallpaper='thoughts-light']::after {
-    opacity: 0.04;
+    opacity: var(--theme-wallpaper-light-opacity);
   }
 
   html[data-theme='dark'] body[data-wallpaper='thoughts-medium']::after {
-    opacity: 0.16;
+    opacity: var(--theme-wallpaper-medium-opacity);
   }
 
   html[data-theme='dark'] body[data-wallpaper='thoughts-high']::after,
   html[data-theme='dark'] body[data-hero-wallpaper='true']::after {
-    opacity: 0.2;
+    opacity: var(--theme-wallpaper-strong-opacity);
   }
 
   #root {
@@ -971,6 +977,17 @@
     .touch-actions {
       display: none;
     }
+
+    .hover-reveal {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .group:hover .hover-reveal,
+    .group:focus-within .hover-reveal {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
 
   @media (hover: none) {
@@ -1004,9 +1021,16 @@
   box-shadow: 0 6px 18px rgb(var(--theme-shadow-color) / 0.16);
 }
 
+.bottom-tray-blur,
+.bottom-tray-blur-tail {
+  background: var(--tray-veil, var(--theme-blur-surface));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
 .bottom-tray-blur {
   bottom: var(--keyboard-offset, 0px);
-  height: calc(var(--bottom-tray-height, 3.5rem) + env(safe-area-inset-bottom) + 3rem);
+  height: calc(var(--bottom-tray-height, 3.5rem) + env(safe-area-inset-bottom) + 2.5rem);
 }
 
 .bottom-tray-blur.bottom-tray-blur-search {
@@ -1035,9 +1059,16 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
 }
 
 @media (hover: none) {
+  /* 472e49b turned these off on touch because the backdrop-filter was bugged on iOS.
+     Keep the filter off, but keep the colour half: without it content runs into the tray
+     with no fade at all. An opaque page colour stands in for the blur. It flattens the
+     wallpaper inside the band, which is invisible even at thoughts-high because the band
+     is a soft gradient and day cards are opaque over most of it. */
   .bottom-tray-blur,
   .bottom-tray-blur-tail {
-    display: none;
+    --tray-veil: var(--theme-page);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .bottom-tray-row {
@@ -1073,7 +1104,8 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
   scroll-margin-top: 80px;
 }
 
-html[data-theme='dark'] img[src$='.svg']:not(.icon-on-accent) {
+/* Recolor only monochrome black icon SVGs; keep colored brand assets (the logo) untouched. */
+html[data-theme='dark'] img[src$='.svg']:not(.icon-on-accent):not([src$='logo.svg']) {
   filter: var(--theme-icon-filter);
 }
 

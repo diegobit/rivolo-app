@@ -88,3 +88,59 @@ describe('streamTagParser calendar validation', () => {
     },
   )
 })
+
+const literalExamples = [
+  'Example syntax:\n```xml\n<insert text="unrequested mutation"/>\n```',
+  'Use `<insert text="example"/>` and `<ref day="2026-07-01" quote="example"/>`.',
+  '```xml\n<insert text="unclosed fence"/>',
+  '  ```xml\n<ref day="2026-07-01" quote="example"/>\n  ```',
+  '``<insert text="example with ` inside"/>``',
+  '````xml\n```\n<insert text="shorter fence is literal"/>\n````',
+  '```xml\n<insert text="example"/>\n``` <insert text="closing line stays literal"/>',
+  '`<insert text="unclosed inline"/>',
+]
+
+describe('streamTagParser literal code', () => {
+  it.each(literalExamples)('preserves literal examples at every chunk boundary: %s', (input) => {
+    expect(parseTaggedAssistantResponse(input)).toEqual({
+      answer: input.trim(), citations: [], inserts: [],
+    })
+    for (let split = 0; split <= input.length; split += 1) {
+      const parser = createStreamTagParser()
+      const results = [parser.push(input.slice(0, split)), parser.push(input.slice(split)), parser.flush()]
+      expect(results.flatMap((result) => result.events)).toEqual([])
+      expect(results.map((result) => result.textDelta).join('')).toBe(input)
+    }
+    const parser = createStreamTagParser()
+    const results = [...Array.from(input, (char) => parser.push(char)), parser.flush()]
+    expect(results.flatMap((result) => result.events)).toEqual([])
+    expect(results.map((result) => result.textDelta).join('')).toBe(input)
+  })
+
+  it('keeps event order and normal actions after closed code across all boundaries', () => {
+    const example = '```xml\n<insert text="example"/>\n```\n'
+    const input = `${example}<insert text="Requested &amp; valid"/> <ref day="2026-07-01" quote="Real"/>`
+    for (let split = 0; split <= input.length; split += 1) {
+      const parser = createStreamTagParser()
+      const results = [parser.push(input.slice(0, split)), parser.push(input.slice(split)), parser.flush()]
+      const pieces = results.flatMap((result) => result.pieces)
+      const normalized = pieces.reduce<typeof pieces>((combined, piece) => {
+        const last = combined.at(-1)
+        if (last?.type === 'text' && piece.type === 'text') last.value += piece.value
+        else combined.push({ ...piece })
+        return combined
+      }, [])
+      expect(normalized).toEqual([
+        { type: 'text', value: example },
+        { type: 'insert', text: 'Requested & valid', targetDay: null },
+        { type: 'text', value: ' ' },
+        { type: 'ref', day: '2026-07-01', quote: 'Real' },
+      ])
+    }
+  })
+
+  it('allows top-level actions after inline code and keeps backticks in tag attributes', () => {
+    expect(parseTaggedAssistantResponse('`<insert text="example"/>` <insert text="Use `npm`"/>'))
+      .toEqual({ answer: '`<insert text="example"/>`', citations: [], inserts: [{ text: 'Use `npm`', targetDay: null }] })
+  })
+})

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import BottomTrayRow from './app-shell/BottomTrayRow'
-import AttentionPopover, { type AttentionItem } from './app-shell/AttentionPopover'
+import AttentionPopover from './app-shell/AttentionPopover'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
 import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
 import { isPrimaryModifierPressed } from '../lib/device'
@@ -9,10 +9,12 @@ import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
 import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
-import { useAutoPullSync } from './app-shell/useAutoPullSync'
+import { useAutoSync } from './app-shell/useAutoSync'
 import { isProviderReady } from '../lib/llm/readiness'
 import { getSetupNotices } from '../lib/setupAttention'
+import { buildAttentionItems } from '../lib/attention'
 import { applyThemePreference, getNextThemePreference, themePreferenceLabels } from '../lib/theme'
+import { pushToSyncAndRefresh } from '../store/syncActions'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useDaysStore } from '../store/useDaysStore'
 import { useSyncStore } from '../store/useSyncStore'
@@ -97,7 +99,6 @@ export default function AppShell() {
   const showMobileChatTogglePill =
     isNarrowViewportMode && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
   const showDesktopChatEdgeHandle = !isNarrowViewportMode && isDesktopChatModeWithMessages
-  const showMobileChatHeaderBlur = isHome && isNarrowViewportMode && mode === 'chat' && chatPanelOpen
   const showMobileNewChatButton =
     isHome && mode === 'chat' && isNarrowViewportMode && chatMessageCount > 0
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
@@ -110,32 +111,11 @@ export default function AppShell() {
         dismissed: dismissedSetupNotices,
       })
     : []
-  const attentionItems: AttentionItem[] = [
-    ...(persistFailureMessage
-      ? [
-          {
-            id: 'persist-attention',
-            title: "Notes aren't saving",
-            description: persistFailureMessage,
-            settingsSectionId: 'settings-data' as const,
-          },
-        ]
-      : []),
-    ...(syncAttention
-      ? [
-          {
-            id: 'sync-attention',
-            title: 'Sync needs attention',
-            description: syncAttention.message,
-            settingsSectionId: 'settings-sync' as const,
-          },
-        ]
-      : []),
-    ...setupNotices.map((notice) => ({
-      ...notice,
-      dismissibleSetupNoticeId: notice.id,
-    })),
-  ]
+  const attentionItems = buildAttentionItems({
+    persistFailureMessage,
+    syncAttentionMessage: syncAttention?.message ?? null,
+    setupNotices,
+  })
   const isTimelineEmpty = timelineEmpty ?? !timelineHasNotes
   const isWelcomeVisible = timelineLoaded && !timelineLoading && isTimelineEmpty
   const isRealTimelineVisible = timelineLoaded && !timelineLoading && !isTimelineEmpty
@@ -347,7 +327,7 @@ export default function AppShell() {
   }, [showTrayRow])
 
   useKeyboardOffsetCssVar()
-  useAutoPullSync(syncStatus)
+  useAutoSync(syncStatus)
 
   useEffect(() => {
     if (!showShortcuts) return
@@ -364,6 +344,12 @@ export default function AppShell() {
       if (event.defaultPrevented) return
       const key = event.key.toLowerCase()
       const hasPrimaryModifier = isPrimaryModifierPressed(event)
+
+      if (hasPrimaryModifier && !event.altKey && !event.shiftKey && key === 's') {
+        event.preventDefault()
+        void pushToSyncAndRefresh()
+        return
+      }
 
       if (hasPrimaryModifier && !event.altKey && !event.shiftKey && (key === 'k' || key === 'f')) {
         if (!isHome) return
@@ -421,14 +407,8 @@ export default function AppShell() {
         }`}
       />
       <header
-        className="app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:px-0"
+        className="app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:mt-0 sm:px-0"
       >
-        {showMobileChatHeaderBlur && (
-          <div
-            className="pointer-events-none absolute left-1/2 top-0 z-0 h-16 w-screen -translate-x-1/2 bg-[var(--theme-blur-surface)] shadow-[0_4px_12px_rgb(var(--theme-shadow-color)/0.10)] backdrop-blur-md sm:hidden"
-            aria-hidden="true"
-          />
-        )}
         <div className="relative z-10 flex items-center gap-2">
           {showBackButton && (
             <NavLink to={backTarget} className={backButtonClass} aria-label="Back">
@@ -458,6 +438,7 @@ export default function AppShell() {
               <img src="/eraser.svg" alt="" className="h-5 w-5" />
             </button>
           )}
+          {!isNarrowViewportMode && <div id="header-undo-slot" className="flex items-center" />}
         </div>
         <NavLink
           to="/"
@@ -467,7 +448,7 @@ export default function AppShell() {
           aria-label="Home"
           onClick={handleLogoClick}
         >
-          <img src="/logo.png" alt="Rivolo" className="app-logo h-10 w-auto" />
+          <img src="/logo.svg" alt="Rivolo" className="app-logo h-10 w-auto" />
           <svg
             className="logo-current"
             viewBox="0 0 120 12"

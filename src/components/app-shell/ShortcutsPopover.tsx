@@ -113,6 +113,15 @@ export default function ShortcutsPopover({
                   <span className="text-slate-400">-&gt;</span>
                   <span>Show/hide sidebar</span>
                 </div>
+                <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                  <span className="flex items-center gap-1">
+                    <kbd className="kbd">{primaryModifierLabel}</kbd>
+                    <span className="text-slate-400">+</span>
+                    <kbd className="kbd">S</kbd>
+                  </span>
+                  <span className="text-slate-400">-&gt;</span>
+                  <span>Sync push</span>
+                </div>
               </div>
             </div>
             <div className="space-y-2">

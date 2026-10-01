@@ -178,43 +178,45 @@ function LanguageControls({
   return (
     <div className="space-y-2">
       <span className={fieldLabelClass}>Reply language</span>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <button
-          className={`${aiLanguage === 'follow' ? buttonPillActive : buttonPill} shrink-0`}
-          type="button"
-          aria-pressed={aiLanguage === 'follow'}
-          onClick={onFollow}
-        >
-          Match my language
-        </button>
-        <button
-          className={`${aiLanguage !== 'follow' ? buttonPillActive : buttonPill} shrink-0`}
-          type="button"
-          aria-pressed={aiLanguage !== 'follow'}
-          aria-expanded={showLanguageInput}
-          onClick={onOpenCustom}
-        >
-          Custom
-        </button>
-        {showLanguageInput && (
-          <input
-            autoComplete="off"
-            type="text"
-            inputMode="text"
-            autoFocus
-            className="min-h-7 w-full min-w-0 rounded-full border border-slate-200 bg-white px-3 text-xs outline-none transition focus:border-slate-400 sm:w-48"
-            placeholder="e.g. Italian, English..."
-            value={languageValue}
-            onChange={(event) => onDraftChange(event.target.value)}
-            onBlur={onCommit}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                onCommit()
-              }
-            }}
-          />
-        )}
+      <div className="overflow-hidden rounded-xl border border-slate-200">
+        <div className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center">
+          <button
+            className={`${aiLanguage === 'follow' ? buttonPillActive : buttonPill} shrink-0`}
+            type="button"
+            aria-pressed={aiLanguage === 'follow'}
+            onClick={onFollow}
+          >
+            Match my language
+          </button>
+          <button
+            className={`${aiLanguage !== 'follow' ? buttonPillActive : buttonPill} shrink-0`}
+            type="button"
+            aria-pressed={aiLanguage !== 'follow'}
+            aria-expanded={showLanguageInput}
+            onClick={onOpenCustom}
+          >
+            Custom
+          </button>
+          {showLanguageInput && (
+            <input
+              autoComplete="off"
+              type="text"
+              inputMode="text"
+              autoFocus
+              className="min-h-7 w-full min-w-0 rounded-full border border-slate-200 bg-white px-3 text-xs outline-none transition focus:border-slate-400 sm:w-48"
+              placeholder="e.g. Italian, English..."
+              value={languageValue}
+              onChange={(event) => onDraftChange(event.target.value)}
+              onBlur={onCommit}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  onCommit()
+                }
+              }}
+            />
+          )}
+        </div>
       </div>
     </div>
   )
