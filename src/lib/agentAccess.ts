@@ -1,4 +1,5 @@
-export const RIVOLO_MCP_ENDPOINT = 'https://mcp.rivolo.app/mcp'
+export const RIVOLO_MCP_ENDPOINT =
+  import.meta.env.VITE_MCP_ENDPOINT || 'https://mcp.rivolo.app/mcp'
 
 type AgentAccessProfileBase = {
   profileId: string

@@ -15,3 +15,22 @@ DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
 MCP_ALLOWED_ORIGINS = "https://mcp.rivolo.app"
 MCP_OAUTH_ISSUER_URL = "https://rivolo.app/api/mcp/oauth"
 MCP_RESOURCE_URL = "https://mcp.rivolo.app/mcp"
+
+# Isolated dev Worker; production remains the top-level configuration.
+[env.dev]
+name = "rivolo-mcp-dev"
+workers_dev = false
+routes = [{ pattern = "mcp-dev.rivolo.app", custom_domain = true }]
+
+[env.dev.vars]
+GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"
+DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
+MCP_ALLOWED_ORIGINS = "https://mcp-dev.rivolo.app"
+MCP_OAUTH_ISSUER_URL = "https://codex-mcp-experimental.rivolo.pages.dev/api/mcp/oauth"
+MCP_RESOURCE_URL = "https://mcp-dev.rivolo.app/mcp"
+
+[[env.dev.d1_databases]]
+binding = "MCP_DB"
+database_name = "rivolo-mcp-dev"
+database_id = "c5596649-3ab7-46db-8947-54135c085c3b"
+migrations_dir = "migrations"

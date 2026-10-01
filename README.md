@@ -79,6 +79,39 @@ DROPBOX_TOKEN_ENCRYPTION_KEY=...
 
 > Only needed when self-hosting the online, multi-user MCP server. The Pages app and MCP Worker must use the same D1 database and the same `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY`.
 
+### Dev / preview environment
+
+The MCP branch preview uses `https://mcp-dev.rivolo.app/mcp` and the separate
+`rivolo-mcp-dev` D1 database. Pages selects `[env.preview]`; Worker commands
+must include `--env dev`. Production keeps its own database and secrets.
+
+```bash
+npx wrangler d1 migrations apply MCP_DB --remote --config wrangler.mcp.toml --env dev
+npx wrangler deploy --config wrangler.mcp.toml --env dev
+```
+
+Set preview secrets in the Pages project's Preview environment. The Worker
+needs `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY` (identical to Pages Preview) and
+`GOOGLE_CLIENT_SECRET`. Pages Preview also needs
+`MCP_PROFILE_SESSION_ENCRYPTION_KEY`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, and
+`DROPBOX_TOKEN_ENCRYPTION_KEY`. Use separate encryption keys from production.
+
+The current OAuth issuer is the stable MCP branch preview:
+`https://codex-mcp-experimental.rivolo.pages.dev/api/mcp/oauth`.
+Complete provider login and Agent access setup on that same hostname.
+When moving testing to `dev.rivolo.pages.dev`, update the issuer in both
+preview and dev Worker configuration and redeploy both. Provider OAuth
+settings must allow the chosen app origin and Dropbox callback URL.
+
+`VITE_MCP_ENDPOINT` selects the endpoint displayed in Settings at build time.
+Pages Preview uses the dev endpoint; Production uses the production endpoint.
+The Worker is deployed separately from Pages; pushing a branch does not
+redeploy it. Use a test notes file: a separate D1 database does not isolate a
+Dropbox/Google file that you deliberately select in both environments.
+
+The remaining instructions below describe production provisioning. Do not
+replace the dev database binding or copy production secrets into Preview.
+
 ### 1. Verify and build
 
 ```bash
@@ -104,7 +137,7 @@ Copy the returned `database_id` into all three D1 binding blocks:
 - the production `MCP_DB` binding in `wrangler.toml`;
 - the `MCP_DB` binding in `wrangler.mcp.toml`.
 
-All three entries must contain the same production database ID. Do not deploy while the placeholder `00000000-0000-0000-0000-000000000000` remains.
+These three production/default entries must contain the same production database ID. Keep `[env.preview]` and `[env.dev]` bound to the separate dev database. Do not deploy while the placeholder `00000000-0000-0000-0000-000000000000` remains.
 
 ### 3. Apply and verify migrations
 
