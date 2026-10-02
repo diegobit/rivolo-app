@@ -9,7 +9,8 @@ import {
   titleFontFamilies,
   titleFontOptions,
 } from '../../lib/fonts'
-import { buttonPill, buttonPillActive } from '../../lib/ui'
+import SegmentedControl from '../SegmentedControl'
+import SettingRow from './SettingRow'
 import { themePreferenceLabels, type ThemePreference } from '../../lib/theme'
 import SettingsToggle from './SettingsToggle'
 
@@ -30,6 +31,9 @@ type AppearanceSectionProps = {
   onTitleFontChange: (titleFont: TitleFont) => void
   onBodyFontChoiceChange: (choice: BodyFontChoice) => void
 }
+
+const selectClass =
+  'min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-slate-400'
 
 export default function AppearanceSection({
   themePreference,
@@ -67,8 +71,12 @@ export default function AppearanceSection({
     </>
   )
 
+  // Accent bar instead of a fill: the sample stays distinct in both themes
+  // without drawing a box (boxes are reserved for collapsible rows).
   const fontPreview = (
-    <div className="bg-slate-50 px-4 py-3">{renderFontPreviewContent()}</div>
+    <div className="mb-3 border-l-2 border-[rgb(var(--theme-accent-rgb)/0.42)] py-1 pl-4">
+      {renderFontPreviewContent()}
+    </div>
   )
 
   const wallpaperPreviewOpacity =
@@ -88,128 +96,91 @@ export default function AppearanceSection({
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <h2 className="text-lg font-bold text-slate-700">Appearance</h2>
-      <div className="mt-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Theme</h3>
-        <div className="mt-2 flex flex-wrap gap-2 rounded-xl border border-slate-200 px-3 py-2.5">
-          {(['system', 'light', 'dark'] as const).map((option) => (
-            <button
-              key={option}
-              className={themePreference === option ? buttonPillActive : buttonPill}
-              type="button"
-              aria-pressed={themePreference === option}
-              onClick={() => onThemePreferenceChange(option)}
-            >
-              {themePreferenceLabels[option]}
-            </button>
-          ))}
-        </div>
-      </div>
+      <div className="mt-2 divide-y divide-slate-200">
+        <SettingRow label="Theme">
+          <SegmentedControl
+            label="Theme"
+            options={(['system', 'light', 'dark'] as const).map((option) => ({
+              value: option,
+              label: themePreferenceLabels[option],
+            }))}
+            value={themePreference}
+            onChange={onThemePreferenceChange}
+          />
+        </SettingRow>
 
-      {!advanced && (
-        <div className="mt-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Font preset
-          </h3>
-          <div className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
-            <div className="flex flex-wrap gap-2 px-3 py-2.5">
-              {fontPresetOptions.map((option) => (
-                <button
-                  key={option.id}
-                  className={fontPreset === option.id ? buttonPillActive : buttonPill}
-                  type="button"
-                  aria-pressed={fontPreset === option.id}
-                  onClick={() => onFontPresetChange(option.id)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+        {!advanced && (
+          <div>
+            <SettingRow label="Font">
+              <SegmentedControl
+                label="Font preset"
+                options={fontPresetOptions.map((option) => ({
+                  value: option.id,
+                  label: option.label,
+                }))}
+                value={fontPreset}
+                onChange={onFontPresetChange}
+              />
+            </SettingRow>
+            {fontPreset === 'custom' && (
+              <p className="-mt-1 mb-3 text-xs text-slate-500">Custom font settings are active.</p>
+            )}
             {fontPreview}
           </div>
-          {fontPreset === 'custom' && (
-            <p className="mt-2 text-xs text-slate-500">Custom font settings are active.</p>
-          )}
-        </div>
-      )}
+        )}
 
-      {advanced && (
-        <div className="mt-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fonts</h3>
-          <div className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
-            <div className="flex items-center gap-3 px-3 py-2.5">
-              <span className="w-9 shrink-0 text-xs font-medium text-slate-400">Title</span>
-              <div className="flex flex-wrap gap-2">
+        {advanced && (
+          <div>
+            {/* Font names are too long for a segmented control on phones, so
+                these use native selects (the system picker on iOS). */}
+            <SettingRow label="Title font" htmlFor="appearance-title-font">
+              <select
+                id="appearance-title-font"
+                className={selectClass}
+                value={titleFont}
+                onChange={(event) => onTitleFontChange(event.target.value as TitleFont)}
+              >
                 {titleFontOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    className={titleFont === option.id ? buttonPillActive : buttonPill}
-                    type="button"
-                    aria-pressed={titleFont === option.id}
-                    onClick={() => onTitleFontChange(option.id)}
-                  >
+                  <option key={option.id} value={option.id}>
                     {option.label}
-                  </button>
+                  </option>
                 ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-3 px-3 py-2.5">
-              <span className="w-9 shrink-0 text-xs font-medium text-slate-400">Body</span>
-              <div className="flex flex-wrap gap-2">
+              </select>
+            </SettingRow>
+            <SettingRow label="Body font" htmlFor="appearance-body-font">
+              <select
+                id="appearance-body-font"
+                className={selectClass}
+                value={bodyFontChoice}
+                onChange={(event) => onBodyFontChoiceChange(event.target.value as BodyFontChoice)}
+              >
                 {bodyFontChoiceOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    className={bodyFontChoice === option.id ? buttonPillActive : buttonPill}
-                    type="button"
-                    aria-pressed={bodyFontChoice === option.id}
-                    onClick={() => onBodyFontChoiceChange(option.id)}
-                  >
+                  <option key={option.id} value={option.id}>
                     {option.label}
-                  </button>
+                  </option>
                 ))}
-              </div>
-            </div>
+              </select>
+            </SettingRow>
             {fontPreview}
           </div>
-        </div>
-      )}
+        )}
 
-      {advanced && (
-        <div className="mt-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Background
-          </h3>
-          <div className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
-            <div className="flex flex-nowrap gap-2 px-3 py-2.5">
-              <button
-                className={wallpaper === 'none' ? buttonPillActive : buttonPill}
-                type="button"
-                aria-label="No background"
-                aria-pressed={wallpaper === 'none'}
-                onClick={() => onWallpaperChange('none')}
-              >
-                None
-              </button>
-              <button
-                className={wallpaper === 'thoughts-light' ? buttonPillActive : buttonPill}
-                type="button"
-                aria-label="Rivolo Light"
-                aria-pressed={wallpaper === 'thoughts-light'}
-                onClick={() => onWallpaperChange('thoughts-light')}
-              >
-                Light
-              </button>
-              <button
-                className={wallpaper === 'thoughts-high' ? buttonPillActive : buttonPill}
-                type="button"
-                aria-label="Rivolo Strong"
-                aria-pressed={wallpaper === 'thoughts-high'}
-                onClick={() => onWallpaperChange('thoughts-high')}
-              >
-                Strong
-              </button>
-            </div>
+        {advanced && (
+          <div>
+            <SettingRow label="Background">
+              <SegmentedControl
+                label="Background"
+                options={[
+                  { value: 'none', label: 'None', ariaLabel: 'No background' },
+                  { value: 'thoughts-light', label: 'Light', ariaLabel: 'Rivolo Light' },
+                  { value: 'thoughts-high', label: 'Strong', ariaLabel: 'Rivolo Strong' },
+                ] as const}
+                value={wallpaper}
+                onChange={onWallpaperChange}
+              />
+            </SettingRow>
             <div
-              className="relative overflow-hidden bg-[var(--theme-page)] sm:hidden"
+              className="relative mb-3 overflow-hidden rounded-xl bg-[var(--theme-page)] sm:hidden"
               role="img"
               aria-label={wallpaperPreviewLabel}
             >
@@ -223,27 +194,28 @@ export default function AppearanceSection({
               />
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="mt-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Editor behavior
-        </h3>
-        <div className="mt-2 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
-          <SettingsToggle
-            checked={autocorrection}
-            label="Autocorrection"
-            onChange={onAutocorrectionChange}
-          />
-          {advanced && (
+        <div>
+          <div className="-mx-3">
             <SettingsToggle
-              checked={highlightInputMode}
-              label="Highlight input mode"
-              onChange={onHighlightInputModeChange}
+              checked={autocorrection}
+              label="Autocorrection"
+              onChange={onAutocorrectionChange}
             />
-          )}
+          </div>
         </div>
+        {advanced && (
+          <div>
+            <div className="-mx-3">
+              <SettingsToggle
+                checked={highlightInputMode}
+                label="Highlight input mode"
+                onChange={onHighlightInputModeChange}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </section>
   )

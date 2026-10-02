@@ -66,7 +66,27 @@ describe('AgentAccessTokensPanel', () => {
     expect(screen.queryByDisplayValue(createdToken.token)).not.toBeInTheDocument()
     expect(document.body.textContent).not.toContain(createdToken.token)
     expect(screen.getByText('Claude Desktop')).toBeInTheDocument()
-    expect(screen.getByText('rvl_example1…')).toBeInTheDocument()
+    expect(screen.getByText(/^Last used:/)).toBeInTheDocument()
+    // Basic keeps token rows to name and last use; Advanced adds the metadata.
+    expect(screen.queryByText('rvl_example1…')).not.toBeInTheDocument()
+  })
+
+  it('shows token prefix and creation time only in advanced mode', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ tokens: [activeToken] }), { status: 200 })),
+    )
+
+    render(
+      <AgentAccessTokensPanel
+        profileId="00000000-0000-4000-8000-000000000001"
+        online
+        advanced
+      />,
+    )
+
+    expect(await screen.findByText('rvl_example1…')).toBeInTheDocument()
+    expect(screen.getByText(/^Created:/)).toBeInTheDocument()
   })
 
   it('clears a visible secret and refreshes metadata when the profile changes', async () => {

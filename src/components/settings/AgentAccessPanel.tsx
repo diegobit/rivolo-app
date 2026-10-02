@@ -4,7 +4,7 @@ import {
   type AgentAccessViewState,
 } from '../../lib/agentAccess'
 import { SYNC_PROVIDER_LABELS, type SyncProviderId } from '../../lib/syncState'
-import { buttonDanger, buttonPrimary, buttonSecondary } from '../../lib/ui'
+import { buttonDangerQuiet, buttonPrimary, buttonSecondary } from '../../lib/ui'
 import { buildAgentSetupPrompt } from '../../lib/agentSetupPrompt'
 import AgentAccessTokensPanel from './AgentAccessTokensPanel'
 
@@ -64,9 +64,9 @@ export default function AgentAccessPanel({
   return (
     <details
       aria-labelledby={`agent-access-title-${provider}`}
-      className="group rounded-xl border border-slate-200 bg-slate-50 p-3"
+      className="group rounded-xl border border-slate-200 px-3 open:pb-4 sm:px-4"
     >
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-sky-500 [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-sky-500 [&::-webkit-details-marker]:hidden">
         <h3 id={`agent-access-title-${provider}`} className="flex-1 text-sm font-semibold text-slate-700">
           Agent access
         </h3>
@@ -154,6 +154,7 @@ export default function AgentAccessPanel({
             key={view.profile.profileId}
             profileId={view.profile.profileId}
             online={online}
+            advanced={advanced}
           />
 
           {view.message && (
@@ -183,9 +184,16 @@ export default function AgentAccessPanel({
           </>
         )}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <button
+            className={`${enabled ? buttonPrimary : buttonSecondary} min-h-11 w-full sm:w-auto`}
+            type="button"
+            onClick={() => void copySetupPrompt()}
+          >
+            Copy setup prompt
+          </button>
           {enabled && (
             <button
-              className={`${buttonDanger} min-h-11`}
+              className={`${buttonDangerQuiet} min-h-11`}
               type="button"
               disabled={busy || !online}
               onClick={() => void onDisable()}
@@ -193,13 +201,6 @@ export default function AgentAccessPanel({
               {busy ? 'Disabling…' : 'Disable Agent access'}
             </button>
           )}
-          <button
-            className={`${buttonSecondary} min-h-11 w-full sm:w-auto`}
-            type="button"
-            onClick={() => void copySetupPrompt()}
-          >
-            Copy setup prompt
-          </button>
         </div>
         {copyStatus && (
           <p className="mt-1 text-xs text-slate-500" role="status">

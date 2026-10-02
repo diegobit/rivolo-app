@@ -16,12 +16,12 @@ import {
 import { isProviderReady } from '../../lib/llm/readiness'
 import {
   buttonDanger,
-  buttonPill,
-  buttonPillActive,
   buttonPrimary,
   buttonSecondary,
 } from '../../lib/ui'
+import SegmentedControl from '../SegmentedControl'
 import AccordionRow from './AccordionRow'
+import SettingRow from './SettingRow'
 import SettingsToggle from './SettingsToggle'
 
 type LlmSectionProps = {
@@ -100,37 +100,34 @@ export default function LlmSection({
         </p>
       </div>
 
-      <div className="mt-5 space-y-2">
-        <span className={fieldLabelClass}>Providers</span>
-        <div className="overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">
-          {LLM_PROVIDER_IDS.map((id) => (
-            <ProviderRow
-              key={id}
-              id={id}
-              advanced={advanced}
-              isActive={id === provider}
-              isOpen={expanded === id}
-              onToggle={() => {
-                setExpanded((current) => (current === id ? null : id))
-                setStatus(null)
-              }}
-              providerSettings={providerSettings}
-              llmSecrets={llmSecrets}
-              allowWebSearch={allowWebSearch}
-              status={status}
-              setStatus={setStatus}
-              onSelectProvider={onSelectProvider}
-              onSaveProviderSettings={onSaveProviderSettings}
-              onSaveProviderKey={onSaveProviderKey}
-              onClearProviderKey={onClearProviderKey}
-              onAllowWebSearchChange={onAllowWebSearchChange}
-            />
-          ))}
-        </div>
+      <div className="mt-4 space-y-2">
+        {LLM_PROVIDER_IDS.map((id) => (
+          <ProviderRow
+            key={id}
+            id={id}
+            advanced={advanced}
+            isActive={id === provider}
+            isOpen={expanded === id}
+            onToggle={() => {
+              setExpanded((current) => (current === id ? null : id))
+              setStatus(null)
+            }}
+            providerSettings={providerSettings}
+            llmSecrets={llmSecrets}
+            allowWebSearch={allowWebSearch}
+            status={status}
+            setStatus={setStatus}
+            onSelectProvider={onSelectProvider}
+            onSaveProviderSettings={onSaveProviderSettings}
+            onSaveProviderKey={onSaveProviderKey}
+            onClearProviderKey={onClearProviderKey}
+            onAllowWebSearchChange={onAllowWebSearchChange}
+          />
+        ))}
       </div>
 
       {advanced && (
-        <div className="mt-5">
+        <div className="mt-3">
           <LanguageControls
             aiLanguage={aiLanguage}
             showLanguageInput={showLanguageInput}
@@ -176,48 +173,39 @@ function LanguageControls({
   onCommit,
 }: LanguageControlsProps) {
   return (
-    <div className="space-y-2">
-      <span className={fieldLabelClass}>Reply language</span>
-      <div className="overflow-hidden rounded-xl border border-slate-200">
-        <div className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center">
-          <button
-            className={`${aiLanguage === 'follow' ? buttonPillActive : buttonPill} shrink-0`}
-            type="button"
-            aria-pressed={aiLanguage === 'follow'}
-            onClick={onFollow}
-          >
-            Match my language
-          </button>
-          <button
-            className={`${aiLanguage !== 'follow' ? buttonPillActive : buttonPill} shrink-0`}
-            type="button"
-            aria-pressed={aiLanguage !== 'follow'}
-            aria-expanded={showLanguageInput}
-            onClick={onOpenCustom}
-          >
-            Custom
-          </button>
-          {showLanguageInput && (
-            <input
-              autoComplete="off"
-              type="text"
-              inputMode="text"
-              autoFocus
-              className="min-h-7 w-full min-w-0 rounded-full border border-slate-200 bg-white px-3 text-xs outline-none transition focus:border-slate-400 sm:w-48"
-              placeholder="e.g. Italian, English..."
-              value={languageValue}
-              onChange={(event) => onDraftChange(event.target.value)}
-              onBlur={onCommit}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  onCommit()
-                }
-              }}
-            />
-          )}
-        </div>
-      </div>
+    <div className="pb-2">
+      <SettingRow label="Reply language">
+        <SegmentedControl
+          label="Reply language"
+          className="w-full sm:w-auto"
+          options={[
+            { value: 'follow', label: 'Match my language' },
+            { value: 'custom', label: 'Custom' },
+          ]}
+          value={showLanguageInput ? 'custom' : 'follow'}
+          onChange={(next) => (next === 'follow' ? onFollow() : onOpenCustom())}
+        />
+      </SettingRow>
+      {showLanguageInput && (
+        <input
+          aria-label="Custom reply language"
+          autoComplete="off"
+          type="text"
+          inputMode="text"
+          autoFocus={aiLanguage === 'follow'}
+          className={inputClass}
+          placeholder="e.g. Italian, English..."
+          value={languageValue}
+          onChange={(event) => onDraftChange(event.target.value)}
+          onBlur={onCommit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              onCommit()
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -448,7 +436,7 @@ function ProviderRow({
       )}
 
       {advanced && webSearchSupported && (
-        <div className="overflow-hidden rounded-xl border border-slate-200">
+        <div className="-mx-3">
           <SettingsToggle checked={allowWebSearch} label="Web search" onChange={handleWebSearch} />
         </div>
       )}

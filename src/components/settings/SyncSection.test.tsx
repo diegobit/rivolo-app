@@ -269,7 +269,7 @@ describe('SyncSection', () => {
 
     await openSyncRow('dropbox')
     // Basic controls remain (superset).
-    expect(screen.getByText(/Account:/)).toBeInTheDocument()
+    expect(screen.getByText(connectedSummary.account)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Disconnect Dropbox' })).toBeInTheDocument()
     // Advanced controls are added.
     expect(screen.getByText(/Tab sync: Primary tab/)).toBeInTheDocument()

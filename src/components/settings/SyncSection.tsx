@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { SYNC_PROVIDER_IDS, SYNC_PROVIDER_LABELS, type SyncProviderId } from '../../lib/syncState'
-import { buttonDanger, buttonPrimary, buttonSecondary } from '../../lib/ui'
+import { buttonDanger, buttonDangerQuiet, buttonPrimary, buttonSecondary } from '../../lib/ui'
 import AccordionRow from './AccordionRow'
 import AgentAccessPanel, { type AgentAccessPanelProps } from './AgentAccessPanel'
 
@@ -159,7 +159,7 @@ export default function SyncSection({
   )
 
   const renderProviderRows = () => (
-    <div className="overflow-hidden rounded-xl border border-slate-200 divide-y divide-slate-200">
+    <div className="space-y-2">
       {SYNC_PROVIDER_IDS.map((id) => {
         const rowSummary = summaries[id]
         const isSelected = id === provider
@@ -185,23 +185,25 @@ export default function SyncSection({
             panelId={`sync-panel-${id}`}
           >
             {isSelected && (
-              <div className="space-y-4 pt-3">
-                <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
-                  <div className="min-w-0 break-words">Account: {summary.account}</div>
-                  <div>Last sync: {summary.lastSync}</div>
-                  {advanced && (
-                    <>
-                      <div className="min-w-0 break-words">File: {summary.target || '—'}</div>
-                      <div>Remote version: {summary.remoteVersion}</div>
-                      <div>Local changes: {summary.dirty ? 'Not synced' : 'Synced'}</div>
-                      <div>Network: {online ? 'Online' : 'Offline'}</div>
-                      <div>Tab sync: {syncTabStatus}</div>
-                    </>
-                  )}
-                </div>
+              <div className="space-y-4 pt-1">
+                {summary.connected && (
+                  <div className="flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:justify-between sm:gap-4">
+                    <div className="min-w-0 break-words">{summary.account}</div>
+                    <div className="shrink-0">Last sync: {summary.lastSync}</div>
+                  </div>
+                )}
+                {advanced && (
+                  <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                    <div className="min-w-0 break-words">File: {summary.target || '—'}</div>
+                    <div>Remote version: {summary.remoteVersion}</div>
+                    <div>Local changes: {summary.dirty ? 'Not synced' : 'Synced'}</div>
+                    <div>Network: {online ? 'Online' : 'Offline'}</div>
+                    <div>Tab sync: {syncTabStatus}</div>
+                  </div>
+                )}
 
                 {syncPaused && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
                     Auto-sync and sync settings are paused here because another Rivolo tab is
                     primary.
                   </div>
@@ -209,7 +211,7 @@ export default function SyncSection({
 
                 {attention && (
                   <div
-                    className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                    className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800"
                     role="alert"
                   >
                     Automatic sync needs attention: {attention}
@@ -232,41 +234,28 @@ export default function SyncSection({
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2">
-                  {summary.connected ? (
-                    <button
-                      className={`${buttonDanger} min-h-11`}
-                      type="button"
-                      onClick={onDisconnect}
-                      disabled={providerMutationDisabled}
-                    >
-                      {agentAccess?.boundToProvider
-                        ? `Disconnect ${rowLabel} (& disable Agent Access)`
-                        : `Disconnect ${rowLabel}`}
-                    </button>
-                  ) : (
-                    <button
-                      className={`${buttonPrimary} min-h-11`}
-                      type="button"
-                      onClick={onConnect}
-                      disabled={syncControlsDisabled || !online}
-                    >
-                      Connect {rowLabel}
-                    </button>
-                  )}
-                  {summary.connected && activeProvider !== id && (
-                    <button
-                      className={`${buttonPrimary} min-h-11`}
-                      type="button"
-                      onClick={onActivate}
-                      disabled={providerMutationDisabled}
-                    >
-                      {agentAccess?.enabled
-                        ? `Disable Agent access, then use ${rowLabel}`
-                        : `Use ${rowLabel} for sync`}
-                    </button>
-                  )}
-                </div>
+                {!summary.connected && (
+                  <button
+                    className={`${buttonPrimary} min-h-11`}
+                    type="button"
+                    onClick={onConnect}
+                    disabled={syncControlsDisabled || !online}
+                  >
+                    Connect {rowLabel}
+                  </button>
+                )}
+                {summary.connected && activeProvider !== id && (
+                  <button
+                    className={`${buttonPrimary} min-h-11`}
+                    type="button"
+                    onClick={onActivate}
+                    disabled={providerMutationDisabled}
+                  >
+                    {agentAccess?.enabled
+                      ? `Disable Agent access, then use ${rowLabel}`
+                      : `Use ${rowLabel} for sync`}
+                  </button>
+                )}
 
                 {advanced && (
                   <>
@@ -343,6 +332,19 @@ export default function SyncSection({
                   <AgentAccessPanel {...agentAccess} provider={provider} advanced={advanced} />
                 )}
 
+                {summary.connected && (
+                  <button
+                    className={`${buttonDangerQuiet} -ml-3 min-h-11 text-left`}
+                    type="button"
+                    onClick={onDisconnect}
+                    disabled={providerMutationDisabled}
+                  >
+                    {agentAccess?.boundToProvider
+                      ? `Disconnect ${rowLabel} (& disable Agent Access)`
+                      : `Disconnect ${rowLabel}`}
+                  </button>
+                )}
+
                 {status && (
                   <p className="text-xs text-slate-500" role="status">
                     {status}
@@ -365,7 +367,7 @@ export default function SyncSection({
         </p>
       </div>
 
-      <div className="mt-5">{renderProviderRows()}</div>
+      <div className="mt-4">{renderProviderRows()}</div>
     </section>
   )
 }

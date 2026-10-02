@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { buildAgentSetupPrompt } from '../../lib/agentSetupPrompt'
-import { buttonDanger, buttonPrimary, buttonSecondary } from '../../lib/ui'
+import { buttonDangerQuiet, buttonPrimary, buttonSecondary } from '../../lib/ui'
 import { useAgentAccessTokens } from '../../routes/settings/useAgentAccessTokens'
 
 type AgentAccessTokensPanelProps = {
   profileId: string
   online: boolean
+  advanced?: boolean
 }
 
 const formatTimestamp = (value: string | null) =>
@@ -14,6 +15,7 @@ const formatTimestamp = (value: string | null) =>
 export default function AgentAccessTokensPanel({
   profileId,
   online,
+  advanced = false,
 }: AgentAccessTokensPanelProps) {
   const tokens = useAgentAccessTokens(profileId, online)
   const [name, setName] = useState('')
@@ -57,10 +59,7 @@ export default function AgentAccessTokensPanel({
   }
 
   return (
-    <section
-      aria-labelledby={`agent-token-title-${profileId}`}
-      className="rounded-xl border border-slate-200 bg-white p-3"
-    >
+    <section aria-labelledby={`agent-token-title-${profileId}`}>
       <div>
         <h4
           id={`agent-token-title-${profileId}`}
@@ -69,13 +68,12 @@ export default function AgentAccessTokensPanel({
           Personal access tokens
         </h4>
         <p className="mt-1 text-xs text-slate-500">
-          Use a token to connect an MCP client that accepts bearer authentication. Tokens can
-          read and write your cloud-synced notes.
+          Tokens let agents read and write your notes.
         </p>
       </div>
 
       {tokens.createdToken ? (
-        <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
+        <div className="mt-3 rounded-xl bg-amber-50 p-3">
           <p className="text-sm font-semibold text-amber-800">Copy this token now</p>
           <p className="mt-1 text-xs text-amber-800">
             It cannot be recovered after you dismiss it.
@@ -139,7 +137,7 @@ export default function AgentAccessTokensPanel({
               maxLength={80}
               required
               autoComplete="off"
-              placeholder="Claude Desktop"
+              placeholder="e.g. Claude Desktop"
               disabled={tokens.busy || !online}
               onChange={(event) => setName(event.target.value)}
             />
@@ -180,51 +178,43 @@ export default function AgentAccessTokensPanel({
         </div>
       )}
 
-      {tokens.view.state === 'ready' && (
-        <div className="mt-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Existing tokens
-          </div>
-          {tokens.view.tokens.length === 0 ? (
-            <p className="mt-2 text-xs text-slate-500">No access tokens yet.</p>
-          ) : (
-            <ul className="mt-2 space-y-2">
-              {tokens.view.tokens.map((token) => (
-                <li
-                  key={token.tokenId}
-                  className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 text-xs text-slate-600">
-                      <div className="break-words text-sm font-semibold text-slate-700">
-                        {token.name}
-                      </div>
-                      <div className="mt-1 font-mono text-slate-500">{token.prefix}…</div>
-                      <div className="mt-1">Created: {formatTimestamp(token.createdAt)}</div>
-                      <div>Last used: {formatTimestamp(token.lastUsedAt)}</div>
-                      {token.revokedAt && (
-                        <div className="font-semibold text-slate-500">
-                          Revoked: {formatTimestamp(token.revokedAt)}
-                        </div>
-                      )}
-                    </div>
-                    {!token.revokedAt && (
-                      <button
-                        className={`${buttonDanger} min-h-11 shrink-0`}
-                        type="button"
-                        disabled={tokens.busy || !online}
-                        onClick={() => void revoke(token.tokenId, token.name)}
-                      >
-                        Revoke
-                      </button>
-                    )}
+      {tokens.view.state === 'ready' &&
+        (tokens.view.tokens.length === 0 ? (
+          <p className="mt-4 text-xs text-slate-500">No access tokens yet.</p>
+        ) : (
+          <ul className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
+            {tokens.view.tokens.map((token) => (
+              <li
+                key={token.tokenId}
+                className="flex items-center justify-between gap-3 py-3"
+              >
+                <div className="min-w-0 text-xs text-slate-500">
+                  <div className="break-words text-sm font-semibold text-slate-700">
+                    {token.name}
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+                  {advanced && <div className="mt-1 font-mono">{token.prefix}…</div>}
+                  {advanced && <div className="mt-1">Created: {formatTimestamp(token.createdAt)}</div>}
+                  <div className="mt-1">Last used: {formatTimestamp(token.lastUsedAt)}</div>
+                  {token.revokedAt && (
+                    <div className="font-semibold">
+                      Revoked: {formatTimestamp(token.revokedAt)}
+                    </div>
+                  )}
+                </div>
+                {!token.revokedAt && (
+                  <button
+                    className={`${buttonDangerQuiet} -mr-3 min-h-11 shrink-0`}
+                    type="button"
+                    disabled={tokens.busy || !online}
+                    onClick={() => void revoke(token.tokenId, token.name)}
+                  >
+                    Revoke
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        ))}
     </section>
   )
 }

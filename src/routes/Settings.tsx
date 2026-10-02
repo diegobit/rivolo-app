@@ -172,7 +172,7 @@ export default function Settings() {
   const bodyFontChoice = getBodyFontChoice(fontPreference, monospaceFont)
   const dropboxAccount = useMemo(() => {
     if (dropboxAccountName && dropboxAccountEmail) {
-      return `${dropboxAccountName} (${dropboxAccountEmail})`
+      return `${dropboxAccountName} · ${dropboxAccountEmail}`
     }
     return dropboxAccountEmail ?? dropboxAccountName ?? '—'
   }, [dropboxAccountEmail, dropboxAccountName])
@@ -198,7 +198,7 @@ export default function Settings() {
 
   const googleDriveAccount = useMemo(() => {
     if (googleDriveAccountName && googleDriveAccountEmail) {
-      return `${googleDriveAccountName} (${googleDriveAccountEmail})`
+      return `${googleDriveAccountName} · ${googleDriveAccountEmail}`
     }
     return googleDriveAccountEmail ?? googleDriveAccountName ?? '—'
   }, [googleDriveAccountEmail, googleDriveAccountName])
@@ -422,37 +422,39 @@ export default function Settings() {
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center justify-between px-3 pt-1">
-        <h1 className="text-2xl font-bold tracking-normal text-slate-700">Settings</h1>
-        <SegmentedControl
-          options={[
-            { value: 'basic', label: 'Basic' },
-            { value: 'advanced', label: 'Advanced' },
-          ]}
-          value={settingsView}
-          onChange={(next) => {
-            void updateSettingsView(next)
-          }}
-        />
-      </header>
-
-      {initialLoadDone &&
-        attentionItems.map((item) => (
-          <AttentionBanner
-            key={item.id}
-            item={item}
-            onOpen={() => scrollToSection(item.settingsSectionId)}
-            onDismiss={
-              item.dismissibleSetupNoticeId
-                ? () => {
-                    void dismissSetupNotice(item.dismissibleSetupNoticeId!).catch((error) => {
-                      console.error('[Setup reminder dismissal failed]', error)
-                    })
-                  }
-                : undefined
-            }
+      <div className="space-y-4">
+        <header className="flex items-center justify-between px-3 pt-1">
+          <h1 className="text-2xl font-bold tracking-normal text-slate-700">Settings</h1>
+          <SegmentedControl
+            options={[
+              { value: 'basic', label: 'Basic' },
+              { value: 'advanced', label: 'Advanced' },
+            ]}
+            value={settingsView}
+            onChange={(next) => {
+              void updateSettingsView(next)
+            }}
           />
-        ))}
+        </header>
+
+        {initialLoadDone &&
+          attentionItems.map((item) => (
+            <AttentionBanner
+              key={item.id}
+              item={item}
+              onOpen={() => scrollToSection(item.settingsSectionId)}
+              onDismiss={
+                item.dismissibleSetupNoticeId
+                  ? () => {
+                      void dismissSetupNotice(item.dismissibleSetupNoticeId!).catch((error) => {
+                        console.error('[Setup reminder dismissal failed]', error)
+                      })
+                    }
+                  : undefined
+              }
+            />
+          ))}
+      </div>
 
       <div id="settings-ai" className="mx-3 scroll-mt-2 sm:mx-0 sm:scroll-mt-20">
         <LlmSection
