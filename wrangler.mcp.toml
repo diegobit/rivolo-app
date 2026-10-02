@@ -1,12 +1,12 @@
 name = "rivolo-mcp"
 main = "mcp/worker.ts"
 compatibility_date = "2026-06-21"
+routes = [{ pattern = "mcp.rivolo.app", custom_domain = true }]
 
-# Replace this placeholder with the production D1 database id before deployment.
 [[d1_databases]]
 binding = "MCP_DB"
 database_name = "rivolo-mcp"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "3e6d7acf-18f7-4b22-aed2-cee616d791a4"
 migrations_dir = "migrations"
 
 [vars]
@@ -26,7 +26,7 @@ routes = [{ pattern = "mcp-dev.rivolo.app", custom_domain = true }]
 GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"
 DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
 MCP_ALLOWED_ORIGINS = "https://mcp-dev.rivolo.app"
-MCP_OAUTH_ISSUER_URL = "https://codex-mcp-experimental.rivolo.pages.dev/api/mcp/oauth"
+MCP_OAUTH_ISSUER_URL = "https://dev.rivolo.pages.dev/api/mcp/oauth"
 MCP_RESOURCE_URL = "https://mcp-dev.rivolo.app/mcp"
 
 [[env.dev.d1_databases]]

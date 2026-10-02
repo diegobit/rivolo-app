@@ -16,8 +16,7 @@ VITE_MCP_ENDPOINT = "https://mcp.rivolo.app/mcp"
 [[d1_databases]]
 binding = "MCP_DB"
 database_name = "rivolo-mcp"
-# Replace this placeholder with the shared production D1 database id.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "3e6d7acf-18f7-4b22-aed2-cee616d791a4"
 migrations_dir = "migrations"
 
 [env.production.vars]
@@ -32,8 +31,7 @@ VITE_MCP_ENDPOINT = "https://mcp.rivolo.app/mcp"
 [[env.production.d1_databases]]
 binding = "MCP_DB"
 database_name = "rivolo-mcp"
-# Replace this placeholder with the same id used by wrangler.mcp.toml.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "3e6d7acf-18f7-4b22-aed2-cee616d791a4"
 migrations_dir = "migrations"
 
 # Pages previews use the dev database, never the production database.
@@ -42,7 +40,7 @@ GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleuse
 DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
 GOOGLE_ALLOWED_ORIGINS = "https://codex-mcp-experimental.rivolo.pages.dev,https://dev.rivolo.pages.dev"
 DROPBOX_ALLOWED_ORIGINS = "https://codex-mcp-experimental.rivolo.pages.dev,https://dev.rivolo.pages.dev"
-MCP_OAUTH_ISSUER_URL = "https://codex-mcp-experimental.rivolo.pages.dev/api/mcp/oauth"
+MCP_OAUTH_ISSUER_URL = "https://dev.rivolo.pages.dev/api/mcp/oauth"
 MCP_RESOURCE_URL = "https://mcp-dev.rivolo.app/mcp"
 VITE_MCP_ENDPOINT = "https://mcp-dev.rivolo.app/mcp"
 
