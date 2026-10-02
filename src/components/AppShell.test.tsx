@@ -1,8 +1,8 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TIMELINE_NEW_CHAT_EVENT } from '../lib/timelineEvents'
+import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
 import AppShell from './AppShell'
 
 const stores = vi.hoisted(() => ({
@@ -70,26 +70,6 @@ vi.mock('../hooks/useTabSyncState', () => ({
   useTabSyncState: () => stores.tabSync,
 }))
 vi.mock('./app-shell/useAutoSync', () => ({ useAutoSync: vi.fn() }))
-vi.mock('./app-shell/BottomTrayRow', () => ({
-  default: ({
-    showMobileNewChatButton,
-    onNewChat,
-    showScrollToToday,
-  }: {
-    showMobileNewChatButton: boolean
-    onNewChat: () => void
-    showScrollToToday: boolean
-  }) => (
-    <>
-      {showMobileNewChatButton ? (
-        <button type="button" aria-label="New chat" onClick={onNewChat}>
-          New chat
-        </button>
-      ) : null}
-      {showScrollToToday ? <div data-testid="scroll-to-today-visible" /> : null}
-    </>
-  ),
-}))
 vi.mock('./app-shell/ShortcutsPopover', () => ({
   default: ({ shortcutsRef }: { shortcutsRef: { current: HTMLDivElement | null } }) => (
     <div ref={shortcutsRef}>
@@ -331,39 +311,93 @@ describe('AppShell attention and stale tab states', () => {
     expect(stores.settings.updateThemePreference).toHaveBeenCalledExactlyOnceWith('system')
   })
 
-  it('uses mobile home header slots with settings on the right and no theme shortcut', () => {
+  it.each(['timeline', 'chat', 'search'] as const)('shows the mobile dock and no header controls in %s mode', (mode) => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
     stores.sync.activeProvider = 'google-drive'
     stores.viewport.isNarrow = true
+    stores.ui.mode = mode
 
-    const renderShell = (initialEntry: string) => (
-      <MemoryRouter initialEntries={[initialEntry]}>
+    render(
+      <MemoryRouter initialEntries={['/']}>
         <Routes>
           <Route path="/" element={<AppShell />}>
             <Route index element={<div>Timeline content</div>} />
-            <Route path="settings" element={<div>Settings content</div>} />
-            <Route path="privacy" element={<div>Privacy content</div>} />
           </Route>
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter>,
     )
-    render(renderShell('/'))
 
-    const settingsLink = screen.getByRole('link', { name: 'Settings' })
-    const { left, right } = getHeaderSlots()
-
+    // The top bar keeps the brand but has no controls: they live in the dock.
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Theme: System' })).not.toBeInTheDocument()
-    expect(left).toBeEmptyDOMElement()
-    expect(right).toContainElement(settingsLink)
     expect(screen.queryByRole('button', { name: 'Shortcuts' })).not.toBeInTheDocument()
+    // The brand is in the shell header whenever the full-screen chat is not up
+    // (with no messages there is no overlay, even in chat mode).
+    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveClass('pt-0')
+    expect(screen.getByRole('main')).toHaveStyle({ paddingBottom: 'var(--mobile-home-bottom-clearance)' })
+    const dock = screen.getByRole('navigation', { name: 'Mobile navigation' })
+    expect(dock).toBeVisible()
+    expect(screen.getByRole('button', { name: mode === 'timeline' ? 'Today' : mode === 'chat' ? 'Chat' : 'Search' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Switch to/ })).not.toBeInTheDocument()
+    if (mode === 'timeline') {
+      expect(document.querySelector('#bottom-tray')).not.toBeInTheDocument()
+    } else {
+      expect(document.querySelector('#bottom-tray')).toBeInTheDocument()
+    }
   })
 
-  it('shows mobile new chat in the left header slot during chat', async () => {
+  it('hands the brand to the full-screen chat overlay when a thread is up', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'
     stores.ui.chatMessageCount = 1
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible()
+  })
+
+  it('brings today back on screen when the Today destination is tapped', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'search'
+    const onScrollToday = vi.fn()
+    window.addEventListener(TIMELINE_SCROLL_TODAY_EVENT, onScrollToday)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Today' }))
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+    await waitFor(() => expect(onScrollToday).toHaveBeenCalled())
+
+    window.removeEventListener(TIMELINE_SCROLL_TODAY_EVENT, onScrollToday)
+  })
+
+  it('opens Chat when New chat is used from another destination', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'search'
     const onNewChat = vi.fn()
     window.addEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
 
@@ -377,15 +411,89 @@ describe('AppShell attention and stale tab states', () => {
       </MemoryRouter>,
     )
 
-    const newChatButton = screen.getByRole('button', { name: 'New chat' })
-    const { left } = getHeaderSlots()
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'New chat' }))
 
-    expect(left).toContainElement(newChatButton)
-
-    await userEvent.click(newChatButton)
+    expect(stores.ui.setMode).toHaveBeenCalledWith('chat')
     expect(onNewChat).toHaveBeenCalledOnce()
 
     window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
+  })
+
+  it('keeps the welcome hero clean: the bottom bar fades out with it on mobile', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    document.body.dataset.heroUi = 'true'
+
+    try {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<AppShell />}>
+              <Route index element={<div>Timeline content</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      // The hero is clean: the row (composer + dock) fades out with it.
+      expect(document.querySelector('.bottom-tray-row')).toHaveClass('hero-ui-fade-down')
+    } finally {
+      delete document.body.dataset.heroUi
+    }
+  })
+
+  it('offers new chat and settings from the mobile menu before chat has messages', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    const onNewChat = vi.fn()
+    window.addEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    // The brand stays in the shell header; the sheet no longer repeats it.
+    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    expect(document.querySelector('#mobile-chat-menu img[src="/logo.svg"]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Close menu' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
+    const newChatButton = await screen.findByRole('button', { name: 'New chat' })
+    await userEvent.click(newChatButton)
+
+    expect(onNewChat).toHaveBeenCalledOnce()
+
+    window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
+  })
+
+  it('keeps Menu as its accessible name when the tab needs reloading', async () => {
+    stores.viewport.isNarrow = true
+    stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
+    stores.sync.activeProvider = 'google-drive'
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const menuButton = screen.getByRole('button', { name: 'Menu' })
+    expect(menuButton).toHaveAccessibleDescription('Reload needed')
+    await userEvent.click(menuButton)
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
   })
 
   it('uses mobile route header slots with back on the left and no theme shortcut', () => {
@@ -502,6 +610,7 @@ describe('AppShell attention and stale tab states', () => {
 
   it('coalesces rapid scroll/resize events into a single rAF-scheduled update, preserving scroll-to-today visibility', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
 
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
     let scrollY = 0
@@ -556,12 +665,12 @@ describe('AppShell attention and stale tab states', () => {
 
     expect(rafSpy).toHaveBeenCalledTimes(1)
     expect(rectSpy).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('scroll-to-today-visible')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Scroll to Today' })).not.toBeInTheDocument()
 
     act(() => flushRaf())
 
     expect(rectSpy).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId('scroll-to-today-visible')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Scroll to Today' })).toBeInTheDocument()
 
     rafSpy.mockClear()
     rectSpy.mockClear()
@@ -569,6 +678,6 @@ describe('AppShell attention and stale tab states', () => {
     fireEvent.scroll(window)
     act(() => flushRaf())
 
-    expect(screen.queryByTestId('scroll-to-today-visible')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Scroll to Today' })).not.toBeInTheDocument()
   })
 })

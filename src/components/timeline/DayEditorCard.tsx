@@ -172,7 +172,7 @@ const DayEditorCardHeader = ({
           {showDeleteMenu && (
             <div className="absolute right-0 top-12 z-10 min-w-[150px] rounded-xl border border-slate-200 bg-white p-1 shadow-lg sm:top-10">
               <button
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
                 type="button"
                 onClick={() => {
                   setShowDeleteMenu(false)

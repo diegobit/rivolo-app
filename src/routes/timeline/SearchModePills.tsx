@@ -1,65 +1,54 @@
 import { memo } from 'react'
 import type { SearchFilter } from '../../lib/dayRepository'
+import { SEARCH_FILTER_OPTIONS } from '../../lib/searchFilters'
 import type { SearchResultMode } from '../Timeline'
 
-type SearchFilterOption = {
-  value: SearchFilter
-  label: string
-}
 
-const SEARCH_FILTER_OPTIONS: SearchFilterOption[] = [
-  { value: 'open-todos', label: 'TODOs' },
-  { value: 'tags', label: '# Tags' },
-  { value: 'mentions', label: '@ Mentions' },
-  { value: 'headings', label: 'Sections' },
-]
-
-const getResultModeLabel = (resultMode: SearchResultMode) =>
-  resultMode === 'whole-day' ? 'Days' : 'Lines'
+const chipFocusClass =
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]'
 
 const SearchModePills = memo(({
   searchFilter,
   resultMode,
   onSearchFilterChange,
-  onToggleResultMode,
+  onResultModeChange,
 }: {
   searchFilter: SearchFilter | null
   resultMode: SearchResultMode
   onSearchFilterChange: (filter: SearchFilter | null) => void
-  onToggleResultMode: () => void
+  onResultModeChange: (mode: SearchResultMode) => void
 }) => (
-  <div className="pointer-events-auto flex items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-    <button
-      className="inline-flex h-10 shrink-0 items-center gap-1 rounded-full border border-[#bfd9ff] bg-[#EBF4FF] px-2 text-xs font-semibold text-[#0f5580] shadow-[0_1px_2px_rgba(15,23,42,0.1),0_2px_8px_rgba(15,23,42,0.06)] transition hover:border-[#9dc6ff] sm:h-8"
-      type="button"
-      onClick={onToggleResultMode}
-      aria-label={`Toggle result mode. Current mode: ${getResultModeLabel(resultMode)}`}
+  <div className="pointer-events-auto flex items-center gap-2 overflow-x-auto pb-2 -mb-1 [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] after:w-6 after:shrink-0 after:content-[''] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div
+      role="group"
+      aria-label="Show results as"
+      className="capsule-segmented inline-flex h-[50px] shrink-0 items-center gap-0.5 text-xs font-semibold sm:h-8"
     >
-      <span className="px-1 text-[10px] uppercase tracking-[0.05em] text-[#0f5580]/70">Show</span>
-      <span
-        className={`rounded-full px-2 py-1 sm:py-0.5 ${
-          resultMode === 'whole-day' ? 'bg-white text-[#0f5580] shadow-sm' : 'text-[#0f5580]/70'
-        }`}
-      >
-        Days
+      <span aria-hidden="true" className="px-2 text-[10px] uppercase tracking-[0.05em]">
+        Show
       </span>
-      <span
-        className={`rounded-full px-2 py-1 sm:py-0.5 ${
-          resultMode === 'matched-lines' ? 'bg-white text-[#0f5580] shadow-sm' : 'text-[#0f5580]/70'
-        }`}
-      >
-        Lines
-      </span>
-    </button>
+      {(['whole-day', 'matched-lines'] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          aria-pressed={resultMode === mode}
+          onClick={() => onResultModeChange(mode)}
+          className={`capsule-segment flex h-full items-center rounded-full px-3 transition-colors ${chipFocusClass}`}
+        >
+          {mode === 'whole-day' ? 'Days' : 'Lines'}
+        </button>
+      ))}
+    </div>
     {searchFilter ? (
       <button
-        className="group inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-[#bfd9ff] bg-[#EBF4FF] px-3 text-xs font-semibold text-[#0f5580] shadow-[0_1px_2px_rgba(15,23,42,0.1),0_2px_8px_rgba(15,23,42,0.06)] transition hover:border-[#9dc6ff] sm:h-8"
+        data-active="true"
+        className={`capsule-chip group inline-flex h-11 shrink-0 items-center gap-2 pl-3.5 pr-2 text-xs font-semibold text-[var(--theme-text)] transition hover:border-[var(--theme-border-strong)] sm:h-8 ${chipFocusClass}`}
         type="button"
         onClick={() => onSearchFilterChange(null)}
         aria-label={`Remove ${SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label ?? 'filter'} filter`}
       >
         {SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label}
-        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[#0f5580] transition group-hover:bg-[#dcecff]">
+        <span className="capsule-chip-disc flex h-5 w-5 items-center justify-center rounded-full bg-[var(--theme-active)] text-[var(--theme-text-soft)] transition group-hover:bg-[var(--theme-border)] group-hover:text-[var(--theme-text)] sm:h-4 sm:w-4">
           <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" aria-hidden="true">
             <path d="M4 4l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             <path d="M12 4L4 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -70,7 +59,7 @@ const SearchModePills = memo(({
       SEARCH_FILTER_OPTIONS.map((option) => (
         <button
           key={option.value}
-          className="inline-flex h-10 shrink-0 items-center rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.1),0_2px_8px_rgba(15,23,42,0.06)] transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 sm:h-8"
+          className={`capsule-chip inline-flex h-11 shrink-0 items-center px-3.5 text-xs font-semibold text-[var(--theme-text-soft)] transition hover:border-[var(--theme-border-strong)] hover:text-[var(--theme-text)] sm:h-8 ${chipFocusClass}`}
           type="button"
           onClick={() => onSearchFilterChange(option.value)}
         >

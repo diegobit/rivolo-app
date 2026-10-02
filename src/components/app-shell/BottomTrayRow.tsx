@@ -6,9 +6,7 @@ type BottomTrayRowProps = {
   searchButton: ReactNode
   modeToggleButton: ReactNode
   trayCenter: ReactNode
-  showMobileChatTogglePill: boolean
-  chatPanelOpen: boolean
-  onToggleChatPanel: () => void
+  mobileChatDock: ReactNode
   showScrollToToday: boolean
   showDesktopChatEdgeHandle: boolean
   desktopChatPanelOpen: boolean
@@ -22,9 +20,7 @@ export default function BottomTrayRow({
   searchButton,
   modeToggleButton,
   trayCenter,
-  showMobileChatTogglePill,
-  chatPanelOpen,
-  onToggleChatPanel,
+  mobileChatDock,
   showScrollToToday,
   showDesktopChatEdgeHandle,
   desktopChatPanelOpen,
@@ -34,6 +30,9 @@ export default function BottomTrayRow({
   const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.5rem] sm:top-[-3.1rem]'
   const trayRowAlignmentClass = mode === 'timeline' ? 'items-center' : 'items-end'
   const modeToggleOffsetClassName = mode === 'timeline' ? '' : 'mb-1.5 sm:mb-3'
+  // Timeline on mobile home shows only the dock; every other combination has
+  // controls of its own (launchers, mode toggle + composer, or the search field).
+  const hasTrayControls = !mobileChatDock || mode !== 'timeline'
 
   return (
     <>
@@ -41,49 +40,40 @@ export default function BottomTrayRow({
         className={`app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.6)_18%,black_72%)] ${
           mode === 'search' ? 'bottom-tray-blur-search' : ''
         }`}
+        data-mobile-dock={mobileChatDock ? 'true' : 'false'}
+        data-mode={mode}
       />
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20" />
 
-      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${trayRowAlignmentClass} justify-center gap-2 px-2 sm:gap-3 sm:px-0`}>
-        {mode === 'timeline' ? (
-          <>
-            <Fragment key="chat-btn">{chatButton}</Fragment>
-            <Fragment key="search-btn">{searchButton}</Fragment>
-          </>
-        ) : (
-          <>
-            <Fragment key="mode-toggle-btn">
-              <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>
-            </Fragment>
-            <Fragment key="tray">{trayCenter}</Fragment>
-          </>
+      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${mobileChatDock ? 'flex-col' : trayRowAlignmentClass} justify-center gap-2 px-2 sm:gap-3 sm:px-0`}>
+        {/* The whole bottom area fades out under the welcome hero, so the hero
+            stays clean with no dock or composer. */}
+        {hasTrayControls && (
+          <div className={`flex w-full justify-center gap-2 ${mobileChatDock ? '' : 'items-center'}`}>
+            {mode === 'timeline' ? (
+              <>
+                <Fragment key="chat-btn">{chatButton}</Fragment>
+                <Fragment key="search-btn">{searchButton}</Fragment>
+              </>
+            ) : (
+              <>
+                <Fragment key="mode-toggle-btn">
+                  {!mobileChatDock && <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>}
+                </Fragment>
+                <Fragment key="tray">{mobileChatDock ? <div className="w-full">{trayCenter}</div> : trayCenter}</Fragment>
+              </>
+            )}
+          </div>
         )}
 
-        {showMobileChatTogglePill && (
-          <button
-            type="button"
-            className="absolute right-[15px] top-[-3.5rem] inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:hidden"
-            aria-label={chatPanelOpen ? 'Hide chat' : 'Show chat'}
-            onClick={onToggleChatPanel}
-          >
-            {chatPanelOpen ? (
-              <img
-                src="/caret-left.svg"
-                alt=""
-                className="h-5 w-5 -rotate-90 opacity-70"
-              />
-            ) : (
-              <img src="/chats-teardrop.svg" alt="" className="h-5 w-5 opacity-75 transition-opacity duration-200" />
-            )}
-          </button>
+        {mobileChatDock && (
+          <div className="w-full">{mobileChatDock}</div>
         )}
 
         {showScrollToToday && (
           <button
             type="button"
-            className={`absolute ${mobileScrollToTodayTopClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:right-0 sm:h-10 sm:w-10 ${
-              showMobileChatTogglePill ? 'right-[67px]' : 'right-[15px]'
-            }`}
+            className={`absolute ${mobileScrollToTodayTopClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:right-0 sm:h-10 sm:w-10 right-[15px]`}
             aria-label="Scroll to Today"
             onClick={onScrollToToday}
           >
