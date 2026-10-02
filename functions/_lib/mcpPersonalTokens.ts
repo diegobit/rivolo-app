@@ -50,6 +50,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const TOKEN_PATTERN = /^rvl_[A-Za-z0-9_-]{43}$/
 const TOKEN_PREFIX_LENGTH = 12
 const TOKEN_NAME_MAX_LENGTH = 80
+const LAST_USED_WRITE_INTERVAL_MS = 60 * 60 * 1000
 const encoder = new TextEncoder()
 
 export class McpPersonalTokenValidationError extends Error {
@@ -240,13 +241,18 @@ export class McpPersonalTokenRepository {
   }
 
   async touchLastUsed(tokenId: string): Promise<void> {
+    const now = this.now()
+    const staleBefore = new Date(
+      now.getTime() - LAST_USED_WRITE_INTERVAL_MS,
+    ).toISOString()
     await this.db
       .prepare(
         `UPDATE mcp_personal_tokens
         SET last_used_at = ?
-        WHERE token_id = ? AND revoked_at IS NULL`,
+        WHERE token_id = ? AND revoked_at IS NULL
+          AND (last_used_at IS NULL OR last_used_at <= ?)`,
       )
-      .bind(this.now().toISOString(), validateId(tokenId, 'tokenId'))
+      .bind(now.toISOString(), validateId(tokenId, 'tokenId'), staleBefore)
       .run()
   }
 }

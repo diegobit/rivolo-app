@@ -212,9 +212,12 @@ class FakeD1 {
     }
 
     if (sql.includes('SET last_used_at = ?')) {
-      const [lastUsedAt, tokenId] = values as [string, string]
+      const [lastUsedAt, tokenId, staleBefore] = values as [string, string, string]
       const row = this.tokens.get(tokenId)
       if (!row || row.revoked_at) return { meta: { changes: 0 } }
+      if (row.last_used_at !== null && row.last_used_at > staleBefore) {
+        return { meta: { changes: 0 } }
+      }
       this.tokens.set(tokenId, { ...row, last_used_at: lastUsedAt })
       return { meta: { changes: 1 } }
     }
@@ -379,6 +382,37 @@ describe('MCP personal access tokens', () => {
         env,
       ),
     ).toBeNull()
+  })
+
+  it('records last_used_at at most once per hour per token', async () => {
+    const db = new FakeD1()
+    const env = createEnv(db)
+    const profile = await createProfile(env)
+    let now = new Date('2026-07-16T12:00:00.000Z')
+    const repository = new McpPersonalTokenRepository(
+      env.MCP_DB,
+      () => now,
+      () => '33333333-3333-4333-8333-333333333333',
+      () => `rvl_${'H'.repeat(43)}`,
+    )
+    const created = await repository.create(profile.profileId, 'Throttled token')
+
+    await repository.touchLastUsed(created.tokenId)
+    expect(db.tokens.get(created.tokenId)?.last_used_at).toBe(
+      '2026-07-16T12:00:00.000Z',
+    )
+
+    now = new Date('2026-07-16T12:30:00.000Z')
+    await repository.touchLastUsed(created.tokenId)
+    expect(db.tokens.get(created.tokenId)?.last_used_at).toBe(
+      '2026-07-16T12:00:00.000Z',
+    )
+
+    now = new Date('2026-07-16T13:00:01.000Z')
+    await repository.touchLastUsed(created.tokenId)
+    expect(db.tokens.get(created.tokenId)?.last_used_at).toBe(
+      '2026-07-16T13:00:01.000Z',
+    )
   })
 
   it('rejects wrong tokens and tokens whose provider profile is revoked', async () => {

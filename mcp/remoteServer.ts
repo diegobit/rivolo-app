@@ -289,6 +289,12 @@ export const handleRemoteMcpRequest = async (
   overrides: Partial<RemoteMcpDependencies> = {},
 ): Promise<Response> => {
   const dependencies = { ...defaultDependencies, ...overrides }
+  if (request.method === 'GET') {
+    return new Response('Method not allowed.', {
+      status: 405,
+      headers: { Allow: 'POST' },
+    })
+  }
   if (!validateOrigin(request, env)) {
     return jsonResponse({ error: 'Origin is not allowed.' }, 403)
   }

@@ -278,6 +278,25 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
     expect(authenticate).toHaveBeenCalledTimes(1)
   })
 
+  it('declines the standalone SSE notification stream before auth', async () => {
+    const authenticate = vi.fn().mockResolvedValue(dropboxAuth())
+    const response = await handleRemoteMcpRequest(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'GET',
+        headers: {
+          Accept: 'text/event-stream',
+          Authorization: 'Bearer rvl_test',
+        },
+      }),
+      createEnv(),
+      { ...defaultDependencies(dropboxAuth()), authenticate },
+    )
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('POST')
+    expect(authenticate).not.toHaveBeenCalled()
+  })
+
   it('lists only tools allowed by PAT scopes', async () => {
     const response = await handleRemoteMcpRequest(
       mcpRequest('tools/list'),
@@ -511,6 +530,19 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
 })
 
 describe('hosted MCP Worker discovery', () => {
+  it('answers a GET notification stream on the MCP endpoint with 405', async () => {
+    const response = await worker.fetch(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'GET',
+        headers: { Accept: 'text/event-stream' },
+      }),
+      createEnv(),
+    )
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('POST')
+  })
+
   it('serves protected-resource metadata from the MCP origin', async () => {
     const response = await worker.fetch(
       new Request(
