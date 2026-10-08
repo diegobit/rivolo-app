@@ -33,9 +33,7 @@ const useChatHarness = (onInsertNote: (targetDay: string, text: string) => Promi
     activeLlmConfig,
     isNarrowViewport: false,
     chatPanelOpen: false,
-    desktopChatPanelOpen: true,
     setChatPanelOpen: vi.fn(),
-    setDesktopChatPanelOpen: vi.fn(),
     onInsertNote,
   })
 
@@ -281,3 +279,46 @@ describe.each(['final response', 'streamed chunks', 'retry response'] as const)(
     })
   },
 )
+
+describe('useTimelineChat send result', () => {
+  const renderSend = (config: typeof activeLlmConfig) =>
+    renderHook(() => {
+      const [messages, setMessages] = useState<ChatUiMessage[]>([])
+      return useTimelineChat({
+        messages,
+        setMessages,
+        aiLanguage: 'follow',
+        allowWebSearch: false,
+        activeLlmConfig: config,
+        isNarrowViewport: false,
+        chatPanelOpen: false,
+        setChatPanelOpen: vi.fn(),
+        onInsertNote: vi.fn(async () => undefined),
+      })
+    })
+
+  it('reports a draft rejected by the provider check as not sent', async () => {
+    const { result } = renderSend({ ...activeLlmConfig, model: '' })
+    let sent: boolean | undefined
+
+    await act(async () => {
+      sent = await result.current.handleChatSend('Hello')
+    })
+
+    expect(sent).toBe(false)
+    expect(result.current.chatError).toMatch(/requires a model ID/)
+    expect(mocks.chat).not.toHaveBeenCalled()
+  })
+
+  it('reports a draft that reached the provider as sent', async () => {
+    mocks.chat.mockResolvedValue({ text: 'Hi', raw: null })
+    const { result } = renderSend(activeLlmConfig)
+    let sent: boolean | undefined
+
+    await act(async () => {
+      sent = await result.current.handleChatSend('Hello')
+    })
+
+    expect(sent).toBe(true)
+  })
+})

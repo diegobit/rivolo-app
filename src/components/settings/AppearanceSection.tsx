@@ -210,7 +210,7 @@ export default function AppearanceSection({
             <div className="-mx-3">
               <SettingsToggle
                 checked={highlightInputMode}
-                label="Highlight input mode"
+                label="Highlight input mode (mobile only)"
                 onChange={onHighlightInputModeChange}
               />
             </div>

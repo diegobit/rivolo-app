@@ -20,16 +20,21 @@ const getResultModeLabel = (resultMode: SearchResultMode) =>
 const SearchModePills = memo(({
   searchFilter,
   resultMode,
+  showResultMode,
   onSearchFilterChange,
   onToggleResultMode,
 }: {
   searchFilter: SearchFilter | null
   resultMode: SearchResultMode
+  // The desktop search card always lists every match, so it hides this toggle:
+  // there the "Days" mode only deduplicated to one hit per day rather than
+  // showing whole days the way the narrow-viewport timeline does.
+  showResultMode: boolean
   onSearchFilterChange: (filter: SearchFilter | null) => void
   onToggleResultMode: () => void
 }) => (
   <div className="pointer-events-auto flex items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-    <button
+    {showResultMode && <button
       className="inline-flex h-10 shrink-0 items-center gap-1 rounded-full border border-[#bfd9ff] bg-[#EBF4FF] px-2 text-xs font-semibold text-[#0f5580] shadow-[0_1px_2px_rgba(15,23,42,0.1),0_2px_8px_rgba(15,23,42,0.06)] transition hover:border-[#9dc6ff] sm:h-8"
       type="button"
       onClick={onToggleResultMode}
@@ -50,7 +55,7 @@ const SearchModePills = memo(({
       >
         Lines
       </span>
-    </button>
+    </button>}
     {searchFilter ? (
       <button
         className="group inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-[#bfd9ff] bg-[#EBF4FF] px-3 text-xs font-semibold text-[#0f5580] shadow-[0_1px_2px_rgba(15,23,42,0.1),0_2px_8px_rgba(15,23,42,0.06)] transition hover:border-[#9dc6ff] sm:h-8"
