@@ -340,9 +340,7 @@ describe('AppShell attention and stale tab states', () => {
     expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible()
     expect(screen.queryByRole('button', { name: /Switch to/ })).not.toBeInTheDocument()
     // The empty portal target stays mounted in Today and is hidden by :empty CSS.
-    expect(document.querySelector('#bottom-tray')).toBeInTheDocument() else {
-      expect(document.querySelector('#bottom-tray')).toBeInTheDocument()
-    }
+    expect(document.querySelector('#bottom-tray')).toBeInTheDocument()
   })
 
   it('hands the brand to the full-screen chat overlay when a thread is up', () => {
