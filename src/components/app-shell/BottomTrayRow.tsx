@@ -6,11 +6,10 @@ type BottomTrayRowProps = {
   searchButton: ReactNode
   modeToggleButton: ReactNode
   trayCenter: ReactNode
+  showLauncherButtons: boolean
+  launcherSpread: boolean
   mobileChatDock: ReactNode
   showScrollToToday: boolean
-  showDesktopChatEdgeHandle: boolean
-  desktopChatPanelOpen: boolean
-  onToggleDesktopChatPanel: () => void
   onScrollToToday: () => void
 }
 
@@ -20,84 +19,88 @@ export default function BottomTrayRow({
   searchButton,
   modeToggleButton,
   trayCenter,
+  showLauncherButtons,
+  launcherSpread,
   mobileChatDock,
   showScrollToToday,
-  showDesktopChatEdgeHandle,
-  desktopChatPanelOpen,
-  onToggleDesktopChatPanel,
   onScrollToToday,
 }: BottomTrayRowProps) {
   const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.5rem] sm:top-[-3.1rem]'
-  const trayRowAlignmentClass = mode === 'timeline' ? 'items-center' : 'items-end'
-  const modeToggleOffsetClassName = mode === 'timeline' ? '' : 'mb-1.5 sm:mb-3'
-  // Timeline on mobile home shows only the dock; every other combination has
-  // controls of its own (launchers, mode toggle + composer, or the search field).
-  const hasTrayControls = !mobileChatDock || mode !== 'timeline'
+  // The launchers (Search, then Chat) show on desktop in every mode and on
+  // narrow viewports in timeline mode. The tray composer only appears on narrow
+  // viewports in chat/search mode.
+  const showTraySlot = !showLauncherButtons
+  const trayRowAlignmentClass = showTraySlot ? 'items-end' : 'items-center'
+  const trayRowJustifyClass = 'justify-center'
+  const modeToggleOffsetClassName = showTraySlot ? 'mb-1.5 sm:mb-3' : ''
+  const mobileScrollToTodayRightClass = 'right-[15px] sm:right-0'
+  // On desktop it sits centred just above the launcher capsule (it is rendered
+  // inside it), so it moves with the capsule and never lands under it.
+  const scrollToTodayPositionClass = launcherSpread
+    ? 'bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2'
+    : `${mobileScrollToTodayTopClass} ${mobileScrollToTodayRightClass}`
+  const scrollToTodayButton = showScrollToToday ? (
+    <button
+      type="button"
+      className={`absolute ${scrollToTodayPositionClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:h-10 sm:w-10`}
+      aria-label="Scroll to Today"
+      title="Scroll to Today"
+      onClick={onScrollToToday}
+    >
+      <img src="/arrow-line-up.svg" alt="" className="h-5 w-5" />
+    </button>
+  ) : null
 
   return (
     <>
       <div
         className={`app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.6)_18%,black_72%)] ${
-          mode === 'search' ? 'bottom-tray-blur-search' : ''
+          mode === 'search' && !launcherSpread ? 'bottom-tray-blur-search' : ''
         }`}
         data-mobile-dock={mobileChatDock ? 'true' : 'false'}
         data-mode={mode}
       />
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20" />
 
-      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${mobileChatDock ? 'flex-col' : trayRowAlignmentClass} justify-center gap-2 px-2 sm:gap-3 sm:px-0`}>
-        {/* The whole bottom area fades out under the welcome hero, so the hero
-            stays clean with no dock or composer. */}
-        {hasTrayControls && (
-          <div className={`flex w-full justify-center gap-2 ${mobileChatDock ? '' : 'items-center'}`}>
-            {mode === 'timeline' ? (
+      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${mobileChatDock ? 'flex-col' : trayRowAlignmentClass} ${trayRowJustifyClass} gap-2 px-2 sm:gap-3 sm:px-0`}>
+        {showLauncherButtons ? (
+          // On desktop CSS lifts this pair out of the row and pins it to the
+          // viewport centre, so a card opening never shifts the buttons.
+          <div
+            className={`flex items-center ${launcherSpread ? 'bottom-tray-launchers' : 'gap-2 sm:gap-3'}`}
+            // Tells the capsule which half the sliding thumb sits behind.
+            data-open={launcherSpread && (mode === 'search' || mode === 'chat') ? mode : undefined}
+          >
+            {launcherSpread ? (
+              // Desktop mirrors the cards: search opens on the left, chat on the right.
+              <>
+                <Fragment key="search-btn">{searchButton}</Fragment>
+                <Fragment key="chat-btn">{chatButton}</Fragment>
+              </>
+            ) : (
               <>
                 <Fragment key="chat-btn">{chatButton}</Fragment>
                 <Fragment key="search-btn">{searchButton}</Fragment>
               </>
-            ) : (
-              <>
-                <Fragment key="mode-toggle-btn">
-                  {!mobileChatDock && <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>}
-                </Fragment>
-                <Fragment key="tray">{mobileChatDock ? <div className="w-full">{trayCenter}</div> : trayCenter}</Fragment>
-              </>
             )}
+            {launcherSpread && scrollToTodayButton}
           </div>
+        ) : !mobileChatDock && (
+          <Fragment key="mode-toggle-btn">
+            <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>
+          </Fragment>
         )}
+        {/*
+          The tray slot stays mounted in every mode (AppShell hides it while the
+          launcher buttons own the row) so #bottom-tray keeps a stable identity
+          for the BottomTrayPortal targets across viewport and mode changes.
+        */}
+        <Fragment key="tray">{trayCenter}</Fragment>
 
-        {mobileChatDock && (
-          <div className="w-full">{mobileChatDock}</div>
-        )}
+        {mobileChatDock && <div className="w-full">{mobileChatDock}</div>}
 
-        {showScrollToToday && (
-          <button
-            type="button"
-            className={`absolute ${mobileScrollToTodayTopClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:right-0 sm:h-10 sm:w-10 right-[15px]`}
-            aria-label="Scroll to Today"
-            onClick={onScrollToToday}
-          >
-            <img src="/arrow-line-up.svg" alt="" className="h-5 w-5" />
-          </button>
-        )}
+        {!launcherSpread && scrollToTodayButton}
       </div>
-
-      {showDesktopChatEdgeHandle && (
-        <button
-          type="button"
-          className="timeline-chat-edge-handle fixed top-1/2 z-30 hidden h-16 w-8 -translate-y-1/2 items-center justify-center rounded-l-full border border-r-0 border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-[-10px_0_22px_-20px_rgb(var(--theme-shadow-color)/0.50)] hover:border-[var(--theme-border-strong)] sm:inline-flex"
-          aria-label={desktopChatPanelOpen ? 'Hide chat' : 'Show chat'}
-          onClick={onToggleDesktopChatPanel}
-        >
-          <span className="-translate-x-[1px]">
-            <img
-              src="/caret-left.svg"
-              alt=""
-              className={`h-5 w-5 opacity-70 transition-transform translate-x-[2px] duration-200 ${desktopChatPanelOpen ? 'rotate-180' : ''}`}
-            />
-          </span>
-        </button>
-      )}
     </>
   )
 }

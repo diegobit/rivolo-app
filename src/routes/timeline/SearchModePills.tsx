@@ -10,16 +10,21 @@ const chipFocusClass =
 const SearchModePills = memo(({
   searchFilter,
   resultMode,
+  showResultMode,
   onSearchFilterChange,
   onResultModeChange,
 }: {
   searchFilter: SearchFilter | null
   resultMode: SearchResultMode
+  // The desktop search card always lists every match, so it hides this toggle:
+  // there the "Days" mode only deduplicated to one hit per day rather than
+  // showing whole days the way the narrow-viewport timeline does.
+  showResultMode: boolean
   onSearchFilterChange: (filter: SearchFilter | null) => void
   onResultModeChange: (mode: SearchResultMode) => void
 }) => (
   <div className="pointer-events-auto flex items-center gap-2 overflow-x-auto pb-2 -mb-1 [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] after:w-6 after:shrink-0 after:content-[''] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-    <div
+    {showResultMode && <div
       role="group"
       aria-label="Show results as"
       className="capsule-segmented inline-flex h-[50px] shrink-0 items-center gap-0.5 text-xs font-semibold sm:h-8"
@@ -38,7 +43,7 @@ const SearchModePills = memo(({
           {mode === 'whole-day' ? 'Days' : 'Lines'}
         </button>
       ))}
-    </div>
+    </div>}
     {searchFilter ? (
       <button
         data-active="true"

@@ -89,6 +89,34 @@ three`
     })
   })
 
+  it('warns about non-whitespace content before the first day marker', () => {
+    const source = `Private preamble
+
+<!-- day:2026-07-11 -->
+Saturday notes
+--------------
+
+Body`
+
+    expect(parseMarkdown(source)).toEqual({
+      days: [
+        {
+          dayId: '2026-07-11',
+          humanTitle: 'Saturday notes',
+          contentMd: 'Body',
+        },
+      ],
+      warnings: ['Content before the first day marker is ignored.'],
+    })
+  })
+
+  it('allows whitespace and a byte-order mark before the first day marker', () => {
+    expect(
+      parseMarkdown('\uFEFF \n\n<!-- day:2026-07-11 -->\nSaturday notes\n---\n\nBody')
+        .warnings,
+    ).toEqual([])
+  })
+
   it.each([
     '2026-02-30',
     '2026-00-10',

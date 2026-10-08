@@ -31,9 +31,7 @@ const useChatHarness = (onInsertNote: (targetDay: string, text: string) => Promi
     activeLlmConfig,
     isNarrowViewport: false,
     chatPanelOpen: false,
-    desktopChatPanelOpen: true,
     setChatPanelOpen: vi.fn(),
-    setDesktopChatPanelOpen: vi.fn(),
     onInsertNote,
   })
 

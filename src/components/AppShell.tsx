@@ -5,7 +5,8 @@ import MobileChatDock from './app-shell/MobileChatDock'
 import AttentionPopover from './app-shell/AttentionPopover'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
 import { TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
-import { isPrimaryModifierPressed, preferredScrollBehavior } from '../lib/device'
+import { isApplePlatform, isPrimaryModifierPressed, preferredScrollBehavior } from '../lib/device'
+import { focusLauncher, isFocusOwnedByCard } from './app-shell/desktopCards'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
@@ -56,8 +57,6 @@ export default function AppShell() {
   const mode = useUIStore((state) => state.mode)
   const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
-  const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
-  const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const timelineEmpty = useUIStore((state) => state.timelineEmpty)
   const tabSync = useTabSyncState()
@@ -93,16 +92,17 @@ export default function AppShell() {
   const backTarget = location.pathname === '/privacy' ? '/settings' : '/'
   const isHome = location.pathname === '/'
   const showSettingsButton = isHome
-  const isDesktopChatModeWithMessages =
-    isHome && mode === 'chat' && !isNarrowViewportMode && chatMessageCount > 0
-  const isDesktopChatSidebarOpen = isDesktopChatModeWithMessages && desktopChatPanelOpen
+  const isDesktopHome = isHome && !isNarrowViewportMode
+  const isDesktopChatMode = isDesktopHome && mode === 'chat'
+  const isDesktopSearchCardOpen = isDesktopHome && mode === 'search'
   const showTrayRow = isHome
   const isMobileHome = isHome && isNarrowViewportMode
   // The full-screen mobile chat renders its own brand bar, so the shell's logo
   // header steps aside only while that overlay is up.
   const showShellLogoHeader =
     isMobileHome && !(mode === 'chat' && (chatPanelOpen || chatMessageCount > 0))
-  const showDesktopChatEdgeHandle = !isNarrowViewportMode && isDesktopChatModeWithMessages
+  const showLauncherButtons = !isNarrowViewportMode
+  const launcherSpread = !isNarrowViewportMode
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
   const showDesktopThemeButton = !isNarrowViewportMode && location.pathname !== '/settings'
   const syncDirection = syncOperation === 'push' ? 'up' : 'down'
@@ -128,23 +128,71 @@ export default function AppShell() {
 
   if (isHome && isWelcomeVisible && !sawWelcome) setSawWelcome(true)
 
+  // The desktop launcher shows "Chat", so its accessible name matches the visible label.
+  const chatButtonLabel = isDesktopHome && mode === 'chat' ? 'Hide chat' : 'Chat'
+  const launcherShortcutModifier = isApplePlatform() ? '⌘' : 'Ctrl '
+
   const chatButton = (
     <button
-      className={`${trayIconButton} ${mode === 'chat' ? 'bg-[var(--theme-active)]' : ''}`}
-      onClick={() => setMode('chat')}
-      aria-label="Chat"
+      type="button"
+      data-launcher="chat"
+      className={`${trayIconButton} bottom-tray-launcher-button ${
+        mode === 'chat' ? 'bg-[var(--theme-active)]' : ''
+      }`}
+      onClick={() => {
+        // On desktop the AI button toggles the floating chat card: it dismisses
+        // the open card back to the timeline, or opens chat and focuses the
+        // composer from any other mode. On narrow viewports it only appears in
+        // timeline mode and simply opens chat.
+        if (isDesktopHome) {
+          if (mode === 'chat') {
+            setMode('timeline')
+            return
+          }
+          setMode('chat')
+          return
+        }
+        setMode('chat')
+      }}
+      aria-label={chatButtonLabel}
+      title={isDesktopHome ? `${chatButtonLabel} (${launcherShortcutModifier.trim()}${isApplePlatform() ? '' : '+'}K)` : chatButtonLabel}
+      aria-expanded={isDesktopChatMode}
+      aria-controls={isDesktopChatMode ? 'desktop-chat-card' : undefined}
     >
       <img src="/sparkle.svg" alt="" className="h-5 w-5" />
+      <span className="launcher-label" aria-hidden="true">Chat</span>
+      <kbd className="launcher-kbd" aria-hidden="true">{launcherShortcutModifier}K</kbd>
     </button>
   )
 
   const searchButton = (
     <button
-      className={`${trayIconButton} ${mode === 'search' ? 'bg-[var(--theme-active)]' : ''}`}
-      onClick={() => setMode('search')}
-      aria-label="Search"
+      type="button"
+      data-launcher="search"
+      className={`${trayIconButton} bottom-tray-launcher-button ${
+        mode === 'search' ? 'bg-[var(--theme-active)]' : ''
+      }`}
+      onClick={() => {
+        // On desktop the lens toggles the floating search card; on narrow
+        // viewports it only appears in timeline mode and simply opens search.
+        if (isDesktopHome) {
+          setMode(mode === 'search' ? 'timeline' : 'search')
+          return
+        }
+        setMode('search')
+      }}
+      aria-label={isDesktopHome && mode === 'search' ? 'Hide search' : 'Search'}
+      title={
+        isDesktopHome
+          ? `${mode === 'search' ? 'Hide search' : 'Search'} (${launcherShortcutModifier.trim()}${isApplePlatform() ? '' : '+'}F)`
+          : 'Search'
+      }
+      aria-expanded={isDesktopHome && mode === 'search'}
+      aria-controls={isDesktopHome && mode === 'search' ? 'desktop-search-card' : undefined}
     >
       <img src="/magnifying-glass.svg" alt="" className="h-5 w-5" />
+      <span className="launcher-label" aria-hidden="true">Search</span>
+      <kbd className="launcher-kbd" aria-hidden="true">{launcherShortcutModifier}F</kbd>
     </button>
   )
 
@@ -158,8 +206,11 @@ export default function AppShell() {
     </button>
   )
 
+  // The tray element stays mounted in every mode (hidden while the launcher
+  // buttons own the row) so its portal target keeps a stable identity across
+  // viewport and mode changes.
   const trayCenter = (
-    <div className="relative flex-1">
+    <div className={`relative flex-1 w-full ${showLauncherButtons ? 'hidden' : ''}`}>
       <div
         id="bottom-tray-pills"
         data-mode={mode}
@@ -360,6 +411,13 @@ export default function AppShell() {
         const nextMode = key === 'k' ? 'chat' : 'search'
         const inputId = nextMode === 'chat' ? 'chat-input' : 'search-input'
         if (mode === nextMode) {
+          // On desktop the shortcut toggles: pressed again from the card's own
+          // field, it closes the card, so repeated presses open and close it.
+          if (isDesktopHome && document.activeElement?.id === inputId) {
+            setMode('timeline')
+            focusLauncher(nextMode)
+            return
+          }
           document.getElementById(inputId)?.focus()
           return
         }
@@ -370,16 +428,43 @@ export default function AppShell() {
       }
 
       if (hasPrimaryModifier && event.shiftKey && !event.altKey && key === 's') {
-        if (!showDesktopChatEdgeHandle) return
+        if (!isDesktopHome) return
         event.preventDefault()
-        setDesktopChatPanelOpen(!desktopChatPanelOpen)
+        if (mode === 'chat') {
+          const moveFocus = isFocusOwnedByCard('chat')
+          setMode('timeline')
+          if (moveFocus) focusLauncher('chat')
+          return
+        }
+        setMode('chat')
         return
       }
     }
 
     window.addEventListener('keydown', handleKeydown, true)
     return () => window.removeEventListener('keydown', handleKeydown, true)
-  }, [desktopChatPanelOpen, isHome, mode, setDesktopChatPanelOpen, setMode, showDesktopChatEdgeHandle])
+  }, [isDesktopHome, isHome, mode, setMode])
+
+  useEffect(() => {
+    if (!isDesktopHome) return
+    const isSearchOpen = mode === 'search'
+    const isChatOpen = mode === 'chat'
+    if (!isSearchOpen && !isChatOpen) return
+
+    const openCard = isSearchOpen ? 'search' : 'chat'
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (event.defaultPrevented) return
+      // Escape while typing in a note belongs to the note, not to the card.
+      if (!isFocusOwnedByCard(openCard)) return
+      event.preventDefault()
+      setMode('timeline')
+      focusLauncher(openCard)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isDesktopHome, mode, setMode])
 
   useEffect(() => {
     if (!isHome) return
@@ -427,16 +512,15 @@ export default function AppShell() {
   return (
     <div
       className="app-shell-root min-h-full text-[var(--theme-text)]"
-      data-desktop-chat-sidebar-open={isDesktopChatSidebarOpen ? 'true' : 'false'}
+      data-desktop-chat-sidebar-open={isDesktopChatMode ? 'true' : 'false'}
+      data-desktop-search-sidebar-open={isDesktopSearchCardOpen ? 'true' : 'false'}
       data-mobile-home={isMobileHome ? 'true' : 'false'}
       data-mode={mode}
     >
-      {/* Fixed header with blur */}
+      {/* Fixed header blur: full width, fading out downwards (see .app-shell-header-blur) */}
       <div
-        className={`app-shell-fixed-right-aware pointer-events-none hidden left-0 z-20 h-16 transition-all sm:fixed sm:block ${
-          isScrolled
-            ? 'bg-[var(--theme-blur-surface)] shadow-[0_4px_12px_rgb(var(--theme-shadow-color)/0.10)] backdrop-blur-md'
-            : ''
+        className={`app-shell-header-blur pointer-events-none hidden inset-x-0 top-0 z-20 transition-all sm:fixed sm:block ${
+          isScrolled ? 'bg-[var(--theme-blur-surface)] backdrop-blur-md' : ''
         }`}
       />
       {!isMobileHome && (
@@ -563,9 +647,8 @@ export default function AppShell() {
             />
           ) : null}
           showScrollToToday={showScrollToToday && (!isNarrowViewportMode || mode === 'timeline')}
-          showDesktopChatEdgeHandle={showDesktopChatEdgeHandle}
-          desktopChatPanelOpen={desktopChatPanelOpen}
-          onToggleDesktopChatPanel={() => setDesktopChatPanelOpen(!desktopChatPanelOpen)}
+          showLauncherButtons={showLauncherButtons}
+          launcherSpread={launcherSpread}
           onScrollToToday={() => {
             window.dispatchEvent(new CustomEvent(TIMELINE_SCROLL_TODAY_EVENT))
           }}

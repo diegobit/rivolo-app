@@ -6,9 +6,15 @@ type UseDaySaveQueueOptions = {
   canSync: boolean
   updateDayContent: (dayId: string, content: string) => Promise<void>
   onAutoPush: () => Promise<void> | void
+  // Called once a day's content is written to the database.
+  onDaySaved?: (dayId: string) => void
 }
 
-export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush }: UseDaySaveQueueOptions) => {
+export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySaved }: UseDaySaveQueueOptions) => {
+  const onDaySavedRef = useRef(onDaySaved)
+  useEffect(() => {
+    onDaySavedRef.current = onDaySaved
+  }, [onDaySaved])
   const saveTimeouts = useRef(new Map<string, number>())
   const pendingSaveContentRef = useRef(new Map<string, string>())
   const daySaveQueueRef = useRef(new Map<string, Promise<void>>())
@@ -61,6 +67,7 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush }: UseDa
             return
           }
 
+          onDaySavedRef.current?.(dayId)
           await onAutoPush()
         })
         .catch((error: unknown) => {

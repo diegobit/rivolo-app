@@ -116,7 +116,7 @@ export default function DataSection({
       {importStatus && <p className="mt-3 text-xs text-slate-500">{importStatus}</p>}
 
       {showBackupTools && (
-        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+        <div className="mt-4">
           <AccordionRow
             label="Local backups"
             isOpen={backupsOpen}
@@ -162,11 +162,11 @@ export default function DataSection({
             )}
 
             {backups.length > 0 && (
-              <ul className="space-y-2">
+              <ul className="divide-y divide-slate-200 border-y border-slate-200">
                 {backups.map((backup, index) => (
                   <li
                     key={`${backup.createdAt}-${index}`}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"
+                    className="flex flex-wrap items-center justify-between gap-2 py-2"
                   >
                     <div className="min-w-0 text-xs text-slate-600">
                       <div className="font-semibold">{formatBackupTime(backup.createdAt)}</div>
