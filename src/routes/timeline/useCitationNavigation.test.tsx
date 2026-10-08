@@ -20,6 +20,7 @@ const renderNavigation = (doc: string) => {
       setHighlightedQuote: vi.fn(),
       isNarrowViewportMode: false,
       setChatPanelOpen: vi.fn(),
+      setMode: vi.fn(),
     }),
   )
   // The scroll target is the position of the scrollIntoView effect.

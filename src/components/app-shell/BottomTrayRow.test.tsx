@@ -17,9 +17,7 @@ const baseProps: BottomTrayRowProps = {
   trayCenter,
   showLauncherButtons: true,
   launcherSpread: false,
-  showMobileChatTogglePill: false,
-  chatPanelOpen: false,
-  onToggleChatPanel: () => undefined,
+  mobileChatDock: null,
   showScrollToToday: false,
   onScrollToToday: () => undefined,
 }
@@ -64,10 +62,17 @@ describe('BottomTrayRow', () => {
     expect(launcherOrder()).toEqual(['Search', 'Chat'])
   })
 
-  it('keeps the mobile launcher order from main: Chat then Search', () => {
-    renderRow({ launcherSpread: false })
-
-    expect(launcherOrder()).toEqual(['Chat', 'Search'])
+  it('keeps the portal target mounted across mobile dock mode changes', () => {
+    const mobileProps = { ...baseProps, showLauncherButtons: false, mobileChatDock: <nav>Mobile dock</nav> }
+    const { rerender } = render(<BottomTrayRow {...mobileProps} />)
+    const target = screen.getByTestId('bottom-tray')
+    expect(screen.queryByRole('button', { name: 'Switch mode' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Chat' })).not.toBeInTheDocument()
+    for (const mode of ['chat', 'search', 'timeline'] as const) {
+      rerender(<BottomTrayRow {...mobileProps} mode={mode} />)
+      expect(screen.getByTestId('bottom-tray')).toBe(target)
+      expect(screen.getByRole('navigation')).toBeInTheDocument()
+    }
   })
 
   it('marks which card is open so the capsule thumb sits behind that half', () => {

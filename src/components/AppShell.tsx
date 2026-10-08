@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import BottomTrayRow from './app-shell/BottomTrayRow'
+import MobileChatDock from './app-shell/MobileChatDock'
 import AttentionPopover from './app-shell/AttentionPopover'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
-import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
-import { isApplePlatform, isPrimaryModifierPressed } from '../lib/device'
+import { TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
+import { isApplePlatform, isPrimaryModifierPressed, preferredScrollBehavior } from '../lib/device'
 import { focusLauncher, isFocusOwnedByCard } from './app-shell/desktopCards'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
@@ -56,7 +57,6 @@ export default function AppShell() {
   const mode = useUIStore((state) => state.mode)
   const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
-  const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const timelineEmpty = useUIStore((state) => state.timelineEmpty)
   const tabSync = useTabSyncState()
@@ -67,6 +67,7 @@ export default function AppShell() {
   const [sawWelcome, setSawWelcome] = useState(false)
   const [postWelcomeAttentionReady, setPostWelcomeAttentionReady] = useState(false)
   const [isLogoCurrentFast, setIsLogoCurrentFast] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
   const shortcutsRef = useRef<HTMLDivElement | null>(null)
   const logoCurrentTimerRef = useRef<number | null>(null)
@@ -83,7 +84,7 @@ export default function AppShell() {
     }, LOGO_FAST_CURRENT_RESET_MS)
 
     if (location.pathname === '/') {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({ top: 0, behavior: preferredScrollBehavior() })
     }
   }
   const focusModeInputAfterSwitchRef = useRef(false)
@@ -95,14 +96,13 @@ export default function AppShell() {
   const isDesktopChatMode = isDesktopHome && mode === 'chat'
   const isDesktopSearchCardOpen = isDesktopHome && mode === 'search'
   const showTrayRow = isHome
-  // Desktop keeps the lens + AI launcher buttons in every mode (each one toggles
-  // its own floating card); narrow viewports keep the toggle + tray composer.
-  const showLauncherButtons = mode === 'timeline' || !isNarrowViewportMode
+  const isMobileHome = isHome && isNarrowViewportMode
+  // The full-screen mobile chat renders its own brand bar, so the shell's logo
+  // header steps aside only while that overlay is up.
+  const showShellLogoHeader =
+    isMobileHome && !(mode === 'chat' && (chatPanelOpen || chatMessageCount > 0))
+  const showLauncherButtons = !isNarrowViewportMode
   const launcherSpread = !isNarrowViewportMode
-  const showMobileChatTogglePill =
-    isNarrowViewportMode && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
-  const showMobileNewChatButton =
-    isHome && mode === 'chat' && isNarrowViewportMode && chatMessageCount > 0
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
   const showDesktopThemeButton = !isNarrowViewportMode && location.pathname !== '/settings'
   const syncDirection = syncOperation === 'push' ? 'up' : 'down'
@@ -210,7 +210,7 @@ export default function AppShell() {
   // buttons own the row) so its portal target keeps a stable identity across
   // viewport and mode changes.
   const trayCenter = (
-    <div className={`relative flex-1 ${showLauncherButtons ? 'hidden' : ''}`}>
+    <div className={`relative flex-1 w-full ${showLauncherButtons ? 'hidden' : ''}`}>
       <div
         id="bottom-tray-pills"
         data-mode={mode}
@@ -377,7 +377,7 @@ export default function AppShell() {
       window.removeEventListener('resize', syncBottomTrayHeight)
       rootStyle.removeProperty('--bottom-tray-height')
     }
-  }, [showTrayRow])
+  }, [showTrayRow, mode, isMobileHome])
 
   useKeyboardOffsetCssVar()
   useAutoSync(syncStatus)
@@ -479,12 +479,43 @@ export default function AppShell() {
     })
   }, [isHome, isNarrowViewportMode, mode])
 
+  const logoLink = (
+    <NavLink
+      to="/"
+      className={`app-logo-link relative z-10 justify-self-center ${
+        isLogoCurrentFast ? 'logo-current-fast' : ''
+      }`}
+      aria-label="Home"
+      onClick={handleLogoClick}
+    >
+      <img src="/logo.svg" alt="Rivolo" className="app-logo h-10 w-auto" />
+      <svg
+        className="logo-current"
+        viewBox="0 0 120 12"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <g className="logo-current-back">
+          <g className="logo-current-boost">
+            <path d="M0 6 Q6 3,12 6 T24 6 T36 6 T48 6 T60 6 T72 6 T84 6 T96 6 T108 6 T120 6 T132 6 T144 6" />
+          </g>
+        </g>
+        <g className="logo-current-front">
+          <g className="logo-current-boost">
+            <path d="M0 6 Q6 2.5,12 6 T24 6 T36 6 T48 6 T60 6 T72 6 T84 6 T96 6 T108 6 T120 6 T132 6 T144 6" />
+          </g>
+        </g>
+      </svg>
+    </NavLink>
+  )
 
   return (
     <div
       className="app-shell-root min-h-full text-[var(--theme-text)]"
       data-desktop-chat-sidebar-open={isDesktopChatMode ? 'true' : 'false'}
       data-desktop-search-sidebar-open={isDesktopSearchCardOpen ? 'true' : 'false'}
+      data-mobile-home={isMobileHome ? 'true' : 'false'}
+      data-mode={mode}
     >
       {/* Fixed header blur: full width, fading out downwards (see .app-shell-header-blur) */}
       <div
@@ -492,127 +523,102 @@ export default function AppShell() {
           isScrolled ? 'bg-[var(--theme-blur-surface)] backdrop-blur-md' : ''
         }`}
       />
-      <header
-        className="app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:mt-0 sm:px-0"
-      >
-        <div className="relative z-10 flex items-center gap-2">
-          {showBackButton && (
-            <NavLink to={backTarget} className={backButtonClass} aria-label="Back">
-              <span
-                aria-hidden="true"
-                className="h-5 w-5 bg-current [mask-image:url('/caret-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/caret-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
-              />
-            </NavLink>
-          )}
-          {showDesktopShortcutsButton && (
-            <ShortcutsPopover
-              shortcutsRef={shortcutsRef}
-              showShortcuts={isHome && showShortcuts}
-              onToggle={() => setShowShortcuts((prev) => !prev)}
-              buttonClassName={topIconButton}
-            />
-          )}
-          {showMobileNewChatButton && (
-            <button
-              type="button"
-              className={topIconButton}
-              aria-label="New chat"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent(TIMELINE_NEW_CHAT_EVENT))
-              }}
-            >
-              <img src="/eraser.svg" alt="" className="h-5 w-5" />
-            </button>
-          )}
-          {!isNarrowViewportMode && <div id="header-undo-slot" className="flex items-center" />}
-        </div>
-        <NavLink
-          to="/"
-          className={`app-logo-link relative z-10 justify-self-center ${
-            isLogoCurrentFast ? 'logo-current-fast' : ''
-          }`}
-          aria-label="Home"
-          onClick={handleLogoClick}
+      {!isMobileHome && (
+        <header
+          className="app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:mt-0 sm:px-0"
         >
-          <img src="/logo.svg" alt="Rivolo" className="app-logo h-10 w-auto" />
-          <svg
-            className="logo-current"
-            viewBox="0 0 120 12"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <g className="logo-current-back">
-              <g className="logo-current-boost">
-                <path d="M0 6 Q6 3,12 6 T24 6 T36 6 T48 6 T60 6 T72 6 T84 6 T96 6 T108 6 T120 6 T132 6 T144 6" />
-              </g>
-            </g>
-            <g className="logo-current-front">
-              <g className="logo-current-boost">
-                <path d="M0 6 Q6 2.5,12 6 T24 6 T36 6 T48 6 T60 6 T72 6 T84 6 T96 6 T108 6 T120 6 T132 6 T144 6" />
-              </g>
-            </g>
-          </svg>
-        </NavLink>
-        <div className="relative z-10 flex items-center justify-end gap-1 sm:gap-2">
-          {tabSync.databaseStale ? (
-            <button
-              className="flex h-11 items-center rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-100 sm:h-9"
-              type="button"
-              aria-label="Reload stale tab"
-              onClick={() => window.location.reload()}
-            >
-              Reload
-            </button>
-          ) : null}
-          {showAttention && (
-            <AttentionPopover
-              items={attentionItems}
-              onDismissSetupNotice={(noticeId) => {
-                void dismissSetupNotice(noticeId).catch((error) => {
-                  console.error('[Setup reminder dismissal failed]', error)
-                })
-              }}
-              onNavigate={() => {
-                sessionStorage.setItem('timeline-scroll', String(window.scrollY))
-              }}
-            />
-          )}
-          {syncing && (
-            <div
-              className={`${showAttention ? 'hidden sm:flex' : 'flex'} h-7 w-7 items-center justify-center rounded-full border border-[var(--theme-border-soft)] bg-[rgb(var(--theme-surface-rgb)/0.86)] text-[var(--theme-text-muted)] shadow-sm`}
-              role="status"
-              aria-live="polite"
-              aria-label={syncDirection === 'down' ? 'Pulling from sync provider' : 'Pushing to sync provider'}
-            >
-              <img
-                src="/arrow-up.svg"
-                alt=""
-                aria-hidden="true"
-                className={`h-3.5 w-3.5 ${syncDirection === 'down' ? 'rotate-180' : ''}`}
+          <div className="relative z-10 flex items-center gap-2">
+            {showBackButton && (
+              <NavLink to={backTarget} className={backButtonClass} aria-label="Back">
+                <span
+                  aria-hidden="true"
+                  className="h-5 w-5 bg-current [mask-image:url('/caret-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/caret-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
+                />
+              </NavLink>
+            )}
+            {showDesktopShortcutsButton && (
+              <ShortcutsPopover
+                shortcutsRef={shortcutsRef}
+                showShortcuts={isHome && showShortcuts}
+                onToggle={() => setShowShortcuts((prev) => !prev)}
+                buttonClassName={topIconButton}
               />
-            </div>
-          )}
-          {showDesktopThemeButton && renderThemeButton()}
-          {showSettingsButton && (
-            <NavLink
-              to="/settings"
-              className={`${topIconButton} hero-ui-fade-up`}
-              aria-label="Settings"
-              onClick={() => {
-                sessionStorage.setItem('timeline-scroll', String(window.scrollY))
-              }}
-            >
-              <img src="/gear.svg" alt="" className="h-5 w-5" />
-            </NavLink>
-          )}
-        </div>
-      </header>
+            )}
+            {!isNarrowViewportMode && <div id="header-undo-slot" className="flex items-center" />}
+          </div>
+          {logoLink}
+          <div className="relative z-10 flex items-center justify-end gap-1 sm:gap-2">
+            {tabSync.databaseStale ? (
+              <button
+                className="flex h-11 items-center rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-100 sm:h-9"
+                type="button"
+                aria-label="Reload stale tab"
+                onClick={() => window.location.reload()}
+              >
+                Reload
+              </button>
+            ) : null}
+            {showAttention && (
+              <AttentionPopover
+                items={attentionItems}
+                onDismissSetupNotice={(noticeId) => {
+                  void dismissSetupNotice(noticeId).catch((error) => {
+                    console.error('[Setup reminder dismissal failed]', error)
+                  })
+                }}
+                onNavigate={() => {
+                  sessionStorage.setItem('timeline-scroll', String(window.scrollY))
+                }}
+              />
+            )}
+            {syncing && (
+              <div
+                className={`${showAttention ? 'hidden sm:flex' : 'flex'} h-7 w-7 items-center justify-center rounded-full border border-[var(--theme-border-soft)] bg-[rgb(var(--theme-surface-rgb)/0.86)] text-[var(--theme-text-muted)] shadow-sm`}
+                role="status"
+                aria-live="polite"
+                aria-label={syncDirection === 'down' ? 'Pulling from sync provider' : 'Pushing to sync provider'}
+              >
+                <img
+                  src="/arrow-up.svg"
+                  alt=""
+                  aria-hidden="true"
+                  className={`h-3.5 w-3.5 ${syncDirection === 'down' ? 'rotate-180' : ''}`}
+                />
+              </div>
+            )}
+            {showDesktopThemeButton && renderThemeButton()}
+            {showSettingsButton && (
+              <NavLink
+                to="/settings"
+                className={`${topIconButton} hero-ui-fade-up`}
+                aria-label="Settings"
+                onClick={() => {
+                  sessionStorage.setItem('timeline-scroll', String(window.scrollY))
+                }}
+              >
+                <img src="/gear.svg" alt="" className="h-5 w-5" />
+              </NavLink>
+            )}
+          </div>
+        </header>
+      )}
+
+      {/* Mobile home keeps the wordmark at the top but no controls: navigation
+          lives in the dock. Chat renders its own brand bar inside the overlay. */}
+      {showShellLogoHeader && (
+        <header className="app-shell-fixed-header-width relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2">
+          <span />
+          {logoLink}
+          <span />
+        </header>
+      )}
 
       <main
-        inert={tabSync.databaseStale}
+        inert={tabSync.databaseStale || mobileMenuOpen}
         className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 pt-0 sm:w-[min(96%,720px)] sm:pt-20 ${
           showTrayRow ? 'pb-40' : 'pb-12'
         }`}
+        style={isMobileHome ? { paddingBottom: 'var(--mobile-home-bottom-clearance)' } : undefined}
       >
         <Outlet />
       </main>
@@ -624,20 +630,25 @@ export default function AppShell() {
           searchButton={searchButton}
           modeToggleButton={modeToggleButton}
           trayCenter={trayCenter}
+          mobileChatDock={isMobileHome ? (
+            <MobileChatDock
+              databaseStale={tabSync.databaseStale}
+              syncing={syncing}
+              onMenuOpenChange={setMobileMenuOpen}
+              attentionItems={attentionItems}
+              onDismissSetupNotice={(noticeId) => {
+                void dismissSetupNotice(noticeId).catch((error) => {
+                  console.error('[Setup reminder dismissal failed]', error)
+                })
+              }}
+              onNavigate={() => {
+                sessionStorage.setItem('timeline-scroll', String(window.scrollY))
+              }}
+            />
+          ) : null}
+          showScrollToToday={showScrollToToday && (!isNarrowViewportMode || mode === 'timeline')}
           showLauncherButtons={showLauncherButtons}
           launcherSpread={launcherSpread}
-          showMobileChatTogglePill={showMobileChatTogglePill}
-          chatPanelOpen={chatPanelOpen}
-          onToggleChatPanel={() => {
-            if (chatPanelOpen) {
-              setChatPanelOpen(false)
-              document.getElementById('chat-input')?.blur()
-              return
-            }
-
-            setChatPanelOpen(true)
-          }}
-          showScrollToToday={showScrollToToday}
           onScrollToToday={() => {
             window.dispatchEvent(new CustomEvent(TIMELINE_SCROLL_TODAY_EVENT))
           }}

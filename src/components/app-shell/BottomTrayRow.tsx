@@ -8,9 +8,7 @@ type BottomTrayRowProps = {
   trayCenter: ReactNode
   showLauncherButtons: boolean
   launcherSpread: boolean
-  showMobileChatTogglePill: boolean
-  chatPanelOpen: boolean
-  onToggleChatPanel: () => void
+  mobileChatDock: ReactNode
   showScrollToToday: boolean
   onScrollToToday: () => void
 }
@@ -23,9 +21,7 @@ export default function BottomTrayRow({
   trayCenter,
   showLauncherButtons,
   launcherSpread,
-  showMobileChatTogglePill,
-  chatPanelOpen,
-  onToggleChatPanel,
+  mobileChatDock,
   showScrollToToday,
   onScrollToToday,
 }: BottomTrayRowProps) {
@@ -37,7 +33,7 @@ export default function BottomTrayRow({
   const trayRowAlignmentClass = showTraySlot ? 'items-end' : 'items-center'
   const trayRowJustifyClass = 'justify-center'
   const modeToggleOffsetClassName = showTraySlot ? 'mb-1.5 sm:mb-3' : ''
-  const mobileScrollToTodayRightClass = `${showMobileChatTogglePill ? 'right-[67px]' : 'right-[15px]'} sm:right-0`
+  const mobileScrollToTodayRightClass = 'right-[15px] sm:right-0'
   // On desktop it sits centred just above the launcher capsule (it is rendered
   // inside it), so it moves with the capsule and never lands under it.
   const scrollToTodayPositionClass = launcherSpread
@@ -61,10 +57,12 @@ export default function BottomTrayRow({
         className={`app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.6)_18%,black_72%)] ${
           mode === 'search' && !launcherSpread ? 'bottom-tray-blur-search' : ''
         }`}
+        data-mobile-dock={mobileChatDock ? 'true' : 'false'}
+        data-mode={mode}
       />
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20" />
 
-      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${trayRowAlignmentClass} ${trayRowJustifyClass} gap-2 px-2 sm:gap-3 sm:px-0`}>
+      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${mobileChatDock ? 'flex-col' : trayRowAlignmentClass} ${trayRowJustifyClass} gap-2 px-2 sm:gap-3 sm:px-0`}>
         {showLauncherButtons ? (
           // On desktop CSS lifts this pair out of the row and pins it to the
           // viewport centre, so a card opening never shifts the buttons.
@@ -87,7 +85,7 @@ export default function BottomTrayRow({
             )}
             {launcherSpread && scrollToTodayButton}
           </div>
-        ) : (
+        ) : !mobileChatDock && (
           <Fragment key="mode-toggle-btn">
             <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>
           </Fragment>
@@ -99,24 +97,7 @@ export default function BottomTrayRow({
         */}
         <Fragment key="tray">{trayCenter}</Fragment>
 
-        {showMobileChatTogglePill && (
-          <button
-            type="button"
-            className="absolute right-[15px] top-[-3.5rem] inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:hidden"
-            aria-label={chatPanelOpen ? 'Hide chat' : 'Show chat'}
-            onClick={onToggleChatPanel}
-          >
-            {chatPanelOpen ? (
-              <img
-                src="/caret-left.svg"
-                alt=""
-                className="h-5 w-5 -rotate-90 opacity-70"
-              />
-            ) : (
-              <img src="/chats-teardrop.svg" alt="" className="h-5 w-5 opacity-75 transition-opacity duration-200" />
-            )}
-          </button>
-        )}
+        {mobileChatDock && <div className="w-full">{mobileChatDock}</div>}
 
         {!launcherSpread && scrollToTodayButton}
       </div>

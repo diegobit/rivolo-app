@@ -7,7 +7,7 @@ import BottomTrayPortal from '../components/BottomTrayPortal'
 import DayEditorCard from '../components/timeline/DayEditorCard'
 import EmptyStateHero from '../components/timeline/EmptyStateHero'
 import ChatMessageList from '../components/timeline/ChatMessageList'
-import { isIOS, isPrimaryModifierPressed } from '../lib/device'
+import { isIOS, isPrimaryModifierPressed, preferredScrollBehavior } from '../lib/device'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import {
@@ -15,6 +15,7 @@ import {
   TIMELINE_SCROLL_TODAY_EVENT,
 } from '../lib/timelineEvents'
 import { addDays, formatHumanDate, getTodayId, parseDayId } from '../lib/dates'
+import { SEARCH_FILTER_LABELS } from '../lib/searchFilters'
 import { debugLog, startDebugTimer } from '../lib/debugLogs'
 import type { Day, DaySearchResult, SearchFilter } from '../lib/dayRepository'
 import { appendToDay, searchDays } from '../lib/dayRepository'
@@ -296,7 +297,7 @@ const TrayInput = memo(({
         </div>
         {mode === 'chat' && (
           <button
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm transition ${
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-sm transition sm:h-10 sm:w-10 ${
               draftText.trim() && !sending ? 'bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)]' : 'bg-slate-300'
             }`}
             type="submit"
@@ -341,11 +342,6 @@ const EDITOR_PIN_TTL_MS = 20_000
 const EDITOR_PIN_PRUNE_INTERVAL_MS = 4_000
 const LOG_SCOPE = 'TimelinePerf'
 
-// Fades the thread out behind the pinned header. The bottom edge is not this mask's job:
-// the shared tray veil covers it for the timeline and the chat alike.
-const MOBILE_CHAT_TOP_FADE =
-  'linear-gradient(to bottom, transparent 0, transparent calc(env(safe-area-inset-top) + 4.5rem), black calc(env(safe-area-inset-top) + 5.5rem))'
-
 // --- Component ---
 
 export default function Timeline() {
@@ -382,6 +378,7 @@ export default function Timeline() {
   const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
+  const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const setChatMessageCount = useUIStore((state) => state.setChatMessageCount)
   const setTimelineEmpty = useUIStore((state) => state.setTimelineEmpty)
   const messages = useChatStore((state) => state.messages)
@@ -514,14 +511,6 @@ export default function Timeline() {
     searchResultsRef.current = searchResults
   }, [searchResults])
 
-  useEffect(() => {
-    if (!isNarrowViewportMode) return
-    if (mode !== 'chat') return
-    if (messages.length > 0) return
-    if (!chatPanelOpen) return
-    setChatPanelOpen(false)
-  }, [chatPanelOpen, isNarrowViewportMode, messages.length, mode, setChatPanelOpen])
-
   const visibleDays = useMemo(
     () => (hiddenDeleteDayIds.size ? days.filter((day) => !hiddenDeleteDayIds.has(day.dayId)) : days),
     [days, hiddenDeleteDayIds],
@@ -553,7 +542,7 @@ export default function Timeline() {
   // Grows with every new message and every streamed chunk of the last one.
   const chatContentKey = `${messages.length}:${lastChatMessage?.content.length ?? 0}:${lastChatMessage?.meta?.isStreaming ? 1 : 0}`
   const chatScroll = useStickToBottom(showDesktopChatPanel, chatContentKey)
-  const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
+  const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && (chatPanelOpen || chatMessageCount > 0)
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
@@ -688,6 +677,7 @@ export default function Timeline() {
       const target = event.target
       if (!(target instanceof Node)) return
       if (mobileChatScrollRef.current?.contains(target)) return
+      if (target instanceof Element && target.closest('[data-mobile-chat-menu]')) return
       event.preventDefault()
     }
 
@@ -737,7 +727,7 @@ export default function Timeline() {
       delete document.body.dataset.emptyState
     }
 
-    if (hasNoNotes && !isLogoAnimating) {
+    if (hasNoNotes && !isLogoAnimating && !showMobileChatOverlay) {
       document.body.dataset.heroWallpaper = 'true'
       document.body.dataset.heroUi = 'true'
       return
@@ -745,7 +735,7 @@ export default function Timeline() {
 
     delete document.body.dataset.heroWallpaper
     delete document.body.dataset.heroUi
-  }, [hasNoNotes, isLogoAnimating, setTimelineEmpty])
+  }, [hasNoNotes, isLogoAnimating, setTimelineEmpty, showMobileChatOverlay])
 
   useLayoutEffect(() => {
     if (hasNoNotes) return
@@ -978,7 +968,7 @@ export default function Timeline() {
       focusPosition?: 'start' | 'end',
       scrollBlock: ScrollLogicalPosition = 'center',
       focusScroll = true,
-      scrollBehavior: ScrollBehavior = 'smooth',
+      scrollBehavior: ScrollBehavior = preferredScrollBehavior(),
     ) => {
       let attempts = 0
       const maxAttempts = 12
@@ -1141,6 +1131,7 @@ export default function Timeline() {
     setHighlightedQuote,
     isNarrowViewportMode,
     setChatPanelOpen,
+    setMode,
   })
 
   const handleRetryLoad = useCallback(() => {
@@ -1176,7 +1167,7 @@ export default function Timeline() {
       revealDay(todayId, undefined, 'start')
       return
     }
-    addTodayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    addTodayRef.current?.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'start' })
   }, [hasToday, revealDay, todayId])
 
   const handleNewTodayEntry = useCallback(async () => {
@@ -1741,9 +1732,7 @@ export default function Timeline() {
         resultMode={searchResultMode}
         showResultMode={showResultMode}
         onSearchFilterChange={setSearchFilter}
-        onToggleResultMode={() => {
-          setSearchResultMode((current) => (current === 'whole-day' ? 'matched-lines' : 'whole-day'))
-        }}
+        onResultModeChange={setSearchResultMode}
       />
     ) : null
 
@@ -1791,14 +1780,32 @@ export default function Timeline() {
       )}
 
       {!loading && noSearchResults && (
-        <section className="flex min-h-[46vh] items-center justify-center">
-          <p className="text-base font-semibold text-slate-400">No results</p>
+        <section
+          className="flex min-h-[46vh] flex-col items-center justify-center gap-3 px-4 text-center"
+          aria-live="polite"
+        >
+          <p className="text-base font-semibold text-[var(--theme-text-muted)]">
+            {searchFilter
+              ? `No ${SEARCH_FILTER_LABELS[searchFilter]} matches${searchQuery.trim() ? ` for “${searchQuery.trim()}”` : ''}`
+              : searchQuery.trim()
+                ? `No results for “${searchQuery.trim()}”`
+                : 'No results'}
+          </p>
+          {searchFilter && (
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm font-semibold text-[var(--theme-text)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)]"
+              onClick={() => setSearchFilter(null)}
+            >
+              Clear filter
+            </button>
+          )}
         </section>
       )}
 
       {!loading && showSearchError && (
-        <section className="flex min-h-[46vh] items-center justify-center px-4 text-center">
-          <p className="text-base font-semibold text-rose-400">{searchError}</p>
+        <section className="flex min-h-[46vh] items-center justify-center px-4 text-center" aria-live="polite">
+          <p className="text-base font-semibold text-[var(--theme-danger-text)]">{searchError}</p>
         </section>
       )}
 
@@ -1869,7 +1876,7 @@ export default function Timeline() {
                   }`}
                 >
                   <button
-                    className="add-day-label-button group inline-flex items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold opacity-70 transition-colors"
+                    className="add-day-label-button group inline-flex min-h-11 items-center gap-2 rounded-full bg-transparent px-3 py-1 text-sm font-semibold opacity-70 transition-colors"
                     type="button"
                     onClick={() => void handleCreateDay(item.dayId)}
                   >
@@ -1973,7 +1980,7 @@ export default function Timeline() {
 
   const undoDeleteButton = (
     <button
-      className="group inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-2 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white"
+      className="group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-3 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white"
       type="button"
       onClick={handleUndoDelete}
     >
@@ -1992,7 +1999,7 @@ export default function Timeline() {
       ) : null}
       {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
 
-      {timelineContent}
+      {showMobileChatOverlay ? <div className="contents" inert>{timelineContent}</div> : timelineContent}
 
       {/* Desktop chat card */}
       {!isNarrowViewportMode && (
@@ -2183,40 +2190,41 @@ export default function Timeline() {
       )}
 
       {pendingDeleteDayId && !hasNoNotes && isNarrowViewportMode && (
-        <div className="pointer-events-none fixed left-0 top-[calc(env(safe-area-inset-top)+4.7rem)] z-40 px-3">
+        <div
+          className="pointer-events-none fixed left-0 z-40 px-3"
+          style={{
+            // Sit above the whole mobile bottom row (composer included in chat and
+            // search, dock only in timeline), not just above the dock.
+            bottom: 'var(--mobile-home-bottom-clearance, calc(env(safe-area-inset-bottom) + 5rem))',
+          }}
+        >
           <div
-            className="pointer-events-auto flex w-[min(12rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-[0_14px_28px_-18px_rgba(15,23,42,0.45)] backdrop-blur-sm"
+            className="pointer-events-auto flex w-[min(12rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 shadow-[0_14px_28px_-18px_rgb(var(--theme-shadow-color)/0.45)]"
             role="status"
             aria-live="polite"
           >
-            <span className="truncate text-sm font-medium text-slate-700">Day deleted</span>
+            <span className="truncate text-sm font-medium text-[var(--theme-text-soft)]">Day deleted</span>
             {undoDeleteButton}
           </div>
         </div>
       )}
 
-      {/* Mobile chat overlay (Mode A) */}
+      {/* Mobile chat overlay */}
       {showMobileChatOverlay && (
         <>
-          <div className="fixed inset-0 z-20 sm:hidden">
-            <div
-              className="pointer-events-none absolute inset-0 bg-white/50 backdrop-blur-lg"
-              style={{
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-              }}
-            />
+          <div className="fixed inset-0 z-20 flex flex-col bg-[var(--theme-page)] sm:hidden">
+            {/* The wordmark stays at the top of the chat, above the thread, so no
+                message can ever run behind it. */}
+            <div className="mt-4 flex h-16 shrink-0 items-center justify-center">
+              <img src="/logo.svg" alt="Rivolo" className="h-10 w-auto" />
+            </div>
             <div
               ref={mobileChatScrollRef}
-              className="relative flex h-full flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
+              className="relative flex min-h-0 flex-1 flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
               style={{
-                maskImage: MOBILE_CHAT_TOP_FADE,
-                WebkitMaskImage: MOBILE_CHAT_TOP_FADE,
-                // Matches where MOBILE_CHAT_TOP_FADE turns fully opaque, so the oldest
-                // message is never parked half-faded at the top of the thread.
-                paddingTop: 'calc(env(safe-area-inset-top) + 5.5rem)',
-                paddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
-                scrollPaddingBottom: 'calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 10rem)',
+                paddingTop: '0.5rem',
+                paddingBottom: 'var(--mobile-home-bottom-clearance)',
+                scrollPaddingBottom: 'var(--mobile-home-bottom-clearance)',
               }}
             >
               <ChatMessageList

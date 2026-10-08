@@ -21,6 +21,7 @@ type UseCitationNavigationParams = {
   setHighlightedQuote: (citation: Citation | null) => void
   isNarrowViewportMode: boolean
   setChatPanelOpen: (open: boolean) => void
+  setMode: (mode: 'timeline' | 'chat' | 'search') => void
 }
 
 const normalizeCitationMatchText = (value: string) =>
@@ -77,6 +78,7 @@ export const useCitationNavigation = ({
   setHighlightedQuote,
   isNarrowViewportMode,
   setChatPanelOpen,
+  setMode,
 }: UseCitationNavigationParams) => {
   const scrollToCitationQuote = useCallback(
     async (citation: CitationTarget) => {
@@ -136,6 +138,7 @@ export const useCitationNavigation = ({
 
       if (isNarrowViewportMode) {
         setChatPanelOpen(false)
+        setMode('timeline')
         document.getElementById('chat-input')?.blur()
         await new Promise<void>((resolve) => {
           requestAnimationFrame(() => {
@@ -164,6 +167,7 @@ export const useCitationNavigation = ({
       revealDay,
       scrollToCitationQuote,
       setChatPanelOpen,
+      setMode,
       setHighlightedQuote,
     ],
   )
