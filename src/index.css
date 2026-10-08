@@ -910,6 +910,52 @@
       --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
     }
 
+    /* Expanded panels use a fixed gutter instead of adding the timeline's
+       proportional margins to the panel inset. Mirror the layout for search. */
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] {
+      --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset) + 24px);
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] {
+      --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset) + 24px);
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) {
+      --desktop-expanded-timeline-width: min(720px, calc(100% - var(--desktop-chat-shift) - var(--desktop-search-shift) - var(--desktop-chat-sidebar-inset)));
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-main {
+      width: min(720px, calc(100% - var(--desktop-chat-sidebar-inset)));
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-shell-fixed-header-width {
+      width: var(--desktop-expanded-timeline-width);
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] .app-main {
+      margin-right: 0;
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] .app-main {
+      margin-left: 0;
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] .app-shell-fixed-header-width {
+      left: auto;
+      right: var(--desktop-chat-shift);
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] .app-shell-fixed-header-width {
+      left: var(--desktop-search-shift);
+      right: auto;
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'] .timeline-floating-card {
+      box-shadow:
+        0 24px 44px -32px rgb(var(--theme-shadow-color) / 0.4),
+        0 8px 20px -16px rgb(var(--theme-shadow-color) / 0.18);
+    }
+
     .app-shell-fixed-right-aware {
       left: var(--desktop-search-shift);
       right: var(--desktop-chat-shift);
@@ -1586,8 +1632,12 @@ html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
     transition: left 260ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .app-shell-root[data-desktop-panel-expanded='true'] .bottom-tray-launchers {
-    left: calc((100vw + var(--desktop-search-shift) - var(--desktop-chat-shift)) / 2);
+  .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] .bottom-tray-launchers {
+    left: calc(100% - var(--desktop-chat-shift) - var(--desktop-expanded-timeline-width) / 2);
+  }
+
+  .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] .bottom-tray-launchers {
+    left: calc(var(--desktop-search-shift) + var(--desktop-expanded-timeline-width) / 2);
   }
 
   .bottom-tray-launchers::before {
