@@ -493,7 +493,7 @@ export default function AppShell() {
         }`}
       />
       <header
-        className="app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:px-0"
+        className="app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:mt-0 sm:px-0"
       >
         <div className="relative z-10 flex items-center gap-2">
           {showBackButton && (
@@ -534,7 +534,7 @@ export default function AppShell() {
           aria-label="Home"
           onClick={handleLogoClick}
         >
-          <img src="/logo.png" alt="Rivolo" className="app-logo h-10 w-auto" />
+          <img src="/logo.svg" alt="Rivolo" className="app-logo h-10 w-auto" />
           <svg
             className="logo-current"
             viewBox="0 0 120 12"

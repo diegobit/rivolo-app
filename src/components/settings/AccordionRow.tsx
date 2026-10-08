@@ -21,11 +21,13 @@ export default function AccordionRow({
   panelClassName = '',
   children,
 }: AccordionRowProps) {
+  // Inside a section card, a box means "this collapses": every collapsible row
+  // owns its own box, and other controls stay unboxed.
   return (
-    <div>
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       <button
         type="button"
-        className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left outline-none transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--theme-accent-rgb)/0.42)]"
+        className="flex min-h-12 w-full items-center gap-2 px-3 py-2 text-left sm:px-4 outline-none transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--theme-accent-rgb)/0.42)]"
         aria-expanded={isOpen}
         aria-controls={panelId}
         onClick={onToggle}
@@ -69,7 +71,7 @@ export default function AccordionRow({
       {isOpen && (
         <div
           id={panelId}
-          className={`space-y-4 bg-slate-50 px-3 pb-4 sm:px-4 ${panelClassName}`}
+          className={`space-y-4 px-3 pb-4 sm:px-4 ${panelClassName}`}
         >
           {children}
         </div>
