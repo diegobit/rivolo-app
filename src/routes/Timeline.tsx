@@ -98,6 +98,7 @@ const TrayInput = memo(({
   const debounceRef = useRef<number | null>(null)
   const prevModeRef = useRef<TrayInputMode>(mode)
   const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const searchTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const isChatMode = mode === 'chat'
   const hasSearchText = draftText.trim().length > 0
   const trayFieldClassName =
