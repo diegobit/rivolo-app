@@ -9,7 +9,8 @@ export function lockPageScroll() {
     const previous = [root.overflow, root.overscrollBehavior, body.overflow, body.overscrollBehavior]
     root.overflow = 'hidden'
     root.overscrollBehavior = 'none'
-    body.overflow = 'hidden'
+    // The body is viewport-height. Clipping it removes the document's scroll
+    // range and jumps the timeline to the top; locking the root is sufficient.
     body.overscrollBehavior = 'none'
     restore = () => {
       root.overflow = previous[0]

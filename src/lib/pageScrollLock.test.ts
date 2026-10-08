@@ -14,6 +14,9 @@ describe('page scroll lock', () => {
     const releaseMenu = lockPageScroll()
 
     expect(document.documentElement.style.overflow).toBe('hidden')
+    // A viewport-height body must keep its overflow visible so the timeline
+    // retains its scroll range while the root is locked.
+    expect(document.body.style.overflow).toBe('')
     releaseChat()
     expect(document.documentElement.style.overflow).toBe('hidden')
     releaseMenu()

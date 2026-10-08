@@ -128,6 +128,7 @@
     --keyboard-offset: 0px;
     --bottom-tray-height: 3.5rem;
     --bottom-tray-radius: 28px;
+    --mobile-control-surface: var(--theme-surface-soft);
     --theme-page: #ffffff;
     --theme-page-rgb: 255 255 255;
     --theme-surface: #ffffff;
@@ -207,6 +208,7 @@
     --theme-surface: #111318;
     --theme-surface-rgb: 17 19 24;
     --theme-surface-soft: #0b0d12;
+    --mobile-control-surface: var(--theme-surface);
     --theme-thumb: #2a3340;
     --theme-scrim: rgb(0 0 0 / 0.55);
     --theme-surface-soft-rgb: 11 13 18;
@@ -866,7 +868,7 @@
 
   @media (min-width: 700px) {
     .app-shell-root {
-      --desktop-chat-sidebar-width: clamp(260px, 34vw, 400px);
+      --desktop-chat-sidebar-width: clamp(260px, 36vw, 440px);
       --desktop-chat-sidebar-inset: 20px;
       --desktop-chat-shift: 0px;
       --desktop-search-shift: 0px;
@@ -876,8 +878,12 @@
        squeezed out; from 1080px up there is room for the roomier card. */
     @media (min-width: 1080px) {
       .app-shell-root {
-        --desktop-chat-sidebar-width: clamp(400px, 32vw, 480px);
+        --desktop-chat-sidebar-width: clamp(400px, min(38vw, calc(50vw - 170px)), 600px);
       }
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'] {
+      --desktop-chat-sidebar-width: min(66vw, calc(100vw - 360px));
     }
 
     .app-shell-fixed-header-width {
@@ -925,6 +931,7 @@
         0 28px 60px -36px rgb(var(--theme-shadow-color) / 0.5),
         0 10px 26px -20px rgb(var(--theme-shadow-color) / 0.28);
       z-index: 25;
+      transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     .timeline-chat-sidebar {
@@ -934,6 +941,7 @@
       pointer-events: none;
       transition:
         opacity 220ms ease,
+        width 260ms cubic-bezier(0.22, 1, 0.36, 1),
         transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
@@ -1008,7 +1016,7 @@
       container-type: inline-size;
     }
 
-    @container (max-width: 299px) {
+    @container (max-width: 359px) {
       .timeline-chat-sidebar .timeline-chat-sidebar-text-button {
         width: 2.25rem;
         padding: 0;
@@ -1399,7 +1407,7 @@
   border-radius: 9999px;
   background:
     radial-gradient(ellipse 36% 130% at 37.5% 110%, rgb(var(--theme-accent-soft-rgb)), transparent 72%),
-    var(--theme-surface-soft);
+    var(--mobile-control-surface);
   box-shadow:
     0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
     0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
@@ -1575,6 +1583,11 @@ html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
       0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
       0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
     z-index: 30;
+    transition: left 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .app-shell-root[data-desktop-panel-expanded='true'] .bottom-tray-launchers {
+    left: calc((100vw + var(--desktop-search-shift) - var(--desktop-chat-shift)) / 2);
   }
 
   .bottom-tray-launchers::before {
@@ -1670,6 +1683,7 @@ html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .bottom-tray-launchers,
     .bottom-tray-launchers::before {
       transition: none;
     }
@@ -1748,10 +1762,59 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
   }
 
   html[data-theme='dark'] #bottom-tray.bottom-tray-shell {
+    background: var(--mobile-control-surface);
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.05),
       0 8px 20px -10px rgb(var(--theme-shadow-color) / 0.6),
       0 1px 3px rgb(var(--theme-shadow-color) / 0.4);
+  }
+
+  html[data-theme='dark'] .capsule-chip {
+    background: var(--mobile-control-surface);
+  }
+}
+
+.mobile-menu-sheet {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 2.5rem);
+  box-shadow: 0 -16px 48px rgb(var(--theme-shadow-color) / 0.35);
+  animation: mobile-menu-rise 180ms ease-out both;
+}
+
+.mobile-menu-scrim {
+  animation: mobile-menu-fade 180ms ease-out both;
+}
+
+.mobile-menu-overlay[data-state='closing'] .mobile-menu-sheet {
+  animation: mobile-menu-lower 180ms ease-in both;
+}
+
+.mobile-menu-overlay[data-state='closing'] .mobile-menu-scrim {
+  animation: mobile-menu-fade-out 180ms ease-in both;
+}
+
+@keyframes mobile-menu-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mobile-menu-lower {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(12px); }
+}
+
+@keyframes mobile-menu-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mobile-menu-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-menu-overlay[data-state] .mobile-menu-sheet,
+  .mobile-menu-overlay[data-state] .mobile-menu-scrim {
+    animation: none;
   }
 }
 
@@ -1942,4 +2005,27 @@ html[data-theme='dark'] .shadow-lg {
 
 html[data-theme='dark'] .focus-visible\:ring-offset-2:focus-visible {
   --tw-ring-offset-color: var(--theme-page);
+}
+
+.matched-result-group {
+  overflow: hidden;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface);
+  box-shadow: var(--theme-card-shadow-soft);
+}
+
+.matched-result-row + .matched-result-row {
+  border-top: 1px solid var(--theme-border);
+}
+
+.matched-result-row {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+}
+
+.matched-result-row > div {
+  min-width: 0;
+  width: 100%;
 }

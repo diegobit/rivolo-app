@@ -414,6 +414,31 @@ describe('AppShell attention and stale tab states', () => {
     window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
   })
 
+  it('keeps the page locked through the menu exit animation, then releases it', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    const view = render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+
+    expect(document.querySelector('.mobile-menu-overlay')).toHaveAttribute('data-state', 'closing')
+    expect(view.container.querySelector('main')).toHaveAttribute('inert')
+    expect(document.documentElement.style.overflow).toBe('hidden')
+    expect(document.body.style.overflow).toBe('')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument())
+    await waitFor(() => expect(view.container.querySelector('main')).not.toHaveAttribute('inert'))
+    expect(document.documentElement.style.overflow).toBe('')
+    expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus()
+  })
+
   it('releases Menu inert state when the viewport crosses into desktop mode', async () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
@@ -973,7 +998,8 @@ describe('AppShell launcher mode buttons', () => {
       fireEvent.keyDown(window, { key, metaKey: true })
 
       expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
-      expect(document.activeElement).toBe(launcher)
+      expect(document.activeElement).toBe(document.body)
+      expect(launcher).not.toHaveFocus()
       field.remove()
     },
   )
