@@ -23,7 +23,7 @@ const DOCK_MODES = [
 ] as const
 
 const menuRowClass =
-  'flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 text-left text-base font-semibold text-[var(--theme-text)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] outline-none transition-colors hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-accent-muted-text)] disabled:cursor-not-allowed disabled:opacity-60'
+  'mobile-menu-row flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface-soft)] px-3 py-2 text-left text-base font-semibold text-[var(--theme-text)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] outline-none transition-colors hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-accent-muted-text)] disabled:cursor-not-allowed disabled:opacity-60'
 const menuIconClass =
   'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border'
 
@@ -39,6 +39,7 @@ export default function MobileChatDock({
   const chatSending = useUIStore((state) => state.chatSending)
   const setMode = useUIStore((state) => state.setMode)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [menuPresent, setMenuPresent] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const sheetRef = useRef<HTMLDivElement | null>(null)
 
@@ -61,17 +62,25 @@ export default function MobileChatDock({
   }
   const navigate = () => {
     setIsMenuOpen(false)
+    setMenuPresent(false)
     onNavigate()
   }
 
   useEffect(() => {
-    onMenuOpenChange?.(isMenuOpen)
-  }, [isMenuOpen, onMenuOpenChange])
+    onMenuOpenChange?.(menuPresent)
+  }, [menuPresent, onMenuOpenChange])
+
+  useEffect(() => {
+    if (isMenuOpen || !menuPresent) return
+    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180
+    const timer = window.setTimeout(() => setMenuPresent(false), delay)
+    return () => window.clearTimeout(timer)
+  }, [isMenuOpen, menuPresent])
 
   useEffect(() => () => onMenuOpenChange?.(false), [onMenuOpenChange])
 
   useEffect(() => {
-    if (!isMenuOpen) return
+    if (!menuPresent) return
 
     const unlock = lockPageScroll()
     const preventBackgroundTouch = (event: TouchEvent) => {
@@ -110,7 +119,7 @@ export default function MobileChatDock({
       document.removeEventListener('touchmove', preventBackgroundTouch)
       unlock()
     }
-  }, [isMenuOpen])
+  }, [menuPresent])
 
   return (
     <>
@@ -150,7 +159,10 @@ export default function MobileChatDock({
           aria-expanded={isMenuOpen}
           aria-haspopup="dialog"
           aria-controls={isMenuOpen ? 'mobile-chat-menu' : undefined}
-          onClick={() => setIsMenuOpen(true)}
+          onClick={() => {
+            setMenuPresent(true)
+            setIsMenuOpen(true)
+          }}
         >
           {syncing ? (
             <span
@@ -178,13 +190,13 @@ export default function MobileChatDock({
         </span>
       </nav>
 
-      {isMenuOpen && createPortal(
-        <div className="fixed inset-0 z-50" style={{ bottom: 'var(--keyboard-offset, 0px)' }}>
+      {menuPresent && createPortal(
+        <div className="mobile-menu-overlay fixed inset-0 z-50" data-state={isMenuOpen ? 'open' : 'closing'} style={{ bottom: 'var(--keyboard-offset, 0px)' }}>
           <button
             type="button"
             tabIndex={-1}
             aria-hidden="true"
-            className="absolute inset-0 h-full w-full" style={{ background: 'var(--theme-scrim)' }}
+            className="mobile-menu-scrim absolute inset-0 h-full w-full" style={{ background: 'var(--theme-scrim)' }}
             onClick={closeMenu}
           />
           <div
@@ -194,8 +206,7 @@ export default function MobileChatDock({
             role="dialog"
             aria-modal="true"
             aria-label="Menu"
-            className="absolute inset-x-0 bottom-0 max-h-full overflow-y-auto overscroll-y-contain rounded-t-3xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-3 text-[var(--theme-text-soft)] shadow-lg"
-            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
+            className="mobile-menu-sheet absolute inset-x-0 bottom-0 max-h-full overflow-y-auto overscroll-y-contain rounded-t-3xl bg-[var(--theme-surface)] p-3 text-[var(--theme-text-soft)]"
           >
             <div className="mb-2 flex justify-center">
               <button
@@ -237,7 +248,7 @@ export default function MobileChatDock({
               >
                 <span
                   aria-hidden="true"
-                  className={`${menuIconClass} border-[var(--theme-accent-border)] bg-[var(--theme-accent-soft)]`}
+                  className={`${menuIconClass} border-[var(--theme-border)] bg-[var(--theme-surface)]`}
                 >
                   <img src="/pencil-simple-line.svg" alt="" className="h-5 w-5" />
                 </span>
@@ -246,7 +257,7 @@ export default function MobileChatDock({
               <Link to="/settings" className={menuRowClass} onClick={navigate}>
                 <span
                   aria-hidden="true"
-                  className={`${menuIconClass} border-[var(--theme-border)] bg-[var(--theme-surface-soft)]`}
+                  className={`${menuIconClass} border-[var(--theme-border)] bg-[var(--theme-surface)]`}
                 >
                   <img src="/gear.svg" alt="" className="h-5 w-5" />
                 </span>

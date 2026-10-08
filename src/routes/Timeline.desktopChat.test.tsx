@@ -141,7 +141,7 @@ describe('Timeline desktop chat card', () => {
     stores.days.days = []
     stores.days.loading = false
     useChatStore.setState({ messages: [] })
-    useUIStore.setState({ mode: 'chat', chatPanelOpen: false, chatMessageCount: 0 })
+    useUIStore.setState({ mode: 'chat', chatPanelOpen: false, chatMessageCount: 0, desktopPanelExpanded: false })
   })
 
   afterEach(() => {
@@ -156,6 +156,17 @@ describe('Timeline desktop chat card', () => {
     expect(getComposer()).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Close chat' })).toBeInTheDocument()
+  })
+
+  it('expands and restores the panel without losing the draft', () => {
+    renderTimeline()
+    fireEvent.change(getComposer(), { target: { value: 'A draft to keep' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }))
+    expect(useUIStore.getState().desktopPanelExpanded).toBe(true)
+    expect(getComposer()).toHaveValue('A draft to keep')
+    fireEvent.click(screen.getByRole('button', { name: 'Reduce panel width' }))
+    expect(useUIStore.getState().desktopPanelExpanded).toBe(false)
+    expect(getComposer()).toHaveValue('A draft to keep')
   })
 
   it('keeps the card open and focuses the composer after New chat', async () => {
@@ -280,7 +291,7 @@ describe('Timeline desktop search card', () => {
     stores.days.days = [todayDay, olderDay]
     stores.days.loading = false
     useChatStore.setState({ messages: [] })
-    useUIStore.setState({ mode: 'timeline', chatPanelOpen: false, chatMessageCount: 0 })
+    useUIStore.setState({ mode: 'timeline', chatPanelOpen: false, chatMessageCount: 0, desktopPanelExpanded: false })
     vi.mocked(searchDays).mockReset().mockResolvedValue([])
   })
 
@@ -413,6 +424,29 @@ describe('Timeline desktop search card', () => {
     const [first, second] = getResultOpenButtons()
     expect(first).toHaveAccessibleDescription(/hello world/)
     expect(second).toHaveAccessibleDescription(/hello again/)
+  })
+
+  it('groups matches by day while each match opens its own line', async () => {
+    vi.mocked(searchDays).mockResolvedValue([
+      { day: todayDay, matchedBlocks: ['hello world', 'hello again'], blockKind: 'line' },
+      { day: olderDay, matchedBlocks: ['unrelated note'], blockKind: 'line' },
+    ])
+    renderTimeline()
+    openSearchCard()
+    typeQuery('hello')
+    await waitForResults(3)
+
+    const groups = document.querySelectorAll('.matched-result-group')
+    expect(groups).toHaveLength(2)
+    expect(groups[0].querySelectorAll('.result-open-button')).toHaveLength(2)
+    expect(groups[0].querySelectorAll('p')[0]).toHaveTextContent('Today')
+    expect(groups[0].textContent?.match(/Today/g)).toHaveLength(1)
+    fireEvent.click(getResultOpenButtons()[1])
+    await waitFor(() => {
+      expect(handleCitationClick).toHaveBeenCalledWith(
+        { day: todayId, quote: 'hello again', lineIndex: 1 },
+      )
+    })
   })
 
   it('announces the match count and No results through one status region', async () => {

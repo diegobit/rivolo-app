@@ -57,6 +57,7 @@ export default function AppShell() {
   const mode = useUIStore((state) => state.mode)
   const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
+  const desktopPanelExpanded = useUIStore((state) => state.desktopPanelExpanded)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const timelineEmpty = useUIStore((state) => state.timelineEmpty)
   const tabSync = useTabSyncState()
@@ -415,7 +416,7 @@ export default function AppShell() {
           // field, it closes the card, so repeated presses open and close it.
           if (isDesktopHome && document.activeElement?.id === inputId) {
             setMode('timeline')
-            focusLauncher(nextMode)
+            document.getElementById(inputId)?.blur()
             return
           }
           document.getElementById(inputId)?.focus()
@@ -513,6 +514,7 @@ export default function AppShell() {
     <div
       className="app-shell-root min-h-full text-[var(--theme-text)]"
       data-desktop-chat-sidebar-open={isDesktopChatMode ? 'true' : 'false'}
+      data-desktop-panel-expanded={desktopPanelExpanded ? 'true' : 'false'}
       data-desktop-search-sidebar-open={isDesktopSearchCardOpen ? 'true' : 'false'}
       data-mobile-home={isMobileHome ? 'true' : 'false'}
       data-mode={mode}

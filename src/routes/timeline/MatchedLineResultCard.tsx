@@ -1,4 +1,4 @@
-import { memo, useId } from 'react'
+import { memo, useId, type ComponentProps } from 'react'
 import type { Day } from '../../lib/dayRepository'
 import { addDays, formatHumanDate, parseDayId } from '../../lib/dates'
 import { renderSyntaxLine } from './syntaxHighlight'
@@ -73,7 +73,7 @@ const MatchedLineResultCard = memo(({
 
   return (
     <section
-      className="scroll-anchor relative cursor-pointer rounded-[4px] border border-slate-200/60 bg-white px-3 py-2.5 pr-14 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition hover:border-slate-300/60"
+      className="matched-result-row relative cursor-pointer px-3 py-3 pr-16 transition-colors hover:bg-[var(--theme-hover)]"
       onClick={(event) => {
         const target = event.target as HTMLElement
         if (target.closest('button[aria-label="Toggle todo"]')) return
@@ -94,11 +94,6 @@ const MatchedLineResultCard = memo(({
       >
         <img src="/arrow-square-in.svg" alt="" className="h-5 w-5" />
       </button>
-      <div className="mb-1.5">
-        <p className="m-0" style={{ ...contentTextStyle, color: 'var(--theme-text-muted)' }}>
-          {dayLabel}
-        </p>
-      </div>
       <div id={snippetId} className="space-y-0" style={contentTextStyle}>
         {block.split('\n').map((line, lineIndex) => (
           <p key={`${day.dayId}-${lineIndex}`} className="m-0 whitespace-pre-wrap break-words px-[2px] pl-[6px] text-[var(--theme-editor-text)]">
@@ -125,3 +120,29 @@ const MatchedLineResultCard = memo(({
 })
 
 export default MatchedLineResultCard
+
+export function MatchedLineResultList({
+  items,
+  ...sharedProps
+}: {
+  items: MatchedLineResultItem[]
+} & Pick<ComponentProps<typeof MatchedLineResultCard>,
+  'enableTodoToggle' | 'todayId' | 'contentTextStyle' | 'searchQuery' | 'onOpen' | 'onToggleTodo'>) {
+  const groups = new Map<string, MatchedLineResultItem[]>()
+  for (const item of items) {
+    const group = groups.get(item.day.dayId)
+    if (group) group.push(item)
+    else groups.set(item.day.dayId, [item])
+  }
+
+  return Array.from(groups, ([dayId, matches]) => (
+    <section key={dayId} className="matched-result-group scroll-anchor">
+      <p className="m-0 px-3 pt-3 pb-1" style={{ ...sharedProps.contentTextStyle, color: 'var(--theme-text-muted)' }}>
+        {getMatchedResultDayLabel(dayId, sharedProps.todayId)}
+      </p>
+      {matches.map(({ key, ...item }) => (
+        <MatchedLineResultCard key={key} {...item} {...sharedProps} />
+      ))}
+    </section>
+  ))
+}

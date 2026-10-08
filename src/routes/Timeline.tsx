@@ -35,7 +35,7 @@ import { toggleTodoLineMarker } from './timeline/todoToggle'
 import { getMatchedBlockLineIndexes } from './timeline/syntaxHighlight'
 import { HEADING_LINE_REGEX, getHeadingPreviewFromDay, getHeadingPreviewFromSectionBlock } from './timeline/headingPreview'
 import SearchModePills from './timeline/SearchModePills'
-import MatchedLineResultCard, { type MatchedLineResultItem } from './timeline/MatchedLineResultCard'
+import { MatchedLineResultList, type MatchedLineResultItem } from './timeline/MatchedLineResultCard'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { resolveActiveLlmConfig } from '../lib/llm/types'
 import { useSyncStore } from '../store/useSyncStore'
@@ -385,6 +385,8 @@ export default function Timeline() {
   const syncStatus = useSyncStore((state) => state.status)
   const mode = useUIStore((state) => state.mode)
   const setMode = useUIStore((state) => state.setMode)
+  const desktopPanelExpanded = useUIStore((state) => state.desktopPanelExpanded)
+  const setDesktopPanelExpanded = useUIStore((state) => state.setDesktopPanelExpanded)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
@@ -1752,6 +1754,23 @@ export default function Timeline() {
       />
     )
 
+  const panelSizeButton = (
+    <button
+      type="button"
+      className="timeline-chat-sidebar-icon-button"
+      aria-label={desktopPanelExpanded ? 'Reduce panel width' : 'Expand panel'}
+      title={desktopPanelExpanded ? 'Reduce panel width' : 'Expand panel'}
+      aria-pressed={desktopPanelExpanded}
+      onClick={() => setDesktopPanelExpanded(!desktopPanelExpanded)}
+    >
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        {desktopPanelExpanded
+          ? <path d="m3 7 5 5-5 5m18-10-5 5 5 5M8 12H2m14 0h6" />
+          : <path d="m8 7-5 5 5 5m8-10 5 5-5 5M3 12h6m12 0h-6" />}
+      </svg>
+    </button>
+  )
+
   const timelineContent = (
     <>
       {hasSearchIntent && !searchLoading && !searchError && (
@@ -1820,24 +1839,15 @@ export default function Timeline() {
       {/* Main List */}
       {!loading && !hasNoNotes && showMatchedLineResults && matchedLineResultItems.length > 0 && (
         <div className="space-y-3">
-          {matchedLineResultItems.map(({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex, openLineIndex }) => (
-            <MatchedLineResultCard
-              key={key}
-              day={day}
-              block={block}
-              openQuote={openQuote}
-              hasMore={hasMore}
-              blockIndex={blockIndex}
-              sourceLineIndex={sourceLineIndex}
-              openLineIndex={openLineIndex}
-              enableTodoToggle={canToggleMatchedResultTodos}
-              todayId={todayId}
-              contentTextStyle={matchedResultsTextStyle}
-              searchQuery={searchQuery}
-              onOpen={handleOpenMatchedLineResult}
-              onToggleTodo={handleToggleMatchedLineTodo}
-            />
-          ))}
+          <MatchedLineResultList
+            items={matchedLineResultItems}
+            enableTodoToggle={canToggleMatchedResultTodos}
+            todayId={todayId}
+            contentTextStyle={matchedResultsTextStyle}
+            searchQuery={searchQuery}
+            onOpen={handleOpenMatchedLineResult}
+            onToggleTodo={handleToggleMatchedLineTodo}
+          />
         </div>
       )}
 
@@ -2024,6 +2034,7 @@ export default function Timeline() {
                 Chat
               </h2>
               <div className="timeline-chat-sidebar-actions">
+                {panelSizeButton}
                 <button
                   type="button"
                   className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
@@ -2106,6 +2117,7 @@ export default function Timeline() {
                 Search
               </h2>
               <div className="timeline-chat-sidebar-actions">
+                {panelSizeButton}
                 <button
                   type="button"
                   className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
@@ -2133,26 +2145,15 @@ export default function Timeline() {
               {matchedLineResultItems.length > 0 && (
                 // Results from the previous query stay visible, dimmed, while a new one runs.
                 <div className={`space-y-3 ${searchLoading ? 'is-pending' : ''}`}>
-                  {visibleCardResultItems.map(
-                    ({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex, openLineIndex }) => (
-                      <MatchedLineResultCard
-                        key={key}
-                        day={day}
-                        block={block}
-                        openQuote={openQuote}
-                        hasMore={hasMore}
-                        blockIndex={blockIndex}
-                        sourceLineIndex={sourceLineIndex}
-                        openLineIndex={openLineIndex}
-                        enableTodoToggle
-                        todayId={todayId}
-                        contentTextStyle={matchedResultsTextStyle}
-                        searchQuery={searchQuery}
-                        onOpen={handleOpenMatchedLineResult}
-                        onToggleTodo={handleToggleMatchedLineTodo}
-                      />
-                    ),
-                  )}
+                  <MatchedLineResultList
+                    items={visibleCardResultItems}
+                    enableTodoToggle
+                    todayId={todayId}
+                    contentTextStyle={matchedResultsTextStyle}
+                    searchQuery={searchQuery}
+                    onOpen={handleOpenMatchedLineResult}
+                    onToggleTodo={handleToggleMatchedLineTodo}
+                  />
                 </div>
               )}
               {hiddenCardResultCount > 0 && (
