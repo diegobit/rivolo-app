@@ -6,13 +6,11 @@ type Mode = 'timeline' | 'chat' | 'search'
 type UIState = {
   mode: Mode
   chatPanelOpen: boolean
-  desktopChatPanelOpen: boolean
   chatMessageCount: number
   chatSending: boolean
   timelineEmpty: boolean | null
   setMode: (mode: Mode) => void
   setChatPanelOpen: (open: boolean) => void
-  setDesktopChatPanelOpen: (open: boolean) => void
   setChatMessageCount: (count: number) => void
   setChatSending: (sending: boolean) => void
   setTimelineEmpty: (empty: boolean | null) => void
@@ -23,21 +21,21 @@ const getDefaultChatPanelsOpen = () => {
   return !isNarrowViewport()
 }
 
+// Desktop homes start on the plain timeline with the two launcher buttons;
+// narrow viewports keep the chat composer in the tray as before.
+const getDefaultMode = () => {
+  if (typeof window === 'undefined') return 'chat'
+  return isNarrowViewport() ? 'chat' : 'timeline'
+}
+
 export const useUIStore = create<UIState>((set) => ({
-  mode: 'chat',
+  mode: getDefaultMode(),
   chatPanelOpen: getDefaultChatPanelsOpen(),
-  desktopChatPanelOpen: getDefaultChatPanelsOpen(),
   chatMessageCount: 0,
   chatSending: false,
   timelineEmpty: null,
-  setMode: (mode) =>
-    set((state) => ({
-      mode,
-      desktopChatPanelOpen:
-        mode === 'chat' && !isNarrowViewport() ? true : state.desktopChatPanelOpen,
-    })),
+  setMode: (mode) => set({ mode }),
   setChatPanelOpen: (open) => set({ chatPanelOpen: open }),
-  setDesktopChatPanelOpen: (open) => set({ desktopChatPanelOpen: open }),
   setChatMessageCount: (count) => set({ chatMessageCount: count }),
   setChatSending: (sending) => set({ chatSending: sending }),
   setTimelineEmpty: (empty) => set({ timelineEmpty: empty }),

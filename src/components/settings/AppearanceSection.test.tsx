@@ -36,10 +36,8 @@ describe('AppearanceSection', () => {
     expect(screen.getByRole('button', { name: 'System' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: 'Light' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: 'Dark' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'System' }).parentElement).toHaveClass(
-      'rounded-xl',
-      'border',
-      'border-slate-200',
+    expect(screen.getByRole('group', { name: 'Theme' })).toContainElement(
+      screen.getByRole('button', { name: 'System' }),
     )
 
     await userEvent.click(screen.getByRole('button', { name: 'System' }))
@@ -54,7 +52,7 @@ describe('AppearanceSection', () => {
     expect(screen.getByRole('button', { name: 'Proportional' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('switch', { name: 'Autocorrection' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'No background' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('switch', { name: 'Highlight input mode' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Highlight input mode (mobile only)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Bree Serif' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Inconsolata' })).not.toBeInTheDocument()
 
@@ -79,7 +77,7 @@ describe('AppearanceSection', () => {
     expect(screen.getByRole('img', { name: 'No background preview' })).toHaveClass(
       'sm:hidden',
     )
-    expect(screen.getByRole('switch', { name: 'Highlight input mode' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Highlight input mode (mobile only)' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Rivolo Light' }))
     expect(onWallpaperChange).toHaveBeenCalledExactlyOnceWith('thoughts-light')
@@ -110,22 +108,15 @@ describe('AppearanceSection', () => {
       onBodyFontChoiceChange,
     })
 
-    expect(screen.getByRole('button', { name: 'Handlee' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Bree Serif' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    )
-    expect(screen.getByRole('button', { name: 'iA Writer Mono' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
-    // 'Lato' appears in both pickers.
-    expect(screen.getAllByRole('button', { name: 'Lato' })).toHaveLength(2)
+    const titleSelect = screen.getByLabelText('Title font')
+    const bodySelect = screen.getByLabelText('Body font')
+    expect(titleSelect).toHaveValue('handlee')
+    expect(bodySelect).toHaveValue('iawriter')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Bree Serif' }))
+    await userEvent.selectOptions(titleSelect, 'Bree Serif')
     expect(onTitleFontChange).toHaveBeenCalledExactlyOnceWith('bree')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Inconsolata' }))
+    await userEvent.selectOptions(bodySelect, 'Inconsolata')
     expect(onBodyFontChoiceChange).toHaveBeenCalledExactlyOnceWith('inconsolata')
   })
 })

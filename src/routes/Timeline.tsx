@@ -1,4 +1,5 @@
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
@@ -21,6 +22,9 @@ import type { Day, DaySearchResult, SearchFilter } from '../lib/dayRepository'
 import { appendToDay, searchDays } from '../lib/dayRepository'
 import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
+import { focusLauncher } from '../components/app-shell/desktopCards'
+import { useStickToBottom } from './timeline/useStickToBottom'
+import { keepEditedDayInResults } from './timeline/searchResults'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
 import { useEditorMountWindow } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
@@ -51,9 +55,12 @@ export type SearchResultMode = 'whole-day' | 'matched-lines'
 
 type TrayInputProps = {
   mode: TrayInputMode
+  draftText: string
+  onDraftTextChange: (value: string) => void
   sending: boolean
   chatError: string | null
-  onChatSubmit: (value: string) => Promise<void>
+  // Resolves false when the draft was rejected (e.g. no provider configured).
+  onChatSubmit: (value: string) => Promise<boolean>
   onSearchTextChange: (value: string) => void
 }
 
@@ -63,24 +70,34 @@ type TrayInputConfig = {
   enterKeyHint: 'send' | 'search'
 }
 
+const SEARCH_CARD_PAGE_SIZE = 50
+
 const CHAT_TEXTAREA_MIN_HEIGHT_PX = 40
 const CHAT_TEXTAREA_MAX_HEIGHT_PX = 136
 const CHAT_TEXTAREA_EXPANDED_DELTA_PX = 4
 const CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX = CHAT_TEXTAREA_MIN_HEIGHT_PX
 
+// One line of text plus vertical padding, derived from styles rather than from
+// the current content: a remounted composer may already hold a multiline draft.
+const measureSingleLineHeight = (textarea: HTMLTextAreaElement) => {
+  const style = window.getComputedStyle(textarea)
+  const height =
+    parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+  return Number.isFinite(height) && height > 0 ? height : CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX
+}
+
 const TrayInput = memo(({
   mode,
+  draftText,
+  onDraftTextChange,
   sending,
   chatError,
   onChatSubmit,
   onSearchTextChange,
 }: TrayInputProps) => {
-  const [draftText, setDraftText] = useState('')
   const debounceRef = useRef<number | null>(null)
   const prevModeRef = useRef<TrayInputMode>(mode)
   const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null)
-  const searchTextareaRef = useRef<HTMLTextAreaElement | null>(null)
-  const chatTextareaSingleLineHeightRef = useRef(0)
   const isChatMode = mode === 'chat'
   const hasSearchText = draftText.trim().length > 0
   const trayFieldClassName =
@@ -110,22 +127,14 @@ const TrayInput = memo(({
 
     textarea.style.height = 'auto'
     const measuredHeight = textarea.scrollHeight
-    if (chatTextareaSingleLineHeightRef.current === 0 || !draftText.trim()) {
-      chatTextareaSingleLineHeightRef.current = measuredHeight
-    }
-
-    const baselineSingleLineHeight =
-      chatTextareaSingleLineHeightRef.current > 0
-        ? chatTextareaSingleLineHeightRef.current
-        : CHAT_TEXTAREA_SINGLE_LINE_FALLBACK_PX
-    const singleLineCeiling = baselineSingleLineHeight + CHAT_TEXTAREA_EXPANDED_DELTA_PX
+    const singleLineCeiling = measureSingleLineHeight(textarea) + CHAT_TEXTAREA_EXPANDED_DELTA_PX
     const nextHeight = Math.min(
       measuredHeight <= singleLineCeiling ? CHAT_TEXTAREA_MIN_HEIGHT_PX : measuredHeight,
       CHAT_TEXTAREA_MAX_HEIGHT_PX,
     )
     textarea.style.height = `${nextHeight}px`
     textarea.style.overflowY = textarea.scrollHeight > CHAT_TEXTAREA_MAX_HEIGHT_PX ? 'auto' : 'hidden'
-  }, [draftText])
+  }, [])
 
   useLayoutEffect(() => {
     if (!isChatMode) {
@@ -134,6 +143,24 @@ const TrayInput = memo(({
 
     syncChatTextareaHeight()
   }, [draftText, isChatMode, syncChatTextareaHeight])
+
+  // A width change (moving between the tray and a card, or the card narrowing)
+  // rewraps the draft, so the height has to be measured again.
+  useEffect(() => {
+    const textarea = chatTextareaRef.current
+    if (!isChatMode || !textarea || typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    let lastWidth = textarea.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (textarea.clientWidth === lastWidth) return
+      lastWidth = textarea.clientWidth
+      syncChatTextareaHeight()
+    })
+    observer.observe(textarea)
+    return () => observer.disconnect()
+  }, [isChatMode, syncChatTextareaHeight])
 
   const submitChatDraft = useCallback(async () => {
     if (mode !== 'chat' || sending) {
@@ -145,9 +172,12 @@ const TrayInput = memo(({
       return
     }
 
-    setDraftText('')
-    await onChatSubmit(trimmed)
-  }, [draftText, mode, onChatSubmit, sending])
+    onDraftTextChange('')
+    const sent = await onChatSubmit(trimmed)
+    // Rejection is immediate, before anything else could be typed, so the
+    // draft can simply be put back.
+    if (!sent) onDraftTextChange(draftText)
+  }, [draftText, mode, onChatSubmit, onDraftTextChange, sending])
 
   useEffect(() => {
     if (mode !== 'search') return
@@ -193,8 +223,11 @@ const TrayInput = memo(({
       window.clearTimeout(debounceRef.current)
       debounceRef.current = null
     }
-    setDraftText('')
+    onDraftTextChange('')
     onSearchTextChange('')
+    // The Clear button disappears with the text; keep focus in the field
+    // instead of dropping it on the page.
+    document.getElementById(inputConfig.id)?.focus()
   }
 
   const showChatError = Boolean(chatError) && mode === 'chat'
@@ -204,7 +237,7 @@ const TrayInput = memo(({
       <form className="flex items-end gap-3" onSubmit={handleSubmit}>
         <div className="relative flex-1">
           <p
-            className={`absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
+            className={`tray-input-error absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
               showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
             }`}
             aria-hidden={!showChatError}
@@ -227,7 +260,7 @@ const TrayInput = memo(({
               placeholder={inputConfig.placeholder}
               value={draftText}
               onChange={(event) => {
-                setDraftText(event.target.value)
+                onDraftTextChange(event.target.value)
               }}
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' || event.shiftKey) {
@@ -258,7 +291,7 @@ const TrayInput = memo(({
               placeholder={inputConfig.placeholder}
               value={draftText}
               onChange={(event) => {
-                setDraftText(event.target.value)
+                onDraftTextChange(event.target.value)
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
@@ -291,7 +324,7 @@ const TrayInput = memo(({
           <div className="flex h-11 w-11 shrink-0 items-center justify-center sm:h-10 sm:w-10">
             {hasSearchText ? (
               <button
-                className="group flex h-11 w-11 items-center justify-center rounded-full hover:bg-slate-500 sm:h-8 sm:w-8"
+                className="tray-input-clear group flex h-11 w-11 items-center justify-center rounded-full hover:bg-slate-500 sm:h-8 sm:w-8"
                 type="button"
                 aria-label="Clear search"
                 onClick={handleClearSearch}
@@ -353,8 +386,6 @@ export default function Timeline() {
   const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
-  const desktopChatPanelOpen = useUIStore((state) => state.desktopChatPanelOpen)
-  const setDesktopChatPanelOpen = useUIStore((state) => state.setDesktopChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const setChatMessageCount = useUIStore((state) => state.setChatMessageCount)
   const setChatSending = useUIStore((state) => state.setChatSending)
@@ -370,6 +401,11 @@ export default function Timeline() {
     },
     [setSearchText],
   )
+
+  // Drafts live here so the desktop chat composer and the tray input keep
+  // their own text when their components unmount on mode switches.
+  const [chatDraftText, setChatDraftText] = useState('')
+  const [searchDraftText, setSearchDraftText] = useState('')
 
   useEffect(() => {
     setChatMessageCount(messages.length)
@@ -387,10 +423,34 @@ export default function Timeline() {
   const [isHeroRevealActive, setIsHeroRevealActive] = useState(false)
   const [isHeroRevealHold, setIsHeroRevealHold] = useState(false)
   const isNarrowViewportMode = useIsNarrowViewport()
+
+  // Crossing the narrow breakpoint moves the composer between the tray and a
+  // card, remounting it. The window resize event fires before the media query
+  // change re-renders anything, so note which composer had focus there and
+  // give focus back once the new one is mounted.
+  const refocusComposerAfterFlipRef = useRef<string | null>(null)
+  useEffect(() => {
+    const rememberFocusedComposer = () => {
+      const id = document.activeElement?.id
+      refocusComposerAfterFlipRef.current = id === 'chat-input' || id === 'search-input' ? id : null
+    }
+    window.addEventListener('resize', rememberFocusedComposer)
+    return () => window.removeEventListener('resize', rememberFocusedComposer)
+  }, [])
+  useEffect(() => {
+    const id = refocusComposerAfterFlipRef.current
+    if (!id) return
+    refocusComposerAfterFlipRef.current = null
+    requestAnimationFrame(() => document.getElementById(id)?.focus())
+  }, [isNarrowViewportMode])
   const searchResultsRef = useRef<DaySearchResult[]>([])
 
   const hasRestoredScroll = useRef(false)
   const editorRefs = useRef(new Map<string, EditorView>())
+  const isNarrowViewportModeRef = useRef(isNarrowViewportMode)
+  useEffect(() => {
+    isNarrowViewportModeRef.current = isNarrowViewportMode
+  }, [isNarrowViewportMode])
   const dayRefs = useRef(new Map<string, HTMLDivElement>())
   const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
   const createdDayIdsRef = useRef(new Set<string>())
@@ -415,6 +475,13 @@ export default function Timeline() {
     })
   }, [])
 
+  // Results come from the database, so an edited note changes which blocks
+  // match only once it is saved; searching again then keeps the card current.
+  const [savedNotesRevision, setSavedNotesRevision] = useState(0)
+  const handleDaySaved = useCallback(() => {
+    setSavedNotesRevision((revision) => revision + 1)
+  }, [])
+
   const {
     clearDaySaveToken,
     discardPendingDaySave,
@@ -427,6 +494,7 @@ export default function Timeline() {
     canSync,
     updateDayContent,
     onAutoPush: handleAutoPush,
+    onDaySaved: handleDaySaved,
   })
 
   const {
@@ -467,17 +535,26 @@ export default function Timeline() {
   const rawSearchQuery = mode === 'search' ? searchText.trim() : ''
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
-  const hasSearchIntent = mode === 'search' && (Boolean(searchQuery) || Boolean(searchFilter))
-  const isTimelineVisible = mode !== 'search' || !hasSearchIntent
+  // Desktop search renders results inside the floating left card and never
+  // filters the timeline; only the narrow-viewport tray search filters it.
+  const isDesktopSearchCardOpen = mode === 'search' && !isNarrowViewportMode
+  const isMobileSearchMode = mode === 'search' && isNarrowViewportMode
+  const hasSearchIntent = isMobileSearchMode && (Boolean(searchQuery) || Boolean(searchFilter))
+  // Only the narrow-viewport search ever hides the timeline: hasSearchIntent
+  // already implies mode === 'search', so this is simply !hasSearchIntent.
+  const isTimelineVisible = !hasSearchIntent
   const hasChatMessages = messages.length > 0
   const mobileChatContentKey = useMemo(
     () => messages.map((message) => `${message.id}:${message.content}:${message.meta?.isStreaming ?? false}`).join('\u0000'),
     [messages],
   )
-  const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode && hasChatMessages
-  const showDesktopChatPanel = showDesktopChatMode && desktopChatPanelOpen
-  const showMobileChatOverlay =
-    mode === 'chat' && isNarrowViewportMode && (chatPanelOpen || chatMessageCount > 0)
+  const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode
+  const showDesktopChatPanel = showDesktopChatMode
+  const lastChatMessage = messages[messages.length - 1]
+  // Grows with every new message and every streamed chunk of the last one.
+  const chatContentKey = `${messages.length}:${lastChatMessage?.content.length ?? 0}:${lastChatMessage?.meta?.isStreaming ? 1 : 0}`
+  const chatScroll = useStickToBottom(showDesktopChatPanel, chatContentKey)
+  const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && (chatPanelOpen || chatMessageCount > 0)
   const mobileChatScroll = useMobileChatScroll(showMobileChatOverlay, mobileChatContentKey)
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
@@ -717,7 +794,14 @@ export default function Timeline() {
       try {
         const data = await searchDays(searchQuery, { filter: searchFilter })
         if (cancelled) return
-        setSearchResults(data)
+        // view.hasFocus is false whenever the window is unfocused, which is
+        // exactly when pending edits are saved (switching apps mid-edit), so
+        // check the editor's own element instead.
+        const editedDayId = isNarrowViewportModeRef.current
+          ? ([...editorRefs.current.entries()].find(([, view]) => view.dom.contains(document.activeElement))?.[0] ??
+            null)
+          : null
+        setSearchResults((previous) => keepEditedDayInResults(data, previous, editedDayId))
       } catch {
         if (cancelled) return
         setSearchError('Search failed. Try again.')
@@ -734,7 +818,9 @@ export default function Timeline() {
     return () => {
       cancelled = true
     }
-  }, [mode, searchFilter, searchQuery])
+    // savedNotesRevision re-runs the search once an edited note is saved;
+    // searchResultMode, so switching Days/Lines never shows a kept day's stale lines.
+  }, [mode, savedNotesRevision, searchFilter, searchQuery, searchResultMode])
 
   // --- Handlers ---
 
@@ -755,9 +841,7 @@ export default function Timeline() {
     activeLlmConfig,
     isNarrowViewport: isNarrowViewportMode,
     chatPanelOpen,
-    desktopChatPanelOpen,
     setChatPanelOpen,
-    setDesktopChatPanelOpen,
     onInsertNote: handleChatInsertNote,
   })
 
@@ -1410,13 +1494,23 @@ export default function Timeline() {
   const showSearchError = hasSearchIntent && !searchLoading && Boolean(searchError)
   const showMatchedLineResults = hasSearchIntent && searchResultMode === 'matched-lines'
   const matchedLineResultItems = useMemo<MatchedLineResultItem[]>(() => {
-    if (!showMatchedLineResults) {
+    // One item per matched block, for the narrow-viewport list in matched-lines
+    // mode and for the desktop search card, which always lists every match.
+    if (!showMatchedLineResults && !isDesktopSearchCardOpen) {
       return []
     }
 
     const items: MatchedLineResultItem[] = []
     for (const { day, matchedBlocks, blockKind } of visibleSearchResults) {
       const lineIndexes = blockKind === 'line' ? getMatchedBlockLineIndexes(day.contentMd, matchedBlocks) : null
+      // A section opens at its heading, so repeated headings are located the same way.
+      const sectionHeadingLineIndexes =
+        blockKind === 'section'
+          ? getMatchedBlockLineIndexes(
+              day.contentMd,
+              matchedBlocks.map((block) => getHeadingPreviewFromSectionBlock(block)?.headingLine || block.split('\n')[0]),
+            )
+          : null
 
       matchedBlocks.forEach((block, index) => {
         if (!block.trim()) {
@@ -1453,6 +1547,9 @@ export default function Timeline() {
               : null
             : null
 
+        const headingLineIndex = sectionHeadingLineIndexes?.[index] ?? -1
+        const sectionHeadingLineIndex = headingLineIndex >= 0 ? headingLineIndex : null
+
         items.push({
           key: `${day.dayId}-${blockKind}-${index}`,
           day,
@@ -1461,21 +1558,113 @@ export default function Timeline() {
           hasMore,
           blockIndex: index,
           sourceLineIndex: matchedLineIndex,
+          openLineIndex: blockKind === 'section' ? sectionHeadingLineIndex : matchedLineIndex,
         })
       })
     }
 
     return items
-  }, [showMatchedLineResults, visibleSearchResults])
+  }, [isDesktopSearchCardOpen, showMatchedLineResults, visibleSearchResults])
+
+  const hasCardSearchIntent = isDesktopSearchCardOpen && (Boolean(searchQuery) || Boolean(searchFilter))
+  const cardNoSearchResults =
+    hasCardSearchIntent &&
+    !searchLoading &&
+    visibleSearchResults.length === 0 &&
+    !searchError
+  const showCardSearchError = hasCardSearchIntent && !searchLoading && Boolean(searchError)
+  const cardMatchCount = matchedLineResultItems.length
+  // One always-mounted live region, so screen readers hear every change.
+  const cardSearchStatus = !hasCardSearchIntent
+    ? ''
+    : searchLoading
+      ? 'Searching…'
+      : showCardSearchError
+        ? (searchError ?? '')
+        : cardNoSearchResults
+          ? 'No results'
+          : `${cardMatchCount} ${cardMatchCount === 1 ? 'match' : 'matches'}`
+  const isCardSearchMessage = showCardSearchError || cardNoSearchResults
+
+  // Large result sets render a page at a time; the rest load as the list is
+  // scrolled to its end. The page count resets only for a new query or filter,
+  // so a refresh after an edit does not collapse a list the user has scrolled.
+  const cardResultsKey = `${searchQuery}\u0000${searchFilter ?? ''}`
+  const [cardResultPage, setCardResultPage] = useState({ key: cardResultsKey, limit: SEARCH_CARD_PAGE_SIZE })
+  const cardResultLimit = cardResultPage.key === cardResultsKey ? cardResultPage.limit : SEARCH_CARD_PAGE_SIZE
+  const visibleCardResultItems =
+    cardMatchCount > cardResultLimit ? matchedLineResultItems.slice(0, cardResultLimit) : matchedLineResultItems
+  const hiddenCardResultCount = cardMatchCount - visibleCardResultItems.length
+  const showMoreCardResults = useCallback(() => {
+    setCardResultPage({ key: cardResultsKey, limit: cardResultLimit + SEARCH_CARD_PAGE_SIZE })
+  }, [cardResultLimit, cardResultsKey])
+  const showMoreCardResultsRef = useRef<HTMLButtonElement | null>(null)
+  // Set by ArrowDown past the last loaded result; focused once the page renders.
+  const focusCardResultAfterLoadRef = useRef<number | null>(null)
+  useEffect(() => {
+    const pendingIndex = focusCardResultAfterLoadRef.current
+    if (pendingIndex === null) return
+    focusCardResultAfterLoadRef.current = null
+    const openButtons = document.querySelectorAll<HTMLButtonElement>('#desktop-search-card .result-open-button')
+    openButtons[pendingIndex]?.focus()
+  }, [visibleCardResultItems.length])
+  useEffect(() => {
+    const button = showMoreCardResultsRef.current
+    if (!button || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) showMoreCardResults()
+    })
+    observer.observe(button)
+    return () => observer.disconnect()
+  }, [hiddenCardResultCount, showMoreCardResults])
+
+  // ArrowDown from the search field reaches the first result; the arrow keys
+  // then move between results, and ArrowUp from the first returns to the field.
+  const handleSearchCardKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    const target = event.target as HTMLElement
+    const openButtons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('.result-open-button')]
+    if (target.id === 'search-input') {
+      if (event.key === 'ArrowDown' && openButtons.length > 0) {
+        event.preventDefault()
+        openButtons[0].focus()
+      }
+      return
+    }
+
+    const index = openButtons.indexOf(target as HTMLButtonElement)
+    if (index === -1) return
+    event.preventDefault()
+    if (event.key === 'ArrowDown') {
+      const showMore = event.currentTarget.querySelector<HTMLButtonElement>('.timeline-search-show-more')
+      if (index === openButtons.length - 1 && showMore) {
+        // Past the last loaded result: load the next page and continue there.
+        focusCardResultAfterLoadRef.current = index + 1
+        showMore.click()
+        return
+      }
+      openButtons[Math.min(index + 1, openButtons.length - 1)].focus()
+    } else if (index === 0) {
+      document.getElementById('search-input')?.focus()
+    } else {
+      openButtons[index - 1].focus()
+    }
+  }, [])
 
   const handleOpenMatchedLineResult = useCallback(
-    (dayId: string, quote: string) => {
-      setSearchResultMode('whole-day')
+    (dayId: string, quote: string, lineIndex?: number) => {
+      // Narrow viewports keep the filtered search view and expand the day in
+      // place. On desktop the card stays open so several results can be opened
+      // in a row; only the unfiltered timeline behind it moves to the match.
+      if (isNarrowViewportMode) {
+        setSearchResultMode('whole-day')
+      }
+
       requestAnimationFrame(() => {
-        void handleCitationClick({ day: dayId, quote })
+        void handleCitationClick({ day: dayId, quote, lineIndex })
       })
     },
-    [handleCitationClick],
+    [handleCitationClick, isNarrowViewportMode],
   )
 
   const handleToggleMatchedLineTodo = useCallback(
@@ -1536,20 +1725,25 @@ export default function Timeline() {
 
   const canToggleMatchedResultTodos = showMatchedLineResults && searchFilter === 'open-todos'
 
-  const searchPillsContent =
+  const renderSearchPills = (showResultMode: boolean) =>
     mode === 'search' ? (
       <SearchModePills
         searchFilter={searchFilter}
         resultMode={searchResultMode}
+        showResultMode={showResultMode}
         onSearchFilterChange={setSearchFilter}
         onResultModeChange={setSearchResultMode}
       />
     ) : null
 
+  // The tray composer only renders on narrow viewports; on desktop both the
+  // chat composer and the search field live inside their floating cards.
   const trayContent =
-    mode === 'timeline' ? null : (
+    mode === 'timeline' || !isNarrowViewportMode ? null : (
       <TrayInput
         mode={mode}
+        draftText={mode === 'chat' ? chatDraftText : searchDraftText}
+        onDraftTextChange={mode === 'chat' ? setChatDraftText : setSearchDraftText}
         sending={sending}
         chatError={chatError}
         onChatSubmit={handleChatSend}
@@ -1625,7 +1819,7 @@ export default function Timeline() {
       {/* Main List */}
       {!loading && !hasNoNotes && showMatchedLineResults && matchedLineResultItems.length > 0 && (
         <div className="space-y-3">
-          {matchedLineResultItems.map(({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex }) => (
+          {matchedLineResultItems.map(({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex, openLineIndex }) => (
             <MatchedLineResultCard
               key={key}
               day={day}
@@ -1634,6 +1828,7 @@ export default function Timeline() {
               hasMore={hasMore}
               blockIndex={blockIndex}
               sourceLineIndex={sourceLineIndex}
+              openLineIndex={openLineIndex}
               enableTodoToggle={canToggleMatchedResultTodos}
               todayId={todayId}
               contentTextStyle={matchedResultsTextStyle}
@@ -1806,43 +2001,186 @@ export default function Timeline() {
 
   return (
     <div>
-      {searchPillsContent ? <BottomTrayPortal containerId="bottom-tray-pills">{searchPillsContent}</BottomTrayPortal> : null}
+      {isMobileSearchMode ? (
+        <BottomTrayPortal containerId="bottom-tray-pills">{renderSearchPills(true)}</BottomTrayPortal>
+      ) : null}
       {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
 
-      {showDesktopChatMode ? (
-        <div className={`timeline-chat-layout ${showDesktopChatPanel ? 'is-chat-open' : 'is-chat-closed'}`}>
-          <div className="timeline-chat-main">{timelineContent}</div>
+      {showMobileChatOverlay ? <div className="contents" inert>{timelineContent}</div> : timelineContent}
 
-          <aside className="timeline-chat-sidebar" aria-hidden={!showDesktopChatPanel}>
-            <div className="timeline-chat-sidebar-inner">
-              <button
-                type="button"
-                className="-mt-0.5 inline-flex h-9 items-center gap-2 self-start rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={handleNewChat}
-                disabled={sending}
-              >
-                <img src="/eraser.svg" alt="" className="h-3.5 w-3.5 opacity-80" />
-                New chat
-              </button>
-              <ChatMessageList
-                messages={messages}
-                onAssistantMarkdownClick={handleAssistantMarkdownClick}
-                onAssistantMarkdownKeyDown={handleAssistantMarkdownKeyDown}
-                onChatInsert={(message) => {
-                  void handleChatInsert(message)
-                }}
-              />
+      {/* Desktop chat card */}
+      {!isNarrowViewportMode && (
+        <aside
+          id="desktop-chat-card"
+          className={`timeline-floating-card timeline-chat-sidebar ${showDesktopChatPanel ? 'is-chat-open' : 'is-chat-closed'}`}
+          aria-labelledby="desktop-chat-title"
+          aria-hidden={!showDesktopChatPanel}
+          inert={!showDesktopChatPanel}
+        >
+          <div className="timeline-chat-sidebar-inner">
+            <header className="timeline-chat-sidebar-header">
+              <h2 id="desktop-chat-title" className="timeline-chat-sidebar-title">
+                Chat
+              </h2>
+              <div className="timeline-chat-sidebar-actions">
+                <button
+                  type="button"
+                  className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
+                  aria-label="New chat"
+                  title="New chat"
+                  onClick={handleNewChat}
+                  disabled={sending}
+                >
+                  <img src="/eraser.svg" alt="" className="h-4 w-4 opacity-80" />
+                  <span className="timeline-chat-sidebar-button-label">New chat</span>
+                </button>
+                <button
+                  type="button"
+                  className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
+                  aria-label="Close chat"
+                  title="Close chat"
+                  onClick={() => {
+                    setMode('timeline')
+                    focusLauncher('chat')
+                  }}
+                >
+                  <img src="/plus.svg" alt="" className="h-4 w-4 rotate-45 opacity-80" />
+                  <span className="timeline-chat-sidebar-button-label">Close</span>
+                </button>
+              </div>
+            </header>
+            <div
+              ref={chatScroll.ref}
+              className="timeline-chat-sidebar-messages"
+              data-following={chatScroll.following ? 'true' : 'false'}
+              onScroll={chatScroll.onScroll}
+            >
+              {hasChatMessages ? (
+                <ChatMessageList
+                  messages={messages}
+                  onAssistantMarkdownClick={handleAssistantMarkdownClick}
+                  onAssistantMarkdownKeyDown={handleAssistantMarkdownKeyDown}
+                  onChatInsert={(message) => {
+                    void handleChatInsert(message)
+                  }}
+                />
+              ) : (
+                <p className="timeline-chat-sidebar-empty">What can I help with?</p>
+              )}
+              {chatScroll.hasUnseen && (
+                <button type="button" className="timeline-chat-jump-latest" onClick={chatScroll.scrollToBottom}>
+                  New messages ↓
+                </button>
+              )}
             </div>
-          </aside>
-        </div>
-      ) : showMobileChatOverlay ? (
-        // The full-screen chat covers the timeline: keep it out of the tab order
-        // and away from assistive technology while it is up.
-        <div className="contents" inert>
-          {timelineContent}
-        </div>
-      ) : (
-        timelineContent
+            <div className="timeline-chat-sidebar-composer">
+              <div className="timeline-chat-composer-field">
+                <TrayInput
+                  mode="chat"
+                  draftText={chatDraftText}
+                  onDraftTextChange={setChatDraftText}
+                  sending={sending}
+                  chatError={chatError}
+                  onChatSubmit={handleChatSend}
+                  onSearchTextChange={handleSearchTextChange}
+                />
+              </div>
+            </div>
+          </div>
+        </aside>
+      )}
+
+      {/* Desktop search card: it never filters the timeline. Opening a result
+          keeps the card open and moves the unfiltered timeline to the match. */}
+      {isDesktopSearchCardOpen && (
+        <aside
+          id="desktop-search-card"
+          className="timeline-floating-card timeline-search-sidebar"
+          aria-labelledby="desktop-search-title"
+          onKeyDown={handleSearchCardKeyDown}
+        >
+          <div className="timeline-chat-sidebar-inner">
+            <header className="timeline-chat-sidebar-header">
+              <h2 id="desktop-search-title" className="timeline-chat-sidebar-title">
+                Search
+              </h2>
+              <div className="timeline-chat-sidebar-actions">
+                <button
+                  type="button"
+                  className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
+                  aria-label="Close search"
+                  title="Close search"
+                  onClick={() => {
+                    setMode('timeline')
+                    focusLauncher('search')
+                  }}
+                >
+                  <img src="/plus.svg" alt="" className="h-4 w-4 rotate-45 opacity-80" />
+                  <span className="timeline-chat-sidebar-button-label">Close</span>
+                </button>
+              </div>
+            </header>
+            <div className="timeline-search-sidebar-results" aria-busy={searchLoading || undefined}>
+              <p
+                role="status"
+                className={`timeline-search-sidebar-status ${isCardSearchMessage ? 'is-message' : ''} ${
+                  showCardSearchError ? 'timeline-search-sidebar-status-error' : ''
+                }`}
+              >
+                {cardSearchStatus}
+              </p>
+              {matchedLineResultItems.length > 0 && (
+                // Results from the previous query stay visible, dimmed, while a new one runs.
+                <div className={`space-y-3 ${searchLoading ? 'is-pending' : ''}`}>
+                  {visibleCardResultItems.map(
+                    ({ key, day, block, openQuote, hasMore, blockIndex, sourceLineIndex, openLineIndex }) => (
+                      <MatchedLineResultCard
+                        key={key}
+                        day={day}
+                        block={block}
+                        openQuote={openQuote}
+                        hasMore={hasMore}
+                        blockIndex={blockIndex}
+                        sourceLineIndex={sourceLineIndex}
+                        openLineIndex={openLineIndex}
+                        enableTodoToggle
+                        todayId={todayId}
+                        contentTextStyle={matchedResultsTextStyle}
+                        searchQuery={searchQuery}
+                        onOpen={handleOpenMatchedLineResult}
+                        onToggleTodo={handleToggleMatchedLineTodo}
+                      />
+                    ),
+                  )}
+                </div>
+              )}
+              {hiddenCardResultCount > 0 && (
+                <button
+                  ref={showMoreCardResultsRef}
+                  type="button"
+                  className="timeline-search-show-more"
+                  onClick={showMoreCardResults}
+                >
+                  Show {Math.min(hiddenCardResultCount, SEARCH_CARD_PAGE_SIZE)} more
+                </button>
+              )}
+            </div>
+            <div className="timeline-search-sidebar-pills">{renderSearchPills(false)}</div>
+            <div className="timeline-search-sidebar-composer">
+              <div className="timeline-chat-composer-field">
+                <TrayInput
+                  mode="search"
+                  draftText={searchDraftText}
+                  onDraftTextChange={setSearchDraftText}
+                  sending={sending}
+                  chatError={chatError}
+                  onChatSubmit={handleChatSend}
+                  onSearchTextChange={handleSearchTextChange}
+                />
+              </div>
+            </div>
+          </div>
+        </aside>
       )}
 
       {pendingDeleteDayId && !hasNoNotes && !isNarrowViewportMode && (

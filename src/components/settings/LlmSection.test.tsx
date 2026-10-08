@@ -176,10 +176,7 @@ describe('LlmSection', () => {
     const onAiLanguageChange = vi.fn()
     renderSection({ aiLanguage: 'follow', advanced: true, onAiLanguageChange })
 
-    const languageBox = screen.getByRole('button', {
-      name: 'Match my language',
-    }).parentElement?.parentElement
-    expect(languageBox).toHaveClass('rounded-xl', 'border', 'border-slate-200')
+    expect(screen.getByRole('group', { name: 'Reply language' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Custom' }))
     const input = screen.getByPlaceholderText('e.g. Italian, English...')
     await userEvent.type(input, 'Italian')
