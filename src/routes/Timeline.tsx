@@ -8,6 +8,7 @@ import DayEditorCard from '../components/timeline/DayEditorCard'
 import EmptyStateHero from '../components/timeline/EmptyStateHero'
 import ChatMessageList from '../components/timeline/ChatMessageList'
 import { isIOS, isPrimaryModifierPressed, preferredScrollBehavior } from '../lib/device'
+import { lockPageScroll } from '../lib/pageScrollLock'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import {
@@ -29,6 +30,7 @@ import { useEditorMountWindow } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
 import { usePendingDayDelete } from './timeline/usePendingDayDelete'
 import { useTimelineChat } from './timeline/useTimelineChat'
+import { useMobileChatScroll } from './timeline/useMobileChatScroll'
 import { toggleTodoLineMarker } from './timeline/todoToggle'
 import { getMatchedBlockLineIndexes } from './timeline/syntaxHighlight'
 import { HEADING_LINE_REGEX, getHeadingPreviewFromDay, getHeadingPreviewFromSectionBlock } from './timeline/headingPreview'
@@ -96,10 +98,11 @@ const TrayInput = memo(({
   const debounceRef = useRef<number | null>(null)
   const prevModeRef = useRef<TrayInputMode>(mode)
   const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const searchTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const isChatMode = mode === 'chat'
   const hasSearchText = draftText.trim().length > 0
   const trayFieldClassName =
-    'block w-full h-10 rounded-full appearance-none bg-transparent py-2 pl-3 pr-3 text-base leading-6 text-[var(--theme-text)] outline-none placeholder:text-slate-400'
+    'block w-full h-10 appearance-none bg-transparent py-2 pl-3 pr-3 text-base leading-6 text-[var(--theme-text)] outline-none placeholder:text-slate-400'
 
   const inputConfig = useMemo<TrayInputConfig>(() => {
     if (isChatMode) {
@@ -211,6 +214,9 @@ const TrayInput = memo(({
       await submitChatDraft()
       return
     }
+    if (debounceRef.current !== null) window.clearTimeout(debounceRef.current)
+    onSearchTextChange(draftText)
+    searchTextareaRef.current?.blur()
   }
 
   const handleClearSearch = () => {
@@ -242,6 +248,7 @@ const TrayInput = memo(({
           {isChatMode ? (
             <textarea
               id={inputConfig.id}
+              data-mobile-chat-composer
               ref={chatTextareaRef}
               autoComplete="off"
               rows={1}
@@ -273,6 +280,7 @@ const TrayInput = memo(({
           ) : (
             <textarea
               id={inputConfig.id}
+              ref={searchTextareaRef}
               autoComplete="off"
               rows={1}
               inputMode="text"
@@ -287,8 +295,9 @@ const TrayInput = memo(({
                 onDraftTextChange(event.target.value)
               }}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') {
+                if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
                   event.preventDefault()
+                  event.currentTarget.form?.requestSubmit()
                 }
               }}
               enterKeyHint={inputConfig.enterKeyHint}
@@ -380,6 +389,7 @@ export default function Timeline() {
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const setChatMessageCount = useUIStore((state) => state.setChatMessageCount)
+  const setChatSending = useUIStore((state) => state.setChatSending)
   const setTimelineEmpty = useUIStore((state) => state.setTimelineEmpty)
   const messages = useChatStore((state) => state.messages)
   const setMessages = useChatStore((state) => state.setMessages)
@@ -444,7 +454,6 @@ export default function Timeline() {
   }, [isNarrowViewportMode])
   const dayRefs = useRef(new Map<string, HTMLDivElement>())
   const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
-  const mobileChatScrollRef = useRef<HTMLDivElement | null>(null)
   const createdDayIdsRef = useRef(new Set<string>())
   const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
   const addTodayRef = useRef<HTMLDivElement | null>(null)
@@ -536,6 +545,10 @@ export default function Timeline() {
   // already implies mode === 'search', so this is simply !hasSearchIntent.
   const isTimelineVisible = !hasSearchIntent
   const hasChatMessages = messages.length > 0
+  const mobileChatContentKey = useMemo(
+    () => messages.map((message) => `${message.id}:${message.content}:${message.meta?.isStreaming ?? false}`).join('\u0000'),
+    [messages],
+  )
   const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode
   const showDesktopChatPanel = showDesktopChatMode
   const lastChatMessage = messages[messages.length - 1]
@@ -543,6 +556,7 @@ export default function Timeline() {
   const chatContentKey = `${messages.length}:${lastChatMessage?.content.length ?? 0}:${lastChatMessage?.meta?.isStreaming ? 1 : 0}`
   const chatScroll = useStickToBottom(showDesktopChatPanel, chatContentKey)
   const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && (chatPanelOpen || chatMessageCount > 0)
+  const mobileChatScroll = useMobileChatScroll(showMobileChatOverlay, mobileChatContentKey)
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
@@ -659,24 +673,13 @@ export default function Timeline() {
 
   useEffect(() => {
     if (!showMobileChatOverlay) return
-
-    const rootStyle = document.documentElement.style
-    const bodyStyle = document.body.style
-    const lockScrollY = window.scrollY
-    const previousRootOverflow = rootStyle.overflow
-    const previousRootOverscroll = rootStyle.overscrollBehavior
-    const previousBodyOverflow = bodyStyle.overflow
-    const previousBodyOverscroll = bodyStyle.overscrollBehavior
-
-    rootStyle.overflow = 'hidden'
-    rootStyle.overscrollBehavior = 'none'
-    bodyStyle.overflow = 'hidden'
-    bodyStyle.overscrollBehavior = 'none'
+    const unlock = lockPageScroll()
 
     const handleTouchMove = (event: TouchEvent) => {
       const target = event.target
       if (!(target instanceof Node)) return
-      if (mobileChatScrollRef.current?.contains(target)) return
+      if (mobileChatScroll.scrollerRef.current?.contains(target)) return
+      if (target instanceof Element && target.closest('[data-mobile-chat-composer]')) return
       if (target instanceof Element && target.closest('[data-mobile-chat-menu]')) return
       event.preventDefault()
     }
@@ -684,16 +687,10 @@ export default function Timeline() {
     document.addEventListener('touchmove', handleTouchMove, { passive: false })
 
     return () => {
-      rootStyle.overflow = previousRootOverflow
-      rootStyle.overscrollBehavior = previousRootOverscroll
-      bodyStyle.overflow = previousBodyOverflow
-      bodyStyle.overscrollBehavior = previousBodyOverscroll
+      unlock()
       document.removeEventListener('touchmove', handleTouchMove)
-      requestAnimationFrame(() => {
-        window.scrollTo(0, lockScrollY)
-      })
     }
-  }, [showMobileChatOverlay])
+  }, [showMobileChatOverlay, mobileChatScroll.scrollerRef])
 
   useEffect(() => {
     const loadTimer = startDebugTimer(LOG_SCOPE, 'initialLoad')
@@ -848,6 +845,11 @@ export default function Timeline() {
     setChatPanelOpen,
     onInsertNote: handleChatInsertNote,
   })
+
+  useEffect(() => {
+    setChatSending(sending)
+    return () => setChatSending(false)
+  }, [sending, setChatSending])
 
   const runLogoTransition = useCallback(() => {
     const heroLogo = heroLogoRef.current
@@ -1722,7 +1724,6 @@ export default function Timeline() {
 
   // --- Render ---
 
-  const chatMessages = useMemo(() => [...messages].reverse(), [messages])
   const canToggleMatchedResultTodos = showMatchedLineResults && searchFilter === 'open-todos'
 
   const renderSearchPills = (showResultMode: boolean) =>
@@ -1753,6 +1754,13 @@ export default function Timeline() {
 
   const timelineContent = (
     <>
+      {hasSearchIntent && !searchLoading && !searchError && (
+        <p className="sr-only" role="status" aria-live="polite">
+          {showMatchedLineResults
+            ? `${matchedLineResultItems.length} ${matchedLineResultItems.length === 1 ? 'line' : 'lines'}`
+            : `${visibleSearchResults.length} ${visibleSearchResults.length === 1 ? 'day' : 'days'}`}
+        </p>
+      )}
       {/* Loading States */}
       {loading && (
         <section className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-sm text-slate-500">
@@ -2189,9 +2197,9 @@ export default function Timeline() {
         </BottomTrayPortal>
       )}
 
-      {pendingDeleteDayId && !hasNoNotes && isNarrowViewportMode && (
+      {pendingDeleteDayId && isNarrowViewportMode && (
         <div
-          className="pointer-events-none fixed left-0 z-40 px-3"
+          className="pointer-events-none fixed left-1/2 z-40 w-[min(96vw,620px)] -translate-x-1/2 px-2"
           style={{
             // Sit above the whole mobile bottom row (composer included in chat and
             // search, dock only in timeline), not just above the dock.
@@ -2199,7 +2207,7 @@ export default function Timeline() {
           }}
         >
           <div
-            className="pointer-events-auto flex w-[min(12rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 shadow-[0_14px_28px_-18px_rgb(var(--theme-shadow-color)/0.45)]"
+            className="pointer-events-auto flex w-[min(13.5rem,calc(100vw-1.5rem))] items-center justify-between gap-2 whitespace-nowrap rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 shadow-[0_14px_28px_-18px_rgb(var(--theme-shadow-color)/0.45)]"
             role="status"
             aria-live="polite"
           >
@@ -2219,24 +2227,39 @@ export default function Timeline() {
               <img src="/logo.svg" alt="Rivolo" className="h-10 w-auto" />
             </div>
             <div
-              ref={mobileChatScrollRef}
-              className="relative flex min-h-0 flex-1 flex-col-reverse gap-3 overflow-y-auto overscroll-y-contain px-2"
+              ref={mobileChatScroll.scrollerRef}
+              onScroll={mobileChatScroll.onScroll}
+              onTouchStart={mobileChatScroll.onTouchStart}
+              onTouchEnd={mobileChatScroll.onTouchEnd}
+              onTouchCancel={mobileChatScroll.onTouchEnd}
+              className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 [overflow-anchor:none]"
               style={{
                 paddingTop: '0.5rem',
                 paddingBottom: 'var(--mobile-home-bottom-clearance)',
                 scrollPaddingBottom: 'var(--mobile-home-bottom-clearance)',
               }}
             >
-              <ChatMessageList
-                messages={chatMessages}
-                mobile
-                onAssistantMarkdownClick={handleAssistantMarkdownClick}
-                onAssistantMarkdownKeyDown={handleAssistantMarkdownKeyDown}
-                onChatInsert={(message) => {
-                  void handleChatInsert(message)
-                }}
-              />
+              <div ref={mobileChatScroll.contentRef} className="flex min-h-full flex-col justify-end gap-3">
+                <ChatMessageList
+                  messages={messages}
+                  mobile
+                  onAssistantMarkdownClick={handleAssistantMarkdownClick}
+                  onAssistantMarkdownKeyDown={handleAssistantMarkdownKeyDown}
+                  onChatInsert={(message) => {
+                    void handleChatInsert(message)
+                  }}
+                />
+              </div>
             </div>
+            {mobileChatScroll.hasUnseen && !mobileChatScroll.following && (
+              <button
+                type="button"
+                className="absolute bottom-[var(--mobile-home-bottom-clearance)] left-1/2 z-10 min-h-11 -translate-x-1/2 rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm font-semibold text-[var(--theme-text)] [box-shadow:var(--theme-card-shadow-soft)]"
+                onClick={mobileChatScroll.scrollToBottom}
+              >
+                New messages
+              </button>
+            )}
           </div>
         </>
       )}

@@ -414,6 +414,28 @@ describe('AppShell attention and stale tab states', () => {
     window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
   })
 
+  it('releases Menu inert state when the viewport crosses into desktop mode', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    const shell = () => (
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    )
+    const view = render(shell())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    expect(view.container.querySelector('main')).toHaveAttribute('inert')
+
+    stores.viewport.isNarrow = false
+    view.rerender(shell())
+    await waitFor(() => expect(view.container.querySelector('main')).not.toHaveAttribute('inert'))
+  })
+
   it('keeps the welcome hero clean: the bottom bar fades out with it on mobile', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
