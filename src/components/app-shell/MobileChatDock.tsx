@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { AttentionItem } from '../../lib/attention'
@@ -42,6 +42,7 @@ export default function MobileChatDock({
   const [menuPresent, setMenuPresent] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const sheetRef = useRef<HTMLDivElement | null>(null)
+  const menuClosingRef = useRef(false)
 
   const activeIndex = DOCK_MODES.findIndex((item) => item.mode === mode)
 
@@ -56,10 +57,18 @@ export default function MobileChatDock({
     .filter(Boolean)
     .join('. ')
 
-  const closeMenu = () => {
+  const closeMenu = useCallback(() => {
+    if (menuClosingRef.current) return
+    menuClosingRef.current = true
+    const sheet = sheetRef.current
+    if (sheet) {
+      // A dismissal during entry should slide down from the current position,
+      // rather than jumping to the entry animation's fully open endpoint.
+      sheet.style.setProperty('--mobile-menu-exit-transform', window.getComputedStyle(sheet).transform)
+    }
     setIsMenuOpen(false)
     menuButtonRef.current?.focus({ preventScroll: true })
-  }
+  }, [])
   const navigate = () => {
     setIsMenuOpen(false)
     setMenuPresent(false)
@@ -96,8 +105,7 @@ export default function MobileChatDock({
       if (event.key === 'Escape') {
         event.preventDefault()
         event.stopPropagation()
-        setIsMenuOpen(false)
-        menuButtonRef.current?.focus({ preventScroll: true })
+        closeMenu()
       }
       if (event.key !== 'Tab') return
       const rows = getRows()
@@ -119,7 +127,7 @@ export default function MobileChatDock({
       document.removeEventListener('touchmove', preventBackgroundTouch)
       unlock()
     }
-  }, [menuPresent])
+  }, [menuPresent, closeMenu])
 
   return (
     <>
@@ -160,6 +168,7 @@ export default function MobileChatDock({
           aria-haspopup="dialog"
           aria-controls={isMenuOpen ? 'mobile-chat-menu' : undefined}
           onClick={() => {
+            menuClosingRef.current = false
             setMenuPresent(true)
             setIsMenuOpen(true)
           }}

@@ -99,6 +99,7 @@ const TrayInput = memo(({
   const prevModeRef = useRef<TrayInputMode>(mode)
   const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const searchTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const [isChatMultiline, setIsChatMultiline] = useState(false)
   const isChatMode = mode === 'chat'
   const hasSearchText = draftText.trim().length > 0
   const trayFieldClassName =
@@ -129,6 +130,7 @@ const TrayInput = memo(({
     textarea.style.height = 'auto'
     const measuredHeight = textarea.scrollHeight
     const singleLineCeiling = measureSingleLineHeight(textarea) + CHAT_TEXTAREA_EXPANDED_DELTA_PX
+    setIsChatMultiline(measuredHeight > singleLineCeiling)
     const nextHeight = Math.min(
       measuredHeight <= singleLineCeiling ? CHAT_TEXTAREA_MIN_HEIGHT_PX : measuredHeight,
       CHAT_TEXTAREA_MAX_HEIGHT_PX,
@@ -249,6 +251,7 @@ const TrayInput = memo(({
             <textarea
               id={inputConfig.id}
               data-mobile-chat-composer
+              data-multiline={isChatMultiline ? 'true' : 'false'}
               ref={chatTextareaRef}
               autoComplete="off"
               rows={1}
@@ -281,6 +284,7 @@ const TrayInput = memo(({
             <textarea
               id={inputConfig.id}
               ref={searchTextareaRef}
+              data-multiline="false"
               autoComplete="off"
               rows={1}
               inputMode="text"
