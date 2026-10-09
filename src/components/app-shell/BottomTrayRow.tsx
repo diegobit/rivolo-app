@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 
 type BottomTrayRowProps = {
   mode: 'timeline' | 'chat' | 'search'
@@ -25,6 +25,17 @@ export default function BottomTrayRow({
   showScrollToToday,
   onScrollToToday,
 }: BottomTrayRowProps) {
+  const [selection, setSelection] = useState({ mode, position: mode === 'chat' ? 'chat' : 'search', slides: false })
+  if (selection.mode !== mode) {
+    // Update before paint so opening from the plain timeline never briefly
+    // shows the thumb under the other launcher.
+    setSelection({
+      mode,
+      position: mode === 'timeline' ? selection.position : mode,
+      // Let an in-flight glide finish while closing, without moving its target.
+      slides: selection.mode !== 'timeline',
+    })
+  }
   const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.5rem] sm:top-[-3.1rem]'
   // The launchers (Search, then Chat) show on desktop in every mode and on
   // narrow viewports in timeline mode. The tray composer only appears on narrow
@@ -70,6 +81,8 @@ export default function BottomTrayRow({
             className={`flex items-center ${launcherSpread ? 'bottom-tray-launchers' : 'gap-2 sm:gap-3'}`}
             // Tells the capsule which half the sliding thumb sits behind.
             data-open={launcherSpread && (mode === 'search' || mode === 'chat') ? mode : undefined}
+            data-position={selection.position}
+            data-slide={selection.slides ? 'true' : 'false'}
           >
             {launcherSpread ? (
               // Desktop mirrors the cards: search opens on the left, chat on the right.
