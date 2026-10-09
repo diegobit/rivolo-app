@@ -89,6 +89,76 @@ export default function MobileChatDock({
   useEffect(() => () => onMenuOpenChange?.(false), [onMenuOpenChange])
 
   useEffect(() => {
+    const sheet = sheetRef.current
+    if (!menuPresent || !sheet) return
+
+    let gesture: { id: number; x: number; y: number; swiping: boolean } | null = null
+    let suppressClickUntil = 0
+    const start = (event: TouchEvent) => {
+      const wasSwiping = gesture?.swiping
+      gesture = null
+      suppressClickUntil = wasSwiping ? performance.now() + 500 : 0
+      // A menu scrolled away from its top needs normal scrolling, not dismissal.
+      if (menuClosingRef.current || event.touches.length !== 1 || sheet.scrollTop > 0) return
+      const touch = event.touches[0]
+      gesture = { id: touch.identifier, x: touch.clientX, y: touch.clientY, swiping: false }
+    }
+    const move = (event: TouchEvent) => {
+      if (!gesture) return
+      if (event.touches.length !== 1) {
+        if (gesture.swiping) suppressClickUntil = performance.now() + 500
+        gesture = null
+        return
+      }
+      const touch = event.touches[0]
+      const dx = Math.abs(touch.clientX - gesture.x)
+      const dy = touch.clientY - gesture.y
+      if (touch.identifier !== gesture.id || dy < -10 || (dx > 10 && dx > dy)) {
+        if (gesture.swiping) suppressClickUntil = performance.now() + 500
+        gesture = null
+        return
+      }
+      if (dy > 10 && dy > dx * 1.3) {
+        gesture.swiping = true
+        // Prevent Safari's rubber-band scroll once this is a downward gesture.
+        event.preventDefault()
+      }
+    }
+    const end = (event: TouchEvent) => {
+      const current = gesture
+      gesture = null
+      if (!current?.swiping) return
+      event.preventDefault()
+      suppressClickUntil = performance.now() + 500
+      const touch = Array.from(event.changedTouches).find((item) => item.identifier === current.id)
+      if (!touch) return
+      const dy = touch.clientY - current.y
+      if (dy >= 64 && dy > Math.abs(touch.clientX - current.x) * 1.3) closeMenu()
+    }
+    const cancel = () => {
+      if (gesture?.swiping) suppressClickUntil = performance.now() + 500
+      gesture = null
+    }
+    const preventSwipeClick = (event: MouseEvent) => {
+      if (performance.now() >= suppressClickUntil) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    sheet.addEventListener('touchstart', start, { passive: true })
+    sheet.addEventListener('touchmove', move, { passive: false })
+    sheet.addEventListener('touchend', end, { passive: false })
+    sheet.addEventListener('touchcancel', cancel)
+    sheet.addEventListener('click', preventSwipeClick, true)
+    return () => {
+      sheet.removeEventListener('touchstart', start)
+      sheet.removeEventListener('touchmove', move)
+      sheet.removeEventListener('touchend', end)
+      sheet.removeEventListener('touchcancel', cancel)
+      sheet.removeEventListener('click', preventSwipeClick, true)
+    }
+  }, [menuPresent, closeMenu])
+
+  useEffect(() => {
     if (!menuPresent) return
 
     const unlock = lockPageScroll()

@@ -321,7 +321,8 @@ describe('Timeline desktop search card', () => {
   it('opens the left search card with the search field and pills, without the chat card', () => {
     renderTimeline()
 
-    expect(screen.queryByPlaceholderText('Search all days')).not.toBeInTheDocument()
+    expect(getSearchInput().closest('aside')).toHaveAttribute('inert')
+    expect(screen.queryByRole('heading', { name: 'Search' })).not.toBeInTheDocument()
 
     openSearchCard()
 
@@ -345,6 +346,30 @@ describe('Timeline desktop search card', () => {
 
     // The timeline keeps showing every day instead of filtering to results.
     expect(screen.getAllByTestId('day-editor-card')).toHaveLength(2)
+  })
+
+  it('retains results, scroll position and a single composer through closing and reopening', async () => {
+    vi.mocked(searchDays).mockResolvedValue([
+      { day: todayDay, matchedBlocks: ['hello world'], blockKind: 'line' },
+    ])
+    renderTimeline()
+    openSearchCard()
+    typeQuery('hello')
+    await waitForResults(1)
+    const card = document.querySelector('#desktop-search-card')!
+    const result = card.querySelector('.result-open-button')
+    const results = card.querySelector('.timeline-search-sidebar-results')!
+    results.scrollTop = 80
+    fireEvent.click(screen.getByRole('button', { name: 'Close search' }))
+    expect(card).toHaveAttribute('inert')
+    expect(card).toHaveAttribute('aria-hidden', 'true')
+    expect(card.querySelector('.result-open-button')).toBe(result)
+    expect(results.scrollTop).toBe(80)
+    expect(document.querySelectorAll('#search-input')).toHaveLength(1)
+    openSearchCard()
+    expect(card).not.toHaveAttribute('inert')
+    expect(card.querySelector('.result-open-button')).toBe(result)
+    expect(results.scrollTop).toBe(80)
   })
 
   it('opening a result keeps the card open and the timeline unfiltered', async () => {
@@ -662,7 +687,8 @@ describe('Timeline desktop search card', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close search' }))
     expect(useUIStore.getState().mode).toBe('timeline')
-    expect(screen.queryByPlaceholderText('Search all days')).not.toBeInTheDocument()
+    expect(getSearchInput().closest('aside')).toHaveAttribute('inert')
+    expect(screen.queryByRole('heading', { name: 'Search' })).not.toBeInTheDocument()
 
     openSearchCard()
     expect(getSearchInput()).toHaveValue('hello')
