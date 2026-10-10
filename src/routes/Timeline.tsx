@@ -65,6 +65,7 @@ type TrayInputProps = {
   onChatSubmit: (value: string) => Promise<boolean>
   onSearchTextChange: (value: string) => void
   onFocus?: () => void
+  onClick?: () => void
 }
 
 type TrayInputConfig = {
@@ -99,6 +100,7 @@ const TrayInput = memo(({
   onChatSubmit,
   onSearchTextChange,
   onFocus,
+  onClick,
 }: TrayInputProps) => {
   const debounceRef = useRef<number | null>(null)
   const wasSearchActiveRef = useRef(false)
@@ -243,7 +245,7 @@ const TrayInput = memo(({
   return (
     <div className="relative">
       <form className="flex items-end gap-3" onSubmit={handleSubmit}>
-        <div className="relative flex-1">
+        <div className="group relative flex-1">
           <p
             className={`tray-input-error absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
               showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
@@ -258,11 +260,11 @@ const TrayInput = memo(({
               aria-hidden="true"
             >
               {isChatMode ? (
-                <svg viewBox="0 0 256 256" className="h-4 w-4 shrink-0 fill-current" aria-hidden="true">
+                <svg viewBox="0 0 256 256" className="h-4 w-4 shrink-0 fill-current group-focus-within:invisible" aria-hidden="true">
                   <path d="M197.58,129.06,146,110l-19-51.62a15.92,15.92,0,0,0-29.88,0L78,110l-51.62,19a15.92,15.92,0,0,0,0,29.88L78,178l19,51.62a15.92,15.92,0,0,0,29.88,0L146,178l51.62-19a15.92,15.92,0,0,0,0-29.88ZM137,164.22a8,8,0,0,0-4.74,4.74L112,223.85,91.78,169A8,8,0,0,0,87,164.22L32.15,144,87,123.78A8,8,0,0,0,91.78,119L112,64.15,132.22,119a8,8,0,0,0,4.74,4.74L191.85,144ZM144,40a8,8,0,0,1,8-8h16V16a8,8,0,0,1,16,0V32h16a8,8,0,0,1,0,16H184V64a8,8,0,0,1-16,0V48H152A8,8,0,0,1,144,40ZM248,88a8,8,0,0,1-8,8h-8v8a8,8,0,0,1-16,0V96h-8a8,8,0,0,1,0-16h8V72a8,8,0,0,1,16,0v8h8A8,8,0,0,1,248,88Z" />
                 </svg>
               ) : (
-                <svg viewBox="0 0 256 256" className="h-4 w-4 shrink-0 fill-current" aria-hidden="true">
+                <svg viewBox="0 0 256 256" className="h-4 w-4 shrink-0 fill-current group-focus-within:invisible" aria-hidden="true">
                   <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" />
                 </svg>
               )}
@@ -285,6 +287,7 @@ const TrayInput = memo(({
               }}
               placeholder={inputConfig.placeholder}
               value={draftText}
+              onClick={onClick}
               onFocus={onFocus}
               onChange={(event) => {
                 onDraftTextChange(event.target.value)
@@ -318,6 +321,8 @@ const TrayInput = memo(({
               }}
               placeholder={inputConfig.placeholder}
               value={draftText}
+              onClick={onClick}
+              onFocus={onFocus}
               onChange={(event) => {
                 onDraftTextChange(event.target.value)
               }}
@@ -1777,6 +1782,12 @@ export default function Timeline() {
       />
     ) : null
 
+  const openChatOverlayIfHidden = useCallback(() => {
+    if (isNarrowViewportMode && mode === 'chat' && !chatPanelOpen && chatMessageCount > 0) {
+      setChatPanelOpen(true)
+    }
+  }, [chatMessageCount, chatPanelOpen, isNarrowViewportMode, mode, setChatPanelOpen])
+
   // The tray composer only renders on narrow viewports; on desktop both the
   // chat composer and the search field live inside their floating cards.
   const trayContent =
@@ -1789,11 +1800,8 @@ export default function Timeline() {
         chatError={chatError}
         onChatSubmit={handleChatSend}
         onSearchTextChange={handleSearchTextChange}
-        onFocus={() => {
-          if (isNarrowViewportMode && mode === 'chat' && !chatPanelOpen && chatMessageCount > 0) {
-            setChatPanelOpen(true)
-          }
-        }}
+        onClick={openChatOverlayIfHidden}
+        onFocus={openChatOverlayIfHidden}
       />
     )
 
@@ -2065,7 +2073,13 @@ export default function Timeline() {
             className="mobile-chat-floating-btn pointer-events-auto ml-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] sm:hidden"
             aria-label={chatPanelOpen ? 'Back to timeline' : 'Open chat'}
             title={chatPanelOpen ? 'Back to timeline' : 'Open chat'}
-            onClick={() => setChatPanelOpen(!chatPanelOpen)}
+            onClick={() => {
+              if (chatPanelOpen) {
+                const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null
+                chatInput?.blur()
+              }
+              setChatPanelOpen(!chatPanelOpen)
+            }}
           >
             {chatPanelOpen ? (
               <span
@@ -2073,7 +2087,10 @@ export default function Timeline() {
                 className="h-5 w-5 bg-current [mask-image:url('/caret-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/caret-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
               />
             ) : (
-              <img src="/chats-teardrop.svg" alt="" className="h-5 w-5 opacity-75" />
+              <span
+                aria-hidden="true"
+                className="h-5 w-5 bg-current [mask-image:url('/chats-teardrop.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/chats-teardrop.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
+              />
             )}
           </button>
         </BottomTrayPortal>

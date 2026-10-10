@@ -161,6 +161,22 @@ describe('Mobile menu quick actions', () => {
     expect(screen.getByRole('button', { name: 'Clear chat' })).toBeDisabled()
   })
 
+  it('does not open chat panel when selecting chat mode if chat is empty', () => {
+    useUIStore.setState({ mode: 'search', chatMessageCount: 0, chatPanelOpen: false })
+    openMenu()
+    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    expect(useUIStore.getState().mode).toBe('chat')
+    expect(useUIStore.getState().chatPanelOpen).toBe(false)
+  })
+
+  it('opens chat panel when selecting chat mode if messages exist', () => {
+    useUIStore.setState({ mode: 'search', chatMessageCount: 2, chatPanelOpen: false })
+    openMenu()
+    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    expect(useUIStore.getState().mode).toBe('chat')
+    expect(useUIStore.getState().chatPanelOpen).toBe(true)
+  })
+
   it('puts the sync setup reminder where pull and push would be', () => {
     openMenu([
       {

@@ -260,4 +260,62 @@ describe('Timeline mobile chat UX', () => {
     fireEvent.change(searchInput, { target: { value: '' } })
     expect(screen.getByText('Search all days')).toBeInTheDocument()
   })
+
+  it('focusing or click on composer with 0 messages does not open chat overlay', () => {
+    useUIStore.setState({ chatPanelOpen: false, chatMessageCount: 0 })
+    useChatStore.setState({ messages: [] })
+
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    fireEvent.click(composer)
+    fireEvent.focus(composer)
+    expect(useUIStore.getState().chatPanelOpen).toBe(false)
+  })
+
+  it('does not render floating chat button in search mode', () => {
+    useUIStore.setState({ mode: 'search', chatPanelOpen: false, chatMessageCount: 2 })
+
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Back to timeline' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open chat' })).toBeNull()
+  })
+
+  it('tapping Back to timeline blurs the composer so subsequent click or focus reopens chat', () => {
+    useUIStore.setState({ chatPanelOpen: true, chatMessageCount: 2 })
+    useChatStore.setState({
+      messages: [
+        { id: '1', role: 'user', content: 'hello', createdAt: 1 },
+        { id: '2', role: 'assistant', content: 'hi', createdAt: 2 },
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    composer.focus()
+    expect(document.activeElement).toBe(composer)
+
+    const backButton = screen.getByRole('button', { name: 'Back to timeline' })
+    fireEvent.click(backButton)
+    expect(useUIStore.getState().chatPanelOpen).toBe(false)
+    expect(document.activeElement).not.toBe(composer)
+
+    // Pointer down on composer reopens chat
+    fireEvent.click(composer)
+    expect(useUIStore.getState().chatPanelOpen).toBe(true)
+  })
 })
