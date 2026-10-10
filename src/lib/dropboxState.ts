@@ -6,6 +6,8 @@ export type DropboxState = {
   lastRemoteRev: string | null
   lastPushedHash: string | null
   lastSyncAt: number | null
+  lastPullAt: number | null
+  lastPushAt: number | null
   localDirty: boolean
   localRevision: number
   accountId: string | null
@@ -19,6 +21,8 @@ const DEFAULT_STATE: DropboxState = {
   lastRemoteRev: null,
   lastPushedHash: null,
   lastSyncAt: null,
+  lastPullAt: null,
+  lastPushAt: null,
   localDirty: false,
   localRevision: 0,
   accountId: null,
@@ -79,6 +83,8 @@ export const updateDropboxFilePath = async (filePath: string) => {
       lastRemoteRev: pathChanged ? null : current.lastRemoteRev,
       lastPushedHash: pathChanged ? null : current.lastPushedHash,
       lastSyncAt: pathChanged ? null : current.lastSyncAt,
+      lastPullAt: pathChanged ? null : current.lastPullAt,
+      lastPushAt: pathChanged ? null : current.lastPushAt,
     }
 
     return { next, result: next }
@@ -108,6 +114,7 @@ export const finalizeDropboxPushState = async (
       lastRemoteRev: remoteRev,
       lastPushedHash: pushedHash === undefined ? current.lastPushedHash : pushedHash,
       lastSyncAt: Date.now(),
+      lastPushAt: Date.now(),
       localDirty: current.localRevision === sourceRevision ? false : current.localDirty,
     }
 

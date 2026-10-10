@@ -2056,13 +2056,13 @@ export default function Timeline() {
                 <button
                   type="button"
                   className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
-                  aria-label="New chat"
-                  title="New chat"
+                  aria-label="Clear chat"
+                  title="Clear chat"
                   onClick={handleNewChat}
                   disabled={sending}
                 >
                   <img src="/eraser.svg" alt="" className="h-4 w-4 opacity-80" />
-                  <span className="timeline-chat-sidebar-button-label">New chat</span>
+                  <span className="timeline-chat-sidebar-button-label">Clear chat</span>
                 </button>
                 <button
                   type="button"
@@ -2223,8 +2223,7 @@ export default function Timeline() {
         <div
           className="pointer-events-none fixed left-1/2 z-40 w-[min(96vw,620px)] -translate-x-1/2 px-2"
           style={{
-            // Sit above the whole mobile bottom row (composer included in chat and
-            // search, dock only in timeline), not just above the dock.
+            // Sit above the whole mobile bottom row, not just above the composer.
             bottom: 'var(--mobile-home-bottom-clearance, calc(env(safe-area-inset-bottom) + 5rem))',
           }}
         >

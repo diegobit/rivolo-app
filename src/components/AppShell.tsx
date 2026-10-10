@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import BottomTrayRow from './app-shell/BottomTrayRow'
-import MobileChatDock from './app-shell/MobileChatDock'
+import MobileMenu from './app-shell/MobileMenu'
 import AttentionPopover from './app-shell/AttentionPopover'
 import ShortcutsPopover from './app-shell/ShortcutsPopover'
 import { TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
@@ -98,10 +98,10 @@ export default function AppShell() {
   const isDesktopSearchCardOpen = isDesktopHome && mode === 'search'
   const showTrayRow = isHome
   const isMobileHome = isHome && isNarrowViewportMode
+  const isMobileChatOverlayUp = isMobileHome && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
   // The full-screen mobile chat renders its own brand bar, so the shell's logo
   // header steps aside only while that overlay is up.
-  const showShellLogoHeader =
-    isMobileHome && !(mode === 'chat' && (chatPanelOpen || chatMessageCount > 0))
+  const showShellLogoHeader = isMobileHome && !isMobileChatOverlayUp
   const showLauncherButtons = !isNarrowViewportMode
   const launcherSpread = !isNarrowViewportMode
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
@@ -380,6 +380,12 @@ export default function AppShell() {
     }
   }, [showTrayRow, mode, isMobileHome])
 
+  // Phones have no plain-timeline mode: the notes sit behind the composer, whose
+  // Chat | Search switch lives in the menu.
+  useEffect(() => {
+    if (isMobileHome && mode === 'timeline') setMode('chat')
+  }, [isMobileHome, mode, setMode])
+
   useKeyboardOffsetCssVar()
   useAutoSync(syncStatus)
 
@@ -605,8 +611,8 @@ export default function AppShell() {
         </header>
       )}
 
-      {/* Mobile home keeps the wordmark at the top but no controls: navigation
-          lives in the dock. Chat renders its own brand bar inside the overlay. */}
+      {/* Mobile home keeps the wordmark at the top but no controls: they live in
+          the menu beside the composer. Chat renders its own brand bar inside the overlay. */}
       {showShellLogoHeader && (
         <header className="app-shell-fixed-header-width relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2">
           <span />
@@ -632,8 +638,8 @@ export default function AppShell() {
           searchButton={searchButton}
           modeToggleButton={modeToggleButton}
           trayCenter={trayCenter}
-          mobileChatDock={isMobileHome ? (
-            <MobileChatDock
+          mobileMenu={isMobileHome ? (
+            <MobileMenu
               databaseStale={tabSync.databaseStale}
               syncing={syncing}
               onMenuOpenChange={setMobileMenuOpen}
@@ -648,7 +654,7 @@ export default function AppShell() {
               }}
             />
           ) : null}
-          showScrollToToday={showScrollToToday && (!isNarrowViewportMode || mode === 'timeline')}
+          showScrollToToday={showScrollToToday && !isMobileChatOverlayUp}
           showLauncherButtons={showLauncherButtons}
           launcherSpread={launcherSpread}
           onScrollToToday={() => {

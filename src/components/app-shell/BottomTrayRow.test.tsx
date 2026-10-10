@@ -17,7 +17,7 @@ const baseProps: BottomTrayRowProps = {
   trayCenter,
   showLauncherButtons: true,
   launcherSpread: false,
-  mobileChatDock: null,
+  mobileMenu: null,
   showScrollToToday: false,
   onScrollToToday: () => undefined,
 }
@@ -62,8 +62,8 @@ describe('BottomTrayRow', () => {
     expect(launcherOrder()).toEqual(['Search', 'Chat'])
   })
 
-  it('keeps the portal target mounted across mobile dock mode changes', () => {
-    const mobileProps = { ...baseProps, showLauncherButtons: false, mobileChatDock: <nav>Mobile dock</nav> }
+  it('keeps the portal target mounted across mobile mode changes', () => {
+    const mobileProps = { ...baseProps, showLauncherButtons: false, mobileMenu: <button type="button">Menu</button> }
     const { rerender } = render(<BottomTrayRow {...mobileProps} />)
     const target = screen.getByTestId('bottom-tray')
     expect(screen.queryByRole('button', { name: 'Switch mode' })).not.toBeInTheDocument()
@@ -71,7 +71,7 @@ describe('BottomTrayRow', () => {
     for (const mode of ['chat', 'search', 'timeline'] as const) {
       rerender(<BottomTrayRow {...mobileProps} mode={mode} />)
       expect(screen.getByTestId('bottom-tray')).toBe(target)
-      expect(screen.getByRole('navigation')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument()
     }
   })
 

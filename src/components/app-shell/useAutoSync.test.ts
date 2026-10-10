@@ -6,9 +6,9 @@ const coordinator = vi.hoisted(() => ({
   getTabSyncBlockReason: vi.fn(),
 }))
 const syncActions = vi.hoisted(() => ({
-  blockedPushMessage: vi.fn(),
   pullFromSyncAndRefresh: vi.fn(),
   pushToSyncAndRefresh: vi.fn(),
+  recordBlockedPush: vi.fn(),
   recordSyncAttention: vi.fn(),
 }))
 
@@ -19,7 +19,6 @@ describe('useAutoSync tab coordination', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     coordinator.getTabSyncBlockReason.mockReturnValue(null)
-    syncActions.blockedPushMessage.mockReturnValue('Remote changed.')
     syncActions.pullFromSyncAndRefresh.mockResolvedValue({ status: 'noop' })
     syncActions.pushToSyncAndRefresh.mockResolvedValue({ status: 'pushed' })
   })
@@ -292,9 +291,8 @@ describe('useAutoSync tab coordination', () => {
     )
 
     await waitFor(() => {
-      expect(syncActions.recordSyncAttention).toHaveBeenCalledWith('push', 'Remote changed.')
+      expect(syncActions.recordBlockedPush).toHaveBeenCalledWith('remote_changed')
     })
-    expect(syncActions.blockedPushMessage).toHaveBeenCalledWith('remote_changed')
   })
 
   it('queues one reconciliation when another trigger arrives in flight', async () => {

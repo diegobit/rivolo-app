@@ -8,7 +8,7 @@ type BottomTrayRowProps = {
   trayCenter: ReactNode
   showLauncherButtons: boolean
   launcherSpread: boolean
-  mobileChatDock: ReactNode
+  mobileMenu: ReactNode
   showScrollToToday: boolean
   onScrollToToday: () => void
 }
@@ -21,7 +21,7 @@ export default function BottomTrayRow({
   trayCenter,
   showLauncherButtons,
   launcherSpread,
-  mobileChatDock,
+  mobileMenu,
   showScrollToToday,
   onScrollToToday,
 }: BottomTrayRowProps) {
@@ -68,12 +68,11 @@ export default function BottomTrayRow({
         className={`app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.6)_18%,black_72%)] ${
           mode === 'search' && !launcherSpread ? 'bottom-tray-blur-search' : ''
         }`}
-        data-mobile-dock={mobileChatDock ? 'true' : 'false'}
         data-mode={mode}
       />
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20" />
 
-      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${mobileChatDock ? 'flex-col' : trayRowAlignmentClass} ${trayRowJustifyClass} gap-2 px-2 sm:gap-3 sm:px-0`}>
+      <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${trayRowAlignmentClass} ${trayRowJustifyClass} gap-2 px-2 sm:gap-3 sm:px-0`}>
         {showLauncherButtons ? (
           // On desktop CSS lifts this pair out of the row and pins it to the
           // viewport centre, so a card opening never shifts the buttons.
@@ -98,7 +97,7 @@ export default function BottomTrayRow({
             )}
             {launcherSpread && scrollToTodayButton}
           </div>
-        ) : !mobileChatDock && (
+        ) : !mobileMenu && (
           <Fragment key="mode-toggle-btn">
             <div className={modeToggleOffsetClassName}>{modeToggleButton}</div>
           </Fragment>
@@ -110,7 +109,7 @@ export default function BottomTrayRow({
         */}
         <Fragment key="tray">{trayCenter}</Fragment>
 
-        {mobileChatDock && <div className="w-full">{mobileChatDock}</div>}
+        {mobileMenu && <div className="bottom-tray-menu mb-1.5">{mobileMenu}</div>}
 
         {!launcherSpread && scrollToTodayButton}
       </div>
