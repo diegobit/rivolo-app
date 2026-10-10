@@ -2,7 +2,18 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import MobileChatDock from './MobileChatDock'
+import { getEmptySyncStatus } from '../../lib/sync'
+import { pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../../store/syncActions'
+import { useSettingsStore } from '../../store/useSettingsStore'
+import { useSyncStore } from '../../store/useSyncStore'
 import { useUIStore } from '../../store/useUIStore'
+
+vi.mock('../../store/syncActions', () => ({
+  blockedPushMessage: vi.fn(() => 'blocked'),
+  pullFromSyncAndRefresh: vi.fn(async () => ({ status: 'noop' })),
+  pushToSyncAndRefresh: vi.fn(async () => ({ status: 'pushed' })),
+  recordSyncAttention: vi.fn(),
+}))
 
 vi.hoisted(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -94,5 +105,62 @@ describe('Mobile menu swipe dismissal', () => {
     fireEvent.touchEnd(row, { touches: [], changedTouches: [touch(100, 100)] })
     fireEvent.click(row)
     expect(useUIStore.getState().mode).toBe('chat')
+  })
+})
+
+describe('Mobile menu quick actions', () => {
+  const connectedStatus = {
+    ...getEmptySyncStatus(),
+    connected: true,
+    targetName: '/inbox.md',
+    lastPullAt: Date.now() - 5 * 60_000,
+    lastPushAt: Date.now() - 2 * 60 * 60_000,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useUIStore.setState({ mode: 'timeline', chatSending: false })
+    useSettingsStore.setState({ themePreference: 'light' })
+    useSyncStore.setState({
+      activeProvider: null,
+      status: getEmptySyncStatus(),
+      syncing: false,
+      syncOperation: null,
+    })
+  })
+
+  it('toggles dark mode from the menu', () => {
+    const updateThemePreference = vi.fn(async () => {})
+    useSettingsStore.setState({ updateThemePreference })
+    openMenu()
+    const tile = screen.getByRole('button', { name: 'Dark mode' })
+    expect(tile).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(tile)
+    expect(updateThemePreference).toHaveBeenCalledWith('dark')
+  })
+
+  it('disables pull and push while cloud sync is off', () => {
+    openMenu()
+    expect(screen.getByRole('button', { name: 'Pull, Sync off' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Push, Sync off' })).toBeDisabled()
+    expect(screen.getAllByText('Sync off')).toHaveLength(2)
+  })
+
+  it('shows when each sync direction last ran and runs it on tap', () => {
+    useSyncStore.setState({ activeProvider: 'dropbox', status: connectedStatus })
+    openMenu()
+    const pull = screen.getByRole('button', { name: 'Pull, 5m ago' })
+    const push = screen.getByRole('button', { name: 'Push, 2h ago' })
+    fireEvent.click(pull)
+    expect(pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+    fireEvent.click(push)
+    expect(pushToSyncAndRefresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds pull back until unsynced edits are pushed', () => {
+    useSyncStore.setState({ activeProvider: 'dropbox', status: { ...connectedStatus, localDirty: true } })
+    openMenu()
+    expect(screen.getByRole('button', { name: 'Pull, Push first' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Push, 2h ago, unsynced edits' })).toBeEnabled()
   })
 })
