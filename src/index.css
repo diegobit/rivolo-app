@@ -1773,16 +1773,52 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
     -webkit-backdrop-filter: none;
   }
 
-  .bottom-tray-row {
-    bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 0.5rem + 2px);
-  }
-
-  body[data-keyboard-open='false'] .bottom-tray-row {
-    bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1rem + 2px);
-  }
-
   #bottom-tray.bottom-tray-shell {
     box-shadow: 0 2px 8px rgb(var(--theme-shadow-color) / 0.22);
+  }
+}
+
+/* Phone layout, including a desktop window narrower than 700px, and any touch
+   device. Keyboard closed is the default (4px higher than the previous
+   1rem + 2px) so the first paint does not use the open-keyboard position.
+   Keyboard open sits 12px closer than the previous 0.5rem + 2px, clamped so
+   the bar never slides under the keyboard when there is no home-indicator inset. */
+@media (hover: none), not all and (min-width: 700px) {
+  .bottom-tray-row {
+    --bottom-tray-offset: calc(1rem + 2px + 4px);
+    --bottom-tray-inset: max(0px, env(safe-area-inset-bottom) + var(--bottom-tray-offset));
+    bottom: calc(var(--keyboard-offset, 0px) + var(--bottom-tray-inset));
+  }
+
+  body[data-keyboard-open='true'] .bottom-tray-row {
+    --bottom-tray-offset: calc(0.5rem + 2px - 12px);
+  }
+
+  /* The tray is 96vw and not itself screen-centred, so centring the button
+     inside the row leaves it left of the phone. Pin it to the viewport, at the
+     same height above the tray that top: -3.5rem used to give a 36px circle
+     (1.25rem of air). Search keeps the extra lift that clears the filter row. */
+  .bottom-tray-row > .bottom-tray-scroll-today {
+    position: fixed;
+    top: auto;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(
+      var(--keyboard-offset, 0px)
+      + var(--bottom-tray-inset)
+      + var(--bottom-tray-height, 3.5rem)
+      + 1.25rem
+    );
+  }
+
+  .bottom-tray-row > .bottom-tray-scroll-today[data-clearance='search'] {
+    bottom: calc(
+      var(--keyboard-offset, 0px)
+      + var(--bottom-tray-inset)
+      + var(--bottom-tray-height, 3.5rem)
+      + 3.75rem
+    );
   }
 }
 

@@ -71,7 +71,10 @@ describe('BottomTrayRow', () => {
     for (const mode of ['chat', 'search', 'timeline'] as const) {
       rerender(<BottomTrayRow {...mobileProps} mode={mode} />)
       expect(screen.getByTestId('bottom-tray')).toBe(target)
-      expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument()
+      const menuSlot = document.querySelector('.bottom-tray-menu')
+      expect(menuSlot).toHaveClass('self-stretch', 'items-center')
+      expect(menuSlot).not.toHaveClass('mb-1.5')
+      expect(menuSlot).toContainElement(screen.getByRole('button', { name: 'Menu' }))
     }
   })
 
@@ -119,11 +122,20 @@ describe('BottomTrayRow', () => {
     expect(button).not.toHaveClass('sm:right-0')
   })
 
-  it('keeps the mobile scroll-to-today position when the pair is centered', () => {
-    renderRow({ launcherSpread: false, showScrollToToday: true })
+  it('marks the mobile scroll-to-today control for the phone layout', () => {
+    const { rerender } = renderRow({ launcherSpread: false, showScrollToToday: true })
 
     const button = screen.getByRole('button', { name: 'Scroll to Today' })
-    expect(button).toHaveClass('right-[15px]', 'sm:top-[-3.1rem]')
+    expect(button).toHaveClass('bottom-tray-scroll-today', 'h-9', 'w-9')
+    expect(button).toHaveAttribute('data-clearance', 'chat')
+    expect(button.querySelector('img')).toHaveClass('h-4', 'w-4')
     expect(getRow()).toContainElement(button)
+
+    rerender(<BottomTrayRow {...baseProps} launcherSpread={false} showScrollToToday mode="search" />)
+    const searchButton = screen.getByRole('button', { name: 'Scroll to Today' })
+    expect(searchButton).toHaveAttribute('data-clearance', 'search')
+    expect(searchButton).toHaveClass('h-9', 'w-9')
+    expect(searchButton.querySelector('img')).toHaveClass('h-4', 'w-4')
+    expect(getRow()).toContainElement(searchButton)
   })
 })

@@ -36,7 +36,6 @@ export default function BottomTrayRow({
       slides: selection.mode !== 'timeline',
     })
   }
-  const mobileScrollToTodayTopClass = mode === 'search' ? 'top-[-6rem] sm:top-[-3.1rem]' : 'top-[-3.5rem] sm:top-[-3.1rem]'
   // The launchers (Search, then Chat) show on desktop in every mode and on
   // narrow viewports in timeline mode. The tray composer only appears on narrow
   // viewports in chat/search mode.
@@ -44,21 +43,22 @@ export default function BottomTrayRow({
   const trayRowAlignmentClass = showTraySlot ? 'items-end' : 'items-center'
   const trayRowJustifyClass = 'justify-center'
   const modeToggleOffsetClassName = showTraySlot ? 'mb-1.5 sm:mb-3' : ''
-  const mobileScrollToTodayRightClass = 'right-[15px] sm:right-0'
   // On desktop it sits centred just above the launcher capsule (it is rendered
-  // inside it), so it moves with the capsule and never lands under it.
+  // inside it), so it moves with the capsule and never lands under it. On a
+  // phone, index.css pins .bottom-tray-scroll-today to the screen centre.
   const scrollToTodayPositionClass = launcherSpread
     ? 'bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2'
-    : `${mobileScrollToTodayTopClass} ${mobileScrollToTodayRightClass}`
+    : ''
   const scrollToTodayButton = showScrollToToday ? (
     <button
       type="button"
-      className={`absolute ${scrollToTodayPositionClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] sm:h-10 sm:w-10`}
+      className={`bottom-tray-scroll-today absolute ${scrollToTodayPositionClass} flex h-9 w-9 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] min-[700px]:h-10 min-[700px]:w-10`}
+      data-clearance={mode === 'search' ? 'search' : 'chat'}
       aria-label="Scroll to Today"
       title="Scroll to Today"
       onClick={onScrollToToday}
     >
-      <img src="/arrow-line-up.svg" alt="" className="h-5 w-5" />
+      <img src="/arrow-line-up.svg" alt="" className="h-4 w-4 min-[700px]:h-5 min-[700px]:w-5" />
     </button>
   ) : null
 
@@ -109,7 +109,7 @@ export default function BottomTrayRow({
         */}
         <Fragment key="tray">{trayCenter}</Fragment>
 
-        {mobileMenu && <div className="bottom-tray-menu mb-1.5">{mobileMenu}</div>}
+        {mobileMenu && <div className="bottom-tray-menu flex items-center self-stretch">{mobileMenu}</div>}
 
         {!launcherSpread && scrollToTodayButton}
       </div>
