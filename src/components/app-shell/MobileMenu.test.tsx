@@ -11,9 +11,9 @@ import { useSyncStore } from '../../store/useSyncStore'
 import { useUIStore } from '../../store/useUIStore'
 
 vi.mock('../../store/syncActions', () => ({
-  blockedPushMessage: vi.fn(() => 'blocked'),
   pullFromSyncAndRefresh: vi.fn(async () => ({ status: 'noop' })),
   pushToSyncAndRefresh: vi.fn(async () => ({ status: 'pushed' })),
+  recordBlockedPush: vi.fn(),
   recordSyncAttention: vi.fn(),
 }))
 
@@ -128,6 +128,7 @@ describe('Mobile menu quick actions', () => {
       status: getEmptySyncStatus(),
       syncing: false,
       syncOperation: null,
+      syncAttention: null,
     })
   })
 
@@ -179,6 +180,26 @@ describe('Mobile menu quick actions', () => {
   it('keeps a quiet setup link once the sync reminder is dismissed', () => {
     openMenu()
     expect(screen.getByRole('link', { name: /Set up cloud sync/ })).toHaveAttribute('href', '/settings#settings-sync')
+  })
+
+  it('puts a refused push in place of pull and push when neither can run', () => {
+    useSyncStore.setState({
+      activeProvider: 'dropbox',
+      status: { ...connectedStatus, localDirty: true },
+      syncAttention: { operation: 'push', message: 'Dropbox changed remotely.', at: 0, blocked: true },
+    })
+    openMenu([
+      {
+        id: 'sync-attention',
+        title: 'Sync needs attention',
+        description: 'Dropbox changed remotely.',
+        settingsSectionId: 'settings-sync',
+      },
+    ])
+    const sync = within(screen.getByRole('region', { name: 'Sync • Dropbox' }))
+    expect(sync.getByRole('link', { name: /Sync needs attention/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Pull/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Push/ })).not.toBeInTheDocument()
   })
 
   it('shows sync problems in the Sync section and other warnings on top', () => {

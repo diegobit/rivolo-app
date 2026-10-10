@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
 import {
-  blockedPushMessage,
   pullFromSyncAndRefresh,
   pushToSyncAndRefresh,
+  recordBlockedPush,
   recordSyncAttention,
 } from '../../store/syncActions'
 
@@ -48,7 +48,7 @@ export const useAutoSync = (status: AutoSyncStatus) => {
         try {
           const result = await pushToSyncAndRefresh(false)
           if (result.status === 'blocked') {
-            recordSyncAttention('push', blockedPushMessage(result.reason))
+            recordBlockedPush(result.reason)
           }
         } catch (error: unknown) {
           recordSyncAttention(

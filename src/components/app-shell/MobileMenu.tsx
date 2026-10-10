@@ -9,9 +9,9 @@ import { getNextThemePreference } from '../../lib/theme'
 import { TIMELINE_NEW_CHAT_EVENT } from '../../lib/timelineEvents'
 import { lockPageScroll } from '../../lib/pageScrollLock'
 import {
-  blockedPushMessage,
   pullFromSyncAndRefresh,
   pushToSyncAndRefresh,
+  recordBlockedPush,
   recordSyncAttention,
 } from '../../store/syncActions'
 import { useSettingsStore } from '../../store/useSettingsStore'
@@ -64,7 +64,7 @@ const runSync = async (operation: SyncOperation) => {
       return
     }
     const result = await pushToSyncAndRefresh()
-    if (result.status === 'blocked') recordSyncAttention('push', blockedPushMessage(result.reason))
+    if (result.status === 'blocked') recordBlockedPush(result.reason)
   } catch (error) {
     // Failures surface as attention items, which this menu lists above the buttons.
     recordSyncAttention(
@@ -92,6 +92,7 @@ export default function MobileMenu({
   const activeSyncProvider = useSyncStore((state) => state.activeProvider)
   const syncStatus = useSyncStore((state) => state.status)
   const syncOperation = useSyncStore((state) => state.syncOperation)
+  const syncPushBlocked = useSyncStore((state) => state.syncAttention?.blocked ?? false)
   const [online, setOnline] = useState(() => navigator.onLine)
   const [now, setNow] = useState(() => Date.now())
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -278,6 +279,9 @@ export default function MobileMenu({
   // new warning never moves the controls below it.
   const syncAttentionItems = attentionItems.filter((item) => item.settingsSectionId === 'settings-sync')
   const otherAttentionItems = attentionItems.filter((item) => item.settingsSectionId !== 'settings-sync')
+  // A refused push with local edits leaves both buttons disabled (Pull waits for
+  // Push), so the warning takes their place, as the setup reminder does.
+  const syncConflict = syncPushBlocked && syncStatus.localDirty && syncAttentionItems.length > 0
 
   const getSyncState = (operation: SyncOperation) => {
     const isPull = operation === 'pull'
@@ -540,13 +544,17 @@ export default function MobileMenu({
                 {activeSyncProvider ? `Sync • ${SYNC_PROVIDER_LABELS[activeSyncProvider]}` : 'Sync'}
               </h2>
               {syncAttentionItems.length > 0 && (
-                <div className="mb-2 space-y-2">{syncAttentionItems.map(renderAttentionItem)}</div>
+                <div className={`space-y-2 ${activeSyncProvider && !syncConflict ? 'mb-2' : ''}`}>
+                  {syncAttentionItems.map(renderAttentionItem)}
+                </div>
               )}
               {activeSyncProvider ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {renderSyncButton('pull')}
-                  {renderSyncButton('push')}
-                </div>
+                !syncConflict && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {renderSyncButton('pull')}
+                    {renderSyncButton('push')}
+                  </div>
+                )
               ) : (
                 syncAttentionItems.length === 0 && (
                   // The setup reminder was dismissed: keep a quiet way in.
