@@ -134,13 +134,13 @@ describe('Mobile menu quick actions', () => {
 
   it.each([
     ['system', 'Auto', '/sun-horizon.svg', 'light'],
-    ['light', 'Off', '/sun.svg', 'dark'],
-    ['dark', 'On', '/moon.svg', 'system'],
-  ] as const)('shows the %s theme on the dark mode tile and cycles on', (preference, state, icon, next) => {
+    ['light', 'Light', '/sun.svg', 'dark'],
+    ['dark', 'Dark', '/moon.svg', 'system'],
+  ] as const)('shows the %s theme on the theme tile and cycles on', (preference, state, icon, next) => {
     const updateThemePreference = vi.fn(async () => {})
     useSettingsStore.setState({ themePreference: preference, updateThemePreference })
     openMenu()
-    const tile = screen.getByRole('button', { name: `Dark mode: ${state}` })
+    const tile = screen.getByRole('button', { name: `Theme: ${state}` })
     expect(tile.querySelector('img')).toHaveAttribute('src', icon)
     fireEvent.click(tile)
     expect(updateThemePreference).toHaveBeenCalledWith(next)

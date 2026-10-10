@@ -34,8 +34,8 @@ const MENU_MODES = [
 
 const THEME_TILE = {
   system: { meta: 'Auto', icon: '/sun-horizon.svg' },
-  light: { meta: 'Off', icon: '/sun.svg' },
-  dark: { meta: 'On', icon: '/moon.svg' },
+  light: { meta: 'Light', icon: '/sun.svg' },
+  dark: { meta: 'Dark', icon: '/moon.svg' },
 } as const
 
 const menuRowClass =
@@ -517,7 +517,7 @@ export default function MobileMenu({
               <button
                 type="button"
                 className={menuTileClass}
-                aria-label={`Dark mode: ${theme.meta}`}
+                aria-label={`Theme: ${theme.meta}`}
                 onClick={() => {
                   void updateThemePreference(getNextThemePreference(themePreference))
                 }}
@@ -525,7 +525,7 @@ export default function MobileMenu({
                 <span aria-hidden="true" className={`${menuTileFaceClass} ${menuTileIdleFaceClass}`}>
                   <img src={theme.icon} alt="" className="h-6 w-6" />
                 </span>
-                <span className={menuTileLabelClass}>Dark mode</span>
+                <span className={menuTileLabelClass}>Theme</span>
                 <span className={menuTileMetaClass}>{theme.meta}</span>
               </button>
               <Link to="/settings" className={menuTileClass} onClick={navigate}>
