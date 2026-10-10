@@ -154,7 +154,7 @@ describe('Timeline desktop chat card', () => {
     expect(screen.getByRole('heading', { name: 'Chat' })).toBeInTheDocument()
     expect(screen.getByText('What can I help with?')).toBeInTheDocument()
     expect(getComposer()).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear chat' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Close chat' })).toBeInTheDocument()
   })
 
@@ -169,7 +169,7 @@ describe('Timeline desktop chat card', () => {
     expect(getComposer()).toHaveValue('A draft to keep')
   })
 
-  it('keeps the card open and focuses the composer after New chat', async () => {
+  it('keeps the card open and focuses the composer after Clear chat', async () => {
     useChatStore.setState({
       messages: [{ id: 'm1', role: 'user', content: 'hello there' }],
     })
@@ -177,7 +177,7 @@ describe('Timeline desktop chat card', () => {
 
     expect(screen.getByText('hello there')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'New chat' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear chat' }))
 
     expect(screen.queryByText('hello there')).not.toBeInTheDocument()
     expect(screen.getByText('What can I help with?')).toBeInTheDocument()

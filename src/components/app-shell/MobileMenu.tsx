@@ -28,7 +28,7 @@ type MobileMenuProps = {
 }
 
 const MENU_MODES = [
-  { mode: 'chat', label: 'Chat', icon: '/chats-teardrop.svg' },
+  { mode: 'chat', label: 'Chat', icon: '/sparkle.svg' },
   { mode: 'search', label: 'Search', icon: '/magnifying-glass.svg' },
 ] as const
 

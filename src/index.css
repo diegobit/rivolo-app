@@ -1051,7 +1051,7 @@
         color 160ms ease;
     }
 
-    /* An icon button that also carries its label, e.g. "New chat". */
+    /* An icon button that also carries its label, e.g. "Clear chat". */
     .timeline-chat-sidebar-icon-button.timeline-chat-sidebar-text-button {
       width: auto;
       gap: 0.4rem;
