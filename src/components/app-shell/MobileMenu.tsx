@@ -430,7 +430,7 @@ export default function MobileMenu({
             type="button"
             tabIndex={-1}
             aria-hidden="true"
-            className="mobile-menu-scrim absolute inset-0 h-full w-full" style={{ background: 'var(--theme-scrim)' }}
+            className="mobile-menu-scrim absolute inset-0 h-full w-full"
             onClick={closeMenu}
           />
           <div
