@@ -1813,9 +1813,12 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
 }
 
 .mobile-menu-sheet {
+  --mobile-menu-shadow: 0 -28px 72px rgb(var(--theme-shadow-color) / 0.16);
   padding-bottom: calc(env(safe-area-inset-bottom) + 2.5rem);
-  box-shadow: none;
-  animation: mobile-menu-rise 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  box-shadow: var(--mobile-menu-shadow);
+  animation:
+    mobile-menu-rise 220ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    mobile-menu-shadow-in 140ms ease-out 70ms both;
 }
 
 .mobile-menu-scrim {
@@ -1830,7 +1833,9 @@ html[data-theme='dark'] .mobile-menu-scrim {
 }
 
 .mobile-menu-overlay[data-state='closing'] .mobile-menu-sheet {
-  animation: mobile-menu-lower 180ms ease-in both;
+  animation:
+    mobile-menu-lower 180ms ease-in both,
+    mobile-menu-shadow-out 100ms ease-out both;
 }
 
 .mobile-menu-overlay[data-state='closing'] .mobile-menu-scrim {
@@ -1855,6 +1860,16 @@ html[data-theme='dark'] .mobile-menu-scrim {
 @keyframes mobile-menu-fade-out {
   from { opacity: 1; }
   to { opacity: 0; }
+}
+
+@keyframes mobile-menu-shadow-in {
+  from { box-shadow: 0 -28px 72px rgb(var(--theme-shadow-color) / 0); }
+  to { box-shadow: var(--mobile-menu-shadow); }
+}
+
+@keyframes mobile-menu-shadow-out {
+  from { box-shadow: var(--mobile-menu-shadow); }
+  to { box-shadow: 0 -28px 72px rgb(var(--theme-shadow-color) / 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
