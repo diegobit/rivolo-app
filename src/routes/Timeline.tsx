@@ -24,13 +24,14 @@ import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
 import { focusLauncher } from '../components/app-shell/desktopCards'
 import { useStickToBottom } from './timeline/useStickToBottom'
-import { keepEditedDayInResults } from './timeline/searchResults'
+import { keepEditedDayInResults, keepInteractedTodoInResults, type InteractedTodo } from './timeline/searchResults'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
 import { useEditorMountWindow } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
 import { usePendingDayDelete } from './timeline/usePendingDayDelete'
 import { useTimelineChat } from './timeline/useTimelineChat'
 import { useMobileChatScroll } from './timeline/useMobileChatScroll'
+import type { TodoAction } from '../lib/editor/todoMarker'
 import { toggleTodoLineMarker } from './timeline/todoToggle'
 import { getMatchedBlockLineIndexes } from './timeline/syntaxHighlight'
 import { HEADING_LINE_REGEX, getHeadingPreviewFromDay, getHeadingPreviewFromSectionBlock } from './timeline/headingPreview'
@@ -484,6 +485,8 @@ export default function Timeline() {
     })
   }, [])
 
+  const interactedTodoRef = useRef<InteractedTodo | null>(null)
+
   // Results come from the database, so an edited note changes which blocks
   // match only once it is saved; searching again then keeps the card current.
   const [savedNotesRevision, setSavedNotesRevision] = useState(0)
@@ -788,6 +791,10 @@ export default function Timeline() {
   }, [])
 
   useEffect(() => {
+    interactedTodoRef.current = null
+  }, [mode, searchQuery, searchFilter, searchResultMode])
+
+  useEffect(() => {
     if (mode !== 'search') return
 
     if (!searchQuery && !searchFilter) {
@@ -812,7 +819,9 @@ export default function Timeline() {
           ? ([...editorRefs.current.entries()].find(([, view]) => view.dom.contains(document.activeElement))?.[0] ??
             null)
           : null
-        setSearchResults((previous) => keepEditedDayInResults(data, previous, editedDayId))
+        setSearchResults((previous) => keepInteractedTodoInResults(
+          keepEditedDayInResults(data, previous, editedDayId), previous, interactedTodoRef.current,
+        ))
       } catch {
         if (cancelled) return
         setSearchError('Search failed. Try again.')
@@ -1679,7 +1688,7 @@ export default function Timeline() {
   )
 
   const handleToggleMatchedLineTodo = useCallback(
-    (dayId: string, blockIndex: number, sourceLineIndex: number) => {
+    (dayId: string, blockIndex: number, sourceLineIndex: number, action: TodoAction = 'complete') => {
       const currentResults = searchResultsRef.current
       let nextContentToSave: string | null = null
       let hasChanges = false
@@ -1695,7 +1704,7 @@ export default function Timeline() {
           return result
         }
 
-        const toggledLine = toggleTodoLineMarker(currentLine)
+        const toggledLine = toggleTodoLineMarker(currentLine, action)
         if (!toggledLine) {
           return result
         }
@@ -1724,6 +1733,7 @@ export default function Timeline() {
         return
       }
 
+      interactedTodoRef.current = { dayId, sourceLineIndex }
       searchResultsRef.current = nextResults
       setSearchResults(nextResults)
       patchDayContent(dayId, nextContentToSave)

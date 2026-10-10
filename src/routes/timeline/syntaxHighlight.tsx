@@ -1,7 +1,8 @@
+import { TODO_INTERACTION_HINT, todoStateLabel, type TodoAction } from '../../lib/editor/todoMarker'
 import { TODO_LINE_REGEX } from './todoToggle'
 
 export type RenderSyntaxLineOptions = {
-  onToggleTodo?: () => void
+  onToggleTodo?: (action?: TodoAction) => void
 }
 
 // Maps each matched block to its line in the note, taking repeated lines in
@@ -124,10 +125,25 @@ export const renderSyntaxLine = (line: string, query: string, keyPrefix: string,
             className="-mx-0.5 inline-flex items-center rounded-[4px] px-1 py-0.5 font-semibold text-[#ed9b38] transition hover:bg-[#ed9b38]/15 active:bg-[#ed9b38]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--theme-accent-rgb)/0.42)]"
             type="button"
             aria-label="Toggle todo"
+            aria-description={`${todoStateLabel(todoMatch[2][1])}. ${TODO_INTERACTION_HINT} Shift+Enter toggles cancellation.`}
+            title={`${todoStateLabel(todoMatch[2][1])}. ${TODO_INTERACTION_HINT} Shift+Enter toggles cancellation.`}
+            onPointerDown={(event) => { event.currentTarget.dataset.todoPointerType = event.pointerType }}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              options.onToggleTodo?.('cancel')
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || !event.shiftKey) return
+              event.preventDefault()
+              event.stopPropagation()
+              options.onToggleTodo?.('cancel')
+            }}
             onClick={(event) => {
               event.preventDefault()
               event.stopPropagation()
-              options.onToggleTodo?.()
+              options.onToggleTodo?.(event.currentTarget.dataset.todoPointerType === 'touch' && event.detail !== 0 ? 'cycle' : 'complete')
+              delete event.currentTarget.dataset.todoPointerType
             }}
           >
             {todoMarker}
@@ -135,7 +151,9 @@ export const renderSyntaxLine = (line: string, query: string, keyPrefix: string,
         ) : (
           <span className="font-semibold text-[#ed9b38]">{todoMarker}</span>
         )}
-        {renderInlineTokenHighlights(todoMatch[3], query, `${keyPrefix}-todo-text`)}
+        <span className={todoMatch[2] === '[-]' ? 'text-[var(--theme-text-muted)] line-through' : undefined}>
+          {renderInlineTokenHighlights(todoMatch[3], query, `${keyPrefix}-todo-text`)}
+        </span>
       </>
     )
   }

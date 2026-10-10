@@ -1,4 +1,5 @@
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { TODO_INTERACTION_HINT, todoStateLabel } from './editor/todoMarker'
 import { tags } from '@lezer/highlight'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, type DecorationSet } from '@codemirror/view'
 import { RangeSetBuilder, type Extension } from '@codemirror/state'
@@ -30,7 +31,7 @@ const highlightStyle = HighlightStyle.define([
 ])
 
 export const findTagHighlightRanges = (text: string) => {
-  const ranges: Array<{ from: number; to: number; className: string }> = []
+  const ranges: Array<{ from: number; to: number; className: string; title?: string }> = []
   const tagRegex = /(^|[^\p{L}\p{M}\p{N}_])([#@][\p{L}\p{M}\p{N}_/-]+)/gu
   let match = tagRegex.exec(text)
 
@@ -50,18 +51,21 @@ export const findTagHighlightRanges = (text: string) => {
 const buildTagDecorations = (text: string) => {
   const ranges = findTagHighlightRanges(text)
 
-  const todoRegex = /(^|\n)(\s*- \[[ xX]\])/g
+  const todoRegex = /(^|\n)([ \t]*-\s+\[[ xX-]\])([^\n]*)/g
   let match = todoRegex.exec(text)
 
   while (match) {
     const prefixLength = match[1].length
     const token = match[2]
     const start = match.index + prefixLength
-    const bracketMatch = token.match(/\[[ xX]\]/)
+    const bracketMatch = token.match(/\[[ xX-]\]/)
     if (bracketMatch) {
       const bracketStart = start + (bracketMatch.index ?? 0)
       const bracketEnd = bracketStart + bracketMatch[0].length
-      ranges.push({ from: bracketStart, to: bracketEnd, className: 'cm-todo-marker' })
+      ranges.push({ from: bracketStart, to: bracketEnd, className: 'cm-todo-marker', title: `${todoStateLabel(bracketMatch[0][1])}. ${TODO_INTERACTION_HINT}` })
+      if (bracketMatch[0] === '[-]' && match[3].length) {
+        ranges.push({ from: start + token.length, to: start + token.length + match[3].length, className: 'cm-todo-cancelled' })
+      }
     }
     match = todoRegex.exec(text)
   }
@@ -82,7 +86,7 @@ const buildTagDecorations = (text: string) => {
 
   const builder = new RangeSetBuilder<Decoration>()
   for (const range of ranges) {
-    builder.add(range.from, range.to, Decoration.mark({ class: range.className }))
+    builder.add(range.from, range.to, Decoration.mark({ class: range.className, attributes: range.title ? { title: range.title } : undefined }))
   }
 
   return builder.finish()

@@ -147,7 +147,21 @@ export default function ShortcutsPopover({
                   <span className="text-slate-400">-&gt;</span>
                   <span>Toggle/Create todo</span>
                 </div>
+                <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 font-semibold">
+                  <span className="flex items-center gap-1">
+                    <kbd className="kbd">{primaryModifierLabel}</kbd>
+                    <span className="text-slate-400">+</span>
+                    <kbd className="kbd">Shift</kbd>
+                    <span className="text-slate-400">+</span>
+                    <kbd className="kbd">Enter</kbd>
+                  </span>
+                  <span className="text-slate-400">-&gt;</span>
+                  <span>Cancel/Reopen todo</span>
+                </div>
               </div>
+              <p className="text-xs text-slate-500">
+                Todo markers: [ ] open, [x] completed, [-] cancelled. Click to complete or reopen; right-click to cancel or reopen. On touch screens, tap to cycle through all three states.
+              </p>
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { memo, useId, type ComponentProps } from 'react'
+import type { TodoAction } from '../../lib/editor/todoMarker'
 import type { Day } from '../../lib/dayRepository'
 import { addDays, formatHumanDate, parseDayId } from '../../lib/dates'
 import { renderSyntaxLine } from './syntaxHighlight'
@@ -64,7 +65,7 @@ const MatchedLineResultCard = memo(({
   contentTextStyle: React.CSSProperties
   searchQuery: string
   onOpen: (dayId: string, quote: string, lineIndex?: number) => void
-  onToggleTodo: (dayId: string, blockIndex: number, sourceLineIndex: number) => void
+  onToggleTodo: (dayId: string, blockIndex: number, sourceLineIndex: number, action?: TodoAction) => void
 }) => {
   const dayLabel = getMatchedResultDayLabel(day.dayId, todayId)
   // Several matches can share a day, so each Open button is described by its
@@ -104,8 +105,8 @@ const MatchedLineResultCard = memo(({
                   `${day.dayId}-${lineIndex}`,
                   enableTodoToggle && sourceLineIndex !== null && lineIndex === 0
                     ? {
-                        onToggleTodo: () => {
-                          onToggleTodo(day.dayId, blockIndex, sourceLineIndex)
+                        onToggleTodo: (action) => {
+                          onToggleTodo(day.dayId, blockIndex, sourceLineIndex, action)
                         },
                       }
                     : undefined,
