@@ -4,8 +4,9 @@ import { Link } from 'react-router-dom'
 import type { AttentionItem } from '../../lib/attention'
 import { formatTimeAgo } from '../../lib/dates'
 import type { SetupNoticeId } from '../../lib/setupAttention'
-import { resolveThemePreference } from '../../lib/theme'
-import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../../lib/timelineEvents'
+import { SYNC_PROVIDER_LABELS } from '../../lib/syncState'
+import { getNextThemePreference } from '../../lib/theme'
+import { TIMELINE_NEW_CHAT_EVENT } from '../../lib/timelineEvents'
 import { lockPageScroll } from '../../lib/pageScrollLock'
 import {
   blockedPushMessage,
@@ -17,7 +18,7 @@ import { useSettingsStore } from '../../store/useSettingsStore'
 import { useSyncStore } from '../../store/useSyncStore'
 import { useUIStore } from '../../store/useUIStore'
 
-type MobileChatDockProps = {
+type MobileMenuProps = {
   databaseStale: boolean
   syncing: boolean
   onMenuOpenChange?: (open: boolean) => void
@@ -26,11 +27,16 @@ type MobileChatDockProps = {
   onNavigate: () => void
 }
 
-const DOCK_MODES = [
-  { mode: 'timeline', label: 'Today', icon: '/arrow-line-up.svg' },
+const MENU_MODES = [
   { mode: 'chat', label: 'Chat', icon: '/chats-teardrop.svg' },
   { mode: 'search', label: 'Search', icon: '/magnifying-glass.svg' },
 ] as const
+
+const THEME_TILE = {
+  system: { meta: 'Auto', icon: '/sun-horizon.svg' },
+  light: { meta: 'Off', icon: '/sun.svg' },
+  dark: { meta: 'On', icon: '/moon.svg' },
+} as const
 
 const menuRowClass =
   'mobile-menu-row flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface-soft)] px-3 py-2 text-left text-base font-semibold text-[var(--theme-text)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] outline-none transition-colors hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-accent-muted-text)] disabled:cursor-not-allowed disabled:opacity-60'
@@ -38,13 +44,14 @@ const menuIconClass =
   'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border'
 // Quick actions are square tiles with the label underneath, as in Arc's page menu.
 const menuTileClass =
-  'group flex w-full min-w-0 cursor-pointer flex-col items-center gap-1.5 text-center outline-none disabled:cursor-not-allowed'
+  'group flex w-full min-w-0 cursor-pointer flex-col items-center gap-1.5 text-center outline-none disabled:cursor-not-allowed disabled:opacity-50'
 const menuTileFaceClass =
-  'relative flex aspect-square w-full max-w-[4.5rem] items-center justify-center rounded-[1.25rem] border shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] transition-colors group-hover:border-[var(--theme-border-strong)] group-hover:bg-[var(--theme-hover)] group-active:bg-[var(--theme-active)] group-focus-visible:ring-2 group-focus-visible:ring-[var(--theme-accent-muted-text)] group-disabled:opacity-50'
+  'relative flex aspect-square w-full max-w-[4.5rem] items-center justify-center rounded-[1.25rem] border shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] transition-colors group-hover:border-[var(--theme-border-strong)] group-hover:bg-[var(--theme-hover)] group-active:bg-[var(--theme-active)] group-focus-visible:ring-2 group-focus-visible:ring-[var(--theme-accent-muted-text)] group-disabled:border-[var(--theme-border)] group-disabled:bg-[var(--theme-surface-soft)]'
 const menuTileIdleFaceClass = 'border-[var(--theme-border)] bg-[var(--theme-surface-soft)]'
-const menuTilePressedFaceClass = 'border-[var(--theme-border-strong)] bg-[var(--theme-active)]'
 const menuTileLabelClass = 'text-xs font-semibold leading-tight text-[var(--theme-text)]'
 const menuTileMetaClass = 'text-[11px] leading-tight text-[var(--theme-text-muted)]'
+const menuCardClass =
+  'flex min-h-16 w-full min-w-0 items-center gap-3 rounded-[1.25rem] border border-[var(--theme-border)] bg-[var(--theme-surface-soft)] px-4 py-2 text-left shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] outline-none transition-colors hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] focus-visible:ring-2 focus-visible:ring-[var(--theme-accent-muted-text)]'
 const spinnerClass =
   'animate-spin rounded-full border-2 border-[var(--theme-accent-border)] border-t-[var(--theme-accent)] motion-reduce:animate-none'
 
@@ -59,7 +66,7 @@ const runSync = async (operation: SyncOperation) => {
     const result = await pushToSyncAndRefresh()
     if (result.status === 'blocked') recordSyncAttention('push', blockedPushMessage(result.reason))
   } catch (error) {
-    // Failures surface as attention items, which this menu lists below the tiles.
+    // Failures surface as attention items, which this menu lists above the buttons.
     recordSyncAttention(
       operation,
       error instanceof Error ? error.message : `${operation === 'pull' ? 'Pull' : 'Push'} failed.`,
@@ -67,16 +74,18 @@ const runSync = async (operation: SyncOperation) => {
   }
 }
 
-export default function MobileChatDock({
+export default function MobileMenu({
   databaseStale,
   syncing,
   onMenuOpenChange,
   attentionItems,
   onDismissSetupNotice,
   onNavigate,
-}: MobileChatDockProps) {
+}: MobileMenuProps) {
   const mode = useUIStore((state) => state.mode)
   const chatSending = useUIStore((state) => state.chatSending)
+  const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
+  const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const setMode = useUIStore((state) => state.setMode)
   const themePreference = useSettingsStore((state) => state.themePreference)
   const updateThemePreference = useSettingsStore((state) => state.updateThemePreference)
@@ -90,8 +99,6 @@ export default function MobileChatDock({
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const sheetRef = useRef<HTMLDivElement | null>(null)
   const menuClosingRef = useRef(false)
-
-  const activeIndex = DOCK_MODES.findIndex((item) => item.mode === mode)
 
   const menuStatusId = 'mobile-chat-menu-status'
   const menuStatus = [
@@ -263,9 +270,16 @@ export default function MobileChatDock({
     }
   }, [menuPresent, closeMenu])
 
-  const isDark = resolveThemePreference(themePreference) === 'dark'
   const syncReady = activeSyncProvider !== null && syncStatus.connected
-  const renderSyncTile = (operation: SyncOperation) => {
+  // An empty chat with no thread on screen has nothing to clear.
+  const chatEmpty = chatMessageCount === 0 && !chatPanelOpen
+  const theme = THEME_TILE[themePreference]
+  // Sync problems sit with Pull and Push; everything else stays on top, where a
+  // new warning never moves the controls below it.
+  const syncAttentionItems = attentionItems.filter((item) => item.settingsSectionId === 'settings-sync')
+  const otherAttentionItems = attentionItems.filter((item) => item.settingsSectionId !== 'settings-sync')
+
+  const getSyncState = (operation: SyncOperation) => {
     const isPull = operation === 'pull'
     const running = syncing && syncOperation === operation
     // Older saved states lack per-operation times; the shared sync time stands
@@ -273,8 +287,9 @@ export default function MobileChatDock({
     const lastAt = (isPull ? syncStatus.lastPullAt : syncStatus.lastPushAt) ?? syncStatus.lastSyncAt
     const pullBlockedByEdits = isPull && syncStatus.localDirty
     const unsyncedEdits = !isPull && syncReady && syncStatus.localDirty
+    const label = isPull ? 'Pull' : 'Push'
     const meta = !syncReady
-      ? 'Sync off'
+      ? 'Disconnected'
       : running
         ? isPull
           ? 'Pulling…'
@@ -286,97 +301,124 @@ export default function MobileChatDock({
             : lastAt
               ? formatTimeAgo(lastAt, now)
               : 'Never'
+    return {
+      label,
+      meta,
+      running,
+      unsyncedEdits,
+      icon: isPull ? '/cloud-arrow-down.svg' : '/cloud-arrow-up.svg',
+      ariaLabel: `${label}, ${meta}${unsyncedEdits ? ', unsynced edits' : ''}`,
+      disabled: !syncReady || syncing || !online || databaseStale || pullBlockedByEdits,
+    }
+  }
+
+  const renderSyncButton = (operation: SyncOperation) => {
+    const state = getSyncState(operation)
     return (
       <button
         type="button"
-        className={menuTileClass}
-        aria-label={`${isPull ? 'Pull' : 'Push'}, ${meta}${unsyncedEdits ? ', unsynced edits' : ''}`}
-        disabled={!syncReady || syncing || !online || databaseStale || pullBlockedByEdits}
+        className={`${menuCardClass} relative cursor-pointer disabled:cursor-not-allowed disabled:opacity-50`}
+        aria-label={state.ariaLabel}
+        disabled={state.disabled}
         onClick={() => void runSync(operation)}
       >
-        <span aria-hidden="true" className={`${menuTileFaceClass} ${menuTileIdleFaceClass}`}>
-          {running ? (
+        <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center">
+          {state.running ? (
             <span className={`h-6 w-6 ${spinnerClass}`} />
           ) : (
-            <img src={isPull ? '/cloud-arrow-down.svg' : '/cloud-arrow-up.svg'} alt="" className="h-6 w-6" />
-          )}
-          {unsyncedEdits && (
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[var(--theme-accent)]" />
+            <img src={state.icon} alt="" className="h-6 w-6" />
           )}
         </span>
-        <span className={menuTileLabelClass}>{isPull ? 'Pull' : 'Push'}</span>
-        <span className={menuTileMetaClass}>{meta}</span>
+        <span aria-hidden="true" className="flex min-w-0 flex-col gap-0.5">
+          <span className={menuTileLabelClass}>{state.label}</span>
+          <span className={menuTileMetaClass}>{state.meta}</span>
+        </span>
+        {state.unsyncedEdits && (
+          <span aria-hidden="true" className="absolute right-3 top-3 h-2 w-2 rounded-full bg-[var(--theme-accent)]" />
+        )}
       </button>
     )
   }
 
-  return (
-    <>
-      <nav aria-label="Mobile navigation" className="dock-capsule">
-        <span
-          className="dock-capsule-thumb"
-          aria-hidden="true"
-          data-visible={activeIndex >= 0 ? 'true' : 'false'}
-          style={{ transform: `translateX(${Math.max(activeIndex, 0) * 100}%)` }}
-        />
-        {DOCK_MODES.map((item) => (
-          <button
-            key={item.mode}
-            type="button"
-            className="dock-capsule-button"
-            aria-current={mode === item.mode ? 'page' : undefined}
-            onClick={() => {
-              setMode(item.mode)
-              if (item.mode === 'timeline') {
-                // "Today" must also bring today's note back on screen.
-                requestAnimationFrame(() => {
-                  window.dispatchEvent(new CustomEvent(TIMELINE_SCROLL_TODAY_EVENT))
-                })
-              }
-            }}
-          >
-            <img src={item.icon} alt="" />
-            <span>{item.label}</span>
-          </button>
-        ))}
+  const renderAttentionItem = (item: AttentionItem) => (
+    <div
+      key={item.id}
+      className="flex overflow-hidden rounded-xl border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)]"
+    >
+      <Link
+        to={`/settings#${item.settingsSectionId}`}
+        className="min-h-11 min-w-0 flex-1 px-3 py-2 outline-none transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-warning-border)]"
+        onClick={navigate}
+      >
+        <span className="block text-sm font-semibold text-[var(--theme-warning-text)]">{item.title}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-[var(--theme-warning-text)]">{item.description}</span>
+      </Link>
+      {item.dismissibleSetupNoticeId && (
         <button
-          ref={menuButtonRef}
           type="button"
-          className="dock-capsule-button"
-          aria-label="Menu"
-          aria-describedby={menuStatus ? menuStatusId : undefined}
-          aria-expanded={isMenuOpen}
-          aria-haspopup="dialog"
-          aria-controls={isMenuOpen ? 'mobile-chat-menu' : undefined}
-          onClick={() => {
-            menuClosingRef.current = false
-            setNow(Date.now())
-            setMenuPresent(true)
-            setIsMenuOpen(true)
+          className="flex min-h-11 w-12 shrink-0 self-stretch items-center justify-center text-lg text-[var(--theme-warning-text)] outline-none transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-warning-border)]"
+          aria-label={`Dismiss ${item.title}`}
+          onClick={(event) => {
+            const rows = Array.from(
+              sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? [],
+            )
+            const index = rows.indexOf(event.currentTarget)
+            onDismissSetupNotice(item.dismissibleSetupNoticeId!)
+            requestAnimationFrame(() => {
+              const next = Array.from(
+                sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? [],
+              )
+              const target = next[Math.min(index, next.length - 1)] ?? menuButtonRef.current
+              target?.focus({ preventScroll: true })
+            })
           }}
         >
-          {syncing ? (
-            <span aria-hidden="true" className={`h-5 w-5 ${spinnerClass}`} />
-          ) : (
-            <img src="/menu-lines.svg" alt="" />
-          )}
-          <span aria-hidden="true">Menu</span>
-          {attentionItems.length > 0 && (
-            <span
-              aria-hidden="true"
-              className="absolute right-0.5 top-0 min-w-5 rounded-full border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] px-1 text-[11px] font-bold text-[var(--theme-warning-text)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.18)]"
-            >
-              {attentionItems.length}
-            </span>
-          )}
-          {databaseStale && (
-            <span aria-hidden="true" className="absolute left-1 top-0 h-2.5 w-2.5 rounded-full bg-[var(--theme-warning-text)]" />
-          )}
+          ×
         </button>
-        <span id={menuStatusId} className="sr-only">
-          {menuStatus}
-        </span>
-      </nav>
+      )}
+    </div>
+  )
+
+  const modeIndex = mode === 'search' ? 1 : 0
+
+  return (
+    <>
+      <button
+        ref={menuButtonRef}
+        type="button"
+        className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)]"
+        aria-label="Menu"
+        aria-describedby={menuStatus ? menuStatusId : undefined}
+        aria-expanded={isMenuOpen}
+        aria-haspopup="dialog"
+        aria-controls={isMenuOpen ? 'mobile-chat-menu' : undefined}
+        onClick={() => {
+          menuClosingRef.current = false
+          setNow(Date.now())
+          setMenuPresent(true)
+          setIsMenuOpen(true)
+        }}
+      >
+        {syncing ? (
+          <span aria-hidden="true" className={`h-5 w-5 ${spinnerClass}`} />
+        ) : (
+          <img src="/menu-lines.svg" alt="" className="h-5 w-5" />
+        )}
+        {attentionItems.length > 0 && (
+          <span
+            aria-hidden="true"
+            className="absolute -right-1 -top-1 min-w-5 rounded-full border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] px-1 text-[11px] font-bold text-[var(--theme-warning-text)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.18)]"
+          >
+            {attentionItems.length}
+          </span>
+        )}
+        {databaseStale && (
+          <span aria-hidden="true" className="absolute -left-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--theme-warning-text)]" />
+        )}
+      </button>
+      <span id={menuStatusId} className="sr-only">
+        {menuStatus}
+      </span>
 
       {menuPresent && createPortal(
         <div className="mobile-menu-overlay fixed inset-0 z-50" data-state={isMenuOpen ? 'open' : 'closing'} style={{ bottom: 'var(--keyboard-offset, 0px)' }}>
@@ -421,25 +463,66 @@ export default function MobileChatDock({
                 <span>Reload</span>
               </button>
             )}
-            <div className="grid grid-cols-5 items-start gap-2 py-1">
+            {otherAttentionItems.length > 0 && (
+              <div className="mb-3 space-y-2 border-b border-[var(--theme-border)] pb-3">
+                {otherAttentionItems.map(renderAttentionItem)}
+              </div>
+            )}
+
+            <div role="group" aria-label="Mode" className="mode-capsule mb-3">
+              <span
+                className="mode-capsule-thumb"
+                aria-hidden="true"
+                style={{ transform: `translateX(${modeIndex * 100}%)` }}
+              />
+              {MENU_MODES.map((item, index) => (
+                <button
+                  key={item.mode}
+                  type="button"
+                  className="mode-capsule-button"
+                  aria-pressed={modeIndex === index}
+                  onClick={() => {
+                    closeMenu()
+                    setMode(item.mode)
+                  }}
+                >
+                  <img src={item.icon} alt="" />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-3 items-start gap-2 py-1">
               <button
                 type="button"
                 className={menuTileClass}
-                aria-label={chatSending ? 'New chat (response in progress)' : 'New chat'}
-                disabled={chatSending}
+                aria-label={chatSending ? 'Clear chat (response in progress)' : 'Clear chat'}
+                disabled={chatSending || chatEmpty}
                 title={chatSending ? 'Available when the response finishes' : undefined}
                 onClick={() => {
                   closeMenu()
-                  // Clear the thread and land in Chat, not wherever we were.
-                  setMode('chat')
                   window.dispatchEvent(new CustomEvent(TIMELINE_NEW_CHAT_EVENT))
                 }}
               >
                 <span aria-hidden="true" className={`${menuTileFaceClass} ${menuTileIdleFaceClass}`}>
-                  <img src="/pencil-simple-line.svg" alt="" className="h-6 w-6" />
+                  <img src="/eraser.svg" alt="" className="h-6 w-6" />
                 </span>
-                <span className={menuTileLabelClass}>New chat</span>
+                <span className={menuTileLabelClass}>Clear chat</span>
                 {chatSending && <span className={menuTileMetaClass}>Replying…</span>}
+              </button>
+              <button
+                type="button"
+                className={menuTileClass}
+                aria-label={`Dark mode: ${theme.meta}`}
+                onClick={() => {
+                  void updateThemePreference(getNextThemePreference(themePreference))
+                }}
+              >
+                <span aria-hidden="true" className={`${menuTileFaceClass} ${menuTileIdleFaceClass}`}>
+                  <img src={theme.icon} alt="" className="h-6 w-6" />
+                </span>
+                <span className={menuTileLabelClass}>Dark mode</span>
+                <span className={menuTileMetaClass}>{theme.meta}</span>
               </button>
               <Link to="/settings" className={menuTileClass} onClick={navigate}>
                 <span aria-hidden="true" className={`${menuTileFaceClass} ${menuTileIdleFaceClass}`}>
@@ -447,71 +530,37 @@ export default function MobileChatDock({
                 </span>
                 <span className={menuTileLabelClass}>Settings</span>
               </Link>
-              <button
-                type="button"
-                className={menuTileClass}
-                aria-label={themePreference === 'system' ? 'Dark mode, following system' : 'Dark mode'}
-                aria-pressed={isDark}
-                onClick={() => {
-                  void updateThemePreference(isDark ? 'light' : 'dark')
-                }}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`${menuTileFaceClass} ${isDark ? menuTilePressedFaceClass : menuTileIdleFaceClass}`}
-                >
-                  <img src="/moon.svg" alt="" className="h-6 w-6" />
-                </span>
-                <span className={menuTileLabelClass}>Dark mode</span>
-                <span className={menuTileMetaClass}>
-                  {themePreference === 'system' ? 'Auto' : isDark ? 'On' : 'Off'}
-                </span>
-              </button>
-              {renderSyncTile('pull')}
-              {renderSyncTile('push')}
             </div>
-            {attentionItems.length > 0 && (
-              <div className="mt-3 space-y-2 border-t border-[var(--theme-border)] pt-3">
-                {attentionItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex overflow-hidden rounded-xl border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)]"
-                  >
-                    <Link
-                      to={`/settings#${item.settingsSectionId}`}
-                      className="min-h-11 min-w-0 flex-1 px-3 py-2 outline-none transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-warning-border)]"
-                      onClick={navigate}
-                    >
-                      <span className="block text-sm font-semibold text-[var(--theme-warning-text)]">{item.title}</span>
-                      <span className="mt-0.5 block text-xs leading-5 text-[var(--theme-warning-text)]">{item.description}</span>
-                    </Link>
-                    {item.dismissibleSetupNoticeId && (
-                      <button
-                        type="button"
-                        className="flex min-h-11 w-12 shrink-0 self-stretch items-center justify-center text-lg text-[var(--theme-warning-text)] outline-none transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-warning-border)]"
-                        aria-label={`Dismiss ${item.title}`}
-                        onClick={(event) => {
-                          const rows = Array.from(
-                            sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? [],
-                          )
-                          const index = rows.indexOf(event.currentTarget)
-                          onDismissSetupNotice(item.dismissibleSetupNoticeId!)
-                          requestAnimationFrame(() => {
-                            const next = Array.from(
-                              sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? [],
-                            )
-                            const target = next[Math.min(index, next.length - 1)] ?? menuButtonRef.current
-                            target?.focus({ preventScroll: true })
-                          })
-                        }}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+
+            <section aria-labelledby="mobile-menu-sync-title" className="mt-3">
+              <h2
+                id="mobile-menu-sync-title"
+                className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-text-muted)]"
+              >
+                {activeSyncProvider ? `Sync • ${SYNC_PROVIDER_LABELS[activeSyncProvider]}` : 'Sync'}
+              </h2>
+              {syncAttentionItems.length > 0 && (
+                <div className="mb-2 space-y-2">{syncAttentionItems.map(renderAttentionItem)}</div>
+              )}
+              {activeSyncProvider ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {renderSyncButton('pull')}
+                  {renderSyncButton('push')}
+                </div>
+              ) : (
+                syncAttentionItems.length === 0 && (
+                  // The setup reminder was dismissed: keep a quiet way in.
+                  <Link to="/settings#settings-sync" className={menuCardClass} onClick={navigate}>
+                    <img src="/cloud-arrow-up.svg" alt="" className="h-6 w-6 shrink-0" />
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className={menuTileLabelClass}>Set up cloud sync</span>
+                      <span className={menuTileMetaClass}>Notes stay on this device until then</span>
+                    </span>
+                    <img src="/caret-left.svg" alt="" className="h-4 w-4 shrink-0 rotate-180 opacity-70" />
+                  </Link>
+                )
+              )}
+            </section>
           </div>
         </div>,
         document.body,

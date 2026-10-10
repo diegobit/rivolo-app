@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import MobileChatDock from './MobileChatDock'
+import MobileMenu from './MobileMenu'
+import type { AttentionItem } from '../../lib/attention'
+import { TIMELINE_NEW_CHAT_EVENT } from '../../lib/timelineEvents'
 import { getEmptySyncStatus } from '../../lib/sync'
 import { pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../../store/syncActions'
 import { useSettingsStore } from '../../store/useSettingsStore'
@@ -24,13 +26,13 @@ vi.hoisted(() => {
 
 const touch = (x: number, y: number, identifier = 1) => ({ clientX: x, clientY: y, identifier })
 
-const openMenu = () => {
+const openMenu = (attentionItems: AttentionItem[] = []) => {
   render(
     <MemoryRouter>
-      <MobileChatDock
+      <MobileMenu
         databaseStale={false}
         syncing={false}
-        attentionItems={[]}
+        attentionItems={attentionItems}
         onDismissSetupNotice={vi.fn()}
         onNavigate={vi.fn()}
       />
@@ -42,7 +44,7 @@ const openMenu = () => {
 
 describe('Mobile menu swipe dismissal', () => {
   beforeEach(() => {
-    useUIStore.setState({ mode: 'timeline', chatSending: false })
+    useUIStore.setState({ mode: 'chat', chatSending: false, chatMessageCount: 2, chatPanelOpen: false })
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: vi.fn().mockReturnValue({ matches: false }),
@@ -95,16 +97,16 @@ describe('Mobile menu swipe dismissal', () => {
 
   it('blocks an accidental row click after a swipe but allows the next deliberate tap', () => {
     openMenu()
-    const row = screen.getByRole('button', { name: 'New chat' })
+    const row = screen.getByRole('button', { name: 'Search' })
     fireEvent.touchStart(row, { touches: [touch(100, 100)] })
     fireEvent.touchMove(row, { touches: [touch(100, 130)] })
     fireEvent.touchEnd(row, { touches: [], changedTouches: [touch(100, 130)] })
     fireEvent.click(row)
-    expect(useUIStore.getState().mode).toBe('timeline')
+    expect(useUIStore.getState().mode).toBe('chat')
     fireEvent.touchStart(row, { touches: [touch(100, 100)] })
     fireEvent.touchEnd(row, { touches: [], changedTouches: [touch(100, 100)] })
     fireEvent.click(row)
-    expect(useUIStore.getState().mode).toBe('chat')
+    expect(useUIStore.getState().mode).toBe('search')
   })
 })
 
@@ -119,7 +121,7 @@ describe('Mobile menu quick actions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    useUIStore.setState({ mode: 'timeline', chatSending: false })
+    useUIStore.setState({ mode: 'chat', chatSending: false, chatMessageCount: 2, chatPanelOpen: false })
     useSettingsStore.setState({ themePreference: 'light' })
     useSyncStore.setState({
       activeProvider: null,
@@ -129,21 +131,77 @@ describe('Mobile menu quick actions', () => {
     })
   })
 
-  it('toggles dark mode from the menu', () => {
+  it.each([
+    ['system', 'Auto', '/sun-horizon.svg', 'light'],
+    ['light', 'Off', '/sun.svg', 'dark'],
+    ['dark', 'On', '/moon.svg', 'system'],
+  ] as const)('shows the %s theme on the dark mode tile and cycles on', (preference, state, icon, next) => {
     const updateThemePreference = vi.fn(async () => {})
-    useSettingsStore.setState({ updateThemePreference })
+    useSettingsStore.setState({ themePreference: preference, updateThemePreference })
     openMenu()
-    const tile = screen.getByRole('button', { name: 'Dark mode' })
-    expect(tile).toHaveAttribute('aria-pressed', 'false')
+    const tile = screen.getByRole('button', { name: `Dark mode: ${state}` })
+    expect(tile.querySelector('img')).toHaveAttribute('src', icon)
     fireEvent.click(tile)
-    expect(updateThemePreference).toHaveBeenCalledWith('dark')
+    expect(updateThemePreference).toHaveBeenCalledWith(next)
   })
 
-  it('disables pull and push while cloud sync is off', () => {
+  it('clears the chat from its tile', () => {
+    const onClear = vi.fn()
+    window.addEventListener(TIMELINE_NEW_CHAT_EVENT, onClear)
     openMenu()
-    expect(screen.getByRole('button', { name: 'Pull, Sync off' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Push, Sync off' })).toBeDisabled()
-    expect(screen.getAllByText('Sync off')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear chat' }))
+    expect(onClear).toHaveBeenCalledOnce()
+    window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onClear)
+  })
+
+  it('greys out Clear chat while the chat is empty', () => {
+    useUIStore.setState({ chatMessageCount: 0 })
+    openMenu()
+    expect(screen.getByRole('button', { name: 'Clear chat' })).toBeDisabled()
+  })
+
+  it('puts the sync setup reminder where pull and push would be', () => {
+    openMenu([
+      {
+        id: 'sync',
+        title: 'Cloud sync is off',
+        description: 'Everything stays on this device.',
+        settingsSectionId: 'settings-sync',
+        dismissibleSetupNoticeId: 'sync',
+      },
+    ])
+    const sync = within(screen.getByRole('region', { name: 'Sync' }))
+    expect(sync.getByRole('link', { name: /Cloud sync is off/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Pull/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Push/ })).not.toBeInTheDocument()
+  })
+
+  it('keeps a quiet setup link once the sync reminder is dismissed', () => {
+    openMenu()
+    expect(screen.getByRole('link', { name: /Set up cloud sync/ })).toHaveAttribute('href', '/settings#settings-sync')
+  })
+
+  it('shows sync problems in the Sync section and other warnings on top', () => {
+    useSyncStore.setState({ activeProvider: 'dropbox', status: connectedStatus })
+    openMenu([
+      {
+        id: 'sync-attention',
+        title: 'Sync needs attention',
+        description: 'Dropbox changed remotely. Choose which copy to keep.',
+        settingsSectionId: 'settings-sync',
+      },
+      {
+        id: 'ai',
+        title: "AI assistant isn't set up",
+        description: 'Open a provider and add an API key.',
+        settingsSectionId: 'settings-ai',
+        dismissibleSetupNoticeId: 'ai',
+      },
+    ])
+    const sync = within(screen.getByRole('region', { name: 'Sync • Dropbox' }))
+    expect(sync.getByRole('link', { name: /Sync needs attention/ })).toBeInTheDocument()
+    expect(sync.queryByRole('link', { name: /AI assistant/ })).not.toBeInTheDocument()
+    expect(sync.getByRole('button', { name: 'Pull, 5m ago' })).toBeInTheDocument()
   })
 
   it('shows when each sync direction last ran and runs it on tap', () => {
