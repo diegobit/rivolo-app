@@ -122,7 +122,7 @@ const setDesktopChatMode = (mode: 'chat' | 'search') =>
     useUIStore.setState({ mode })
   })
 
-const getComposer = () => screen.getByPlaceholderText<HTMLTextAreaElement>('Ask anything')
+const getComposer = () => screen.getByPlaceholderText<HTMLTextAreaElement>('Ask Rivolo')
 
 const ensureTrayContainers = () => {
   for (const id of ['bottom-tray', 'bottom-tray-pills']) {

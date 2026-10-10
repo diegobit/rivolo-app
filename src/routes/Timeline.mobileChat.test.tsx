@@ -184,7 +184,7 @@ describe('Timeline mobile chat UX', () => {
       </MemoryRouter>,
     )
 
-    const composer = screen.getByPlaceholderText('Ask anything')
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
     fireEvent.focus(composer)
     expect(useUIStore.getState().chatPanelOpen).toBe(true)
   })
@@ -207,5 +207,57 @@ describe('Timeline mobile chat UX', () => {
     const logo = container.querySelector('img[src="/logo.svg"]')
     expect(logo).toBeInTheDocument()
     expect(logo?.parentElement).toHaveClass('mb-auto')
+  })
+
+  it('renders custom visual placeholder with sparkle icon for Ask Rivolo that disappears when writing', () => {
+    useUIStore.setState({ mode: 'chat' })
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    expect(composer).toBeInTheDocument()
+
+    // Overlay is present when empty
+    const overlayText = screen.getByText('Ask Rivolo')
+    expect(overlayText).toBeInTheDocument()
+    const sparkleSvg = overlayText.parentElement?.querySelector('svg')
+    expect(sparkleSvg).toBeInTheDocument()
+
+    // Typing hides overlay
+    fireEvent.change(composer, { target: { value: 'What did I do today?' } })
+    expect(screen.queryByText('Ask Rivolo')).toBeNull()
+
+    // Clearing restores overlay
+    fireEvent.change(composer, { target: { value: '' } })
+    expect(screen.getByText('Ask Rivolo')).toBeInTheDocument()
+  })
+
+  it('renders custom visual placeholder with lens icon for Search all days that disappears when writing', () => {
+    useUIStore.setState({ mode: 'search' })
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const searchInput = screen.getByPlaceholderText('Search all days')
+    expect(searchInput).toBeInTheDocument()
+
+    // Overlay is present when empty
+    const overlayText = screen.getByText('Search all days')
+    expect(overlayText).toBeInTheDocument()
+    const lensSvg = overlayText.parentElement?.querySelector('svg')
+    expect(lensSvg).toBeInTheDocument()
+
+    // Typing hides overlay
+    fireEvent.change(searchInput, { target: { value: 'meeting' } })
+    expect(screen.queryByText('Search all days')).toBeNull()
+
+    // Clearing restores overlay
+    fireEvent.change(searchInput, { target: { value: '' } })
+    expect(screen.getByText('Search all days')).toBeInTheDocument()
   })
 })

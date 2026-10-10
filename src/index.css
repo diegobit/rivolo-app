@@ -1842,6 +1842,10 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
   }
 }
 
+.tray-field::placeholder {
+  color: transparent !important;
+}
+
 /* Mobile: the composer / search field should read as a sibling of the menu button:
    same border and pill shape, one step more lift, and the soft shadow recipe instead
    of the tight touch override above. */
