@@ -1424,7 +1424,8 @@
 }
 
 /* The mobile menu's Chat | Search switch: the capsule + sliding-thumb language
-   shared with the desktop launchers, so the app reads as one system. */
+   shared with the desktop launchers, so the app reads as one system. In the
+   sheet it uses the same 1px lift as the tiles beside it. */
 .mode-capsule {
   /* Gentle AI glow rising from under Chat (the left half), fixed there
      regardless of the thumb. Blue is the AI colour, so it only appears here as
@@ -1440,9 +1441,7 @@
   background:
     radial-gradient(ellipse 36% 130% at 25% 110%, rgb(var(--theme-accent-soft-rgb)), transparent 72%),
     var(--mobile-control-surface);
-  box-shadow:
-    0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
-    0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
+  box-shadow: 0 1px 2px rgb(var(--theme-shadow-color) / 0.08);
 }
 
 .mode-capsule-thumb {
@@ -1453,14 +1452,11 @@
   width: calc(50% - 4px);
   border-radius: 9999px;
   background: var(--theme-thumb);
-  box-shadow:
-    0 1px 2px rgb(var(--theme-shadow-color) / 0.08),
-    0 3px 8px -4px rgb(var(--theme-shadow-color) / 0.18);
+  box-shadow: 0 1px 2px rgb(var(--theme-shadow-color) / 0.08);
   pointer-events: none;
   transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-html[data-theme='dark'] .mode-capsule-thumb,
 html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.4),
@@ -1817,6 +1813,20 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
   padding-bottom: calc(env(safe-area-inset-bottom) + 2.5rem);
   box-shadow: var(--mobile-menu-shadow);
   animation: mobile-menu-rise 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Sheet grabber: 40×4, the light grey from the reference (shadow ink at 9%
+   on white). Dark sheets need a light bar or it disappears. */
+.mobile-menu-grabber {
+  width: 2.5rem;
+  height: 4px;
+  margin: 0 auto 0.75rem;
+  border-radius: 999px;
+  background: rgb(var(--theme-shadow-color) / 0.09);
+}
+
+html[data-theme='dark'] .mobile-menu-grabber {
+  background: rgb(255 255 255 / 0.28);
 }
 
 .mobile-menu-scrim {
