@@ -1,7 +1,13 @@
 import { memo, useLayoutEffect, useRef, useState } from 'react'
+import SegmentedCapsule from '../../components/SegmentedCapsule'
 import type { SearchFilter } from '../../lib/dayRepository'
 import { SEARCH_FILTER_OPTIONS } from '../../lib/searchFilters'
 import type { SearchResultMode } from '../Timeline'
+
+const resultModeSegments: { value: SearchResultMode; word: string }[] = [
+  { value: 'whole-day', word: 'Days' },
+  { value: 'matched-lines', word: 'Lines' },
+]
 
 
 const chipFocusClass =
@@ -57,26 +63,24 @@ const SearchModePills = memo(({
       ref={scrollerRef}
       className={`pointer-events-auto flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-2 -mb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${overflows ? overflowFadeClass : ''}`}
     >
-    {showResultMode && <div
-      role="group"
-      aria-label="Show results as"
-      className="capsule-segmented inline-flex h-[50px] shrink-0 grow items-center gap-0.5 text-xs font-semibold sm:h-8"
-    >
-      <span aria-hidden="true" className="px-2 text-[10px] uppercase tracking-[0.05em]">
-        Show
-      </span>
-      {(['whole-day', 'matched-lines'] as const).map((mode) => (
-        <button
-          key={mode}
-          type="button"
-          aria-pressed={resultMode === mode}
-          onClick={() => onResultModeChange(mode)}
-          className={`capsule-segment flex h-full grow items-center justify-center rounded-full px-3 transition-colors ${chipFocusClass}`}
-        >
-          {mode === 'whole-day' ? 'Days' : 'Lines'}
-        </button>
-      ))}
-    </div>}
+    {showResultMode && (
+      <SegmentedCapsule
+        className="mode-capsule-compact"
+        label="Show results as"
+        value={resultMode}
+        segments={resultModeSegments.map((segment) => ({
+          value: segment.value,
+          ariaLabel: `Show ${segment.word}`,
+          label: (
+            <span className="mode-capsule-lines" aria-hidden="true">
+              <span>Show</span>
+              <span>{segment.word}</span>
+            </span>
+          ),
+        }))}
+        onChange={onResultModeChange}
+      />
+    )}
     {searchFilter ? (
       <button
         data-active="true"

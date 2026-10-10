@@ -17,6 +17,7 @@ import {
 import { useSettingsStore } from '../../store/useSettingsStore'
 import { useSyncStore } from '../../store/useSyncStore'
 import { useUIStore } from '../../store/useUIStore'
+import SegmentedCapsule from '../SegmentedCapsule'
 
 type MobileMenuProps = {
   databaseStale: boolean
@@ -383,8 +384,6 @@ export default function MobileMenu({
     </div>
   )
 
-  const modeIndex = mode === 'search' ? 1 : 0
-
   return (
     <>
       <button
@@ -464,28 +463,25 @@ export default function MobileMenu({
               </div>
             )}
 
-            <div role="group" aria-label="Mode" className="mode-capsule mb-3">
-              <span
-                className="mode-capsule-thumb"
-                aria-hidden="true"
-                style={{ transform: `translateX(${modeIndex * 100}%)` }}
-              />
-              {MENU_MODES.map((item, index) => (
-                <button
-                  key={item.mode}
-                  type="button"
-                  className="mode-capsule-button"
-                  aria-pressed={modeIndex === index}
-                  onClick={() => {
-                    closeMenu()
-                    setMode(item.mode)
-                  }}
-                >
-                  <img src={item.icon} alt="" />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
+            <SegmentedCapsule
+              className="mb-3"
+              label="Mode"
+              value={mode === 'search' ? 'search' : 'chat'}
+              segments={MENU_MODES.map((item) => ({
+                value: item.mode,
+                ariaLabel: item.label,
+                label: (
+                  <>
+                    <img src={item.icon} alt="" />
+                    <span>{item.label}</span>
+                  </>
+                ),
+              }))}
+              onChange={(next) => {
+                closeMenu()
+                setMode(next)
+              }}
+            />
 
             <div className="grid grid-cols-3 items-start gap-2 py-1">
               <button

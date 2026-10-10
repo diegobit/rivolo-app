@@ -1471,7 +1471,7 @@
   transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
+html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.4),
     0 4px 14px -4px rgb(0 0 0 / 0.6);
@@ -1509,33 +1509,45 @@ html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
   border-radius: 9999px;
 }
 
-/* Search pills: the mode capsule's language at chip size. `.capsule-segmented` is a
-   small capsule (soft tray + raised thumb); `.capsule-chip` is a single raised button.
-   Lift steps up the stack: pills < capsule < field. */
-.capsule-segmented,
+/* The search result toggle is the same capsule, short enough to sit with the
+   filter chips. The 4px track padding is what makes its thumb shorter. */
+.mode-capsule-compact {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: max-content;
+  height: 2.75rem;
+}
+
+.mode-capsule-compact .mode-capsule-button {
+  flex: 1 0 auto;
+  min-width: 4.25rem;
+  padding: 0 0.7rem;
+}
+
+.mode-capsule-lines {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1.05;
+}
+
+.mode-capsule-lines > :first-child {
+  font-size: 10px;
+}
+
+.mode-capsule-lines > :last-child {
+  font-size: 12px;
+}
+
+/* Filter chips are a single raised button. Lift steps up the stack: pills < capsule < field. */
 .capsule-chip {
   border: 1px solid var(--theme-border);
   border-radius: 9999px;
+  background: var(--theme-surface);
   box-shadow:
     0 4px 12px -8px rgb(var(--theme-shadow-color) / 0.22),
     0 1px 2px rgb(var(--theme-shadow-color) / 0.08);
-}
-
-.capsule-segmented {
-  padding: 3px;
-  background: var(--theme-surface-soft);
-  color: var(--theme-text-muted);
-}
-
-/* Mobile keeps 44px halves (48px tray - 2px padding); the desktop chip stays 32px. */
-@media not all and (min-width: 700px) {
-  .capsule-segmented {
-    padding: 2px;
-  }
-}
-
-.capsule-chip {
-  background: var(--theme-surface);
 }
 
 .capsule-chip[data-active='true'] {
@@ -1547,14 +1559,6 @@ html[data-theme='dark'] .capsule-segment[aria-pressed='true'] {
 .capsule-chip[data-active='true'] .capsule-chip-disc {
   background: var(--theme-surface);
   color: var(--theme-accent-muted-text);
-}
-
-.capsule-segment[aria-pressed='true'] {
-  background: var(--theme-thumb);
-  color: var(--theme-text);
-  box-shadow:
-    0 1px 2px rgb(var(--theme-shadow-color) / 0.08),
-    0 3px 8px -4px rgb(var(--theme-shadow-color) / 0.18);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1845,17 +1849,6 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
 @media not all and (min-width: 700px) {
   .bottom-tray-row:has(.bottom-tray-menu) #bottom-tray-pills {
     right: calc(-1 * (2.75rem + 0.5rem));
-  }
-
-  #bottom-tray-pills .capsule-segmented,
-  #bottom-tray-pills .capsule-chip {
-    flex-grow: 1;
-    justify-content: center;
-  }
-
-  #bottom-tray-pills .capsule-segment {
-    flex-grow: 1;
-    justify-content: center;
   }
 }
 
