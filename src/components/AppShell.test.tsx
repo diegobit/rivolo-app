@@ -419,7 +419,7 @@ describe('AppShell attention and stale tab states', () => {
       </MemoryRouter>,
     )
     await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    await userEvent.click(document.querySelector('.mobile-menu-scrim')!)
 
     expect(document.querySelector('.mobile-menu-overlay')).toHaveAttribute('data-state', 'closing')
     expect(view.container.querySelector('main')).toHaveAttribute('inert')
@@ -498,7 +498,8 @@ describe('AppShell attention and stale tab states', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
     expect(document.querySelector('#mobile-chat-menu img[src="/logo.svg"]')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Close menu' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Close menu' })).not.toBeInTheDocument()
+    expect(document.querySelector('.mobile-menu-grabber')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
     expect(screen.getByRole('button', { name: 'Clear chat' })).toBeDisabled()
   })

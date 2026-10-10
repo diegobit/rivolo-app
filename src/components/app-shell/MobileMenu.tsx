@@ -440,18 +440,9 @@ export default function MobileMenu({
             role="dialog"
             aria-modal="true"
             aria-label="Menu"
-            className="mobile-menu-sheet absolute inset-x-0 bottom-0 max-h-full overflow-y-auto overscroll-y-contain rounded-t-3xl bg-[var(--theme-surface)] p-3 text-[var(--theme-text-soft)]"
+            className="mobile-menu-sheet absolute inset-x-0 bottom-0 max-h-full overflow-y-auto overscroll-y-contain rounded-t-3xl bg-[var(--theme-surface)] px-3 pb-3 pt-2 text-[var(--theme-text-soft)]"
           >
-            <div className="mb-2 flex justify-center">
-              <button
-                type="button"
-                aria-label="Close menu"
-                onClick={closeMenu}
-                className="flex h-11 w-16 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface-soft)] text-[var(--theme-text-soft)] shadow-[0_1px_2px_rgb(var(--theme-shadow-color)/0.08)] outline-none transition-colors hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] focus-visible:ring-2 focus-visible:ring-[var(--theme-accent-muted-text)]"
-              >
-                <img src="/caret-left.svg" alt="" className="h-5 w-5 -rotate-90" />
-              </button>
-            </div>
+            <div className="mobile-menu-grabber" aria-hidden="true" />
             {databaseStale && (
               <button
                 type="button"
