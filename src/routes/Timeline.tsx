@@ -2213,8 +2213,7 @@ export default function Timeline() {
         <div
           className="pointer-events-none fixed left-1/2 z-40 w-[min(96vw,620px)] -translate-x-1/2 px-2"
           style={{
-            // Sit above the whole mobile bottom row (composer included in chat and
-            // search, dock only in timeline), not just above the dock.
+            // Sit above the whole mobile bottom row, not just above the composer.
             bottom: 'var(--mobile-home-bottom-clearance, calc(env(safe-area-inset-bottom) + 5rem))',
           }}
         >

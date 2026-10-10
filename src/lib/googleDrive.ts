@@ -276,6 +276,8 @@ export const disconnectGoogleDrive = async () => {
     lastRemoteVersion: null,
     lastPushedHash: null,
     lastSyncAt: null,
+    lastPullAt: null,
+    lastPushAt: null,
     accountId: null,
     accountEmail: null,
     accountName: null,
@@ -289,6 +291,8 @@ export const getGoogleDriveStatus = async (): Promise<SyncStatus> => {
     targetName: getGoogleDrivePath(state.fileName),
     lastRemoteVersion: state.lastRemoteVersion,
     lastSyncAt: state.lastSyncAt,
+    lastPullAt: state.lastPullAt,
+    lastPushAt: state.lastPushAt,
     localDirty: state.localDirty,
     accountName: state.accountName,
     accountEmail: state.accountEmail,
@@ -306,6 +310,8 @@ export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
   if (!metadata) throw new Error('Google Drive file not found. Push to create it first.')
 
   if (metadata.version === state.lastRemoteVersion && !(force && state.localDirty)) {
+    // The remote was checked and matches, so this still counts as a pull.
+    await updateGoogleDriveState({ lastPullAt: Date.now() })
     return { status: 'noop' as const }
   }
 
@@ -325,6 +331,7 @@ export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
     // immediate redundant push of what we just pulled.
     lastPushedHash: await hashSyncContent(content),
     lastSyncAt: Date.now(),
+    lastPullAt: Date.now(),
     localDirty: false,
   })
   return { status: 'pulled' as const }

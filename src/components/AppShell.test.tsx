@@ -1,8 +1,8 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TIMELINE_NEW_CHAT_EVENT, TIMELINE_SCROLL_TODAY_EVENT } from '../lib/timelineEvents'
+import { TIMELINE_NEW_CHAT_EVENT } from '../lib/timelineEvents'
 import AppShell from './AppShell'
 
 const stores = vi.hoisted(() => ({
@@ -125,6 +125,7 @@ describe('AppShell attention and stale tab states', () => {
     stores.ui.chatPanelOpen = false
     stores.ui.chatMessageCount = 0
     stores.ui.timelineEmpty = null
+    stores.ui.setMode.mockClear()
     stores.viewport.isNarrow = false
   })
 
@@ -308,7 +309,7 @@ describe('AppShell attention and stale tab states', () => {
     expect(stores.settings.updateThemePreference).toHaveBeenCalledExactlyOnceWith('system')
   })
 
-  it.each(['timeline', 'chat', 'search'] as const)('shows the mobile dock and no header controls in %s mode', (mode) => {
+  it.each(['chat', 'search'] as const)('shows the menu button and no header controls in %s mode', (mode) => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
     stores.sync.activeProvider = 'google-drive'
@@ -325,7 +326,7 @@ describe('AppShell attention and stale tab states', () => {
       </MemoryRouter>,
     )
 
-    // The top bar keeps the brand but has no controls: they live in the dock.
+    // The top bar keeps the brand but has no controls: they live in the menu.
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Theme: System' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Shortcuts' })).not.toBeInTheDocument()
@@ -334,13 +335,28 @@ describe('AppShell attention and stale tab states', () => {
     expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument()
     expect(screen.getByRole('main')).toHaveClass('pt-0')
     expect(screen.getByRole('main')).toHaveStyle({ paddingBottom: 'var(--mobile-home-bottom-clearance)' })
-    const dock = screen.getByRole('navigation', { name: 'Mobile navigation' })
-    expect(dock).toBeVisible()
-    expect(screen.getByRole('button', { name: mode === 'timeline' ? 'Today' : mode === 'chat' ? 'Chat' : 'Search' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible()
     expect(screen.queryByRole('button', { name: /Switch to/ })).not.toBeInTheDocument()
-    // The empty portal target stays mounted in Today and is hidden by :empty CSS.
     expect(document.querySelector('#bottom-tray')).toBeInTheDocument()
+  })
+
+  it('moves a phone out of the plain timeline mode, which has no controls there', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'timeline'
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('chat')
   })
 
   it('hands the brand to the full-screen chat overlay when a thread is up', () => {
@@ -360,38 +376,14 @@ describe('AppShell attention and stale tab states', () => {
     )
 
     expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
-    expect(screen.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible()
   })
 
-  it('brings today back on screen when the Today destination is tapped', async () => {
+  it('clears the chat from the menu without changing mode', async () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
     stores.ui.mode = 'search'
-    const onScrollToday = vi.fn()
-    window.addEventListener(TIMELINE_SCROLL_TODAY_EVENT, onScrollToday)
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <Routes>
-          <Route path="/" element={<AppShell />}>
-            <Route index element={<div>Timeline content</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await userEvent.click(screen.getByRole('button', { name: 'Today' }))
-
-    expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
-    await waitFor(() => expect(onScrollToday).toHaveBeenCalled())
-
-    window.removeEventListener(TIMELINE_SCROLL_TODAY_EVENT, onScrollToday)
-  })
-
-  it('opens Chat when New chat is used from another destination', async () => {
-    stores.tabSync = { isPrimary: true, databaseStale: false }
-    stores.viewport.isNarrow = true
-    stores.ui.mode = 'search'
+    stores.ui.chatMessageCount = 2
     const onNewChat = vi.fn()
     window.addEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
 
@@ -406,9 +398,9 @@ describe('AppShell attention and stale tab states', () => {
     )
 
     await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'New chat' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Clear chat' }))
 
-    expect(stores.ui.setMode).toHaveBeenCalledWith('chat')
+    expect(stores.ui.setMode).not.toHaveBeenCalled()
     expect(onNewChat).toHaveBeenCalledOnce()
 
     window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
@@ -485,12 +477,10 @@ describe('AppShell attention and stale tab states', () => {
     }
   })
 
-  it('offers new chat and settings from the mobile menu before chat has messages', async () => {
+  it('offers settings but greys out Clear chat while the chat is empty', async () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'
-    const onNewChat = vi.fn()
-    window.addEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
 
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -510,12 +500,7 @@ describe('AppShell attention and stale tab states', () => {
     expect(document.querySelector('#mobile-chat-menu img[src="/logo.svg"]')).toBeNull()
     expect(screen.getByRole('button', { name: 'Close menu' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
-    const newChatButton = await screen.findByRole('button', { name: 'New chat' })
-    await userEvent.click(newChatButton)
-
-    expect(onNewChat).toHaveBeenCalledOnce()
-
-    window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
+    expect(screen.getByRole('button', { name: 'Clear chat' })).toBeDisabled()
   })
 
   it('keeps Menu as its accessible name when the tab needs reloading', async () => {
@@ -880,18 +865,16 @@ describe('AppShell launcher mode buttons', () => {
     )
   })
 
-  it('keeps the mobile launcher buttons as plain mode switches', () => {
+  it('switches between chat and search from the mobile menu', () => {
     stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
     render(renderHome())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
-    expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('chat')
-    expect(screen.getByRole('button', { name: 'Chat' })).not.toHaveAttribute('aria-controls')
-
-    stores.ui.setMode.mockClear()
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    const modes = within(screen.getByRole('group', { name: 'Mode' }))
+    expect(modes.getByRole('button', { name: 'Chat' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(modes.getByRole('button', { name: 'Search' }))
     expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('search')
-    expect(screen.getByRole('button', { name: 'Search' })).not.toHaveAttribute('aria-controls')
   })
 
   it('opens chat from the AI button in timeline mode', () => {
