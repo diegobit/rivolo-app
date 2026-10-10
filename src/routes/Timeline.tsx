@@ -64,6 +64,7 @@ type TrayInputProps = {
   // Resolves false when the draft was rejected (e.g. no provider configured).
   onChatSubmit: (value: string) => Promise<boolean>
   onSearchTextChange: (value: string) => void
+  onFocus?: () => void
 }
 
 type TrayInputConfig = {
@@ -97,6 +98,7 @@ const TrayInput = memo(({
   chatError,
   onChatSubmit,
   onSearchTextChange,
+  onFocus,
 }: TrayInputProps) => {
   const debounceRef = useRef<number | null>(null)
   const wasSearchActiveRef = useRef(false)
@@ -266,6 +268,7 @@ const TrayInput = memo(({
               }}
               placeholder={inputConfig.placeholder}
               value={draftText}
+              onFocus={onFocus}
               onChange={(event) => {
                 onDraftTextChange(event.target.value)
               }}
@@ -568,7 +571,7 @@ export default function Timeline() {
   // Grows with every new message and every streamed chunk of the last one.
   const chatContentKey = `${messages.length}:${lastChatMessage?.content.length ?? 0}:${lastChatMessage?.meta?.isStreaming ? 1 : 0}`
   const chatScroll = useStickToBottom(showDesktopChatPanel, chatContentKey)
-  const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && (chatPanelOpen || chatMessageCount > 0)
+  const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
   const mobileChatScroll = useMobileChatScroll(showMobileChatOverlay, mobileChatContentKey)
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
@@ -1769,6 +1772,11 @@ export default function Timeline() {
         chatError={chatError}
         onChatSubmit={handleChatSend}
         onSearchTextChange={handleSearchTextChange}
+        onFocus={() => {
+          if (isNarrowViewportMode && mode === 'chat' && !chatPanelOpen && chatMessageCount > 0) {
+            setChatPanelOpen(true)
+          }
+        }}
       />
     )
 
@@ -2033,6 +2041,26 @@ export default function Timeline() {
       {isMobileSearchMode ? (
         <BottomTrayPortal containerId="bottom-tray-pills">{renderSearchPills(true)}</BottomTrayPortal>
       ) : null}
+      {isNarrowViewportMode && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0) ? (
+        <BottomTrayPortal containerId="bottom-tray-pills">
+          <button
+            type="button"
+            className="mobile-chat-floating-btn pointer-events-auto ml-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] sm:hidden"
+            aria-label={chatPanelOpen ? 'Back to timeline' : 'Open chat'}
+            title={chatPanelOpen ? 'Back to timeline' : 'Open chat'}
+            onClick={() => setChatPanelOpen(!chatPanelOpen)}
+          >
+            {chatPanelOpen ? (
+              <span
+                aria-hidden="true"
+                className="h-5 w-5 bg-current [mask-image:url('/caret-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/caret-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
+              />
+            ) : (
+              <img src="/chats-teardrop.svg" alt="" className="h-5 w-5 opacity-75" />
+            )}
+          </button>
+        </BottomTrayPortal>
+      ) : null}
       {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
 
       {showMobileChatOverlay ? <div className="contents" inert>{timelineContent}</div> : timelineContent}
@@ -2242,11 +2270,6 @@ export default function Timeline() {
       {showMobileChatOverlay && (
         <>
           <div className="fixed inset-0 z-20 flex flex-col bg-[var(--theme-page)] sm:hidden">
-            {/* The wordmark stays at the top of the chat, above the thread, so no
-                message can ever run behind it. */}
-            <div className="mt-4 flex h-16 shrink-0 items-center justify-center">
-              <img src="/logo.svg" alt="Rivolo" className="h-10 w-auto" />
-            </div>
             <div
               ref={mobileChatScroll.scrollerRef}
               onScroll={mobileChatScroll.onScroll}
@@ -2255,12 +2278,17 @@ export default function Timeline() {
               onTouchCancel={mobileChatScroll.onTouchEnd}
               className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 [overflow-anchor:none]"
               style={{
-                paddingTop: '0.5rem',
-                paddingBottom: 'var(--mobile-home-bottom-clearance)',
-                scrollPaddingBottom: 'var(--mobile-home-bottom-clearance)',
+                paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)',
+                paddingBottom: 'var(--mobile-chat-bottom-clearance)',
+                scrollPaddingBottom: 'var(--mobile-chat-bottom-clearance)',
               }}
             >
-              <div ref={mobileChatScroll.contentRef} className="flex min-h-full flex-col justify-end gap-3">
+              <div ref={mobileChatScroll.contentRef} className="flex min-h-full flex-col gap-3">
+                {/* The wordmark sits at the top of the chat scroller: pinned at the top
+                    when the thread is short, scrolling upward when the thread gets long. */}
+                <div className="mt-2 mb-auto flex h-16 shrink-0 items-center justify-center">
+                  <img src="/logo.svg" alt="Rivolo" className="h-10 w-auto" />
+                </div>
                 <ChatMessageList
                   messages={messages}
                   mobile
@@ -2275,7 +2303,7 @@ export default function Timeline() {
             {mobileChatScroll.hasUnseen && !mobileChatScroll.following && (
               <button
                 type="button"
-                className="absolute bottom-[var(--mobile-home-bottom-clearance)] left-1/2 z-10 min-h-11 -translate-x-1/2 rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm font-semibold text-[var(--theme-text)] [box-shadow:var(--theme-card-shadow-soft)]"
+                className="absolute bottom-[var(--mobile-chat-bottom-clearance)] left-1/2 z-10 min-h-11 -translate-x-1/2 rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm font-semibold text-[var(--theme-text)] [box-shadow:var(--theme-card-shadow-soft)]"
                 onClick={mobileChatScroll.scrollToBottom}
               >
                 New messages

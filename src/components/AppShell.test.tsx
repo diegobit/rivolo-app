@@ -363,6 +363,7 @@ describe('AppShell attention and stale tab states', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'
+    stores.ui.chatPanelOpen = true
     stores.ui.chatMessageCount = 1
 
     render(
@@ -377,6 +378,26 @@ describe('AppShell attention and stale tab states', () => {
 
     expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible()
+  })
+
+  it('shows the shell brand on mobile when chat overlay is dismissed to timeline', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    stores.ui.chatPanelOpen = false
+    stores.ui.chatMessageCount = 1
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Home' })).toBeVisible()
   })
 
   it('clears the chat from the menu without changing mode', async () => {

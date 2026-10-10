@@ -88,6 +88,7 @@ export default function MobileMenu({
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const setMode = useUIStore((state) => state.setMode)
+  const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
   const themePreference = useSettingsStore((state) => state.themePreference)
   const updateThemePreference = useSettingsStore((state) => state.updateThemePreference)
   const activeSyncProvider = useSyncStore((state) => state.activeProvider)
@@ -480,6 +481,9 @@ export default function MobileMenu({
               onChange={(next) => {
                 closeMenu()
                 setMode(next)
+                if (next === 'chat') {
+                  setChatPanelOpen(true)
+                }
               }}
             />
 

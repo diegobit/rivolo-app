@@ -1430,9 +1430,11 @@
 @media not all and (min-width: 700px) {
   .app-shell-root[data-mobile-home='true'] {
     --mobile-home-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 2rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
+    --mobile-chat-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 6rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
   }
 
-  .app-shell-root[data-mobile-home='true'][data-mode='search'] {
+  .app-shell-root[data-mobile-home='true'][data-mode='search'],
+  .app-shell-root[data-mobile-home='true']:has(#bottom-tray-pills:not(:empty)) {
     --mobile-home-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 5rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
   }
 }
@@ -1866,7 +1868,8 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
       0 1px 3px rgb(var(--theme-shadow-color) / 0.4);
   }
 
-  html[data-theme='dark'] .capsule-chip {
+  html[data-theme='dark'] .capsule-chip,
+  html[data-theme='dark'] .mobile-chat-floating-btn {
     background: var(--mobile-control-surface);
   }
 }
