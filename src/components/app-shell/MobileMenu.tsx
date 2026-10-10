@@ -85,9 +85,9 @@ export default function MobileMenu({
 }: MobileMenuProps) {
   const mode = useUIStore((state) => state.mode)
   const chatSending = useUIStore((state) => state.chatSending)
-  const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const setMode = useUIStore((state) => state.setMode)
+  const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
   const themePreference = useSettingsStore((state) => state.themePreference)
   const updateThemePreference = useSettingsStore((state) => state.updateThemePreference)
   const activeSyncProvider = useSyncStore((state) => state.activeProvider)
@@ -273,8 +273,8 @@ export default function MobileMenu({
   }, [menuPresent, closeMenu])
 
   const syncReady = activeSyncProvider !== null && syncStatus.connected
-  // An empty chat with no thread on screen has nothing to clear.
-  const chatEmpty = chatMessageCount === 0 && !chatPanelOpen
+  // An empty chat has nothing to clear.
+  const chatEmpty = chatMessageCount === 0
   const theme = THEME_TILE[themePreference]
   // Sync problems sit with Pull and Push; everything else stays on top, where a
   // new warning never moves the controls below it.
@@ -480,6 +480,9 @@ export default function MobileMenu({
               onChange={(next) => {
                 closeMenu()
                 setMode(next)
+                if (next === 'chat' && chatMessageCount > 0) {
+                  setChatPanelOpen(true)
+                }
               }}
             />
 

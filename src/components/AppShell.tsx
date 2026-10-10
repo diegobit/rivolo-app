@@ -58,7 +58,6 @@ export default function AppShell() {
   const setMode = useUIStore((state) => state.setMode)
   const chatPanelOpen = useUIStore((state) => state.chatPanelOpen)
   const desktopPanelExpanded = useUIStore((state) => state.desktopPanelExpanded)
-  const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const timelineEmpty = useUIStore((state) => state.timelineEmpty)
   const tabSync = useTabSyncState()
   const [showShortcuts, setShowShortcuts] = useState(false)
@@ -98,7 +97,7 @@ export default function AppShell() {
   const isDesktopSearchCardOpen = isDesktopHome && mode === 'search'
   const showTrayRow = isHome
   const isMobileHome = isHome && isNarrowViewportMode
-  const isMobileChatOverlayUp = isMobileHome && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0)
+  const isMobileChatOverlayUp = isMobileHome && mode === 'chat' && chatPanelOpen
   // The full-screen mobile chat renders its own brand bar, so the shell's logo
   // header steps aside only while that overlay is up.
   const showShellLogoHeader = isMobileHome && !isMobileChatOverlayUp

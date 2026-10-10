@@ -52,13 +52,13 @@ export default function BottomTrayRow({
   const scrollToTodayButton = showScrollToToday ? (
     <button
       type="button"
-      className={`bottom-tray-scroll-today absolute ${scrollToTodayPositionClass} flex h-9 w-9 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] min-[700px]:h-10 min-[700px]:w-10`}
+      className={`bottom-tray-scroll-today absolute ${scrollToTodayPositionClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] min-[700px]:h-10 min-[700px]:w-10`}
       data-clearance={mode === 'search' ? 'search' : 'chat'}
       aria-label="Scroll to Today"
       title="Scroll to Today"
       onClick={onScrollToToday}
     >
-      <img src="/arrow-line-up.svg" alt="" className="h-4 w-4 min-[700px]:h-5 min-[700px]:w-5" />
+      <img src="/arrow-line-up.svg" alt="" className="h-5 w-5" />
     </button>
   ) : null
 

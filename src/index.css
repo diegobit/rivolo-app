@@ -1430,9 +1430,11 @@
 @media not all and (min-width: 700px) {
   .app-shell-root[data-mobile-home='true'] {
     --mobile-home-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 2rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
+    --mobile-chat-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 4.5rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
   }
 
-  .app-shell-root[data-mobile-home='true'][data-mode='search'] {
+  .app-shell-root[data-mobile-home='true'][data-mode='search'],
+  .app-shell-root[data-mobile-home='true']:has(#bottom-tray-pills:not(:empty)) {
     --mobile-home-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 5rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
   }
 }
@@ -1814,8 +1816,8 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
 
   /* The tray is 96vw and not itself screen-centred, so centring the button
      inside the row leaves it left of the phone. Pin it to the viewport, at the
-     same height above the tray that top: -3.5rem used to give a 36px circle
-     (1.25rem of air). Search keeps the extra lift that clears the filter row. */
+     same height above the tray that aligns with the floating pills row (0.5rem gap).
+     Search keeps the extra lift (3rem) that clears the filter row. */
   .bottom-tray-row > .bottom-tray-scroll-today {
     position: fixed;
     top: auto;
@@ -1826,7 +1828,7 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
       var(--keyboard-offset, 0px)
       + var(--bottom-tray-inset)
       + var(--bottom-tray-height, 3.5rem)
-      + 1.25rem
+      + 0.5rem
     );
   }
 
@@ -1835,10 +1837,11 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
       var(--keyboard-offset, 0px)
       + var(--bottom-tray-inset)
       + var(--bottom-tray-height, 3.5rem)
-      + 3.75rem
+      + 3rem
     );
   }
 }
+
 
 /* Mobile: the composer / search field should read as a sibling of the menu button:
    same border and pill shape, one step more lift, and the soft shadow recipe instead
@@ -1866,7 +1869,8 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
       0 1px 3px rgb(var(--theme-shadow-color) / 0.4);
   }
 
-  html[data-theme='dark'] .capsule-chip {
+  html[data-theme='dark'] .capsule-chip,
+  html[data-theme='dark'] .mobile-chat-floating-btn {
     background: var(--mobile-control-surface);
   }
 }
