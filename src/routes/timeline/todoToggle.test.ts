@@ -19,3 +19,20 @@ describe('toggleTodoLineMarker', () => {
     expect(toggledTwice).toBe(original)
   })
 })
+
+describe('cancelled todo markers', () => {
+  it('cancels open and completed tasks and reopens cancelled tasks', () => {
+    expect(toggleTodoLineMarker('  - [ ] buy *milk* #errands', 'cancel')).toBe('  - [-] buy *milk* #errands')
+    expect(toggleTodoLineMarker('- [X] buy milk', 'cancel')).toBe('- [-] buy milk')
+    expect(toggleTodoLineMarker('- [-] buy milk', 'cancel')).toBe('- [ ] buy milk')
+    expect(toggleTodoLineMarker('- [-] buy milk')).toBe('- [x] buy milk')
+  })
+
+  it('cycles twice through open, completed, and cancelled without changing the text', () => {
+    let line = '- [ ] buy ~~milk~~ @today'
+    for (const marker of ['x', '-', ' ', 'x', '-', ' ']) {
+      line = toggleTodoLineMarker(line, 'cycle')!
+      expect(line).toBe(`- [${marker}] buy ~~milk~~ @today`)
+    }
+  })
+})

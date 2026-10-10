@@ -586,6 +586,20 @@
     transition: background-color 120ms ease;
   }
 
+  @media (max-width: 640px), (pointer: coarse) {
+    .cm-todo-marker {
+      /* Space task rows apart and grow the marker's touch area. */
+      line-height: 46px;
+      padding: 12.5px 9px;
+      margin: 0 -9px;
+    }
+  }
+
+  .cm-todo-cancelled {
+    color: var(--theme-text-muted);
+    text-decoration: line-through;
+  }
+
   .cm-todo-marker:hover {
     background-color: rgb(237 155 56 / 0.15);
   }
