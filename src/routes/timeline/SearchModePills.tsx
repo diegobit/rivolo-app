@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useLayoutEffect, useRef, useState } from 'react'
 import type { SearchFilter } from '../../lib/dayRepository'
 import { SEARCH_FILTER_OPTIONS } from '../../lib/searchFilters'
 import type { SearchResultMode } from '../Timeline'
@@ -6,6 +6,9 @@ import type { SearchResultMode } from '../Timeline'
 
 const chipFocusClass =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]'
+
+const overflowFadeClass =
+  '[-webkit-mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] after:w-6 after:shrink-0 after:content-[\'\']'
 
 const SearchModePills = memo(({
   searchFilter,
@@ -22,12 +25,42 @@ const SearchModePills = memo(({
   showResultMode: boolean
   onSearchFilterChange: (filter: SearchFilter | null) => void
   onResultModeChange: (mode: SearchResultMode) => void
-}) => (
-  <div className="pointer-events-auto flex items-center gap-2 overflow-x-auto pb-2 -mb-1 [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] after:w-6 after:shrink-0 after:content-[''] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+}) => {
+  const scrollerRef = useRef<HTMLDivElement>(null)
+  const [overflows, setOverflows] = useState(false)
+
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    const update = () => {
+      // The end spacer exists only while scrolling, so measure the chips themselves.
+      const contentWidth = Array.from(scroller.children).reduce(
+        (sum, child) => sum + (child as HTMLElement).offsetWidth,
+        0,
+      )
+      const styles = getComputedStyle(scroller)
+      const gap = Number.parseFloat(styles.columnGap || styles.gap) || 0
+      const gaps = Math.max(0, scroller.children.length - 1) * gap
+      setOverflows(contentWidth + gaps > scroller.clientWidth + 1)
+    }
+
+    update()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(update)
+    observer.observe(scroller)
+    return () => observer.disconnect()
+  }, [searchFilter, showResultMode])
+
+  return (
+    <div
+      ref={scrollerRef}
+      className={`pointer-events-auto flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-2 -mb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${overflows ? overflowFadeClass : ''}`}
+    >
     {showResultMode && <div
       role="group"
       aria-label="Show results as"
-      className="capsule-segmented inline-flex h-[50px] shrink-0 items-center gap-0.5 text-xs font-semibold sm:h-8"
+      className="capsule-segmented inline-flex h-[50px] shrink-0 grow items-center gap-0.5 text-xs font-semibold sm:h-8"
     >
       <span aria-hidden="true" className="px-2 text-[10px] uppercase tracking-[0.05em]">
         Show
@@ -38,7 +71,7 @@ const SearchModePills = memo(({
           type="button"
           aria-pressed={resultMode === mode}
           onClick={() => onResultModeChange(mode)}
-          className={`capsule-segment flex h-full items-center rounded-full px-3 transition-colors ${chipFocusClass}`}
+          className={`capsule-segment flex h-full grow items-center justify-center rounded-full px-3 transition-colors ${chipFocusClass}`}
         >
           {mode === 'whole-day' ? 'Days' : 'Lines'}
         </button>
@@ -72,7 +105,8 @@ const SearchModePills = memo(({
         </button>
       ))
     )}
-  </div>
-))
+    </div>
+  )
+})
 
 export default SearchModePills

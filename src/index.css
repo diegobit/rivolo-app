@@ -1789,6 +1789,26 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
 /* Mobile: the composer / search field should read as a sibling of the menu button:
    same border and pill shape, one step more lift, and the soft shadow recipe instead
    of the tight touch override above. */
+/* The filter row is anchored to the search field, so it stops at the field and
+   leaves the menu column empty. Pull it across that column (menu is w-11, the
+   row gap below 700px is 0.5rem) so the chips reach the button's right edge. */
+@media not all and (min-width: 700px) {
+  .bottom-tray-row:has(.bottom-tray-menu) #bottom-tray-pills {
+    right: calc(-1 * (2.75rem + 0.5rem));
+  }
+
+  #bottom-tray-pills .capsule-segmented,
+  #bottom-tray-pills .capsule-chip {
+    flex-grow: 1;
+    justify-content: center;
+  }
+
+  #bottom-tray-pills .capsule-segment {
+    flex-grow: 1;
+    justify-content: center;
+  }
+}
+
 @media not all and (min-width: 700px) {
   #bottom-tray.bottom-tray-shell {
     box-shadow:

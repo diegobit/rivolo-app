@@ -109,7 +109,7 @@ export default function BottomTrayRow({
         */}
         <Fragment key="tray">{trayCenter}</Fragment>
 
-        {mobileMenu && <div className="mb-1.5">{mobileMenu}</div>}
+        {mobileMenu && <div className="bottom-tray-menu mb-1.5">{mobileMenu}</div>}
 
         {!launcherSpread && scrollToTodayButton}
       </div>
