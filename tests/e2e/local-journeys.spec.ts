@@ -10,14 +10,14 @@ async function start(page: Page) {
 }
 
 async function settings(page: Page) {
-  if (mobile(page)) await page.getByRole('button', { name: 'Menu', exact: true }).click()
+  if (mobile(page)) await page.getByRole('button', { name: /^Menu(?:,|$)/ }).click()
   await page.getByRole('link', { name: 'Settings', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible()
 }
 
 async function search(page: Page, query: string) {
   if (mobile(page)) {
-    await page.getByRole('button', { name: 'Menu', exact: true }).click()
+    await page.getByRole('button', { name: /^Menu(?:,|$)/ }).click()
     await page.getByRole('button', { name: 'Search', exact: true }).click()
   } else {
     await page.getByRole('button', { name: 'Search', exact: true }).click()
@@ -53,13 +53,14 @@ test('J1: edit, flush through navigation, reopen, and search literal Unicode tex
   await expect(note(page)).toContainText('Meet @Renée #café for 100% planning')
   await search(page, '100%')
   await expect(page.getByText('Meet @Renée #café for 100% planning', { exact: false }).first()).toBeVisible()
-  const modes = page.getByRole('group', { name: 'Show results as' })
+  const lines = page.getByRole('button', { name: 'Lines', exact: true })
   if (mobile(page)) {
-    await expect(modes).toBeVisible()
-    await modes.getByRole('button', { name: 'Show Lines' }).click()
+    await expect(lines).toBeVisible()
+    await lines.click()
+    await expect(lines).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByText('Meet @Renée #café for 100% planning', { exact: false }).first()).toBeVisible()
   } else {
-    await expect(modes).toHaveCount(0)
+    await expect(lines).toHaveCount(0)
     await expect(note(page)).toBeVisible()
   }
 })
@@ -107,8 +108,9 @@ test('J7: mobile menu preserves draft, restores focus, and exposes contained tou
   await start(page)
   const draft = page.getByPlaceholder('Ask Rivolo')
   await draft.fill('Keep this unsent draft 🙂')
-  const menu = page.getByRole('button', { name: 'Menu', exact: true })
+  const menu = page.getByRole('button', { name: /^Menu(?:,|$)/ })
   await insideViewport(page, menu, 44)
+  await insideViewport(page, page.getByRole('button', { name: 'Send', exact: true }), 44)
   await menu.click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
@@ -147,3 +149,35 @@ test('J3: import, export, malformed import, and reopen preserve actual notes', a
   await page.reload()
   await expect(page.getByText('Archive café 100%', { exact: false }).first()).toBeVisible()
 })
+
+test('J2: search toggles the intended todo occurrence and preserves cancelled/other notes', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'canShare', { value: () => false }))
+  await page.goto('/settings')
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'occurrences.md', mimeType: 'text/markdown',
+    buffer: Buffer.from('<!-- day:2024-01-03 -->\nJanuary 3\n---\n\n- [ ] tea #café\n- [ ] tea #café\n- [-] cancelled tea #café\n<!-- day:2024-01-02 -->\nJanuary 2\n---\n\n- [ ] other #café\n'),
+  })
+  await expect(page.getByText(/Imported 2 day/)).toBeVisible()
+  await page.goto('/')
+  await search(page, 'tea')
+  if (mobile(page)) await page.getByRole('button', { name: 'Lines', exact: true }).click()
+  await page.getByRole('button', { name: 'TODOs', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Toggle todo', exact: true })).toHaveCount(2)
+  await page.getByRole('button', { name: 'Toggle todo', exact: true }).nth(1).click()
+  // Export reads the independent persisted owner after route navigation flushes.
+  await settings(page)
+  await page.reload()
+  const pending = page.waitForEvent('download')
+  await page.getByRole('button', { name: /^Export .*\.md$/ }).click()
+  const download = await pending
+  const stream = await download.createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream!) chunks.push(Buffer.from(chunk))
+  const archive = Buffer.concat(chunks).toString('utf8')
+  expect(archive).toContain('- [ ] tea #café\n- [x] tea #café\n- [-] cancelled tea #café')
+  expect(archive).toContain('[ ] other #café')
+  await page.goto('/')
+  await search(page, '#café')
+  await expect(page.getByText('other #café', { exact: false }).first()).toBeVisible()
+})
+
