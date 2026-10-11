@@ -19,7 +19,7 @@ describe('Google Drive folder and revision protocol', () => {
     expect(cloud.content).toContain('first local note')
     expect(await adapter.getStatus()).toMatchObject({ targetName: '/rivolo/inbox.md' })
     storage = await reopenStorage(storage)
-    expect(await storage.settings.getJsonSetting('google-drive.state')).toMatchObject({ fileId: 'file-1', folderId: 'folder-1', localDirty: false })
+    expect(await storage.settings.getJsonSetting('google-drive.state')).toMatchObject({ fileId: 'file-1', folderId: 'folder-1', lastRemoteVersion: '2', localDirty: false })
   })
 
   it.each([true, false])('moves a tracked root file before a manual push (dirty=%s)', async (localDirty) => {

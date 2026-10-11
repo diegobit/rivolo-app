@@ -1,11 +1,17 @@
 // @vitest-environment node
 import vm from 'node:vm'
 import { get, set } from 'idb-keyval'
+import * as idb from 'idb-keyval'
 import { deflateSync, strToU8 } from 'fflate'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { addDays } from './dates'
 import { parseMarkdown } from './markdown'
 import { closeStorage, createStorage, reopenStorage, type Storage } from '../test/helpers/storage'
+
+vi.mock('idb-keyval', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('idb-keyval')>()
+  return { ...actual, get: vi.fn(actual.get) }
+})
 
 let storage: Storage
 beforeEach(async () => { storage = await createStorage() })
@@ -41,6 +47,12 @@ describe('import/export durable storage boundary', () => {
     expect(await notes()).toEqual([])
   })
 
+  it('imports a valid replacement into an empty database and reports its count without warnings', async () => {
+    expect(await storage.importer.importMarkdownToDb(markdownDay('2026-07-01', 'valid content'), { replace: true })).toEqual({ imported: 1, warnings: [] })
+    storage = await reopenStorage(storage)
+    expect(await notes()).toEqual([['2026-07-01', 'valid content']])
+  })
+
   it('reports duplicate markers and omitted local days together without writing or backing up', async () => {
     await seed()
     const duplicate = `${markdownDay('2026-06-30', 'first')}\n\n${markdownDay('2026-06-30', 'second')}`
@@ -54,7 +66,8 @@ describe('import/export durable storage boundary', () => {
 
   it('confirmed replacement keeps the last duplicate and a recoverable backup of every original day', async () => {
     await seed()
-    await storage.importer.importMarkdownToDb(`${markdownDay('2026-06-30', 'first')}\n\n${markdownDay('2026-06-30', 'second')}`, { replace: true, allowUnsafeImport: true })
+    const result = await storage.importer.importMarkdownToDb(`${markdownDay('2026-06-30', 'first')}\n\n${markdownDay('2026-06-30', 'second')}`, { replace: true, allowUnsafeImport: true })
+    expect(result).toEqual({ imported: 1, warnings: [expect.stringContaining('Duplicate day marker for 2026-06-30')] })
     storage = await reopenStorage(storage)
     expect(await notes()).toEqual([['2026-06-30', 'second']])
     const backups = await storage.importer.listRollbackBackups()
@@ -104,7 +117,7 @@ describe('import/export durable storage boundary', () => {
     const literal = '```md\n<!-- day:2026-01-01 -->\n```\nprefix <!-- day:2024-12-31 --> suffix'
     await storage.repository.saveDay('2026-07-11', literal)
     const exported = await storage.importer.exportMarkdownFromDb()
-    await storage.importer.importMarkdownToDb(exported, { replace: true })
+    expect(await storage.importer.importMarkdownToDb(exported, { replace: true })).toEqual({ imported: 1, warnings: [] })
     storage = await reopenStorage(storage)
     expect(await notes()).toEqual([['2026-07-11', literal]])
   })
@@ -128,15 +141,30 @@ describe('import/export durable storage boundary', () => {
     )
   })
 
-  it('reads compressed bytes cloned from another realm and ignores corrupt backups', async () => {
-    const OtherBytes = vm.runInNewContext('Uint8Array') as Uint8ArrayConstructor
+  it('reads compressed bytes committed through IndexedDB and ignores corrupt backups', async () => {
     await set('rivolo.import.rollbackBackups', [
-      { createdAt: 300, contentMdGz: OtherBytes.from(deflateSync(strToU8('# intact backup'))), dayCount: 2 },
+      { createdAt: 300, contentMdGz: deflateSync(strToU8('# intact backup')), dayCount: 2 },
       { createdAt: 200, contentMdGz: new Uint8Array([1, 2, 3]), dayCount: 1 },
     ])
     expect(await storage.importer.listRollbackBackups()).toEqual([{ createdAt: 300, contentMd: '# intact backup', dayCount: 2 }])
     await storage.importer.saveRollbackBackup(markdownDay('2026-07-01', 'next'))
     expect((await storage.importer.listRollbackBackups()).map((backup) => backup.dayCount)).toEqual([1, 2])
+  })
+
+  it('accepts compressed backup bytes arriving from a different realm at the IDB read boundary', async () => {
+    const OtherBytes = vm.runInNewContext('Uint8Array') as Uint8ArrayConstructor
+    const bytes = OtherBytes.from(deflateSync(strToU8('# cross-realm backup')))
+    expect(bytes instanceof Uint8Array).toBe(false)
+    expect(ArrayBuffer.isView(bytes)).toBe(true)
+    // fake-indexeddb normalizes views into the current realm when cloning;
+    // retain the narrow public read-boundary regression for foreign views.
+    vi.mocked(idb.get).mockImplementationOnce(async (key) => {
+      expect(key).toBe('rivolo.import.rollbackBackups')
+      return [{ createdAt: 300, contentMdGz: bytes, dayCount: 2 }]
+    })
+    expect(await storage.importer.listRollbackBackups()).toEqual([
+      { createdAt: 300, contentMd: '# cross-realm backup', dayCount: 2 },
+    ])
   })
 
   it('exports over 10000 real rows and includes the oldest day in safety checks and rollback', async () => {

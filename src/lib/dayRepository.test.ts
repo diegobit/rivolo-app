@@ -14,6 +14,15 @@ const ids = async (query: string, filter?: 'open-todos' | 'tags' | 'mentions' | 
   (await storage.repository.searchDays(query, { filter }, limit)).map(({ day }) => day.dayId)
 
 describe('persisted day repository', () => {
+  it('returns descending stored rows with their independent title and timestamp metadata', async () => {
+    storage.database.exec({ sql: 'INSERT INTO days VALUES (?, ?, ?, ?, ?)', bind: ['2026-07-11', 'Older title', 'older content', 30, 40] })
+    storage.database.exec({ sql: 'INSERT INTO days VALUES (?, ?, ?, ?, ?)', bind: ['2026-07-12', 'Newer title', 'newer content', 10, 20] })
+    expect(await storage.repository.listAllDays()).toEqual([
+      { dayId: '2026-07-12', humanTitle: 'Newer title', contentMd: 'newer content', createdAt: 10, updatedAt: 20 },
+      { dayId: '2026-07-11', humanTitle: 'Older title', contentMd: 'older content', createdAt: 30, updatedAt: 40 },
+    ])
+  })
+
   it.each(['ensureDay', 'saveDay', 'appendLineToDay', 'appendToDay', 'replaceDays', 'move source', 'move target'])(
     'rejects invalid dates through %s without stored changes', async (operation) => {
       await write('2026-03-01', 'keep me')
@@ -30,6 +39,7 @@ describe('persisted day repository', () => {
       await expect(calls[operation]()).rejects.toThrow('Invalid day ID')
       expect((await repo.listAllDays()).map((day) => [day.dayId, day.contentMd])).toEqual([['2026-03-01', 'keep me']])
       expect(await storage.settings.getJsonSetting('dropbox.state')).toBeNull()
+      expect(await storage.settings.getJsonSetting('google-drive.state')).toBeNull()
     },
   )
 
@@ -95,14 +105,45 @@ describe('persisted day repository', () => {
     expect(await ids('needle', 'open-todos', 1)).toEqual(['2026-06-30'])
   })
 
+  it('executes literal and phrase searches and paging when FTS is unavailable', async () => {
+    // Simulate the optional capability, while production fallback SQL and
+    // its parameters still execute against the actual SQLite database.
+    vi.spyOn(storage.db, 'isFtsAvailable').mockResolvedValue(false)
+    await write('2026-07-12', '100%_ "quoted" O\'Reilly')
+    await write('2026-07-11', 'alpha on one line\nbeta on another', 'alpha title')
+    await write('2026-07-10', 'the alpha beta phrase matches')
+    await write('2026-07-09', '100XX wildcard near miss')
+    expect(await ids('100%_ "quoted" O\'Reilly')).toEqual(['2026-07-12'])
+    expect(await ids('alpha beta')).toEqual(['2026-07-10'])
+    for (let i = 0; i < 55; i++) await write(addDays('2026-08-01', i), '- [x] needle completed')
+    await write('2026-06-30', '- [ ] needle actual match')
+    expect(await ids('needle', 'open-todos', 1)).toEqual(['2026-06-30'])
+  })
+
+  it('trims trailing existing whitespace for a line append before a paragraph append', async () => {
+    await write('2026-07-12', 'initial line  \n')
+    const [line, paragraph] = await Promise.all([
+      storage.repository.appendLineToDay('2026-07-12', '  second line  '),
+      storage.repository.appendToDay('2026-07-12', '  third paragraph\n'),
+    ])
+    expect(line?.contentMd).toBe('initial line\nsecond line')
+    expect(paragraph?.contentMd).toBe('initial line\nsecond line\n\nthird paragraph')
+    storage = await reopenStorage(storage)
+    expect((await storage.repository.getDay('2026-07-12'))?.contentMd).toBe('initial line\nsecond line\n\nthird paragraph')
+  })
+
   it('preserves concurrent appends and newline rules through durable reopen', async () => {
     await write('2026-07-12', '\n\n  indented first line\nbody')
-    await Promise.all([
+    const [paragraph, line, first, second] = await Promise.all([
       storage.repository.appendToDay('2026-07-12', '  paragraph  '),
       storage.repository.appendLineToDay('2026-07-12', ' line '),
-      storage.repository.appendToDay('2026-07-13', 'first'),
+      storage.repository.appendToDay('2026-07-13', '  first\n'),
       storage.repository.appendToDay('2026-07-13', 'second'),
     ])
+    expect(paragraph?.contentMd).toBe('\n\n  indented first line\nbody\n\nparagraph')
+    expect(line?.contentMd).toBe('\n\n  indented first line\nbody\n\nparagraph\nline')
+    expect(first?.contentMd).toBe('first')
+    expect(second?.contentMd).toBe('first\n\nsecond')
     storage = await reopenStorage(storage)
     expect((await storage.repository.getDay('2026-07-12'))?.contentMd).toBe('\n\n  indented first line\nbody\n\nparagraph\nline')
     expect((await storage.repository.getDay('2026-07-13'))?.contentMd).toBe('first\n\nsecond')

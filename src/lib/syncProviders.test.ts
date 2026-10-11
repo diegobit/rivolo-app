@@ -16,6 +16,9 @@ describe.each(['dropbox', 'google-drive'] as const)('%s persisted sync boundary'
     expect(await adapter.pull()).toMatchObject({ status: 'noop' })
     expect(cloud.calls).toEqual([])
     expect((await storage.repository.getDay('2026-06-21'))?.contentMd).toBe('local unsynced')
+    expect(await storage.settings.getJsonSetting(`${provider}.state`)).toMatchObject({ localDirty: true, lastPullAt: null,
+      ...(provider === 'dropbox' ? { lastRemoteRev: 'rev-1' } : { lastRemoteVersion: '1' }),
+    })
   })
 
   it('force-pulls valid archive content, persists it and preserves a recoverable local rollback', async () => {
@@ -50,7 +53,9 @@ describe.each(['dropbox', 'google-drive'] as const)('%s persisted sync boundary'
     cloud.version = 2
     await expect(adapter.pull({ force: true })).rejects.toMatchObject({ name: 'ImportSafetyError', reasons: ['no-day-markers'] })
     expect((await storage.repository.getDay('2026-06-21'))?.contentMd).toBe('keep me')
-    expect(await storage.settings.getJsonSetting(`${provider}.state`)).toMatchObject({ localDirty: true, lastPullAt: null })
+    expect(await storage.settings.getJsonSetting(`${provider}.state`)).toMatchObject({ localDirty: true, lastPullAt: null,
+      ...(provider === 'dropbox' ? { lastRemoteRev: 'rev-1' } : { lastRemoteVersion: '1' }),
+    })
     expect(await storage.importer.listRollbackBackups()).toEqual([])
   })
 
