@@ -370,12 +370,13 @@ const stashPending = async (
   env: McpOAuthEnv,
   authorization: OAuthAuthorizationRequest,
   phase: PendingPayload['phase'],
+  profileId: string | null,
   existing?: PendingPayload,
 ) => {
   const now = new Date()
   const payload = existing
-    ? withPendingPhase(existing, phase)
-    : createPendingPayload(authorization, phase, now)
+    ? withPendingPhase(existing, phase, profileId)
+    : createPendingPayload(authorization, phase, profileId, now)
   const cookie = await pendingCookieHeader(
     request,
     env.MCP_PROFILE_SESSION_ENCRYPTION_KEY,
@@ -456,14 +457,9 @@ const startAuthorization = async (
       resource,
     )
     const profileId = await readActiveMcpProfileSession(request, env)
-    const cookie = await stashPending(
-      request,
-      env,
-      authorization,
-      profileId ? 'consent' : 'setup',
-    )
-    if (!cookie.ok) return pendingCookieFailure(request, issuerUrl, context, cookie.reason)
     if (!profileId) {
+      const cookie = await stashPending(request, env, authorization, 'setup', null)
+      if (!cookie.ok) return pendingCookieFailure(request, issuerUrl, context, cookie.reason)
       return redirectResponse(settingsContinuationUrl(issuerUrl), [cookie.header])
     }
     const accountLabel = await accountLabelFor(env, profileId)
@@ -479,6 +475,8 @@ const startAuthorization = async (
         [clearPendingCookieHeader(request)],
       )
     }
+    const cookie = await stashPending(request, env, authorization, 'consent', profileId)
+    if (!cookie.ok) return pendingCookieFailure(request, issuerUrl, context, cookie.reason)
     return consentPage(
       authorization,
       profileId,
@@ -542,14 +540,6 @@ ${cancelForm(issuerUrl, pending.payload.transactionId)}`,
         authorization.redirectUri,
       )
     }
-    const cookie = await stashPending(
-      request,
-      env,
-      authorization,
-      'consent',
-      pending.payload,
-    )
-    if (!cookie.ok) return pendingCookieFailure(request, issuerUrl, context, cookie.reason)
     const accountLabel = await accountLabelFor(env, profileId)
     if (!accountLabel) {
       return callbackRedirect(
@@ -563,6 +553,15 @@ ${cancelForm(issuerUrl, pending.payload.transactionId)}`,
         [clearPendingCookieHeader(request)],
       )
     }
+    const cookie = await stashPending(
+      request,
+      env,
+      authorization,
+      'consent',
+      profileId,
+      pending.payload,
+    )
+    if (!cookie.ok) return pendingCookieFailure(request, issuerUrl, context, cookie.reason)
     return consentPage(
       authorization,
       profileId,
@@ -673,7 +672,11 @@ export const submitOAuthConsent = async (request: Request, env: McpOAuthEnv) => 
         clear,
       )
     }
-    if (body.get('profile_id') !== profileId) {
+    if (
+      pending.payload.phase !== 'consent' ||
+      pending.payload.profileId !== profileId ||
+      body.get('profile_id') !== pending.payload.profileId
+    ) {
       return callbackRedirect(
         issuerUrl,
         context,
@@ -754,9 +757,6 @@ export const submitOAuthPendingCancellation = async (request: Request, env: McpO
   try {
     const body = await requireUrlEncodedBody(request)
     assertUniqueFields(body, ['decision', 'transaction_id'])
-    if (body.get('decision') !== 'deny') {
-      throw new McpOAuthTrustError('The authorization decision is invalid.')
-    }
     const pending = await readPendingRequest(request, env.MCP_PROFILE_SESSION_ENCRYPTION_KEY)
     if (pending.status !== 'valid') {
       return localAuthorizationError(
@@ -772,24 +772,31 @@ export const submitOAuthPendingCancellation = async (request: Request, env: McpO
     const revalidated = await revalidatePending(env, pending.payload)
     context = revalidated.context
     revalidated.validate()
+    const clear = [clearPendingCookieHeader(request)]
+    if (body.get('decision') !== 'deny') {
+      return callbackRedirect(
+        issuerUrl,
+        context,
+        {
+          type: 'error',
+          error: 'invalid_request',
+          description: 'The authorization decision is invalid.',
+        },
+        clear,
+      )
+    }
     return callbackRedirect(
       issuerUrl,
       context,
       { type: 'error', error: 'access_denied', description: 'The request was denied.' },
-      [clearPendingCookieHeader(request)],
+      clear,
     )
   } catch (error) {
     const cookies = context ? [clearPendingCookieHeader(request)] : []
     if (context && !(error instanceof McpOAuthTrustError)) {
       return serviceRedirect(issuerUrl, context, error, cookies)
     }
-    return localAuthorizationError(
-      error instanceof McpOAuthTrustError &&
-        error.message === 'The authorization decision is invalid.'
-        ? new McpOAuthTrustError('The authorization request could not be completed.')
-        : error,
-      cookies,
-    )
+    return localAuthorizationError(error, cookies)
   }
 }
 

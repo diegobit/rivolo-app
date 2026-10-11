@@ -69,6 +69,25 @@ describe('useMcpOAuthPending', () => {
     await waitFor(() => expect(result.current.view.state).toBe('pending'))
   })
 
+  it('shows restart guidance when a recovered connection expires without the query flag', async () => {
+    let calls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => {
+        calls += 1
+        const body =
+          calls === 1
+            ? { ...pending('transaction-a', false), expiresAt: Math.floor(Date.now() / 1000) - 1 }
+            : { pending: false }
+        return new Response(JSON.stringify(body), { status: 200 })
+      }),
+    )
+    const recovered = renderHook(() => useMcpOAuthPending(true), {
+      wrapper: wrapperFor(''),
+    })
+    await waitFor(() => expect(recovered.result.current.view.state).toBe('restart'))
+  })
+
   it('navigates once after Agent access becomes ready and keeps retry available', async () => {
     const fetchMock = vi
       .fn()

@@ -35,6 +35,7 @@ export const useMcpOAuthPending = (
   const assign = options.assign ?? assignLocation
   const [view, setView] = useState<McpOAuthPendingView>({ state: 'loading' })
   const seenTransactionId = useRef<string | null>(null)
+  const recoveredTransaction = useRef(false)
   const navigated = useRef(false)
   const expiredRefresh = useRef<string | null>(null)
 
@@ -42,9 +43,12 @@ export const useMcpOAuthPending = (
     (status: McpOAuthPendingStatus, message: string | null = null) => {
       if (!status.pending) {
         seenTransactionId.current = null
-        setView(flagged ? { state: 'restart' } : { state: 'hidden' })
+        setView(
+          flagged || recoveredTransaction.current ? { state: 'restart' } : { state: 'hidden' },
+        )
         return status
       }
+      recoveredTransaction.current = true
       const replaced =
         seenTransactionId.current !== null &&
         seenTransactionId.current !== status.transactionId
@@ -65,16 +69,16 @@ export const useMcpOAuthPending = (
 
   const load = useCallback(async () => {
     if (!online) {
-      setView((current) =>
-        current.state === 'pending'
-          ? { ...current, message: 'Go online to continue this connection.' }
-          : flagged
-            ? {
-                state: 'error',
-                message: 'Go online to continue this connection.',
-              }
-            : { state: 'hidden' },
-      )
+      setView((current) => {
+        if (current.state === 'pending') {
+          return { ...current, message: 'Go online to continue this connection.' }
+        }
+        if (flagged || recoveredTransaction.current) {
+          if (current.state === 'restart') return current
+          return { state: 'error', message: 'Go online to continue this connection.' }
+        }
+        return { state: 'hidden' }
+      })
       return null
     }
     try {
@@ -86,7 +90,7 @@ export const useMcpOAuthPending = (
           : 'The ChatGPT connection could not be checked.'
       setView((current) => {
         if (current.state === 'pending') return { ...current, message }
-        if (flagged) return { state: 'error', message }
+        if (flagged || recoveredTransaction.current) return { state: 'error', message }
         return { state: 'hidden' }
       })
       return null

@@ -513,6 +513,7 @@ describe('pending authorization cookie', () => {
       issuedAt: Math.floor(Date.now() / 1000),
       expiresAt: Math.floor(Date.now() / 1000) + 600,
       phase: 'setup',
+      profileId: null,
       authorization: {
         response_type: 'code',
         client_id: 'rvc_size_boundary_client',
@@ -720,6 +721,67 @@ describe('pending authorization cookie', () => {
     expect(expired.status).toBe(400)
     expect(expired.headers.get('Location')).toBeNull()
     expect(await expired.text()).not.toContain('attacker.example')
+
+    const invalidDecision = await submitOAuthPendingCancellation(
+      new Request(`${ISSUER}/pending`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'https://rivolo.app',
+          Cookie: pair,
+        },
+        body: new URLSearchParams({
+          decision: 'maybe',
+          transaction_id: read.payload.transactionId,
+        }),
+      }),
+      env,
+    )
+    const invalidLocation = acceptIssuer(invalidDecision.headers.get('Location') ?? '', ISSUER)
+    expect(invalidDecision.status).toBe(302)
+    expect(invalidLocation.searchParams.get('error')).toBe('invalid_request')
+    expect(invalidLocation.searchParams.get('error_description')).toBe(
+      'The authorization decision is invalid.',
+    )
+    expect(invalidLocation.searchParams.get('state')).toBe('cancel-state')
+    expect(invalidLocation.searchParams.getAll('iss')).toEqual([ISSUER])
+    expect(invalidLocation.searchParams.get('code')).toBeNull()
+    expect(
+      invalidDecision.headers.getSetCookie().some((cookie) => cookie.includes('Max-Age=0')),
+    ).toBe(true)
+
+    const restarted = await show(env, params)
+    const restartedPair = pendingPair(restarted) ?? ''
+    const restartedRead = await readPendingRequest(
+      new Request(`${ISSUER}/authorize`, { headers: { Cookie: restartedPair } }),
+      env.MCP_PROFILE_SESSION_ENCRYPTION_KEY,
+    )
+    if (restartedRead.status !== 'valid') throw new Error('Missing pending request.')
+    const wrongNonce = await submitOAuthPendingCancellation(
+      new Request(`${ISSUER}/pending`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'https://rivolo.app',
+          Cookie: restartedPair,
+        },
+        body: new URLSearchParams({
+          decision: 'maybe',
+          transaction_id: 'A'.repeat(43),
+        }),
+      }),
+      env,
+    )
+    expect(wrongNonce.status).toBe(400)
+    expect(wrongNonce.headers.get('Location')).toBeNull()
+    expect(
+      (
+        await readPendingRequest(
+          new Request(`${ISSUER}/authorize`, { headers: { Cookie: restartedPair } }),
+          env.MCP_PROFILE_SESSION_ENCRYPTION_KEY,
+        )
+      ).status,
+    ).toBe('valid')
   })
 
   it('clears the previous pending transaction when a later trusted request fails', async () => {
@@ -1024,6 +1086,98 @@ describe('consent submission', () => {
     )
     expect(foreign.status).toBe(400)
     expect(foreign.headers.get('Location')).toBeNull()
+  })
+
+  it('issues a code only for the profile that was shown consent', async () => {
+    const env = createEnv()
+    const profile = await createProfile(env)
+    const other = await new ProviderProfileRepository(
+      env.MCP_DB,
+      env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY,
+    ).createOrUpdate({
+      provider: 'dropbox',
+      providerAccountId: 'dbid:other-user',
+      providerEmail: 'other@example.com',
+      target: { path: '/other.md' },
+      timeZone: 'Europe/Rome',
+      refreshToken: 'other-refresh-secret',
+    })
+    const client = await register(env, 'https://chatgpt.com/callback')
+    const params = authorizeParams(client.clientId, client.redirectUris[0], await pkce(), {
+      state: 'reviewed-state',
+    })
+    const setup = await show(env, params)
+    const setupPair = pendingPair(setup) ?? ''
+    const setupRead = await readPendingRequest(
+      new Request(`${ISSUER}/authorize`, { headers: { Cookie: setupPair } }),
+      env.MCP_PROFILE_SESSION_ENCRYPTION_KEY,
+    )
+    if (setupRead.status !== 'valid') throw new Error('Missing pending request.')
+    expect(setupRead.payload.phase).toBe('setup')
+    expect(setupRead.payload.profileId).toBeNull()
+    const session = await sessionCookie(env, profile.profileId)
+    const setupAllow = await submitOAuthConsent(
+      new Request(`${ISSUER}/authorize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'https://rivolo.app',
+          Cookie: `${session}; ${setupPair}`,
+        },
+        body: new URLSearchParams([
+          ...params,
+          ['transaction_id', setupRead.payload.transactionId],
+          ['profile_id', profile.profileId],
+          ['decision', 'allow'],
+        ]),
+      }),
+      env,
+    )
+    const setupLocation = acceptIssuer(setupAllow.headers.get('Location') ?? '', ISSUER)
+    expect(setupLocation.searchParams.get('error')).toBe('invalid_request')
+    expect(setupLocation.searchParams.get('error_description')).toBe(
+      'The Rivolo notes profile changed. Review access again.',
+    )
+    expect(setupLocation.searchParams.get('code')).toBeNull()
+
+    const consent = await show(env, params, session)
+    const consentRead = await readPendingRequest(
+      new Request(`${ISSUER}/authorize`, { headers: { Cookie: pendingPair(consent) ?? '' } }),
+      env.MCP_PROFILE_SESSION_ENCRYPTION_KEY,
+    )
+    if (consentRead.status !== 'valid') throw new Error('Missing pending request.')
+    expect(consentRead.payload.phase).toBe('consent')
+    expect(consentRead.payload.profileId).toBe(profile.profileId)
+    const otherSession = await sessionCookie(env, other.profileId)
+    const switched = await submitOAuthConsent(
+      new Request(`${ISSUER}/authorize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'https://rivolo.app',
+          Cookie: `${otherSession}; ${pendingPair(consent) ?? ''}`,
+        },
+        body: new URLSearchParams([
+          ...params,
+          ['transaction_id', consentRead.payload.transactionId],
+          ['profile_id', other.profileId],
+          ['decision', 'allow'],
+        ]),
+      }),
+      env,
+    )
+    const switchedLocation = acceptIssuer(switched.headers.get('Location') ?? '', ISSUER)
+    expect(switchedLocation.searchParams.get('error')).toBe('invalid_request')
+    expect(switchedLocation.searchParams.get('state')).toBe('reviewed-state')
+    expect(switchedLocation.searchParams.get('code')).toBeNull()
+    expect(
+      (
+        await (env.MCP_DB as unknown as SqliteD1)
+          .prepare('SELECT COUNT(*) AS count FROM mcp_oauth_authorization_codes')
+          .bind()
+          .first<{ count: number }>()
+      )?.count,
+    ).toBe(0)
   })
 
   it('uses the reviewed transaction when the profile, session, or hidden fields change', async () => {

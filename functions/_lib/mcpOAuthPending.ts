@@ -28,6 +28,7 @@ export type PendingPayload = {
   issuedAt: number
   expiresAt: number
   phase: 'setup' | 'consent'
+  profileId: string | null
   authorization: PendingAuthorization
 }
 
@@ -40,6 +41,8 @@ const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 const CLIENT_ID_PATTERN = /^rvc_[A-Za-z0-9_-]{22}$/
 const PKCE_CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43}$/
+const PROFILE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const bytesToBase64Url = (bytes: Uint8Array) => {
   let binary = ''
@@ -107,6 +110,7 @@ export const pendingAuthorizationFromRequest = (
 export const createPendingPayload = (
   authorization: OAuthAuthorizationRequest,
   phase: PendingPayload['phase'],
+  profileId: string | null,
   now: Date,
 ): PendingPayload => {
   const issuedAt = Math.floor(now.getTime() / 1000)
@@ -117,6 +121,7 @@ export const createPendingPayload = (
     issuedAt,
     expiresAt: issuedAt + MCP_OAUTH_PENDING_TTL_SECONDS,
     phase,
+    profileId,
     authorization: pendingAuthorizationFromRequest(authorization),
   }
 }
@@ -124,9 +129,11 @@ export const createPendingPayload = (
 export const withPendingPhase = (
   payload: PendingPayload,
   phase: PendingPayload['phase'],
+  profileId: string | null,
 ): PendingPayload => ({
   ...payload,
   phase,
+  profileId,
 })
 
 const deriveKey = async (secret: string) => {
@@ -185,6 +192,13 @@ const validatePendingPayload = (
   const payload = value as PendingPayload
   if (payload.version !== 1 || payload.purpose !== 'mcp-oauth-pending') return null
   if (payload.phase !== 'setup' && payload.phase !== 'consent') return null
+  if (payload.phase === 'setup' && payload.profileId !== null) return null
+  if (
+    payload.phase === 'consent' &&
+    (typeof payload.profileId !== 'string' || !PROFILE_ID_PATTERN.test(payload.profileId))
+  ) {
+    return null
+  }
   if (!isTransactionId(payload.transactionId)) return null
   if (!isEpochSeconds(payload.issuedAt) || !isEpochSeconds(payload.expiresAt)) return null
   if (payload.expiresAt !== payload.issuedAt + MCP_OAUTH_PENDING_TTL_SECONDS) return null
