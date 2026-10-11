@@ -1,392 +1,66 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+// @vitest-environment node
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { closeStorage, createStorage, reopenStorage, type Storage } from '../test/helpers/storage'
+import { createCloud } from '../test/helpers/cloud'
 
-const settings = new Map<string, unknown>()
-const importMarkdownToDb = vi.fn()
-const exportMarkdownFromDb = vi.fn()
-const saveRollbackBackup = vi.fn()
+let storage: Storage
+beforeEach(async () => { storage = await createStorage() })
+afterEach(() => { closeStorage(storage) })
 
-vi.mock('./settingsRepository', () => ({
-  getJsonSetting: vi.fn(async (key: string) => settings.get(key) ?? null),
-  setJsonSetting: vi.fn(async (key: string, value: unknown) => {
-    settings.set(key, structuredClone(value))
-  }),
-}))
-
-vi.mock('./importExport', () => ({ importMarkdownToDb, exportMarkdownFromDb, saveRollbackBackup }))
-vi.mock('./googleDriveAuth', () => ({
-  authorizedGoogleDriveFetch: (input: string, init?: RequestInit) => fetch(input, init),
-  disconnectGoogleDriveAuth: vi.fn(),
-}))
-
-const json = (body: unknown, init: ResponseInit = {}) => Response.json(body, init)
-const driveFolder = {
-  id: 'folder-1',
-  name: 'rivolo',
-  mimeType: 'application/vnd.google-apps.folder',
-  version: '1',
-}
-const driveFile = (version: string, parents = ['folder-1'], headRevisionId?: string) => ({
-  id: 'file-1',
-  name: 'inbox.md',
-  mimeType: 'text/markdown',
-  version,
-  headRevisionId,
-  parents,
-  capabilities: { canDownload: true, canEdit: true, canModifyContent: true },
-})
-const connectedState = {
-  connected: true,
-  fileId: null,
-  folderId: null,
-  fileName: 'inbox.md',
-  lastRemoteVersion: null,
-  lastPushedHash: null,
-  lastSyncAt: null,
-  lastPullAt: null,
-  lastPushAt: null,
-  localDirty: true,
-  localRevision: 1,
-  accountId: 'account',
-  accountEmail: 'person@example.com',
-  accountName: 'Person',
-}
-
-describe('Google Drive sync provider', () => {
-  beforeEach(() => {
-    settings.clear()
-    settings.set('google-drive.state', structuredClone(connectedState))
-    importMarkdownToDb.mockReset()
-    exportMarkdownFromDb.mockReset()
-    saveRollbackBackup.mockReset()
-    vi.restoreAllMocks()
-    vi.resetModules()
+describe('Google Drive folder and revision protocol', () => {
+  it('creates the managed folder and a valid multipart archive on first push', async () => {
+    await storage.repository.saveDay('2026-06-21', 'first local note')
+    const { adapter, cloud, state } = await createCloud('google-drive', storage)
+    cloud.exists = false; cloud.folderExists = false
+    await state({ fileId: null, folderId: null, lastRemoteVersion: null })
+    expect(await adapter.push()).toEqual({ status: 'pushed' })
+    expect(cloud.parents).toEqual(['folder-1'])
+    expect(cloud.content).toContain('<!-- day:2026-06-21 -->')
+    expect(cloud.content).toContain('first local note')
+    expect(await adapter.getStatus()).toMatchObject({ targetName: '/rivolo/inbox.md' })
+    storage = await reopenStorage(storage)
+    expect(await storage.settings.getJsonSetting('google-drive.state')).toMatchObject({ fileId: 'file-1', folderId: 'folder-1', localDirty: false })
   })
 
-  it('creates the managed folder and Markdown file on the first dirty push', async () => {
-    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nhello')
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json({ files: [] }))
-      .mockResolvedValueOnce(json(driveFolder))
-      .mockResolvedValueOnce(json({ files: [] }))
-      .mockResolvedValueOnce(json(driveFile('1')))
-    vi.stubGlobal('fetch', fetchMock)
-    const { getGoogleDriveStatus, pushToGoogleDrive } = await import('./googleDrive')
-    const { getGoogleDriveState } = await import('./googleDriveState')
-
-    expect(await pushToGoogleDrive()).toEqual({ status: 'pushed' })
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
-      name: 'rivolo',
-      mimeType: 'application/vnd.google-apps.folder',
-    })
-    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("%27folder-1%27+in+parents")
-    expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain('"parents":["folder-1"]')
-    expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain('# 2026-06-21')
-    expect(await getGoogleDriveState()).toMatchObject({
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-      localDirty: false,
-    })
-    expect(await getGoogleDriveStatus()).toMatchObject({ targetName: '/rivolo/inbox.md' })
+  it.each([true, false])('moves a tracked root file before a manual push (dirty=%s)', async (localDirty) => {
+    await storage.repository.saveDay('2026-06-21', 'local note')
+    const { adapter, cloud, state } = await createCloud('google-drive', storage)
+    cloud.parents = ['root']
+    await state({ folderId: null, localDirty })
+    expect(await adapter.push()).toEqual({ status: 'pushed' })
+    expect(cloud.parents).toEqual(['folder-1'])
+    expect(cloud.uploads).toHaveLength(localDirty ? 1 : 0)
+    expect(await storage.settings.getJsonSetting('google-drive.state')).toMatchObject({ lastRemoteVersion: localDirty ? '3' : '2', localDirty: false })
   })
 
-  it('blocks a push when the remote version changed', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-    })
-    // Resolving the file by id is enough to see the changed version — no folder
-    // lookup and no separate re-check fetch.
-    const fetchMock = vi.fn().mockResolvedValueOnce(json(driveFile('2')))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pushToGoogleDrive } = await import('./googleDrive')
-
-    expect(await pushToGoogleDrive()).toEqual({ status: 'blocked', reason: 'remote_changed' })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(exportMarkdownFromDb).not.toHaveBeenCalled()
+  it('uses cached folder membership without discovery round trips on an ordinary push', async () => {
+    await storage.repository.saveDay('2026-06-21', 'changed content')
+    const { adapter, cloud } = await createCloud('google-drive', storage)
+    expect(await adapter.push()).toEqual({ status: 'pushed' })
+    expect(cloud.calls.filter((call) => call.url.origin === 'https://www.googleapis.com').map((call) => [call.method, call.url.pathname])).toEqual([
+      ['GET', '/drive/v3/files/file-1'], ['PATCH', '/upload/drive/v3/files/file-1'],
+    ])
   })
 
-  it('keeps an edit made during upload dirty', async () => {
-    exportMarkdownFromDb.mockImplementation(async () => {
-      const { markGoogleDriveLocalDirty } = await import('./googleDriveState')
-      await markGoogleDriveLocalDirty()
-      return '# 2026-06-21\n\nfirst version'
-    })
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json({ files: [] }))
-      .mockResolvedValueOnce(json(driveFolder))
-      .mockResolvedValueOnce(json({ files: [] }))
-      .mockResolvedValueOnce(json(driveFile('1')))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pushToGoogleDrive } = await import('./googleDrive')
-    const { getGoogleDriveState } = await import('./googleDriveState')
-
-    await pushToGoogleDrive()
-    expect(await getGoogleDriveState()).toMatchObject({ localRevision: 2, localDirty: true })
-  })
-
-  it('pulls a newer remote file and marks the other provider stale', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-      localDirty: false,
-    })
-    importMarkdownToDb.mockResolvedValue({ imported: 1, warnings: [] })
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(driveFile('2')))
-      .mockResolvedValueOnce(new Response('# 2026-06-21\n\nremote text'))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pullFromGoogleDrive } = await import('./googleDrive')
-    const { getGoogleDriveState } = await import('./googleDriveState')
-    const { getDropboxState } = await import('./dropboxState')
-
-    expect(await pullFromGoogleDrive()).toEqual({ status: 'pulled' })
-    expect(importMarkdownToDb).toHaveBeenCalledWith('# 2026-06-21\n\nremote text', {
-      replace: true,
-      markDirty: false,
-      allowUnsafeImport: undefined,
-    })
-    expect(await getGoogleDriveState()).toMatchObject({ lastRemoteVersion: '2', localDirty: false })
-    expect(await getDropboxState()).toMatchObject({ localDirty: true })
-  })
-
-  it('does not pull over dirty local notes without force', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-      localDirty: true,
-    })
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-    const { pullFromGoogleDrive } = await import('./googleDrive')
-    const { getGoogleDriveState } = await import('./googleDriveState')
-
-    expect(await pullFromGoogleDrive()).toEqual({ status: 'noop' })
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(importMarkdownToDb).not.toHaveBeenCalled()
-    expect(await getGoogleDriveState()).toMatchObject({ localDirty: true, lastRemoteVersion: '1' })
-  })
-
-  it('pulls over dirty local notes when forced', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-      localDirty: true,
-    })
-    importMarkdownToDb.mockResolvedValue({ imported: 1, warnings: [] })
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(driveFile('1')))
-      .mockResolvedValueOnce(new Response('# 2026-06-21\n\nremote text'))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pullFromGoogleDrive } = await import('./googleDrive')
-    const { getGoogleDriveState } = await import('./googleDriveState')
-
-    expect(await pullFromGoogleDrive({ force: true })).toEqual({ status: 'pulled' })
-    expect(importMarkdownToDb).toHaveBeenCalledWith('# 2026-06-21\n\nremote text', {
-      replace: true,
-      markDirty: false,
-      allowUnsafeImport: undefined,
-    })
-    expect(await getGoogleDriveState()).toMatchObject({ localDirty: false, lastRemoteVersion: '1' })
-  })
-
-  it('moves a previously tracked root file into the managed folder before uploading', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      lastRemoteVersion: '1',
-    })
-    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nhello')
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(driveFile('1', ['root'])))
-      .mockResolvedValueOnce(json({ files: [driveFolder] }))
-      .mockResolvedValueOnce(json(driveFile('2', ['folder-1'])))
-      .mockResolvedValueOnce(json(driveFile('3', ['folder-1'])))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pushToGoogleDrive } = await import('./googleDrive')
-
-    expect(await pushToGoogleDrive()).toEqual({ status: 'pushed' })
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/files/file-1?fields=')
-    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('addParents=folder-1')
-    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('removeParents=root')
-    expect(String(fetchMock.mock.calls[3]?.[0])).toContain('uploadType=media')
-  })
-
-  it('moves an unchanged tracked root file on a manual push', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      lastRemoteVersion: '1',
-      localDirty: false,
-    })
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(driveFile('1', ['root'])))
-      .mockResolvedValueOnce(json({ files: [driveFolder] }))
-      .mockResolvedValueOnce(json(driveFile('2', ['folder-1'])))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pushToGoogleDrive } = await import('./googleDrive')
-    const { getGoogleDriveState } = await import('./googleDriveState')
-
-    expect(await pushToGoogleDrive()).toEqual({ status: 'pushed' })
-    expect(exportMarkdownFromDb).not.toHaveBeenCalled()
-    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('addParents=folder-1')
-    expect(await getGoogleDriveState()).toMatchObject({ lastRemoteVersion: '2', localDirty: false })
-  })
-
-  it('uploads a changed file via the cached folder in two round trips', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-    })
-    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nlocal edit')
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(driveFile('1')))
-      .mockResolvedValueOnce(json(driveFile('2')))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pushToGoogleDrive } = await import('./googleDrive')
-
-    expect(await pushToGoogleDrive()).toEqual({ status: 'pushed' })
-    // Fetch the file by id, then upload — no folder lookup, no re-check fetch.
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/files/file-1?fields=')
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('uploadType=media')
-  })
-
-  it('backs up a clobbered remote revision and returns sync attention', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-    })
-    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nlocal edit')
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(driveFile('1', ['folder-1'], 'head-before')))
-      .mockResolvedValueOnce(json(driveFile('3', ['folder-1'], 'head-after')))
-      .mockResolvedValueOnce(json({
-        revisions: [
-          { id: 'head-before', modifiedTime: '2026-07-11T10:00:00.000Z' },
-          { id: 'remote-conflict', modifiedTime: '2026-07-11T10:01:00.000Z' },
-          { id: 'head-after', modifiedTime: '2026-07-11T10:02:00.000Z' },
-        ],
-      }))
-      .mockResolvedValueOnce(new Response('# 2026-06-21\n\nremote edit'))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pushToGoogleDrive } = await import('./googleDrive')
-
-    await expect(pushToGoogleDrive()).resolves.toEqual({
-      status: 'pushed',
-      attention: 'Google Drive changed while uploading. A local backup of the remote conflict was saved.',
-    })
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('headRevisionId')
-    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('/revisions?')
-    expect(String(fetchMock.mock.calls[3]?.[0])).toContain('/revisions/remote-conflict?alt=media')
-    expect(saveRollbackBackup).toHaveBeenCalledWith('# 2026-06-21\n\nremote edit')
-  })
-
-  it('degrades to a normal push when revision identifiers are unavailable', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-    })
-    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nlocal edit')
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(driveFile('1')))
-      .mockResolvedValueOnce(json(driveFile('2')))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pushToGoogleDrive } = await import('./googleDrive')
-
-    await expect(pushToGoogleDrive()).resolves.toEqual({ status: 'pushed' })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(saveRollbackBackup).not.toHaveBeenCalled()
-  })
-
-  it('does not report a conflict when the upload creates the next revision', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-    })
-    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nlocal edit')
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(driveFile('1', ['folder-1'], 'head-before')))
-      .mockResolvedValueOnce(json(driveFile('2', ['folder-1'], 'head-after')))
-      .mockResolvedValueOnce(json({
-        revisions: [
-          { id: 'head-before', modifiedTime: '2026-07-11T10:00:00.000Z' },
-          { id: 'head-after', modifiedTime: '2026-07-11T10:01:00.000Z' },
-        ],
-      }))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pushToGoogleDrive } = await import('./googleDrive')
-
-    await expect(pushToGoogleDrive()).resolves.toEqual({ status: 'pushed' })
-    expect(saveRollbackBackup).not.toHaveBeenCalled()
-  })
-
-  it('skips the upload when the content matches the last push', async () => {
-    const { hashSyncContent } = await import('./syncHash')
-    const content = '# 2026-06-21\n\nunchanged'
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-      lastPushedHash: await hashSyncContent(content),
-    })
-    exportMarkdownFromDb.mockResolvedValue(content)
-    const fetchMock = vi.fn().mockResolvedValueOnce(json(driveFile('1')))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pushToGoogleDrive } = await import('./googleDrive')
-    const { getGoogleDriveState } = await import('./googleDriveState')
-
-    expect(await pushToGoogleDrive()).toEqual({ status: 'clean' })
-    // Only the metadata fetch happens; the 130KB upload is skipped entirely.
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(await getGoogleDriveState()).toMatchObject({ localDirty: false, lastRemoteVersion: '1' })
-  })
-
-  it('force-uploads over a changed remote without blocking', async () => {
-    settings.set('google-drive.state', {
-      ...connectedState,
-      fileId: 'file-1',
-      folderId: 'folder-1',
-      lastRemoteVersion: '1',
-      localDirty: false,
-    })
-    exportMarkdownFromDb.mockResolvedValue('# 2026-06-21\n\nrestored local copy')
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(driveFile('2')))
-      .mockResolvedValueOnce(json(driveFile('3')))
-    vi.stubGlobal('fetch', fetchMock)
-    const { pushToGoogleDrive } = await import('./googleDrive')
-
-    expect(await pushToGoogleDrive(true)).toEqual({ status: 'pushed' })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('uploadType=media')
+  it.each([false, true])('distinguishes a normal next revision from a concurrent edit (concurrent=%s)', async (concurrent) => {
+    await storage.repository.saveDay('2026-06-21', 'local upload')
+    const { adapter, cloud } = await createCloud('google-drive', storage)
+    cloud.headBefore = 'head-before'; cloud.headAfter = 'head-after'
+    cloud.revisions = [
+      { id: 'head-before', modifiedTime: '2026-07-11T10:00:00Z' },
+      ...(concurrent ? [{ id: 'remote-conflict', modifiedTime: '2026-07-11T10:01:00Z' }] : []),
+      { id: 'head-after', modifiedTime: '2026-07-11T10:02:00Z' },
+    ]
+    const result = await adapter.push()
+    if (concurrent) {
+      expect(result).toEqual({ status: 'pushed', attention: 'Google Drive changed while uploading. A local backup of the remote conflict was saved.' })
+      storage = await reopenStorage(storage)
+      expect((await storage.importer.listRollbackBackups())[0].contentMd).toContain('concurrent remote edit')
+    } else {
+      expect(result).toEqual({ status: 'pushed' })
+      expect(await storage.importer.listRollbackBackups()).toEqual([])
+    }
+    expect(cloud.uploads).toHaveLength(1)
+    expect(cloud.content).toContain('local upload')
   })
 })
