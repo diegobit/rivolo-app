@@ -638,7 +638,7 @@ describe('Timeline desktop search card', () => {
     typeQuery('hello')
     await waitForResults(2)
 
-    expect(screen.queryByRole('group', { name: 'Show results as' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Lines', exact: true })).not.toBeInTheDocument()
   })
 
   it('shows No results in the card when nothing matches', async () => {
