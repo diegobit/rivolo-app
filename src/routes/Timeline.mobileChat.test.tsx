@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Timeline from './Timeline'
@@ -132,22 +132,29 @@ describe('Timeline mobile chat UX', () => {
     vi.useRealTimers()
   })
 
-  it('renders floating Back to timeline button on mobile when chat overlay is open', () => {
+  it('puts Back to timeline inside the composer, which closes the overlay and blurs the field', () => {
+    useUIStore.setState({ chatPanelOpen: true, chatMessageCount: 2 })
     render(
       <MemoryRouter>
         <Timeline />
       </MemoryRouter>,
     )
 
-    const backButton = screen.getByRole('button', { name: 'Back to timeline' })
-    expect(backButton).toBeInTheDocument()
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    const form = composer.closest('form')!
+    const backButton = within(form).getByRole('button', { name: 'Back to timeline' })
+    expect(document.getElementById('bottom-tray-pills')).toBeEmptyDOMElement()
 
-    // Clicking it closes the overlay
+    composer.focus()
+    fireEvent.change(composer, { target: { value: 'keep this draft' } })
     fireEvent.click(backButton)
+
     expect(useUIStore.getState().chatPanelOpen).toBe(false)
+    expect(document.activeElement).not.toBe(composer)
+    expect(composer).toHaveValue('keep this draft')
   })
 
-  it('renders floating Open chat button on timeline when collapsed with existing messages', () => {
+  it('puts Open chat in the same composer slot when a conversation exists', () => {
     useUIStore.setState({ chatPanelOpen: false, chatMessageCount: 2 })
     useChatStore.setState({
       messages: [
@@ -165,11 +172,92 @@ describe('Timeline mobile chat UX', () => {
     // Overlay is not up; empty state / timeline is visible
     expect(screen.getByTestId('empty-state-hero')).toBeInTheDocument()
 
-    const openChatBtn = screen.getByRole('button', { name: 'Open chat' })
-    expect(openChatBtn).toBeInTheDocument()
+    const form = screen.getByPlaceholderText('Ask Rivolo').closest('form')!
+    const openChatBtn = within(form).getByRole('button', { name: 'Open chat' })
+    expect(document.getElementById('bottom-tray-pills')).toBeEmptyDOMElement()
 
     fireEvent.click(openChatBtn)
     expect(useUIStore.getState().chatPanelOpen).toBe(true)
+  })
+
+  it('leaves the leading slot empty when there is no conversation', () => {
+    useUIStore.setState({ chatPanelOpen: false, chatMessageCount: 0 })
+
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Back to timeline' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open chat' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
+  })
+
+  it('opens the composer into a box on focus, before the text wraps', () => {
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    const form = composer.closest('form')!
+    expect(form).toHaveAttribute('data-expanded', 'false')
+
+    fireEvent.focus(composer)
+    expect(form).toHaveAttribute('data-expanded', 'true')
+    expect(composer).toHaveAttribute('data-multiline', 'false')
+
+    // Moving focus to a control inside the composer keeps the box.
+    fireEvent.blur(composer, { relatedTarget: screen.getByRole('button', { name: 'Send' }) })
+    expect(form).toHaveAttribute('data-expanded', 'true')
+
+    fireEvent.blur(composer, { relatedTarget: null })
+    expect(form).toHaveAttribute('data-expanded', 'false')
+  })
+
+  // No provider key is configured here, so a send attempt surfaces the
+  // missing-key error. That error is how these tests see a send happen.
+  const chatErrorBubble = () => document.querySelector('.tray-input-error')
+
+  it('lets Return insert a newline on the phone composer instead of sending', async () => {
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    expect(composer).toHaveAttribute('enterkeyhint', 'enter')
+    fireEvent.focus(composer)
+    fireEvent.change(composer, { target: { value: 'first line' } })
+
+    // Not prevented: the browser inserts the newline.
+    expect(fireEvent.keyDown(composer, { key: 'Enter' })).toBe(true)
+    await act(async () => {})
+
+    expect(composer).toHaveValue('first line')
+    expect(chatErrorBubble()).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('sends with the Send button inside the composer', async () => {
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    const form = composer.closest('form')!
+    fireEvent.change(composer, { target: { value: 'What did I do today?' } })
+    expect(chatErrorBubble()).toHaveAttribute('aria-hidden', 'true')
+
+    await act(async () => {
+      fireEvent.click(within(form).getByRole('button', { name: 'Send' }))
+    })
+
+    expect(chatErrorBubble()).toHaveAttribute('aria-hidden', 'false')
   })
 
   it('tapping the composer on mobile restores the chat overlay when messages exist', () => {
@@ -277,7 +365,7 @@ describe('Timeline mobile chat UX', () => {
     expect(useUIStore.getState().chatPanelOpen).toBe(false)
   })
 
-  it('does not render floating chat button in search mode', () => {
+  it('does not render Back or Open chat in search mode', () => {
     useUIStore.setState({ mode: 'search', chatPanelOpen: false, chatMessageCount: 2 })
 
     render(

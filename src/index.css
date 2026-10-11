@@ -1428,9 +1428,17 @@
 }
 
 @media not all and (min-width: 700px) {
+  /* The chat transcript clears the composer with a small gap: the tray sits
+     1rem + 6px above the safe area, then about 14px of air. With the keyboard
+     up the tray sits on the keyboard (see .bottom-tray-row below), so the
+     safe area drops out. */
   .app-shell-root[data-mobile-home='true'] {
     --mobile-home-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 2rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
-    --mobile-chat-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 4.5rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
+    --mobile-chat-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 2.25rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
+  }
+
+  body[data-keyboard-open='true'] .app-shell-root[data-mobile-home='true'] {
+    --mobile-chat-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 1.25rem + var(--keyboard-offset, 0px));
   }
 
   .app-shell-root[data-mobile-home='true'][data-mode='search'],
@@ -1575,8 +1583,54 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
   box-shadow: 0 6px 18px rgb(var(--theme-shadow-color) / 0.16);
 }
 
-#bottom-tray.bottom-tray-shell:has(textarea[data-multiline='true']) {
+/* The phone chat composer takes its box radius once, on focus, and keeps it
+   while the draft grows. The shell has no radius transition, so it snaps. */
+#bottom-tray.bottom-tray-shell:has(.tray-phone-composer[data-expanded='true']) {
   border-radius: var(--bottom-tray-radius, 28px);
+}
+
+/* Phone chat composer. Idle: one 52px pill, [Back/Open chat] field [Send].
+   Focused: the draft takes the full width on top and the two buttons move to
+   an action row under it. The layout snaps instead of animating, because
+   Safari is already moving the viewport for the keyboard. */
+.tray-phone-composer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'lead field send';
+  align-items: center;
+}
+
+.tray-phone-composer[data-expanded='true'] {
+  grid-template-areas:
+    'field field field'
+    'lead . send';
+  row-gap: 0.125rem;
+}
+
+.tray-phone-lead {
+  grid-area: lead;
+}
+
+.tray-phone-field {
+  grid-area: field;
+}
+
+.tray-phone-composer[data-expanded='true'] .tray-phone-field {
+  margin-top: 0.25rem;
+}
+
+/* In the pill the Back/Open chat button already spaces the field from the
+   edge, so the text starts close to it. */
+.tray-phone-composer[data-expanded='false'] .tray-phone-lead + .tray-phone-field .tray-field {
+  padding-left: 0.25rem;
+}
+
+.tray-phone-composer[data-expanded='false'] .tray-phone-lead + .tray-phone-field .tray-field-placeholder {
+  left: 0.25rem;
+}
+
+.tray-phone-send {
+  grid-area: send;
 }
 
 .bottom-tray-blur,
@@ -1853,6 +1907,17 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
   .bottom-tray-row:has(.bottom-tray-menu) #bottom-tray-pills {
     right: calc(-1 * (2.75rem + 0.5rem));
   }
+
+  /* The chat composer sits on the keyboard: the home-indicator inset is
+     under the keyboard, so it adds no gap. */
+  body[data-keyboard-open='true'] .bottom-tray-row:has(#bottom-tray[data-mode='chat']) {
+    --bottom-tray-inset: 0.375rem;
+  }
+
+  /* 3px around the 44px buttons makes the idle pill 52px tall. */
+  #bottom-tray.bottom-tray-shell[data-mode='chat'] {
+    padding: 3px;
+  }
 }
 
 @media not all and (min-width: 700px) {
@@ -1869,8 +1934,7 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
       0 1px 3px rgb(var(--theme-shadow-color) / 0.4);
   }
 
-  html[data-theme='dark'] .capsule-chip,
-  html[data-theme='dark'] .mobile-chat-floating-btn {
+  html[data-theme='dark'] .capsule-chip {
     background: var(--mobile-control-surface);
   }
 }
