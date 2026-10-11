@@ -223,7 +223,7 @@ describe('Timeline mobile chat UX', () => {
     window.removeEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
   })
 
-  it('labels the first chip Open chat on the timeline', () => {
+  it('labels the first chip Chat on the timeline', () => {
     useUIStore.setState({ chatPanelOpen: false, chatMessageCount: 1 })
     useChatStore.setState({ messages: [{ id: '1', role: 'user', content: 'hello', createdAt: 1 }] })
     render(
@@ -233,7 +233,7 @@ describe('Timeline mobile chat UX', () => {
     )
 
     const form = screen.getByPlaceholderText('Ask Rivolo').closest('form')!
-    expect(within(form).getByRole('button', { name: 'Open chat' })).toHaveTextContent('Open chat')
+    expect(within(form).getByRole('button', { name: 'Open chat' })).toHaveTextContent(/^Chat$/)
   })
 
   // No provider key is configured here, so a send attempt surfaces the
@@ -314,6 +314,8 @@ describe('Timeline mobile chat UX', () => {
     const logo = container.querySelector('img[src="/logo.svg"]')
     expect(logo).toBeInTheDocument()
     expect(logo?.parentElement).toHaveClass('mb-auto')
+    // A short thread still overflows by a pixel, so it can always be scrolled.
+    expect(logo?.parentElement?.parentElement).toHaveClass('min-h-[calc(100%+1px)]')
   })
 
   it('shows Ask Rivolo as a plain placeholder, with no icon for the caret to cover', () => {

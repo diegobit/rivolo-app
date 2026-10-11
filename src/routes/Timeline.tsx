@@ -92,7 +92,7 @@ const LEADING_ACTION_LABELS: Record<TrayLeadingAction['kind'], string> = {
 
 const LEADING_ACTION_CHIP_TEXT: Record<TrayLeadingAction['kind'], string> = {
   back: 'Timeline',
-  'open-chat': 'Open chat',
+  'open-chat': 'Chat',
 }
 
 const phoneComposerChipClassName =
@@ -2426,7 +2426,9 @@ export default function Timeline() {
                 scrollPaddingBottom: 'var(--mobile-chat-bottom-clearance)',
               }}
             >
-              <div ref={mobileChatScroll.contentRef} className="flex min-h-full flex-col gap-3">
+              {/* One pixel taller than the scroller, so a short thread still
+                  scrolls and rubber-bands under the finger like the timeline. */}
+              <div ref={mobileChatScroll.contentRef} className="flex min-h-[calc(100%+1px)] flex-col gap-3">
                 {/* The wordmark sits at the top of the chat scroller: pinned at the top
                     when the thread is short, scrolling upward when the thread gets long. */}
                 <div className="mt-2 mb-auto flex h-16 shrink-0 items-center justify-center">
