@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Timeline from './Timeline'
 import { DEFAULT_LLM_PROVIDER_SETTINGS } from '../lib/llm/types'
 import { useChatStore } from '../store/useChatStore'
 import { useUIStore } from '../store/useUIStore'
+import { MOBILE_MENU_OPEN_EVENT } from '../lib/timelineEvents'
 
 const installMatchMedia = (matches: boolean) => {
   Object.defineProperty(window, 'matchMedia', {
@@ -104,7 +105,7 @@ vi.mock('../components/timeline/EmptyStateHero', () => ({
 }))
 
 const ensureTrayContainers = () => {
-  for (const id of ['bottom-tray', 'bottom-tray-pills']) {
+  for (const id of ['bottom-tray']) {
     document.getElementById(id)?.remove()
     const container = document.createElement('div')
     container.id = id
@@ -125,6 +126,7 @@ describe('Timeline mobile chat UX', () => {
       chatPanelOpen: true,
       chatMessageCount: 0,
       desktopPanelExpanded: false,
+      menuAttentionCount: 0,
     })
   })
 
@@ -132,22 +134,28 @@ describe('Timeline mobile chat UX', () => {
     vi.useRealTimers()
   })
 
-  it('renders floating Back to timeline button on mobile when chat overlay is open', () => {
+  it('puts Back to timeline inside the composer, which closes the overlay and blurs the field', () => {
+    useUIStore.setState({ chatPanelOpen: true, chatMessageCount: 2 })
     render(
       <MemoryRouter>
         <Timeline />
       </MemoryRouter>,
     )
 
-    const backButton = screen.getByRole('button', { name: 'Back to timeline' })
-    expect(backButton).toBeInTheDocument()
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    const form = composer.closest('form')!
+    const backButton = within(form).getByRole('button', { name: 'Back to timeline' })
 
-    // Clicking it closes the overlay
+    composer.focus()
+    fireEvent.change(composer, { target: { value: 'keep this draft' } })
     fireEvent.click(backButton)
+
     expect(useUIStore.getState().chatPanelOpen).toBe(false)
+    expect(document.activeElement).not.toBe(composer)
+    expect(composer).toHaveValue('keep this draft')
   })
 
-  it('renders floating Open chat button on timeline when collapsed with existing messages', () => {
+  it('puts Open chat in the same composer slot when a conversation exists', () => {
     useUIStore.setState({ chatPanelOpen: false, chatMessageCount: 2 })
     useChatStore.setState({
       messages: [
@@ -165,11 +173,114 @@ describe('Timeline mobile chat UX', () => {
     // Overlay is not up; empty state / timeline is visible
     expect(screen.getByTestId('empty-state-hero')).toBeInTheDocument()
 
-    const openChatBtn = screen.getByRole('button', { name: 'Open chat' })
-    expect(openChatBtn).toBeInTheDocument()
+    const form = screen.getByPlaceholderText('Ask Rivolo').closest('form')!
+    const openChatBtn = within(form).getByRole('button', { name: 'Open chat' })
 
     fireEvent.click(openChatBtn)
     expect(useUIStore.getState().chatPanelOpen).toBe(true)
+  })
+
+  it('leaves the leading slot empty when there is no conversation', () => {
+    useUIStore.setState({ chatPanelOpen: false, chatMessageCount: 0 })
+
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Back to timeline' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open chat' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
+  })
+
+  it('shows labelled Timeline and Menu chips without focus, and Menu opens the sheet', () => {
+    useUIStore.setState({ chatPanelOpen: true, chatMessageCount: 2, menuAttentionCount: 2 })
+    const openMenu = vi.fn()
+    window.addEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    const form = composer.closest('form')!
+    expect(form).toHaveClass('tray-phone-composer')
+    expect(within(form).getByRole('button', { name: 'Back to timeline' })).toHaveTextContent('Timeline')
+    const menuChip = within(form).getByRole('button', { name: 'Menu, 2 items need attention' })
+    expect(menuChip).toHaveTextContent('Menu2')
+    // Menu first, then Timeline, then Send on its own at the right.
+    expect(within(form).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Menu, 2 items need attention',
+      'Back to timeline',
+      'Send',
+    ])
+
+    composer.focus()
+    fireEvent.change(composer, { target: { value: 'keep this draft' } })
+    fireEvent.click(menuChip)
+    expect(openMenu).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).not.toBe(composer)
+    expect(composer).toHaveValue('keep this draft')
+    expect(useUIStore.getState().chatPanelOpen).toBe(true)
+    window.removeEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
+  })
+
+  it('labels the first chip Chat on the timeline', () => {
+    useUIStore.setState({ chatPanelOpen: false, chatMessageCount: 1 })
+    useChatStore.setState({ messages: [{ id: '1', role: 'user', content: 'hello', createdAt: 1 }] })
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const form = screen.getByPlaceholderText('Ask Rivolo').closest('form')!
+    expect(within(form).getByRole('button', { name: 'Open chat' })).toHaveTextContent(/^Chat$/)
+  })
+
+  // No provider key is configured here, so a send attempt surfaces the
+  // missing-key error. That error is how these tests see a send happen.
+  const chatErrorBubble = () => document.querySelector('.tray-input-error')
+
+  it('lets Return insert a newline on the phone composer instead of sending', async () => {
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    expect(composer).toHaveAttribute('enterkeyhint', 'enter')
+    fireEvent.focus(composer)
+    fireEvent.change(composer, { target: { value: 'first line' } })
+
+    // Not prevented: the browser inserts the newline.
+    expect(fireEvent.keyDown(composer, { key: 'Enter' })).toBe(true)
+    await act(async () => {})
+
+    expect(composer).toHaveValue('first line')
+    expect(chatErrorBubble()).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('sends with the Send button inside the composer', async () => {
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const composer = screen.getByPlaceholderText('Ask Rivolo')
+    const form = composer.closest('form')!
+    fireEvent.change(composer, { target: { value: 'What did I do today?' } })
+    expect(chatErrorBubble()).toHaveAttribute('aria-hidden', 'true')
+
+    await act(async () => {
+      fireEvent.click(within(form).getByRole('button', { name: 'Send' }))
+    })
+
+    expect(chatErrorBubble()).toHaveAttribute('aria-hidden', 'false')
   })
 
   it('tapping the composer on mobile restores the chat overlay when messages exist', () => {
@@ -207,10 +318,11 @@ describe('Timeline mobile chat UX', () => {
     const logo = container.querySelector('img[src="/logo.svg"]')
     expect(logo).toBeInTheDocument()
     expect(logo?.parentElement).toHaveClass('mb-auto')
+    // A short thread still overflows by a pixel, so it can always be scrolled.
+    expect(logo?.parentElement?.parentElement).toHaveClass('min-h-[calc(100%+1px)]')
   })
 
-  it('renders custom visual placeholder with sparkle icon for Ask Rivolo that disappears when writing', () => {
-    useUIStore.setState({ mode: 'chat' })
+  it('shows Ask Rivolo as a plain placeholder, with no icon for the caret to cover', () => {
     render(
       <MemoryRouter>
         <Timeline />
@@ -218,24 +330,10 @@ describe('Timeline mobile chat UX', () => {
     )
 
     const composer = screen.getByPlaceholderText('Ask Rivolo')
-    expect(composer).toBeInTheDocument()
-
-    // Overlay is present when empty
-    const overlayText = screen.getByText('Ask Rivolo')
-    expect(overlayText).toBeInTheDocument()
-    const sparkleSvg = overlayText.parentElement?.querySelector('svg')
-    expect(sparkleSvg).toBeInTheDocument()
-
-    // Typing hides overlay
-    fireEvent.change(composer, { target: { value: 'What did I do today?' } })
-    expect(screen.queryByText('Ask Rivolo')).toBeNull()
-
-    // Clearing restores overlay
-    fireEvent.change(composer, { target: { value: '' } })
-    expect(screen.getByText('Ask Rivolo')).toBeInTheDocument()
+    expect(composer.parentElement?.querySelector('svg')).toBeNull()
   })
 
-  it('renders custom visual placeholder with lens icon for Search all days that disappears when writing', () => {
+  it('keeps the search lens in place while the field is focused and filled', () => {
     useUIStore.setState({ mode: 'search' })
     render(
       <MemoryRouter>
@@ -244,21 +342,13 @@ describe('Timeline mobile chat UX', () => {
     )
 
     const searchInput = screen.getByPlaceholderText('Search all days')
-    expect(searchInput).toBeInTheDocument()
+    const lens = () => searchInput.parentElement?.querySelector('svg')
+    expect(lens()).toBeInTheDocument()
 
-    // Overlay is present when empty
-    const overlayText = screen.getByText('Search all days')
-    expect(overlayText).toBeInTheDocument()
-    const lensSvg = overlayText.parentElement?.querySelector('svg')
-    expect(lensSvg).toBeInTheDocument()
-
-    // Typing hides overlay
+    searchInput.focus()
     fireEvent.change(searchInput, { target: { value: 'meeting' } })
-    expect(screen.queryByText('Search all days')).toBeNull()
-
-    // Clearing restores overlay
-    fireEvent.change(searchInput, { target: { value: '' } })
-    expect(screen.getByText('Search all days')).toBeInTheDocument()
+    expect(lens()).toBeInTheDocument()
+    expect(lens()).not.toHaveClass('invisible')
   })
 
   it('focusing or click on composer with 0 messages does not open chat overlay', () => {
@@ -277,7 +367,7 @@ describe('Timeline mobile chat UX', () => {
     expect(useUIStore.getState().chatPanelOpen).toBe(false)
   })
 
-  it('does not render floating chat button in search mode', () => {
+  it('does not render Back or Open chat in search mode', () => {
     useUIStore.setState({ mode: 'search', chatPanelOpen: false, chatMessageCount: 2 })
 
     render(
@@ -288,6 +378,38 @@ describe('Timeline mobile chat UX', () => {
 
     expect(screen.queryByRole('button', { name: 'Back to timeline' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open chat' })).toBeNull()
+  })
+
+  it('puts Menu, the Lines toggle and the filters inside the search box', () => {
+    useUIStore.setState({ mode: 'search' })
+    const openMenu = vi.fn()
+    window.addEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const searchInput = screen.getByPlaceholderText('Search all days')
+    const form = searchInput.closest('form')!
+    expect(form).toHaveClass('tray-phone-composer')
+    expect(form).toHaveAttribute('data-mode', 'search')
+    const lines = within(form).getByRole('button', { name: 'Lines' })
+    expect(lines).toHaveAttribute('aria-pressed', 'false')
+    expect(within(form).getByRole('button', { name: 'TODOs' })).toBeInTheDocument()
+
+    fireEvent.click(lines)
+    expect(within(form).getByRole('button', { name: 'Lines' })).toHaveAttribute('aria-pressed', 'true')
+
+    searchInput.focus()
+    fireEvent.change(searchInput, { target: { value: 'hotel' } })
+    expect(within(form).getByRole('button', { name: 'Clear search' })).toBeInTheDocument()
+
+    fireEvent.click(within(form).getByRole('button', { name: 'Menu' }))
+    expect(openMenu).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).not.toBe(searchInput)
+    expect(searchInput).toHaveValue('hotel')
+    window.removeEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
   })
 
   it('tapping Back to timeline blurs the composer so subsequent click or focus reopens chat', () => {

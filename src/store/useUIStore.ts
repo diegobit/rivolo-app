@@ -10,12 +10,16 @@ type UIState = {
   chatSending: boolean
   desktopPanelExpanded: boolean
   timelineEmpty: boolean | null
+  // How many attention items the mobile menu is showing, so the copy of the
+  // menu button inside the chat composer can show the same badge.
+  menuAttentionCount: number
   setMode: (mode: Mode) => void
   setChatPanelOpen: (open: boolean) => void
   setChatMessageCount: (count: number) => void
   setChatSending: (sending: boolean) => void
   setDesktopPanelExpanded: (expanded: boolean) => void
   setTimelineEmpty: (empty: boolean | null) => void
+  setMenuAttentionCount: (count: number) => void
 }
 
 const getDefaultChatPanelsOpen = () => {
@@ -37,10 +41,12 @@ export const useUIStore = create<UIState>((set) => ({
   chatSending: false,
   desktopPanelExpanded: false,
   timelineEmpty: null,
+  menuAttentionCount: 0,
   setMode: (mode) => set({ mode }),
   setChatPanelOpen: (open) => set({ chatPanelOpen: open }),
   setChatMessageCount: (count) => set({ chatMessageCount: count }),
   setChatSending: (sending) => set({ chatSending: sending }),
   setDesktopPanelExpanded: (expanded) => set({ desktopPanelExpanded: expanded }),
   setTimelineEmpty: (empty) => set({ timelineEmpty: empty }),
+  setMenuAttentionCount: (count) => set({ menuAttentionCount: count }),
 }))

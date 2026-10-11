@@ -1,5 +1,5 @@
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
@@ -12,6 +12,7 @@ import { lockPageScroll } from '../lib/pageScrollLock'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import {
+  MOBILE_MENU_OPEN_EVENT,
   TIMELINE_NEW_CHAT_EVENT,
   TIMELINE_SCROLL_TODAY_EVENT,
 } from '../lib/timelineEvents'
@@ -66,12 +67,55 @@ type TrayInputProps = {
   onSearchTextChange: (value: string) => void
   onFocus?: () => void
   onClick?: () => void
+  // The phone tray composer: a box with the field on top and an action row
+  // under it. Chat: Menu, Timeline/Chat, then Send, and Return inserts a
+  // newline. Search: Menu, then the result toggle and filters.
+  phoneLayout?: boolean
+  leadingAction?: TrayLeadingAction | null
+  // The box spans the menu button's column, so the menu moves into its row.
+  menuAction?: TrayMenuAction | null
+  searchFilters?: ReactNode
 }
+
+type TrayLeadingAction = {
+  kind: 'back' | 'open-chat'
+  onActivate: () => void
+}
+
+type TrayMenuAction = {
+  attentionCount: number
+  onActivate: () => void
+}
+
+const LEADING_ACTION_LABELS: Record<TrayLeadingAction['kind'], string> = {
+  back: 'Back to timeline',
+  'open-chat': 'Open chat',
+}
+
+const LEADING_ACTION_CHIP_TEXT: Record<TrayLeadingAction['kind'], string> = {
+  back: 'Timeline',
+  'open-chat': 'Chat',
+}
+
+const phoneComposerChipClassName =
+  'flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-active)] pl-2.5 pr-3.5 text-sm font-medium text-[var(--theme-text-soft)] transition active:opacity-75'
+const maskIconClassName =
+  'h-5 w-5 shrink-0 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]'
+
+const LEADING_ACTION_ICONS: Record<TrayLeadingAction['kind'], string> = {
+  back: '/caret-left.svg',
+  'open-chat': '/chats-teardrop.svg',
+}
+
+// Tapping a control inside the phone composer leaves focus in the field: Send
+// keeps the keyboard up for the next message, and Timeline and Menu blur the
+// field themselves.
+const keepComposerFocus = (event: React.MouseEvent) => event.preventDefault()
 
 type TrayInputConfig = {
   placeholder: string
   id: string
-  enterKeyHint: 'send' | 'search'
+  enterKeyHint: 'send' | 'search' | 'enter'
 }
 
 const SEARCH_CARD_PAGE_SIZE = 50
@@ -101,6 +145,10 @@ const TrayInput = memo(({
   onSearchTextChange,
   onFocus,
   onClick,
+  phoneLayout = false,
+  leadingAction = null,
+  menuAction = null,
+  searchFilters = null,
 }: TrayInputProps) => {
   const debounceRef = useRef<number | null>(null)
   const wasSearchActiveRef = useRef(false)
@@ -108,16 +156,17 @@ const TrayInput = memo(({
   const searchTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [isChatMultiline, setIsChatMultiline] = useState(false)
   const isChatMode = mode === 'chat'
+  const isPhoneChat = phoneLayout && isChatMode
   const hasSearchText = draftText.trim().length > 0
   const trayFieldClassName =
-    'tray-field block w-full h-10 appearance-none bg-transparent py-2 pl-3 pr-3 text-base leading-6 text-[var(--theme-text)] outline-none placeholder:text-transparent'
+    'tray-field block w-full h-10 appearance-none bg-transparent py-2 pr-3 text-base leading-6 text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-text-subtle)]'
 
   const inputConfig = useMemo<TrayInputConfig>(() => {
     if (isChatMode) {
       return {
         placeholder: 'Ask Rivolo',
         id: 'chat-input',
-        enterKeyHint: 'send',
+        enterKeyHint: phoneLayout ? 'enter' : 'send',
       }
     }
 
@@ -126,7 +175,7 @@ const TrayInput = memo(({
       id: 'search-input',
       enterKeyHint: 'search',
     }
-  }, [isChatMode])
+  }, [isChatMode, phoneLayout])
 
   const syncChatTextareaHeight = useCallback(() => {
     const textarea = chatTextareaRef.current
@@ -244,8 +293,61 @@ const TrayInput = memo(({
 
   return (
     <div className="relative">
-      <form className="flex items-end gap-3" onSubmit={handleSubmit}>
-        <div className="group relative flex-1">
+      <form
+        className={phoneLayout ? 'tray-phone-composer' : 'flex items-end gap-3'}
+        data-mode={phoneLayout ? mode : undefined}
+        onSubmit={handleSubmit}
+      >
+        {phoneLayout && menuAction ? (
+          <button
+            type="button"
+            className={`tray-phone-menu ${phoneComposerChipClassName}`}
+            aria-label={
+              menuAction.attentionCount > 0
+                ? `Menu, ${menuAction.attentionCount} ${menuAction.attentionCount === 1 ? 'item needs' : 'items need'} attention`
+                : 'Menu'
+            }
+            aria-haspopup="dialog"
+            onMouseDown={keepComposerFocus}
+            onClick={menuAction.onActivate}
+          >
+            <span
+              aria-hidden="true"
+              className={maskIconClassName}
+              style={{ maskImage: "url('/menu-lines.svg')", WebkitMaskImage: "url('/menu-lines.svg')" }}
+            />
+            <span aria-hidden="true">Menu</span>
+            {menuAction.attentionCount > 0 ? (
+              <span
+                aria-hidden="true"
+                className="min-w-5 rounded-full border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] px-1 text-center text-[11px] font-bold leading-[18px] text-[var(--theme-warning-text)]"
+              >
+                {menuAction.attentionCount}
+              </span>
+            ) : null}
+          </button>
+        ) : null}
+        {isPhoneChat && leadingAction ? (
+          <button
+            type="button"
+            className={`tray-phone-lead ${phoneComposerChipClassName}`}
+            aria-label={LEADING_ACTION_LABELS[leadingAction.kind]}
+            title={LEADING_ACTION_LABELS[leadingAction.kind]}
+            onMouseDown={keepComposerFocus}
+            onClick={leadingAction.onActivate}
+          >
+            <span
+              aria-hidden="true"
+              className={maskIconClassName}
+              style={{
+                maskImage: `url('${LEADING_ACTION_ICONS[leadingAction.kind]}')`,
+                WebkitMaskImage: `url('${LEADING_ACTION_ICONS[leadingAction.kind]}')`,
+              }}
+            />
+            <span aria-hidden="true">{LEADING_ACTION_CHIP_TEXT[leadingAction.kind]}</span>
+          </button>
+        ) : null}
+        <div className={`relative flex-1 ${phoneLayout ? 'tray-phone-field min-w-0' : ''}`}>
           <p
             className={`tray-input-error absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
               showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
@@ -254,22 +356,15 @@ const TrayInput = memo(({
           >
             {chatError}
           </p>
-          {!draftText && (
-            <div
-              className="pointer-events-none absolute left-3 top-2 flex h-6 items-center gap-1.5 select-none text-[var(--theme-text-subtle)]"
+          {!isChatMode && (
+            // A fixed lens, outside the text, so the caret never lands on it.
+            <svg
+              viewBox="0 0 256 256"
+              className="pointer-events-none absolute left-3 top-3 h-4 w-4 fill-current text-[var(--theme-text-subtle)]"
               aria-hidden="true"
             >
-              {isChatMode ? (
-                <svg viewBox="0 0 256 256" className="h-4 w-4 shrink-0 fill-current group-focus-within:invisible" aria-hidden="true">
-                  <path d="M197.58,129.06,146,110l-19-51.62a15.92,15.92,0,0,0-29.88,0L78,110l-51.62,19a15.92,15.92,0,0,0,0,29.88L78,178l19,51.62a15.92,15.92,0,0,0,29.88,0L146,178l51.62-19a15.92,15.92,0,0,0,0-29.88ZM137,164.22a8,8,0,0,0-4.74,4.74L112,223.85,91.78,169A8,8,0,0,0,87,164.22L32.15,144,87,123.78A8,8,0,0,0,91.78,119L112,64.15,132.22,119a8,8,0,0,0,4.74,4.74L191.85,144ZM144,40a8,8,0,0,1,8-8h16V16a8,8,0,0,1,16,0V32h16a8,8,0,0,1,0,16H184V64a8,8,0,0,1-16,0V48H152A8,8,0,0,1,144,40ZM248,88a8,8,0,0,1-8,8h-8v8a8,8,0,0,1-16,0V96h-8a8,8,0,0,1,0-16h8V72a8,8,0,0,1,16,0v8h8A8,8,0,0,1,248,88Z" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 256 256" className="h-4 w-4 shrink-0 fill-current group-focus-within:invisible" aria-hidden="true">
-                  <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" />
-                </svg>
-              )}
-              <span className="text-base leading-6">{inputConfig.placeholder}</span>
-            </div>
+              <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" />
+            </svg>
           )}
           {isChatMode ? (
             <textarea
@@ -280,7 +375,7 @@ const TrayInput = memo(({
               autoComplete="off"
               rows={1}
               inputMode="text"
-              className={`${trayFieldClassName} resize-none`}
+              className={`${trayFieldClassName} resize-none pl-3`}
               style={{
                 minHeight: `${CHAT_TEXTAREA_MIN_HEIGHT_PX}px`,
                 maxHeight: `${CHAT_TEXTAREA_MAX_HEIGHT_PX}px`,
@@ -293,11 +388,21 @@ const TrayInput = memo(({
                 onDraftTextChange(event.target.value)
               }}
               onKeyDown={(event) => {
-                if (event.key !== 'Enter' || event.shiftKey) {
+                if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
                   return
                 }
 
-                if (event.metaKey || event.ctrlKey || event.altKey || event.nativeEvent.isComposing) {
+                // On a phone Return is a newline and Send is the button; a
+                // narrow desktop window can still send with Cmd/Ctrl+Enter.
+                if (phoneLayout) {
+                  if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+                    event.preventDefault()
+                    void submitChatDraft()
+                  }
+                  return
+                }
+
+                if (event.metaKey || event.ctrlKey || event.altKey) {
                   return
                 }
 
@@ -314,7 +419,7 @@ const TrayInput = memo(({
               autoComplete="off"
               rows={1}
               inputMode="text"
-              className={`${trayFieldClassName} resize-none overflow-hidden`}
+              className={`${trayFieldClassName} resize-none overflow-hidden pl-9`}
               style={{
                 minHeight: `${CHAT_TEXTAREA_MIN_HEIGHT_PX}px`,
                 maxHeight: `${CHAT_TEXTAREA_MIN_HEIGHT_PX}px`,
@@ -338,12 +443,15 @@ const TrayInput = memo(({
         </div>
         {mode === 'chat' && (
           <button
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-sm transition sm:h-10 sm:w-10 ${
+            className={`flex shrink-0 items-center justify-center rounded-full shadow-sm transition ${
+              isPhoneChat ? 'tray-phone-send h-10 w-10' : 'h-11 w-11 sm:h-10 sm:w-10'
+            } ${
               draftText.trim() && !sending ? 'bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)]' : 'bg-slate-300'
             }`}
             type="submit"
             disabled={sending}
             aria-label="Send"
+            onMouseDown={isPhoneChat ? keepComposerFocus : undefined}
           >
             <img
               src="/arrow-up.svg"
@@ -354,10 +462,16 @@ const TrayInput = memo(({
           </button>
         )}
         {mode === 'search' && (
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center sm:h-10 sm:w-10">
+          <div
+            className={`flex shrink-0 items-center justify-center ${
+              phoneLayout ? 'tray-phone-clear h-10 w-10' : 'h-11 w-11 sm:h-10 sm:w-10'
+            }`}
+          >
             {hasSearchText ? (
               <button
-                className="tray-input-clear group flex h-11 w-11 items-center justify-center rounded-full hover:bg-slate-500 sm:h-8 sm:w-8"
+                className={`tray-input-clear group flex items-center justify-center rounded-full hover:bg-slate-500 ${
+                  phoneLayout ? 'h-10 w-10' : 'h-11 w-11 sm:h-8 sm:w-8'
+                }`}
                 type="button"
                 aria-label="Clear search"
                 onClick={handleClearSearch}
@@ -371,6 +485,9 @@ const TrayInput = memo(({
             ) : null}
           </div>
         )}
+        {phoneLayout && mode === 'search' && searchFilters ? (
+          <div className="tray-phone-filters min-w-0">{searchFilters}</div>
+        ) : null}
       </form>
     </div>
   )
@@ -1771,22 +1888,72 @@ export default function Timeline() {
 
   const canToggleMatchedResultTodos = showMatchedLineResults && searchFilter === 'open-todos'
 
-  const renderSearchPills = (showResultMode: boolean) =>
+  const renderSearchPills = (layout: 'card' | 'composer') =>
     mode === 'search' ? (
       <SearchModePills
         searchFilter={searchFilter}
         resultMode={searchResultMode}
-        showResultMode={showResultMode}
+        layout={layout}
         onSearchFilterChange={setSearchFilter}
         onResultModeChange={setSearchResultMode}
       />
     ) : null
+
+  // Memoized so the memoized tray composer doesn't re-render on every
+  // Timeline render just for a new filter row element.
+  const composerSearchPills = useMemo(
+    () =>
+      mode === 'search' ? (
+        <SearchModePills
+          searchFilter={searchFilter}
+          resultMode={searchResultMode}
+          layout="composer"
+          onSearchFilterChange={setSearchFilter}
+          onResultModeChange={setSearchResultMode}
+        />
+      ) : null,
+    [mode, searchFilter, searchResultMode, setSearchFilter, setSearchResultMode],
+  )
 
   const openChatOverlayIfHidden = useCallback(() => {
     if (isNarrowViewportMode && mode === 'chat' && !chatPanelOpen && chatMessageCount > 0) {
       setChatPanelOpen(true)
     }
   }, [chatMessageCount, chatPanelOpen, isNarrowViewportMode, mode, setChatPanelOpen])
+
+  // Timeline/Chat follows Menu in the phone composer's action row.
+  // Timeline blurs the field first so the keyboard goes down with the chat;
+  // the draft stays.
+  const mobileChatLeadingAction = useMemo<TrayLeadingAction | null>(() => {
+    if (!isNarrowViewportMode || mode !== 'chat') return null
+    if (chatPanelOpen) {
+      return {
+        kind: 'back',
+        onActivate: () => {
+          document.getElementById('chat-input')?.blur()
+          setChatPanelOpen(false)
+        },
+      }
+    }
+    if (chatMessageCount > 0) {
+      return { kind: 'open-chat', onActivate: () => setChatPanelOpen(true) }
+    }
+    return null
+  }, [chatMessageCount, chatPanelOpen, isNarrowViewportMode, mode, setChatPanelOpen])
+
+  const menuAttentionCount = useUIStore((state) => state.menuAttentionCount)
+  const mobileMenuAction = useMemo<TrayMenuAction | null>(() => {
+    if (!isNarrowViewportMode || mode === 'timeline') return null
+    return {
+      attentionCount: menuAttentionCount,
+      // The keyboard goes down first so the sheet opens over the whole screen;
+      // the draft stays.
+      onActivate: () => {
+        document.getElementById(mode === 'chat' ? 'chat-input' : 'search-input')?.blur()
+        window.dispatchEvent(new CustomEvent(MOBILE_MENU_OPEN_EVENT))
+      },
+    }
+  }, [isNarrowViewportMode, menuAttentionCount, mode])
 
   // The tray composer only renders on narrow viewports; on desktop both the
   // chat composer and the search field live inside their floating cards.
@@ -1802,6 +1969,10 @@ export default function Timeline() {
         onSearchTextChange={handleSearchTextChange}
         onClick={openChatOverlayIfHidden}
         onFocus={openChatOverlayIfHidden}
+        phoneLayout
+        leadingAction={mobileChatLeadingAction}
+        menuAction={mobileMenuAction}
+        searchFilters={composerSearchPills}
       />
     )
 
@@ -2063,38 +2234,6 @@ export default function Timeline() {
 
   return (
     <div>
-      {isMobileSearchMode ? (
-        <BottomTrayPortal containerId="bottom-tray-pills">{renderSearchPills(true)}</BottomTrayPortal>
-      ) : null}
-      {isNarrowViewportMode && mode === 'chat' && (chatPanelOpen || chatMessageCount > 0) ? (
-        <BottomTrayPortal containerId="bottom-tray-pills">
-          <button
-            type="button"
-            className="mobile-chat-floating-btn pointer-events-auto ml-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-soft)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)] sm:hidden"
-            aria-label={chatPanelOpen ? 'Back to timeline' : 'Open chat'}
-            title={chatPanelOpen ? 'Back to timeline' : 'Open chat'}
-            onClick={() => {
-              if (chatPanelOpen) {
-                const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null
-                chatInput?.blur()
-              }
-              setChatPanelOpen(!chatPanelOpen)
-            }}
-          >
-            {chatPanelOpen ? (
-              <span
-                aria-hidden="true"
-                className="h-5 w-5 bg-current [mask-image:url('/caret-left.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/caret-left.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
-              />
-            ) : (
-              <span
-                aria-hidden="true"
-                className="h-5 w-5 bg-current [mask-image:url('/chats-teardrop.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:url('/chats-teardrop.svg')] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
-              />
-            )}
-          </button>
-        </BottomTrayPortal>
-      ) : null}
       {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
 
       {showMobileChatOverlay ? <div className="contents" inert>{timelineContent}</div> : timelineContent}
@@ -2249,7 +2388,7 @@ export default function Timeline() {
                 </button>
               )}
             </div>
-            <div className="timeline-search-sidebar-pills">{renderSearchPills(false)}</div>
+            <div className="timeline-search-sidebar-pills">{renderSearchPills('card')}</div>
             <div className="timeline-search-sidebar-composer">
               <div className="timeline-chat-composer-field">
                 <TrayInput
@@ -2317,7 +2456,9 @@ export default function Timeline() {
                 scrollPaddingBottom: 'var(--mobile-chat-bottom-clearance)',
               }}
             >
-              <div ref={mobileChatScroll.contentRef} className="flex min-h-full flex-col gap-3">
+              {/* One pixel taller than the scroller, so a short thread still
+                  scrolls and rubber-bands under the finger like the timeline. */}
+              <div ref={mobileChatScroll.contentRef} className="flex min-h-[calc(100%+1px)] flex-col gap-3">
                 {/* The wordmark sits at the top of the chat scroller: pinned at the top
                     when the thread is short, scrolling upward when the thread gets long. */}
                 <div className="mt-2 mb-auto flex h-16 shrink-0 items-center justify-center">

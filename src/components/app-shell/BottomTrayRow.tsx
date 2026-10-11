@@ -53,7 +53,6 @@ export default function BottomTrayRow({
     <button
       type="button"
       className={`bottom-tray-scroll-today absolute ${scrollToTodayPositionClass} flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)] min-[700px]:h-10 min-[700px]:w-10`}
-      data-clearance={mode === 'search' ? 'search' : 'chat'}
       aria-label="Scroll to Today"
       title="Scroll to Today"
       onClick={onScrollToToday}
@@ -65,9 +64,7 @@ export default function BottomTrayRow({
   return (
     <>
       <div
-        className={`app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.6)_18%,black_72%)] ${
-          mode === 'search' && !launcherSpread ? 'bottom-tray-blur-search' : ''
-        }`}
+        className="app-shell-fixed-right-aware bottom-tray-blur hero-ui-fade-down pointer-events-none fixed left-0 z-20 [mask-image:linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.6)_18%,black_72%)]"
         data-mode={mode}
       />
       <div className="app-shell-fixed-right-aware bottom-tray-blur-tail hero-ui-fade-down pointer-events-none fixed left-0 z-20" />

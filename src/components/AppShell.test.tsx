@@ -44,6 +44,7 @@ const stores = vi.hoisted(() => ({
     chatMessageCount: 0,
     timelineEmpty: null as boolean | null,
     setTimelineEmpty: vi.fn(),
+    setMenuAttentionCount: vi.fn(),
   },
   viewport: {
     isNarrow: false,
