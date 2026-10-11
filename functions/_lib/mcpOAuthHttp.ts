@@ -46,6 +46,7 @@ const LOCAL_MESSAGES = new Set([
   'state is invalid.',
   'Consent origin is invalid.',
   'Content-Type must be application/x-www-form-urlencoded.',
+  'The request body is not valid form data.',
   'This connection expired. Start again from the client.',
   'Start again from the client that sent you here.',
 ])
@@ -353,12 +354,15 @@ const repository = (env: McpOAuthEnv) => new McpOAuthRepository(env.MCP_DB)
 const revalidatePending = async (env: McpOAuthEnv, payload: PendingPayload) => {
   const params = pendingAuthorizationParams(payload.authorization)
   const context = await repository(env).resolveCallbackContext(params)
-  const authorization = repository(env).validateAuthorizationDetails(
+  return {
     context,
-    params,
-    getMcpOAuthConfig(env).resourceUrl,
-  )
-  return { context, authorization }
+    validate: () =>
+      repository(env).validateAuthorizationDetails(
+        context,
+        params,
+        getMcpOAuthConfig(env).resourceUrl,
+      ),
+  }
 }
 
 const stashPending = async (
@@ -485,7 +489,7 @@ const startAuthorization = async (
     )
   } catch (error) {
     if (context && !(error instanceof McpOAuthTrustError)) {
-      return serviceRedirect(issuerUrl, context, error)
+      return serviceRedirect(issuerUrl, context, error, [clearPendingCookieHeader(request)])
     }
     return localAuthorizationError(error)
   }
@@ -514,14 +518,15 @@ const resumeAuthorization = async (
   try {
     const revalidated = await revalidatePending(env, pending.payload)
     context = revalidated.context
+    const authorization = revalidated.validate()
     if (cancel) {
-      const clientLabel = revalidated.authorization.client.clientName ?? 'An MCP client'
+      const clientLabel = authorization.client.clientName ?? 'An MCP client'
       return continuationPage(
         'Cancel connection',
         `<h1>Cancel this connection?</h1>
 <p>${escapeHtml(clientLabel)} will not receive access to your Rivolo notes.</p>
 ${cancelForm(issuerUrl, pending.payload.transactionId)}`,
-        revalidated.authorization.redirectUri,
+        authorization.redirectUri,
       )
     }
     const profileId = await readActiveMcpProfileSession(request, env)
@@ -534,13 +539,13 @@ ${cancelForm(issuerUrl, pending.payload.transactionId)}`,
   <a class="button" href="${escapeHtml(settingsContinuationUrl(issuerUrl).href)}">Open Settings</a>
 </div>
 ${cancelForm(issuerUrl, pending.payload.transactionId)}`,
-        revalidated.authorization.redirectUri,
+        authorization.redirectUri,
       )
     }
     const cookie = await stashPending(
       request,
       env,
-      revalidated.authorization,
+      authorization,
       'consent',
       pending.payload,
     )
@@ -559,7 +564,7 @@ ${cancelForm(issuerUrl, pending.payload.transactionId)}`,
       )
     }
     return consentPage(
-      revalidated.authorization,
+      authorization,
       profileId,
       accountLabel,
       issuerUrl,
@@ -575,13 +580,22 @@ ${cancelForm(issuerUrl, pending.payload.transactionId)}`,
   }
 }
 
+const FORM_URLENCODED = 'application/x-www-form-urlencoded'
+const INVALID_FORM_ESCAPE = /%(?![0-9A-Fa-f]{2})/
+
 const requireUrlEncodedBody = async (request: Request) => {
-  const contentType = request.headers.get('Content-Type') ?? ''
-  if (!contentType.toLowerCase().startsWith('application/x-www-form-urlencoded')) {
+  const mediaType = (request.headers.get('Content-Type') ?? '')
+    .split(';', 1)[0]
+    ?.trim()
+    .toLowerCase()
+  if (mediaType !== FORM_URLENCODED) {
     throw new McpOAuthTrustError('Content-Type must be application/x-www-form-urlencoded.')
   }
   const body = await request.text()
   assertBoundedAuthorizationInput(body)
+  if (INVALID_FORM_ESCAPE.test(body)) {
+    throw new McpOAuthTrustError('The request body is not valid form data.')
+  }
   return new URLSearchParams(body)
 }
 
@@ -619,6 +633,7 @@ export const submitOAuthConsent = async (request: Request, env: McpOAuthEnv) => 
     }
     const revalidated = await revalidatePending(env, pending.payload)
     context = revalidated.context
+    const authorization = revalidated.validate()
     const clear = [clearPendingCookieHeader(request)]
     if (!submittedAuthorizationMatches(body, pending.payload.authorization)) {
       return callbackRedirect(
@@ -678,7 +693,7 @@ export const submitOAuthConsent = async (request: Request, env: McpOAuthEnv) => 
         clear,
       )
     }
-    const code = await repository(env).issueAuthorizationCode(profileId, revalidated.authorization)
+    const code = await repository(env).issueAuthorizationCode(profileId, authorization)
     return callbackRedirect(issuerUrl, context, { type: 'code', code }, clear)
   } catch (error) {
     const cookies = context ? [clearPendingCookieHeader(request)] : []
@@ -756,6 +771,7 @@ export const submitOAuthPendingCancellation = async (request: Request, env: McpO
     }
     const revalidated = await revalidatePending(env, pending.payload)
     context = revalidated.context
+    revalidated.validate()
     return callbackRedirect(
       issuerUrl,
       context,

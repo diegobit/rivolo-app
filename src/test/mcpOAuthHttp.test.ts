@@ -342,7 +342,10 @@ describe('authorization callback trust', () => {
       expect(location.searchParams.getAll('code')).toEqual([])
       expect(location.searchParams.getAll('iss')).toEqual([ISSUER])
       expect(location.searchParams.get('state')).toBe('client-state')
-      expect(response.headers.getSetCookie()).toEqual([])
+      const cookies = response.headers.getSetCookie()
+      expect(cookies).toHaveLength(1)
+      expect(cookies[0]).toContain(`${MCP_OAUTH_PENDING_COOKIE}=;`)
+      expect(cookies[0]).toContain('Max-Age=0')
     }
   })
 
@@ -718,9 +721,204 @@ describe('pending authorization cookie', () => {
     expect(expired.headers.get('Location')).toBeNull()
     expect(await expired.text()).not.toContain('attacker.example')
   })
+
+  it('clears the previous pending transaction when a later trusted request fails', async () => {
+    const env = createEnv()
+    const client = await register(env, 'https://chatgpt.com/callback')
+    const challenge = await pkce()
+    const started = await show(
+      env,
+      authorizeParams(client.clientId, client.redirectUris[0], challenge, { state: 'first' }),
+    )
+    const pair = pendingPair(started) ?? ''
+    const read = await readPendingRequest(
+      new Request(`${ISSUER}/authorize`, { headers: { Cookie: pair } }),
+      env.MCP_PROFILE_SESSION_ENCRYPTION_KEY,
+    )
+    if (read.status !== 'valid') throw new Error('Missing pending request.')
+    const failed = await show(
+      env,
+      authorizeParams(client.clientId, client.redirectUris[0], challenge, {
+        state: 'second',
+        code_challenge: 'not-a-challenge',
+      }),
+      pair,
+    )
+    const location = acceptIssuer(failed.headers.get('Location') ?? '', ISSUER)
+    expect(failed.status).toBe(302)
+    expect(location.searchParams.get('error')).toBe('invalid_request')
+    expect(location.searchParams.get('state')).toBe('second')
+    const cleared = failed.headers
+      .getSetCookie()
+      .some(
+        (cookie) =>
+          cookie.startsWith(`${MCP_OAUTH_PENDING_COOKIE}=;`) && cookie.includes('Max-Age=0'),
+      )
+    expect(cleared).toBe(true)
+    const resumed = await showOAuthConsent(
+      new Request(`${ISSUER}/authorize?resume=${read.payload.transactionId}`, {
+        headers: cleared ? {} : { Cookie: pair },
+      }),
+      env,
+    )
+    expect(resumed.status).toBe(400)
+    expect(resumed.headers.get('Location')).toBeNull()
+  })
+
+  it('returns detail failures for a pending request to the trusted callback', async () => {
+    const env = createEnv()
+    const profile = await createProfile(env)
+    const cookie = await sessionCookie(env, profile.profileId)
+    const client = await register(env, 'https://chatgpt.com/callback?foo=1')
+    const params = authorizeParams(client.clientId, client.redirectUris[0], await pkce(), {
+      state: 'kept-state',
+    })
+    const setup = await show(env, params)
+    const setupPair = pendingPair(setup) ?? ''
+    const setupRead = await readPendingRequest(
+      new Request(`${ISSUER}/authorize`, { headers: { Cookie: setupPair } }),
+      env.MCP_PROFILE_SESSION_ENCRYPTION_KEY,
+    )
+    if (setupRead.status !== 'valid') throw new Error('Missing pending request.')
+    const consent = await show(env, params, cookie)
+    const consentId = transactionIdFrom(await consent.text())
+    const consentPair = pendingPair(consent) ?? ''
+    const cancel = await show(env, params)
+    const cancelRead = await readPendingRequest(
+      new Request(`${ISSUER}/authorize`, { headers: { Cookie: pendingPair(cancel) ?? '' } }),
+      env.MCP_PROFILE_SESSION_ENCRYPTION_KEY,
+    )
+    if (cancelRead.status !== 'valid') throw new Error('Missing pending request.')
+    const cancelPair = pendingPair(cancel) ?? ''
+    env.MCP_RESOURCE_URL = 'https://mcp.rivolo.app/other'
+
+    const expectResourceError = (response: Response) => {
+      const location = acceptIssuer(response.headers.get('Location') ?? '', ISSUER)
+      expect(response.status).toBe(302)
+      expect(location.searchParams.get('error')).toBe('invalid_request')
+      expect(location.searchParams.get('error_description')).toBe(
+        'resource does not match the Rivolo MCP server.',
+      )
+      expect(location.searchParams.get('state')).toBe('kept-state')
+      expect(location.searchParams.getAll('iss')).toEqual([ISSUER])
+      expect(location.searchParams.get('foo')).toBe('1')
+      expect(location.searchParams.get('code')).toBeNull()
+      expect(response.headers.getSetCookie().some((header) => header.includes('Max-Age=0'))).toBe(
+        true,
+      )
+    }
+
+    expectResourceError(
+      await showOAuthConsent(
+        new Request(`${ISSUER}/authorize?resume=${setupRead.payload.transactionId}`, {
+          headers: { Cookie: setupPair },
+        }),
+        env,
+      ),
+    )
+    expectResourceError(
+      await submitOAuthConsent(
+        new Request(`${ISSUER}/authorize`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Origin: 'https://rivolo.app',
+            Cookie: `${cookie}; ${consentPair}`,
+          },
+          body: new URLSearchParams([
+            ...params,
+            ['transaction_id', consentId],
+            ['profile_id', profile.profileId],
+            ['decision', 'allow'],
+          ]),
+        }),
+        env,
+      ),
+    )
+    expectResourceError(
+      await submitOAuthPendingCancellation(
+        new Request(`${ISSUER}/pending`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Origin: 'https://rivolo.app',
+            Cookie: cancelPair,
+          },
+          body: new URLSearchParams({
+            decision: 'deny',
+            transaction_id: cancelRead.payload.transactionId,
+          }),
+        }),
+        env,
+      ),
+    )
+    expect(
+      (
+        await (env.MCP_DB as unknown as SqliteD1)
+          .prepare('SELECT COUNT(*) AS count FROM mcp_oauth_authorization_codes')
+          .bind()
+          .first<{ count: number }>()
+      )?.count,
+    ).toBe(0)
+  })
 })
 
 describe('consent submission', () => {
+  it('rejects a malformed consent body without issuing a code', async () => {
+    const env = createEnv()
+    const profile = await createProfile(env)
+    const cookie = await sessionCookie(env, profile.profileId)
+    const client = await register(env, 'https://chatgpt.com/callback')
+    const params = authorizeParams(client.clientId, client.redirectUris[0], await pkce())
+    const consent = await show(env, params, cookie)
+    const transactionId = transactionIdFrom(await consent.text())
+    const pair = pendingPair(consent) ?? ''
+    const fields = new URLSearchParams([
+      ...params,
+      ['transaction_id', transactionId],
+      ['profile_id', profile.profileId],
+      ['decision', 'allow'],
+    ])
+    const post = (contentType: string, body: string) =>
+      submitOAuthConsent(
+        new Request(`${ISSUER}/authorize`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': contentType,
+            Origin: 'https://rivolo.app',
+            Cookie: `${cookie}; ${pair}`,
+          },
+          body,
+        }),
+        env,
+      )
+    for (const [contentType, body] of [
+      ['application/x-www-form-urlencodedevil', fields.toString()],
+      ['application/x-www-form-urlencodedevil; charset=UTF-8', fields.toString()],
+      ['application/x-www-form-urlencoded', `${fields.toString()}&junk=%FF%`],
+    ] as const) {
+      const response = await post(contentType, body)
+      expect(response.status).toBe(400)
+      expect(response.headers.get('Location')).toBeNull()
+      expect(await response.text()).not.toContain('%FF')
+    }
+    expect(
+      (
+        await (env.MCP_DB as unknown as SqliteD1)
+          .prepare('SELECT COUNT(*) AS count FROM mcp_oauth_authorization_codes')
+          .bind()
+          .first<{ count: number }>()
+      )?.count,
+    ).toBe(0)
+
+    const accepted = await post(
+      'application/x-www-form-urlencoded; charset=UTF-8',
+      fields.toString(),
+    )
+    const location = acceptIssuer(accepted.headers.get('Location') ?? '', ISSUER)
+    expect(location.searchParams.getAll('code')).toHaveLength(1)
+  })
+
   it('issues one code or one denial and rejects unbound changes', async () => {
     const env = createEnv()
     const db = env.MCP_DB as unknown as SqliteD1
