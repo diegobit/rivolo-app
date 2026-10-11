@@ -12,6 +12,7 @@ import { lockPageScroll } from '../lib/pageScrollLock'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import {
+  MOBILE_MENU_OPEN_EVENT,
   TIMELINE_NEW_CHAT_EVENT,
   TIMELINE_SCROLL_TODAY_EVENT,
 } from '../lib/timelineEvents'
@@ -70,6 +71,9 @@ type TrayInputProps = {
   // a newline, and Back/Open chat sits inside it.
   phoneLayout?: boolean
   leadingAction?: TrayLeadingAction | null
+  // While the phone composer is a box it spans the menu button's column, so
+  // the menu moves into the box's action row.
+  menuAction?: TrayMenuAction | null
 }
 
 type TrayLeadingAction = {
@@ -77,10 +81,26 @@ type TrayLeadingAction = {
   onActivate: () => void
 }
 
+type TrayMenuAction = {
+  attentionCount: number
+  onActivate: () => void
+}
+
 const LEADING_ACTION_LABELS: Record<TrayLeadingAction['kind'], string> = {
   back: 'Back to timeline',
   'open-chat': 'Open chat',
 }
+
+// The box has room for a visible label next to the icon; the pill does not.
+const LEADING_ACTION_CHIP_TEXT: Record<TrayLeadingAction['kind'], string> = {
+  back: 'Timeline',
+  'open-chat': 'Open chat',
+}
+
+const phoneComposerChipClassName =
+  'flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-active)] pl-3 pr-4 text-sm font-medium text-[var(--theme-text-soft)] transition active:opacity-75'
+const maskIconClassName =
+  'h-5 w-5 shrink-0 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]'
 
 const LEADING_ACTION_ICONS: Record<TrayLeadingAction['kind'], string> = {
   back: '/caret-left.svg',
@@ -126,6 +146,7 @@ const TrayInput = memo(({
   onClick,
   phoneLayout = false,
   leadingAction = null,
+  menuAction = null,
 }: TrayInputProps) => {
   const debounceRef = useRef<number | null>(null)
   const wasSearchActiveRef = useRef(false)
@@ -300,7 +321,11 @@ const TrayInput = memo(({
         {isPhoneChat && leadingAction ? (
           <button
             type="button"
-            className="tray-phone-lead flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--theme-text-soft)] transition hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)]"
+            className={`tray-phone-lead ${
+              isPhoneBox
+                ? phoneComposerChipClassName
+                : 'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--theme-text-soft)] transition hover:bg-[var(--theme-hover)] active:bg-[var(--theme-active)]'
+            }`}
             aria-label={LEADING_ACTION_LABELS[leadingAction.kind]}
             title={LEADING_ACTION_LABELS[leadingAction.kind]}
             onMouseDown={keepComposerFocus}
@@ -308,12 +333,42 @@ const TrayInput = memo(({
           >
             <span
               aria-hidden="true"
-              className="h-5 w-5 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
+              className={maskIconClassName}
               style={{
                 maskImage: `url('${LEADING_ACTION_ICONS[leadingAction.kind]}')`,
                 WebkitMaskImage: `url('${LEADING_ACTION_ICONS[leadingAction.kind]}')`,
               }}
             />
+            {isPhoneBox ? <span aria-hidden="true">{LEADING_ACTION_CHIP_TEXT[leadingAction.kind]}</span> : null}
+          </button>
+        ) : null}
+        {isPhoneBox && menuAction ? (
+          <button
+            type="button"
+            className={`tray-phone-menu ${phoneComposerChipClassName}`}
+            aria-label={
+              menuAction.attentionCount > 0
+                ? `Menu, ${menuAction.attentionCount} ${menuAction.attentionCount === 1 ? 'item needs' : 'items need'} attention`
+                : 'Menu'
+            }
+            aria-haspopup="dialog"
+            onMouseDown={keepComposerFocus}
+            onClick={menuAction.onActivate}
+          >
+            <span
+              aria-hidden="true"
+              className={maskIconClassName}
+              style={{ maskImage: "url('/menu-lines.svg')", WebkitMaskImage: "url('/menu-lines.svg')" }}
+            />
+            <span aria-hidden="true">Menu</span>
+            {menuAction.attentionCount > 0 ? (
+              <span
+                aria-hidden="true"
+                className="min-w-5 rounded-full border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] px-1 text-center text-[11px] font-bold leading-[18px] text-[var(--theme-warning-text)]"
+              >
+                {menuAction.attentionCount}
+              </span>
+            ) : null}
           </button>
         ) : null}
         <div className={`group relative flex-1 ${isPhoneChat ? 'tray-phone-field min-w-0' : ''}`}>
@@ -1892,6 +1947,20 @@ export default function Timeline() {
     return null
   }, [chatMessageCount, chatPanelOpen, isNarrowViewportMode, mode, setChatPanelOpen])
 
+  const menuAttentionCount = useUIStore((state) => state.menuAttentionCount)
+  const mobileChatMenuAction = useMemo<TrayMenuAction | null>(() => {
+    if (!isNarrowViewportMode || mode !== 'chat') return null
+    return {
+      attentionCount: menuAttentionCount,
+      // The keyboard goes down first so the sheet opens over the whole screen;
+      // the draft stays.
+      onActivate: () => {
+        document.getElementById('chat-input')?.blur()
+        window.dispatchEvent(new CustomEvent(MOBILE_MENU_OPEN_EVENT))
+      },
+    }
+  }, [isNarrowViewportMode, menuAttentionCount, mode])
+
   // The tray composer only renders on narrow viewports; on desktop both the
   // chat composer and the search field live inside their floating cards.
   const trayContent =
@@ -1908,6 +1977,7 @@ export default function Timeline() {
         onFocus={openChatOverlayIfHidden}
         phoneLayout
         leadingAction={mobileChatLeadingAction}
+        menuAction={mobileChatMenuAction}
       />
     )
 

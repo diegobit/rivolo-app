@@ -6,7 +6,7 @@ import { formatTimeAgo } from '../../lib/dates'
 import type { SetupNoticeId } from '../../lib/setupAttention'
 import { SYNC_PROVIDER_LABELS } from '../../lib/syncState'
 import { getNextThemePreference } from '../../lib/theme'
-import { TIMELINE_NEW_CHAT_EVENT } from '../../lib/timelineEvents'
+import { MOBILE_MENU_OPEN_EVENT, TIMELINE_NEW_CHAT_EVENT } from '../../lib/timelineEvents'
 import { lockPageScroll } from '../../lib/pageScrollLock'
 import {
   pullFromSyncAndRefresh,
@@ -88,6 +88,7 @@ export default function MobileMenu({
   const chatMessageCount = useUIStore((state) => state.chatMessageCount)
   const setMode = useUIStore((state) => state.setMode)
   const setChatPanelOpen = useUIStore((state) => state.setChatPanelOpen)
+  const setMenuAttentionCount = useUIStore((state) => state.setMenuAttentionCount)
   const themePreference = useSettingsStore((state) => state.themePreference)
   const updateThemePreference = useSettingsStore((state) => state.updateThemePreference)
   const activeSyncProvider = useSyncStore((state) => state.activeProvider)
@@ -125,6 +126,12 @@ export default function MobileMenu({
     setIsMenuOpen(false)
     menuButtonRef.current?.focus({ preventScroll: true })
   }, [])
+  const openMenu = useCallback(() => {
+    menuClosingRef.current = false
+    setNow(Date.now())
+    setMenuPresent(true)
+    setIsMenuOpen(true)
+  }, [])
   const navigate = () => {
     setIsMenuOpen(false)
     setMenuPresent(false)
@@ -143,6 +150,19 @@ export default function MobileMenu({
   }, [isMenuOpen, menuPresent])
 
   useEffect(() => () => onMenuOpenChange?.(false), [onMenuOpenChange])
+
+  // The chat composer carries its own Menu button while it is a box (it then
+  // covers this one's column): it opens this sheet and mirrors this badge.
+  useEffect(() => {
+    window.addEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
+    return () => window.removeEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
+  }, [openMenu])
+
+  useEffect(() => {
+    setMenuAttentionCount(attentionItems.length)
+  }, [attentionItems.length, setMenuAttentionCount])
+
+  useEffect(() => () => setMenuAttentionCount(0), [setMenuAttentionCount])
 
   useEffect(() => {
     const handleStatus = () => setOnline(navigator.onLine)
@@ -395,12 +415,7 @@ export default function MobileMenu({
         aria-expanded={isMenuOpen}
         aria-haspopup="dialog"
         aria-controls={isMenuOpen ? 'mobile-chat-menu' : undefined}
-        onClick={() => {
-          menuClosingRef.current = false
-          setNow(Date.now())
-          setMenuPresent(true)
-          setIsMenuOpen(true)
-        }}
+        onClick={openMenu}
       >
         {syncing ? (
           <span aria-hidden="true" className={`h-5 w-5 ${spinnerClass}`} />

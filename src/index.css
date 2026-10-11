@@ -1589,26 +1589,36 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
   border-radius: var(--bottom-tray-radius, 28px);
 }
 
-/* Phone chat composer. Idle: one 52px pill, [Back/Open chat] field [Send].
-   Focused: the draft takes the full width on top and the two buttons move to
-   an action row under it. The layout snaps instead of animating, because
-   Safari is already moving the viewport for the keyboard. */
+/* Phone chat composer. Idle: one 52px pill, [Back/Open chat] field [Send],
+   with the menu button outside it. Focused: the box spans the menu's column
+   too, the draft takes the full width on top, and an action row under it
+   holds labelled Timeline/Open chat and Menu chips, then Send. The layout
+   snaps instead of animating, because Safari is already moving the viewport
+   for the keyboard. */
 .tray-phone-composer {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas: 'lead field send';
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: 'lead field field send';
   align-items: center;
 }
 
 .tray-phone-composer[data-expanded='true'] {
   grid-template-areas:
-    'field field field'
-    'lead . send';
+    'field field field field'
+    'lead menu . send';
   row-gap: 0.125rem;
+}
+
+.tray-phone-composer[data-expanded='true'] .tray-phone-lead + .tray-phone-menu {
+  margin-left: 0.375rem;
 }
 
 .tray-phone-lead {
   grid-area: lead;
+}
+
+.tray-phone-menu {
+  grid-area: menu;
 }
 
 .tray-phone-field {
@@ -1912,6 +1922,12 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
      under the keyboard, so it adds no gap. */
   body[data-keyboard-open='true'] .bottom-tray-row:has(#bottom-tray[data-mode='chat']) {
     --bottom-tray-inset: 0.375rem;
+  }
+
+  /* The focused composer carries its own Menu chip, so the outside button
+     gives its column to the box. */
+  .bottom-tray-row:has(.tray-phone-composer[data-expanded='true']) > .bottom-tray-menu {
+    display: none;
   }
 
   /* 3px around the 44px buttons makes the idle pill 52px tall. */
