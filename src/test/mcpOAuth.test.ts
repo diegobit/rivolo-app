@@ -28,6 +28,7 @@ import {
   McpPersonalTokenRepository,
 } from '../../functions/_lib/mcpPersonalTokens'
 import { ProviderProfileRepository } from '../../functions/_lib/providerProfiles'
+import worker from '../../mcp/worker'
 import {
   createMcpBearerChallenge,
   createMcpProtectedResourceMetadata,
@@ -176,31 +177,54 @@ const authorizationParameters = (
     resource: DEFAULT_MCP_RESOURCE_URL,
   })
 
+const cookiePair = (setCookie: string) => {
+  const name = setCookie.split('=', 1)[0]
+  const value = setCookie.slice(name.length + 1).split(';', 1)[0]
+  return `${name}=${value}`
+}
+
 const completeConsent = async (
   env: McpOAuthEnv,
   cookie: string,
   parameters: URLSearchParams,
   profileId: string,
 ) => {
+  const consent = await showOAuthConsent(
+    new Request(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize?${parameters.toString()}`, {
+      headers: { Cookie: cookie },
+    }),
+    env,
+  )
+  expect(consent.status).toBe(200)
+  const html = await consent.text()
+  const transactionId = html.match(/name="transaction_id" value="([^"]+)"/)?.[1]
+  if (!transactionId) throw new Error('Missing consent transaction.')
+  const pending = consent.headers
+    .getSetCookie()
+    .map(cookiePair)
+    .find((pair) => pair.startsWith('rivolo_oauth_pending='))
+  if (!pending) throw new Error('Missing pending cookie.')
   const response = await submitOAuthConsent(
     formRequest(
       `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`,
       new URLSearchParams([
         ...parameters,
+        ['transaction_id', transactionId],
         ['profile_id', profileId],
         ['decision', 'allow'],
       ]),
       {
         Origin: 'https://rivolo.app',
-        Cookie: cookie,
+        Cookie: `${cookie}; ${pending}`,
       },
     ),
     env,
   )
   expect(response.status).toBe(302)
   const redirect = new URL(response.headers.get('Location') ?? '')
+  expect(redirect.searchParams.getAll('iss')).toEqual([DEFAULT_MCP_OAUTH_ISSUER_URL])
   expect(redirect.searchParams.get('state')).toBe('client-state')
-  expect(redirect.searchParams.get('iss')).toBe(DEFAULT_MCP_OAUTH_ISSUER_URL)
+  expect(redirect.searchParams.getAll('code')).toHaveLength(1)
   return redirect.searchParams.get('code') ?? ''
 }
 
@@ -346,21 +370,29 @@ describe('MCP OAuth authorization and tokens', () => {
       ),
       env,
     )
-    expect(resourceMismatch.status).toBe(400)
+    expect(resourceMismatch.status).toBe(302)
+    const resourceLocation = new URL(resourceMismatch.headers.get('Location') ?? '')
+    expect(resourceLocation.origin + resourceLocation.pathname).toBe(
+      'http://127.0.0.1:4567/callback',
+    )
+    expect(resourceLocation.searchParams.get('error')).toBe('invalid_request')
+    expect(resourceLocation.searchParams.get('error_description')).toBe(
+      'resource does not match the Rivolo MCP server.',
+    )
 
     const noPkce = new URLSearchParams(parameters)
     noPkce.delete('code_challenge')
-    expect(
-      await (
-        await showOAuthConsent(
-          new Request(
-            `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize?${noPkce.toString()}`,
-            { headers: { Cookie: cookie } },
-          ),
-          env,
-        )
-      ).text(),
-    ).toContain('S256 PKCE is required.')
+    const pkceMismatch = await showOAuthConsent(
+      new Request(
+        `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize?${noPkce.toString()}`,
+        { headers: { Cookie: cookie } },
+      ),
+      env,
+    )
+    expect(pkceMismatch.status).toBe(302)
+    expect(new URL(pkceMismatch.headers.get('Location') ?? '').searchParams.get(
+      'error_description',
+    )).toBe('S256 PKCE is required.')
   })
 
   it('issues one-time codes and hashed audience-bound tokens without leaking secrets', async () => {
@@ -654,22 +686,36 @@ describe('MCP OAuth authorization and tokens', () => {
     expect(crossOrigin.status).toBe(400)
     expect(await crossOrigin.text()).toContain('Consent origin is invalid.')
 
+    const consent = await showOAuthConsent(
+      new Request(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize?${parameters.toString()}`, {
+        headers: { Cookie: cookie },
+      }),
+      env,
+    )
+    const transactionId = (await consent.text()).match(
+      /name="transaction_id" value="([^"]+)"/,
+    )?.[1]
+    const pending = consent.headers
+      .getSetCookie()
+      .map(cookiePair)
+      .find((pair) => pair.startsWith('rivolo_oauth_pending='))
     const changedProfile = await submitOAuthConsent(
       formRequest(
         `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`,
         new URLSearchParams([
           ...parameters,
+          ['transaction_id', transactionId ?? ''],
           ['profile_id', '22222222-2222-4222-8222-222222222222'],
           ['decision', 'allow'],
         ]),
-        { Origin: 'https://rivolo.app', Cookie: cookie },
+        { Origin: 'https://rivolo.app', Cookie: `${cookie}; ${pending ?? ''}` },
       ),
       env,
     )
-    expect(changedProfile.status).toBe(400)
-    expect(await changedProfile.text()).toContain(
-      'The Rivolo notes profile changed. Review access again.',
-    )
+    expect(changedProfile.status).toBe(302)
+    expect(new URL(changedProfile.headers.get('Location') ?? '').searchParams.get(
+      'error_description',
+    )).toBe('The Rivolo notes profile changed. Review access again.')
     expect(
       db.database
         .prepare('SELECT COUNT(*) AS count FROM mcp_oauth_authorization_codes')
@@ -709,5 +755,37 @@ describe('MCP OAuth authorization and tokens', () => {
         env,
       ),
     ).toBeNull()
+  })
+})
+
+describe('hosted MCP worker credentials', () => {
+  it('returns 405 for an authenticated GET after the bearer check', async () => {
+    const env = createEnv(new SqliteD1())
+    const profile = await createProfile(env)
+    const personal = await new McpPersonalTokenRepository(env.MCP_DB).create(
+      profile.profileId,
+      'Worker probe',
+    )
+    const response = await worker.fetch(
+      new Request(DEFAULT_MCP_RESOURCE_URL, {
+        method: 'GET',
+        headers: {
+          Accept: 'text/event-stream',
+          Authorization: `Bearer ${personal.token}`,
+          'Last-Event-ID': 'event-1',
+        },
+      }),
+      {
+        ...env,
+        DROPBOX_CLIENT_ID: 'dropbox-client',
+        GOOGLE_CLIENT_ID: 'google-client',
+        GOOGLE_CLIENT_SECRET: 'google-secret',
+      },
+    )
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('POST')
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Content-Type')).not.toContain('text/event-stream')
   })
 })

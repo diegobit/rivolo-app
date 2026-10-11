@@ -9,27 +9,52 @@ export type McpOAuthMetadataConfig = {
 
 const withoutTrailingSlash = (value: string) => value.replace(/\/+$/, '')
 
+const CANONICAL_URL_ERROR = 'MCP OAuth URLs must be canonical HTTPS URLs.'
+
+const hasUrlControlCharacter = (value: string) =>
+  [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return codePoint <= 31 || codePoint === 127
+  })
+
+// One canonical form for metadata, authorize responses, and endpoint construction.
+// Reject delimiter characters before URL parsing so an empty "?" or "#" cannot
+// disappear into a normalized href.
+const canonicalHttpsUrl = (value: string) => {
+  if (
+    value.includes('?') ||
+    value.includes('#') ||
+    value.includes('\\') ||
+    hasUrlControlCharacter(value)
+  ) {
+    throw new Error(CANONICAL_URL_ERROR)
+  }
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error(CANONICAL_URL_ERROR)
+  }
+  if (
+    url.protocol !== 'https:' ||
+    url.hostname.length === 0 ||
+    url.username.length > 0 ||
+    url.password.length > 0 ||
+    url.search.length > 0 ||
+    url.hash.length > 0
+  ) {
+    throw new Error(CANONICAL_URL_ERROR)
+  }
+  return withoutTrailingSlash(url.href)
+}
+
 export const resolveMcpOAuthConfig = ({
   resourceUrl = DEFAULT_MCP_RESOURCE_URL,
   issuerUrl = DEFAULT_MCP_OAUTH_ISSUER_URL,
-}: McpOAuthMetadataConfig = {}) => {
-  const resource = new URL(resourceUrl)
-  const issuer = new URL(issuerUrl)
-  if (
-    resource.protocol !== 'https:' ||
-    issuer.protocol !== 'https:' ||
-    resource.search ||
-    resource.hash ||
-    issuer.search ||
-    issuer.hash
-  ) {
-    throw new Error('MCP OAuth URLs must be canonical HTTPS URLs.')
-  }
-  return {
-    resourceUrl: withoutTrailingSlash(resource.href),
-    issuerUrl: withoutTrailingSlash(issuer.href),
-  }
-}
+}: McpOAuthMetadataConfig = {}) => ({
+  resourceUrl: canonicalHttpsUrl(resourceUrl),
+  issuerUrl: canonicalHttpsUrl(issuerUrl),
+})
 
 export const createMcpProtectedResourceMetadata = (
   config?: McpOAuthMetadataConfig,

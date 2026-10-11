@@ -79,17 +79,33 @@ export const decryptToken = async (
   }
 }
 
-export const readCookie = (request: Request, name: string) => {
+export type CookieReadResult =
+  | { status: 'absent' }
+  | { status: 'malformed' }
+  | { status: 'value'; value: string }
+
+export const readCookieResult = (request: Request, name: string): CookieReadResult => {
   const cookie = request.headers.get('Cookie')
-  if (!cookie) return null
+  if (!cookie) return { status: 'absent' }
   for (const part of cookie.split(';')) {
     const separator = part.indexOf('=')
     if (separator === -1) continue
-    if (part.slice(0, separator).trim() === name) {
-      return decodeURIComponent(part.slice(separator + 1).trim())
+    if (part.slice(0, separator).trim() !== name) continue
+    try {
+      return {
+        status: 'value',
+        value: decodeURIComponent(part.slice(separator + 1).trim()),
+      }
+    } catch {
+      return { status: 'malformed' }
     }
   }
-  return null
+  return { status: 'absent' }
+}
+
+export const readCookie = (request: Request, name: string) => {
+  const result = readCookieResult(request, name)
+  return result.status === 'value' ? result.value : null
 }
 
 const cookieAttributes = (
