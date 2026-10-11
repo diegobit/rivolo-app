@@ -125,15 +125,16 @@ export default function MobileMenu({
       sheet.style.setProperty('--mobile-menu-exit-transform', window.getComputedStyle(sheet).transform)
     }
     setIsMenuOpen(false)
-    ;(returnFocusRef.current ?? menuButtonRef.current)?.focus({ preventScroll: true })
+    const target = returnFocusRef.current ?? menuButtonRef.current
+    target?.focus({ preventScroll: true })
   }, [])
-  const openMenu = useCallback(() => {
+  const openMenu = useCallback((returnFocusTo?: HTMLElement) => {
     const active = document.activeElement
     // The inline composer chip opens this sheet while the field keeps focus.
     // Restore that field rather than the covered shell launcher on dismissal.
-    returnFocusRef.current = active instanceof HTMLElement && active !== document.body
+    returnFocusRef.current = returnFocusTo ?? (active instanceof HTMLElement && active !== document.body
       ? active
-      : menuButtonRef.current
+      : menuButtonRef.current)
     menuClosingRef.current = false
     setNow(Date.now())
     setMenuPresent(true)
@@ -158,11 +159,26 @@ export default function MobileMenu({
 
   useEffect(() => () => onMenuOpenChange?.(false), [onMenuOpenChange])
 
+  useEffect(() => {
+    if (menuPresent || !menuClosingRef.current) return
+    // AppShell removes inert when the closing sheet disappears. Wait for that
+    // commit before restoring input; focusing an inert field has no effect.
+    const frame = requestAnimationFrame(() => {
+      const target = returnFocusRef.current
+      ;(target?.isConnected ? target : menuButtonRef.current)?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [menuPresent])
+
   // The phone chat composer covers this button's column and carries its own
   // Menu chip, which opens this sheet and mirrors this badge.
   useEffect(() => {
-    window.addEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
-    return () => window.removeEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
+    const handleOpen = (event: Event) => {
+      const target = (event as CustomEvent<{ returnFocusTo?: unknown }>).detail?.returnFocusTo
+      openMenu(target instanceof HTMLElement ? target : undefined)
+    }
+    window.addEventListener(MOBILE_MENU_OPEN_EVENT, handleOpen)
+    return () => window.removeEventListener(MOBILE_MENU_OPEN_EVENT, handleOpen)
   }, [openMenu])
 
   useEffect(() => {
@@ -422,7 +438,7 @@ export default function MobileMenu({
         aria-expanded={isMenuOpen}
         aria-haspopup="dialog"
         aria-controls={isMenuOpen ? 'mobile-chat-menu' : undefined}
-        onClick={openMenu}
+        onClick={() => openMenu(menuButtonRef.current ?? undefined)}
       >
         {syncing ? (
           <span aria-hidden="true" className={`h-5 w-5 ${spinnerClass}`} />

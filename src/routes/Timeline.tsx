@@ -1948,8 +1948,9 @@ export default function Timeline() {
       // The keyboard goes down first so the sheet opens over the whole screen;
       // the draft stays.
       onActivate: () => {
-        document.getElementById(mode === 'chat' ? 'chat-input' : 'search-input')?.blur()
-        window.dispatchEvent(new CustomEvent(MOBILE_MENU_OPEN_EVENT))
+        const composer = document.getElementById(mode === 'chat' ? 'chat-input' : 'search-input')
+        composer?.blur()
+        window.dispatchEvent(new CustomEvent(MOBILE_MENU_OPEN_EVENT, { detail: { returnFocusTo: composer } }))
       },
     }
   }, [isNarrowViewportMode, menuAttentionCount, mode])
