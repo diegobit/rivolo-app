@@ -124,10 +124,13 @@ const callback = createHttpServer((req, res) => {
 })
 await new Promise(resolve => callback.listen(port + 1, '127.0.0.1', resolve))
 const built = await preview({ preview: { host: '127.0.0.1', port, strictPort: true, https: { key: readFileSync(join(certificateDir, 'key.pem')), cert: readFileSync(join(certificateDir, 'cert.pem')) } }, plugins: [{ name: 'actual-pages-fixture', configurePreviewServer(server) { server.middlewares.use(handle) } }] })
-console.log(`Built browser fixture ready at ${origin}; callback at ${port + 1}`)
+// Service workers reject untrusted TLS certificates even when page navigation accepts
+// them. Secure loopback HTTP exercises the generated worker without bypassing TLS.
+const offline = await preview({ preview: { host: '127.0.0.1', port: port + 2, strictPort: true } })
+console.log(`Built browser fixture ready at ${origin}; callback at ${port + 1}; offline at ${port + 2}`)
 const stop = async () => {
   callback.close()
-  await new Promise(resolve => built.httpServer.close(resolve))
+  await Promise.all([built, offline].map(server => new Promise(resolve => server.httpServer.close(resolve))))
   await ssr.close()
   closeTestDatabases()
   rmSync(certificateDir, { recursive: true, force: true })

@@ -253,6 +253,12 @@ and browser specs are excluded from Vitest. Agent exploration supplements the
 deterministic gates. Installed iOS/Mac PWA close behavior and live model quality
 require separate, explicitly recorded checks.
 
+The audit independently confirmed immediate-reload note loss before the editor
+save debounce. Run `npm run test:pwa-interruption` for its maintained browser
+reproduction; it currently exits nonzero on both engines. It is separate from the
+green normal-save gate, keeps the intended latest-text assertion, and belongs to
+the existing PWA-close follow-up. See [the QA receipt](docs/testing/agent-qa-run.md).
+
 ## Debugging
 
 Set `VITE_DEBUG_LOGS=true` to enable verbose logging.

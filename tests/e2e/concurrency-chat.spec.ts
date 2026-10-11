@@ -1,12 +1,13 @@
 import { createServer, type ServerResponse } from 'node:http'
 import { test, expect, type Page, type Locator } from 'playwright/test'
+import { downloadArchive } from './helpers/archive'
 
 const note = (page: Page) => page.locator('.cm-content[contenteditable="true"]').first()
 const mobile = (page: Page) => (page.viewportSize()?.width ?? 1440) < 640
 const revision = (page: Page) => page.evaluate(() => localStorage.getItem('rivolo.db.persisted-revision'))
 
-async function start(page: Page) {
-  await page.goto('/')
+async function start(page: Page, origin = '/') {
+  await page.goto(origin)
   await page.getByRole('button', { name: 'Start Today' }).click()
   await expect(note(page)).toBeVisible()
   // Let creation of the initial empty day reach storage before observing the
@@ -103,7 +104,7 @@ async function provider() {
   }
 }
 
-async function configure(page: Page, url: string) {
+async function configure(page: Page, url: string, origin: string) {
   if (mobile(page)) await page.getByRole('button', { name: /^Menu(?:,|$)/ }).click()
   await page.getByRole('link', { name: 'Settings', exact: true }).click()
   await page.getByRole('button', { name: /OpenAI-compatible/, exact: false }).click()
@@ -115,7 +116,7 @@ async function configure(page: Page, url: string) {
   await page.getByRole('button', { name: 'Use OpenAI-compatible', exact: true }).click()
   await expect(page.getByText('OpenAI-compatible is now the active provider.', { exact: true })).toBeVisible()
   await expect.poll(() => revision(page)).not.toBe(before)
-  await page.goto('/')
+  await page.goto(origin)
   if (mobile(page)) await page.getByRole('button', { name: /^Menu(?:,|$)/ }).click()
   await page.getByRole('button', { name: 'Chat', exact: true }).click()
 }
@@ -125,17 +126,20 @@ const scroller = (page: Page) => mobile(page)
   : page.locator('.timeline-chat-sidebar-messages')
 const remainingScroll = (target: Locator) => target.evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop)
 
-test('J6: actual streamed chat preserves a reader, follows reflow, navigates grounded citation, and safely persists one insert', async ({ page }) => {
+test('J6: actual streamed chat preserves a reader, follows reflow, navigates grounded citation, and safely persists one insert', async ({ page }, testInfo) => {
+  // Loopback HTTP avoids mixed-content policy blocking the external SSE fixture.
+  const origin = `http://127.0.0.1:${Number(new URL(String(testInfo.project.use.baseURL)).port) + 2}`
+  await page.addInitScript(() => Object.defineProperty(navigator, 'canShare', { value: () => false }))
   const endpoint = await provider()
   try {
-    await start(page)
+    await start(page, origin)
     const original = `${Array.from({ length: 40 }, (_, i) => `Context line ${i + 1}`).join('\n')}\nCitation destination café`
     await saveNote(page, original)
     const day = await page.evaluate(() => {
       const date = new Date()
       return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
     })
-    await configure(page, endpoint.url)
+    await configure(page, endpoint.url, origin)
     await page.getByPlaceholder('Ask Rivolo').fill('Explain the source and add Requested safe note. Keep code examples literal.')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
     const response = await endpoint.request()
@@ -185,5 +189,11 @@ test('J6: actual streamed chat preserves a reader, follows reflow, navigates gro
     await expect(note(page)).toContainText('Citation destination café')
     await expect(note(page)).toContainText('Requested safe note')
     await expect(note(page)).not.toContainText('Forbidden literal mutation')
+    if (mobile(page)) await page.getByRole('button', { name: /^Menu(?:,|$)/ }).click()
+    await page.getByRole('link', { name: 'Settings', exact: true }).click()
+    const archive = await downloadArchive(page)
+    expect(archive.split('Requested safe note').length - 1).toBe(1)
+    expect(archive).toContain(original)
+    expect(archive).not.toContain('Forbidden literal mutation')
   } finally { await endpoint.close() }
 })

@@ -33,6 +33,24 @@ failure artifacts. Tests are excluded from Vitest discovery.
   The offline spec is Chromium-only; WebKit/iOS offline and installed-PWA
   process-close behavior remain inconclusive/untested, not passed.
 
+- The HTTPS Pages harness initially prevented service-worker registration with
+  its temporary untrusted certificate and blocked WebKit's HTTP SSE provider as
+  mixed content. The runner now serves the same build on secure loopback HTTP
+  for those two journeys. Production OAuth/cookie journeys retain HTTPS; no
+  application security policy was relaxed.
+- J3 replacement first waited for a nonexistent download status string; actual
+  UI inspection showed “Pulled and imported.” The corrected locator preserves
+  exact archive and rollback outcomes rather than supplying import success.
+
+## Archive and chat preservation
+
+J3 also exercises cloud force pull: a malformed archive cannot change the
+current export; a valid replacement removes old notes and saves their backup;
+the actual Local backups Restore action recovers the byte-identical prior
+archive, including after reload. Only external Dropbox HTTP is simulated.
+J6's post-reload export independently counts exactly one requested insertion
+and preserves the full original note, beyond CodeMirror's virtualized DOM.
+
 ## Confirmed mobile owner defects
 
 After merging `dev` at `3e1fd28`, J7 measured the new composer Menu at 40px and

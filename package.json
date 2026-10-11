@@ -16,7 +16,8 @@
     "mcp:worker:build": "tsc -p tsconfig.mcp-worker.json && wrangler deploy --dry-run --config wrangler.mcp.toml --outdir dist-mcp-worker",
     "mcp:start": "node dist-mcp/mcp/index.js",
     "preview": "vite preview",
-    "browser": "node scripts/drive-browser.mjs"
+    "browser": "node scripts/drive-browser.mjs",
+    "test:pwa-interruption": "npm run build && playwright test --config playwright.interruptions.config.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.85",

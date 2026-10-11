@@ -16,9 +16,9 @@ The desktop search test checks the actual result-mode control. At the audited ba
 
 The public event tests use CodeMirror's installed `domEventHandlers`, `EditorView.posAtDOM`, rendered decorations and document updates. Where a test specifies a marker position, `posAtCoords` supplies only the hit-test coordinate because jsdom has no layout. It does not supply the toggle behavior. Browser tests still own actual hit testing, native touch delivery and scrolling.
 
-## Mutation evidence
+## Original-baseline mutation evidence (`830e548`)
 
-Each mutation ran in isolation after a passing focused baseline. Source and tests were restored before the next run.
+The group assertions below describe the historical baseline. The current `dev` control is the `Lines` button; its separate caught control appears in the browser mutation table. Each mutation ran in isolation after a passing focused baseline. Source and tests were restored before the next run.
 
 | Temporary mutation | Observed result |
 | --- | --- |

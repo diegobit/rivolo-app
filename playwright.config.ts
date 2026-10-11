@@ -1,5 +1,8 @@
 import { defineConfig, devices } from 'playwright/test'
 
+const port = Number(process.env.E2E_PORT ?? 4175)
+const origin = `https://127.0.0.1:${port}`
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -10,7 +13,7 @@ export default defineConfig({
   workers: process.env.CI ? 2 : 4,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'https://127.0.0.1:4175',
+    baseURL: origin,
     ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -22,7 +25,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'node scripts/serve-e2e.mjs',
-    url: 'https://127.0.0.1:4175',
+    url: origin,
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
   },

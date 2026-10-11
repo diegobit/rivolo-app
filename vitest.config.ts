@@ -13,7 +13,7 @@ export default mergeConfig(
       // Agentic-QA runs write throwaway *.test.ts probes under this path; keep
       // them out of `npm test` (.gitignore alone does not, since vitest
       // discovers by glob, not git status).
-      exclude: [...configDefaults.exclude, 'tests/agentic-qa-tests/**', 'tests/e2e/**'],
+      exclude: [...configDefaults.exclude, 'tests/agentic-qa-tests/**', 'tests/e2e/**', 'tests/known-issues/**'],
     },
   }),
 )
