@@ -151,8 +151,8 @@ export default function MobileMenu({
 
   useEffect(() => () => onMenuOpenChange?.(false), [onMenuOpenChange])
 
-  // The chat composer carries its own Menu button while it is a box (it then
-  // covers this one's column): it opens this sheet and mirrors this badge.
+  // The phone chat composer covers this button's column and carries its own
+  // Menu chip, which opens this sheet and mirrors this badge.
   useEffect(() => {
     window.addEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
     return () => window.removeEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)

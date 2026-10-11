@@ -1583,34 +1583,22 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
   box-shadow: 0 6px 18px rgb(var(--theme-shadow-color) / 0.16);
 }
 
-/* The phone chat composer takes its box radius once, on focus, and keeps it
-   while the draft grows. The shell has no radius transition, so it snaps. */
-#bottom-tray.bottom-tray-shell:has(.tray-phone-composer[data-expanded='true']) {
+/* Phone chat composer: always a box. The draft takes the full width on top,
+   and an action row under it holds labelled Timeline/Open chat and Menu
+   chips, then Send on its own at the right. 8px of padding plus the 20px
+   radius of the 40px buttons matches the box's 28px corner. */
+#bottom-tray.bottom-tray-shell:has(.tray-phone-composer) {
   border-radius: var(--bottom-tray-radius, 28px);
 }
 
-/* Phone chat composer. Idle: one 52px pill, [Back/Open chat] field [Send],
-   with the menu button outside it. Focused: the box spans the menu's column
-   too, the draft takes the full width on top, and an action row under it
-   holds labelled Timeline/Open chat and Menu chips, then Send. The layout
-   snaps instead of animating, because Safari is already moving the viewport
-   for the keyboard. */
 .tray-phone-composer {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
-  grid-template-areas: 'lead field field send';
-  align-items: center;
-}
-
-.tray-phone-composer[data-expanded='true'] {
   grid-template-areas:
     'field field field field'
     'lead menu . send';
-  row-gap: 0.125rem;
-}
-
-.tray-phone-composer[data-expanded='true'] .tray-phone-lead + .tray-phone-menu {
-  margin-left: 0.375rem;
+  align-items: center;
+  row-gap: 0.25rem;
 }
 
 .tray-phone-lead {
@@ -1621,22 +1609,17 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
   grid-area: menu;
 }
 
+.tray-phone-lead + .tray-phone-menu {
+  margin-left: 0.375rem;
+}
+
 .tray-phone-field {
   grid-area: field;
 }
 
-.tray-phone-composer[data-expanded='true'] .tray-phone-field {
-  margin-top: 0.25rem;
-}
-
-/* In the pill the Back/Open chat button already spaces the field from the
-   edge, so the text starts close to it. */
-.tray-phone-composer[data-expanded='false'] .tray-phone-lead + .tray-phone-field .tray-field {
-  padding-left: 0.25rem;
-}
-
-.tray-phone-composer[data-expanded='false'] .tray-phone-lead + .tray-phone-field .tray-field-placeholder {
-  left: 0.25rem;
+/* Lines the draft up with the chip icons below it. */
+.tray-phone-field .tray-field {
+  padding-left: 0.625rem;
 }
 
 .tray-phone-send {
@@ -1924,15 +1907,14 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
     --bottom-tray-inset: 0.375rem;
   }
 
-  /* The focused composer carries its own Menu chip, so the outside button
+  /* The chat composer carries its own Menu chip, so the outside button
      gives its column to the box. */
-  .bottom-tray-row:has(.tray-phone-composer[data-expanded='true']) > .bottom-tray-menu {
+  .bottom-tray-row:has(.tray-phone-composer) > .bottom-tray-menu {
     display: none;
   }
 
-  /* 3px around the 44px buttons makes the idle pill 52px tall. */
   #bottom-tray.bottom-tray-shell[data-mode='chat'] {
-    padding: 3px;
+    padding: 0.5rem;
   }
 }
 
