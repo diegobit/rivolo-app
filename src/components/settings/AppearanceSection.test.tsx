@@ -74,49 +74,10 @@ describe('AppearanceSection', () => {
       'aria-pressed',
       'true',
     )
-    expect(screen.getByRole('img', { name: 'No background preview' })).toHaveClass(
-      'sm:hidden',
-    )
     expect(screen.getByRole('switch', { name: 'Highlight input mode (mobile only)' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Rivolo Light' }))
     expect(onWallpaperChange).toHaveBeenCalledExactlyOnceWith('thoughts-light')
   })
 
-  it('previews the selected background at the font sample height on mobile', () => {
-    renderSection({ advanced: true, wallpaper: 'thoughts-high' })
-
-    const preview = screen.getByRole('img', { name: 'Rivolo Strong background preview' })
-    expect(preview).toHaveClass('sm:hidden')
-    expect(preview.querySelector('.invisible')).toHaveTextContent(
-      '@bob send message for breakfast at 8:30',
-    )
-    expect(preview.lastElementChild).toHaveClass(
-      'bg-fixed',
-      'opacity-[var(--theme-wallpaper-strong-opacity)]',
-    )
-  })
-
-  it('offers individual title and body font pickers in advanced mode', async () => {
-    const onTitleFontChange = vi.fn()
-    const onBodyFontChoiceChange = vi.fn()
-    renderSection({
-      advanced: true,
-      titleFont: 'handlee',
-      bodyFontChoice: 'iawriter',
-      onTitleFontChange,
-      onBodyFontChoiceChange,
-    })
-
-    const titleSelect = screen.getByLabelText('Title font')
-    const bodySelect = screen.getByLabelText('Body font')
-    expect(titleSelect).toHaveValue('handlee')
-    expect(bodySelect).toHaveValue('iawriter')
-
-    await userEvent.selectOptions(titleSelect, 'Bree Serif')
-    expect(onTitleFontChange).toHaveBeenCalledExactlyOnceWith('bree')
-
-    await userEvent.selectOptions(bodySelect, 'Inconsolata')
-    expect(onBodyFontChoiceChange).toHaveBeenCalledExactlyOnceWith('inconsolata')
-  })
 })

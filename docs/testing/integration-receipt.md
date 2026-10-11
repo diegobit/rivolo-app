@@ -25,7 +25,11 @@ work. Plan directions with no equivalent proof remain retained follow-ups.
 Detailed candidate/history/caller/keeper/risk records and controls:
 [storage](storage-audit.md), [MCP](mcp-audit.md), [editor/UI](ui-audit.md),
 [browser](browser-audit.md), [Agent Access](mcp-browser-audit.md), and the
-[74-file historical inventory](inventory.md).
+[74-file historical inventory](inventory.md). A subsequent
+[UI consolidation](ui-consolidation.md) retires another 12 fast cases and three
+files, folds the real portal into tray composition, and extends existing browser
+journeys for toggles, fonts, reminder persistence/destination and actual geometry.
+It changes no production code.
 
 ## Validation actually run
 
@@ -35,15 +39,19 @@ browser engines on Ubuntu; its result is separate from this local receipt.
 
 | Command | Result |
 | --- | --- |
-| `npm test -- --reporter=json --outputFile=/tmp/rivolo-final-tests.json` | 74 files, 670 passed, zero failed/skipped; 6.72s runner interval |
+| `npm test -- --reporter=json --outputFile=/tmp/rivolo-ui-consolidation/final-tests.json` | 71 files, 658 passed, zero failed/skipped; 7.59s runner interval |
 | `npm run lint` | Passed |
 | `npm run build` | Passed: app/Pages TypeScript, Vite and generated PWA worker; existing bundle-size warning remains |
-| `npm run test:e2e:built` | 28 passed in 28.2s, zero retries; one desktop execution explicitly inapplicable to the narrow-menu contract |
+| `npm run test:e2e:built` | 28 passed in 38.9s, zero retries; one desktop execution explicitly inapplicable to the narrow-menu contract |
 | `E2E_PORT=4195 npm run test:e2e:built -- --grep 'missing profile\|offline'` | Three passed in 4.8s; alternate HTTPS, callback and offline ports work |
 | `npm run test:mcp-runtime` | Passed: actual local workerd/D1 migrations, metadata, initialize/list, auth, GET 405 and revocation across re-enable |
 | Skill frontmatter validator and relative-reference checks | Passed; all four AQA phases invoked successfully |
 | `git diff --check` | Passed |
 | `npx playwright test --config playwright.interruptions.config.ts` | Four intended-outcome failures, reproducing the named pre-existing interruption defect; not included as a green result |
+
+Fast tests, lint, build, default E2E and runtime smoke were rerun after the UI
+consolidation. Alternate-port, skill-validator and known-issue results are from
+the preceding campaign and were not rerun for this follow-up.
 
 The browser runner uses actual Pages handlers and migrated SQL for Agent Access,
 HTTPS cookies and real consent form navigation. It simulates only external
@@ -53,7 +61,11 @@ and mixed-content harness failures. No production security policy is relaxed.
 First failures and corrected fixture/locator diagnoses remain in the lane and
 QA receipts; retries do not conceal them.
 
-## Independent preservation review
+## Campaign preservation review
+
+The independent reviews below cover the campaign before the focused UI
+consolidation. That follow-up has a separate assertion-preservation review and
+13 owner controls in its receipt; no new independent AQA run is claimed.
 
 Storage review restored ten missing assertions/variants: cross-realm storage,
 trimming and append receipts, metadata, fallback query execution, import receipts,
@@ -92,9 +104,9 @@ fake databases count as test-file lines, which explains much of their reduction.
 | --- | ---: | ---: | ---: | ---: |
 | Production TS/source | 26,072 | 26,265 | 26,282 | +17 |
 | Tooling/config/package text | 13,800 | 13,800 | 14,109 | +309 |
-| Test files | 14,911 | 15,080 | 13,699 | −1,381 |
+| Test files | 14,911 | 15,080 | 13,596 | −1,484 |
 | Shared test support | 6 | 6 | 325 | +319 |
-| Tests and support combined | 14,917 | 15,086 | 14,024 | −1,062 |
+| Tests and support combined | 14,917 | 15,086 | 13,921 | −1,165 |
 
 Production adds the narrowly demonstrated consent/mobile fixes and citation
 ordering, while removing unused getter support, private helper exports and the
@@ -114,6 +126,7 @@ Physical installed Mac/iOS PWA closure, process termination, software keyboard,
 background scroll, deployed bindings, live provider consent and live model
 quality remain untested here. WebKit offline emulation is inconclusive; Chromium
 exercises the generated worker offline. J5's native stale-tab proof does not
-replace lease/duplicate-sync contracts. Remaining CSS/setter/attention candidates
-stay until their exact replacements exist. This PR establishes the automated
+replace lease/duplicate-sync contracts. Remaining CSS and setter candidates
+stay until their exact replacements exist; the retired UI batch is recorded
+separately. This PR establishes the automated
 owners and QA workflow, not complete release/device/live coverage.

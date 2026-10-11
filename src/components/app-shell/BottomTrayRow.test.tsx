@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import BottomTrayRow from './BottomTrayRow'
+import BottomTrayPortal from '../BottomTrayPortal'
 
 const chatButton = <button type="button" aria-label="Chat" />
 const searchButton = <button type="button" aria-label="Search" />
@@ -63,14 +64,31 @@ describe('BottomTrayRow', () => {
   })
 
   it('keeps the portal target mounted across mobile mode changes', () => {
-    const mobileProps = { ...baseProps, showLauncherButtons: false, mobileMenu: <button type="button">Menu</button> }
-    const { rerender } = render(<BottomTrayRow {...mobileProps} />)
+    const mobileProps = {
+      ...baseProps,
+      trayCenter: <div id="bottom-tray" data-testid="bottom-tray" />,
+      showLauncherButtons: false,
+      mobileMenu: <button type="button">Menu</button>,
+    }
+    const composition = (mode: BottomTrayRowProps['mode']) => (
+      <>
+        <BottomTrayRow {...mobileProps} mode={mode} />
+        <BottomTrayPortal>
+          <input aria-label="Tray draft" defaultValue="Unsent draft" />
+        </BottomTrayPortal>
+      </>
+    )
+    const { rerender } = render(composition('timeline'))
     const target = screen.getByTestId('bottom-tray')
+    const draft = screen.getByRole('textbox', { name: 'Tray draft' })
     expect(screen.queryByRole('button', { name: 'Switch mode' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Chat' })).not.toBeInTheDocument()
     for (const mode of ['chat', 'search', 'timeline'] as const) {
-      rerender(<BottomTrayRow {...mobileProps} mode={mode} />)
+      rerender(composition(mode))
       expect(screen.getByTestId('bottom-tray')).toBe(target)
+      expect(target).toContainElement(draft)
+      expect(screen.getByRole('textbox', { name: 'Tray draft' })).toBe(draft)
+      expect(draft).toHaveValue('Unsent draft')
       const menuSlot = document.querySelector('.bottom-tray-menu')
       expect(menuSlot).toHaveClass('self-stretch', 'items-center')
       expect(menuSlot).not.toHaveClass('mb-1.5')
@@ -111,29 +129,4 @@ describe('BottomTrayRow', () => {
     expect(screen.queryByRole('button', { name: 'Chat' })).not.toBeInTheDocument()
   })
 
-  it('centres scroll-to-today above the desktop launcher capsule', () => {
-    const { container } = renderRow({ launcherSpread: true, showScrollToToday: true, mode: 'chat' })
-
-    // Rendered inside the capsule so it is centred on it and moves with it; the
-    // real geometry is measured in the browser.
-    const button = screen.getByRole('button', { name: 'Scroll to Today' })
-    expect(container.querySelector('.bottom-tray-launchers')).toContainElement(button)
-    expect(button).toHaveClass('left-1/2', '-translate-x-1/2', 'bottom-[calc(100%+10px)]')
-    expect(button).not.toHaveClass('sm:right-0')
-  })
-
-  it('marks the mobile scroll-to-today control for the phone layout', () => {
-    const { rerender } = renderRow({ launcherSpread: false, showScrollToToday: true })
-
-    const button = screen.getByRole('button', { name: 'Scroll to Today' })
-    expect(button).toHaveClass('bottom-tray-scroll-today', 'h-11', 'w-11')
-    expect(button.querySelector('img')).toHaveClass('h-5', 'w-5')
-    expect(getRow()).toContainElement(button)
-
-    rerender(<BottomTrayRow {...baseProps} launcherSpread={false} showScrollToToday mode="search" />)
-    const searchButton = screen.getByRole('button', { name: 'Scroll to Today' })
-    expect(searchButton).toHaveClass('h-11', 'w-11')
-    expect(searchButton.querySelector('img')).toHaveClass('h-5', 'w-5')
-    expect(getRow()).toContainElement(searchButton)
-  })
 })
