@@ -212,11 +212,6 @@ export default function AppShell() {
   const trayCenter = (
     <div className={`relative flex-1 w-full ${showLauncherButtons ? 'hidden' : ''}`}>
       <div
-        id="bottom-tray-pills"
-        data-mode={mode}
-        className="bottom-tray-pills pointer-events-none absolute bottom-full left-0 right-0 mb-1 flex min-h-0 items-end justify-start sm:mb-2"
-      />
-      <div
         id="bottom-tray"
         data-mode={mode}
         data-highlight-input={highlightInputMode}

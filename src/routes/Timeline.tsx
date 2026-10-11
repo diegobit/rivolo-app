@@ -1,5 +1,5 @@
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
@@ -67,12 +67,14 @@ type TrayInputProps = {
   onSearchTextChange: (value: string) => void
   onFocus?: () => void
   onClick?: () => void
-  // The phone tray composer: a box with the draft on top and an action row
-  // under it (Timeline/Open chat, Menu, Send). Return inserts a newline.
+  // The phone tray composer: a box with the field on top and an action row
+  // under it. Chat: Menu, Timeline/Chat, then Send, and Return inserts a
+  // newline. Search: Menu, then the result toggle and filters.
   phoneLayout?: boolean
   leadingAction?: TrayLeadingAction | null
   // The box spans the menu button's column, so the menu moves into its row.
   menuAction?: TrayMenuAction | null
+  searchFilters?: ReactNode
 }
 
 type TrayLeadingAction = {
@@ -146,6 +148,7 @@ const TrayInput = memo(({
   phoneLayout = false,
   leadingAction = null,
   menuAction = null,
+  searchFilters = null,
 }: TrayInputProps) => {
   const debounceRef = useRef<number | null>(null)
   const wasSearchActiveRef = useRef(false)
@@ -290,28 +293,12 @@ const TrayInput = memo(({
 
   return (
     <div className="relative">
-      <form className={isPhoneChat ? 'tray-phone-composer' : 'flex items-end gap-3'} onSubmit={handleSubmit}>
-        {isPhoneChat && leadingAction ? (
-          <button
-            type="button"
-            className={`tray-phone-lead ${phoneComposerChipClassName}`}
-            aria-label={LEADING_ACTION_LABELS[leadingAction.kind]}
-            title={LEADING_ACTION_LABELS[leadingAction.kind]}
-            onMouseDown={keepComposerFocus}
-            onClick={leadingAction.onActivate}
-          >
-            <span
-              aria-hidden="true"
-              className={maskIconClassName}
-              style={{
-                maskImage: `url('${LEADING_ACTION_ICONS[leadingAction.kind]}')`,
-                WebkitMaskImage: `url('${LEADING_ACTION_ICONS[leadingAction.kind]}')`,
-              }}
-            />
-            <span aria-hidden="true">{LEADING_ACTION_CHIP_TEXT[leadingAction.kind]}</span>
-          </button>
-        ) : null}
-        {isPhoneChat && menuAction ? (
+      <form
+        className={phoneLayout ? 'tray-phone-composer' : 'flex items-end gap-3'}
+        data-mode={phoneLayout ? mode : undefined}
+        onSubmit={handleSubmit}
+      >
+        {phoneLayout && menuAction ? (
           <button
             type="button"
             className={`tray-phone-menu ${phoneComposerChipClassName}`}
@@ -340,7 +327,27 @@ const TrayInput = memo(({
             ) : null}
           </button>
         ) : null}
-        <div className={`relative flex-1 ${isPhoneChat ? 'tray-phone-field min-w-0' : ''}`}>
+        {isPhoneChat && leadingAction ? (
+          <button
+            type="button"
+            className={`tray-phone-lead ${phoneComposerChipClassName}`}
+            aria-label={LEADING_ACTION_LABELS[leadingAction.kind]}
+            title={LEADING_ACTION_LABELS[leadingAction.kind]}
+            onMouseDown={keepComposerFocus}
+            onClick={leadingAction.onActivate}
+          >
+            <span
+              aria-hidden="true"
+              className={maskIconClassName}
+              style={{
+                maskImage: `url('${LEADING_ACTION_ICONS[leadingAction.kind]}')`,
+                WebkitMaskImage: `url('${LEADING_ACTION_ICONS[leadingAction.kind]}')`,
+              }}
+            />
+            <span aria-hidden="true">{LEADING_ACTION_CHIP_TEXT[leadingAction.kind]}</span>
+          </button>
+        ) : null}
+        <div className={`relative flex-1 ${phoneLayout ? 'tray-phone-field min-w-0' : ''}`}>
           <p
             className={`tray-input-error absolute -top-8 left-0 z-10 w-max whitespace-nowrap rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-red-400 shadow-sm ${
               showChatError ? 'opacity-100' : 'pointer-events-none opacity-0'
@@ -455,10 +462,16 @@ const TrayInput = memo(({
           </button>
         )}
         {mode === 'search' && (
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center sm:h-10 sm:w-10">
+          <div
+            className={`flex shrink-0 items-center justify-center ${
+              phoneLayout ? 'tray-phone-clear h-10 w-10' : 'h-11 w-11 sm:h-10 sm:w-10'
+            }`}
+          >
             {hasSearchText ? (
               <button
-                className="tray-input-clear group flex h-11 w-11 items-center justify-center rounded-full hover:bg-slate-500 sm:h-8 sm:w-8"
+                className={`tray-input-clear group flex items-center justify-center rounded-full hover:bg-slate-500 ${
+                  phoneLayout ? 'h-10 w-10' : 'h-11 w-11 sm:h-8 sm:w-8'
+                }`}
                 type="button"
                 aria-label="Clear search"
                 onClick={handleClearSearch}
@@ -472,6 +485,9 @@ const TrayInput = memo(({
             ) : null}
           </div>
         )}
+        {phoneLayout && mode === 'search' && searchFilters ? (
+          <div className="tray-phone-filters min-w-0">{searchFilters}</div>
+        ) : null}
       </form>
     </div>
   )
@@ -1872,16 +1888,32 @@ export default function Timeline() {
 
   const canToggleMatchedResultTodos = showMatchedLineResults && searchFilter === 'open-todos'
 
-  const renderSearchPills = (showResultMode: boolean) =>
+  const renderSearchPills = (layout: 'card' | 'composer') =>
     mode === 'search' ? (
       <SearchModePills
         searchFilter={searchFilter}
         resultMode={searchResultMode}
-        showResultMode={showResultMode}
+        layout={layout}
         onSearchFilterChange={setSearchFilter}
         onResultModeChange={setSearchResultMode}
       />
     ) : null
+
+  // Memoized so the memoized tray composer doesn't re-render on every
+  // Timeline render just for a new filter row element.
+  const composerSearchPills = useMemo(
+    () =>
+      mode === 'search' ? (
+        <SearchModePills
+          searchFilter={searchFilter}
+          resultMode={searchResultMode}
+          layout="composer"
+          onSearchFilterChange={setSearchFilter}
+          onResultModeChange={setSearchResultMode}
+        />
+      ) : null,
+    [mode, searchFilter, searchResultMode, setSearchFilter, setSearchResultMode],
+  )
 
   const openChatOverlayIfHidden = useCallback(() => {
     if (isNarrowViewportMode && mode === 'chat' && !chatPanelOpen && chatMessageCount > 0) {
@@ -1889,7 +1921,7 @@ export default function Timeline() {
     }
   }, [chatMessageCount, chatPanelOpen, isNarrowViewportMode, mode, setChatPanelOpen])
 
-  // Timeline/Open chat is the first chip in the phone composer's action row.
+  // Timeline/Chat follows Menu in the phone composer's action row.
   // Timeline blurs the field first so the keyboard goes down with the chat;
   // the draft stays.
   const mobileChatLeadingAction = useMemo<TrayLeadingAction | null>(() => {
@@ -1910,14 +1942,14 @@ export default function Timeline() {
   }, [chatMessageCount, chatPanelOpen, isNarrowViewportMode, mode, setChatPanelOpen])
 
   const menuAttentionCount = useUIStore((state) => state.menuAttentionCount)
-  const mobileChatMenuAction = useMemo<TrayMenuAction | null>(() => {
-    if (!isNarrowViewportMode || mode !== 'chat') return null
+  const mobileMenuAction = useMemo<TrayMenuAction | null>(() => {
+    if (!isNarrowViewportMode || mode === 'timeline') return null
     return {
       attentionCount: menuAttentionCount,
       // The keyboard goes down first so the sheet opens over the whole screen;
       // the draft stays.
       onActivate: () => {
-        document.getElementById('chat-input')?.blur()
+        document.getElementById(mode === 'chat' ? 'chat-input' : 'search-input')?.blur()
         window.dispatchEvent(new CustomEvent(MOBILE_MENU_OPEN_EVENT))
       },
     }
@@ -1939,7 +1971,8 @@ export default function Timeline() {
         onFocus={openChatOverlayIfHidden}
         phoneLayout
         leadingAction={mobileChatLeadingAction}
-        menuAction={mobileChatMenuAction}
+        menuAction={mobileMenuAction}
+        searchFilters={composerSearchPills}
       />
     )
 
@@ -2201,9 +2234,6 @@ export default function Timeline() {
 
   return (
     <div>
-      {isMobileSearchMode ? (
-        <BottomTrayPortal containerId="bottom-tray-pills">{renderSearchPills(true)}</BottomTrayPortal>
-      ) : null}
       {trayContent ? <BottomTrayPortal>{trayContent}</BottomTrayPortal> : null}
 
       {showMobileChatOverlay ? <div className="contents" inert>{timelineContent}</div> : timelineContent}
@@ -2358,7 +2388,7 @@ export default function Timeline() {
                 </button>
               )}
             </div>
-            <div className="timeline-search-sidebar-pills">{renderSearchPills(false)}</div>
+            <div className="timeline-search-sidebar-pills">{renderSearchPills('card')}</div>
             <div className="timeline-search-sidebar-composer">
               <div className="timeline-chat-composer-field">
                 <TrayInput

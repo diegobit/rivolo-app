@@ -105,7 +105,7 @@ vi.mock('../components/timeline/EmptyStateHero', () => ({
 }))
 
 const ensureTrayContainers = () => {
-  for (const id of ['bottom-tray', 'bottom-tray-pills']) {
+  for (const id of ['bottom-tray']) {
     document.getElementById(id)?.remove()
     const container = document.createElement('div')
     container.id = id
@@ -145,7 +145,6 @@ describe('Timeline mobile chat UX', () => {
     const composer = screen.getByPlaceholderText('Ask Rivolo')
     const form = composer.closest('form')!
     const backButton = within(form).getByRole('button', { name: 'Back to timeline' })
-    expect(document.getElementById('bottom-tray-pills')).toBeEmptyDOMElement()
 
     composer.focus()
     fireEvent.change(composer, { target: { value: 'keep this draft' } })
@@ -176,7 +175,6 @@ describe('Timeline mobile chat UX', () => {
 
     const form = screen.getByPlaceholderText('Ask Rivolo').closest('form')!
     const openChatBtn = within(form).getByRole('button', { name: 'Open chat' })
-    expect(document.getElementById('bottom-tray-pills')).toBeEmptyDOMElement()
 
     fireEvent.click(openChatBtn)
     expect(useUIStore.getState().chatPanelOpen).toBe(true)
@@ -212,6 +210,12 @@ describe('Timeline mobile chat UX', () => {
     expect(within(form).getByRole('button', { name: 'Back to timeline' })).toHaveTextContent('Timeline')
     const menuChip = within(form).getByRole('button', { name: 'Menu, 2 items need attention' })
     expect(menuChip).toHaveTextContent('Menu2')
+    // Menu first, then Timeline, then Send on its own at the right.
+    expect(within(form).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Menu, 2 items need attention',
+      'Back to timeline',
+      'Send',
+    ])
 
     composer.focus()
     fireEvent.change(composer, { target: { value: 'keep this draft' } })
@@ -374,6 +378,38 @@ describe('Timeline mobile chat UX', () => {
 
     expect(screen.queryByRole('button', { name: 'Back to timeline' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open chat' })).toBeNull()
+  })
+
+  it('puts Menu, the Lines toggle and the filters inside the search box', () => {
+    useUIStore.setState({ mode: 'search' })
+    const openMenu = vi.fn()
+    window.addEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
+    render(
+      <MemoryRouter>
+        <Timeline />
+      </MemoryRouter>,
+    )
+
+    const searchInput = screen.getByPlaceholderText('Search all days')
+    const form = searchInput.closest('form')!
+    expect(form).toHaveClass('tray-phone-composer')
+    expect(form).toHaveAttribute('data-mode', 'search')
+    const lines = within(form).getByRole('button', { name: 'Lines' })
+    expect(lines).toHaveAttribute('aria-pressed', 'false')
+    expect(within(form).getByRole('button', { name: 'TODOs' })).toBeInTheDocument()
+
+    fireEvent.click(lines)
+    expect(within(form).getByRole('button', { name: 'Lines' })).toHaveAttribute('aria-pressed', 'true')
+
+    searchInput.focus()
+    fireEvent.change(searchInput, { target: { value: 'hotel' } })
+    expect(within(form).getByRole('button', { name: 'Clear search' })).toBeInTheDocument()
+
+    fireEvent.click(within(form).getByRole('button', { name: 'Menu' }))
+    expect(openMenu).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).not.toBe(searchInput)
+    expect(searchInput).toHaveValue('hotel')
+    window.removeEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
   })
 
   it('tapping Back to timeline blurs the composer so subsequent click or focus reopens chat', () => {

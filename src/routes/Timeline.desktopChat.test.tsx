@@ -125,7 +125,7 @@ const setDesktopChatMode = (mode: 'chat' | 'search') =>
 const getComposer = () => screen.getByPlaceholderText<HTMLTextAreaElement>('Ask Rivolo')
 
 const ensureTrayContainers = () => {
-  for (const id of ['bottom-tray', 'bottom-tray-pills']) {
+  for (const id of ['bottom-tray']) {
     document.getElementById(id)?.remove()
     const container = document.createElement('div')
     container.id = id
