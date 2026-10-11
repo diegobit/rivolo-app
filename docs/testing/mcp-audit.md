@@ -41,6 +41,26 @@ Each mutation was applied alone, exercised by its owner, and restored before sub
 
 ## Runtime verification and limits
 
-`node scripts/test-mcp-runtime.mjs` creates an isolated temporary local D1 database, applies the actual migrations with Wrangler, starts the real Worker in workerd, and verifies discovery, unauthenticated challenges, authenticated SDK initialization/listing, GET rejection, profile revocation, and refusal to revive an old PAT after re-enable. It uses generated fixture credentials and never calls a live provider. It removes the temporary database and stops the Worker afterward.
+`node scripts/test-mcp-runtime.mjs` creates an isolated temporary local D1 database, applies the actual migrations with Wrangler, starts the real Worker in workerd, and verifies discovery, unauthenticated challenges, authenticated JSON-RPC initialization/listing, GET rejection, profile revocation, and refusal to revive an old PAT after re-enable. It uses generated fixture credentials and never calls a live provider. It removes the temporary database and stops the Worker afterward.
 
 Focused suites, TypeScript application/Worker builds, and lint passed. The local workerd/D1 smoke passed. SQLite-backed tests do not establish hosted D1 concurrency, deployed Cloudflare bindings, or a live Dropbox/Google contract. Browser consent navigation and session-cookie behavior need the separate browser campaign; the existing thin client suites remain until that replacement passes.
+
+
+## Independent preservation review
+
+Reviewed commit `4042673` against `830e548` in a separate detached worktree. No production change was needed. The review reran 11 focused files, including both provider-cookie and Drive-write-safety owners: 99 tests passed with the original source restored.
+
+| Previous proof | Current primary owner | Preservation result |
+| --- | --- | --- |
+| Encrypted profile credentials, credential rotation, uniqueness, disable/re-enable, metadata secrecy | `providerProfiles`; `mcpAgentAccess` | Kept with migrated SQL. Both provider retarget guards and same-target reconnect remain covered. |
+| PAT hashing, one-time secret display, list secrecy, throttled usage, revoke, invalid bearer, profile isolation | `mcpPersonalTokens` | Kept with migrated SQL; isolated revoke now exercises the actual ownership condition. |
+| OAuth public registration, exact redirect/resource, S256, explicit consent, changed profile, one-use code, token hashing, refresh replay, audience and revoke | `mcpOAuth` | Kept. Expiry and rejected refresh preservation add independent outcomes. |
+| Write normalization, replay, input mismatch, pending/concurrent claim, safe retry, ambiguous failure, note-body exclusion and operation-ID bounds | `mcpWriteIdempotency`; `remoteMcpServer` | Kept. Real SQL now owns claims; HTTP independently proves retries do not repeat provider writes. |
+| Additive tool names, schemas, annotations, defaults, compact results, calendar boundaries, invalid timezone and writer errors | `mcpWriteTools` | Kept through the SDK with an in-memory transport. HTTP verifies production registration and writes; fixed-clock timezone cases do not claim a network transport. |
+| Drive post-upload revision advance and empty first note; retarget protection | `googleDriveNotesSource`; `providerProfiles` | Former mixed `mcpWriteSafety` cases were relocated with their expected outcomes preserved. |
+| Cleanup retention, grants/families, completed/pending writes, scheduled dispatch and error logging | `mcpCleanup` | Kept with current migrations. Added multi-chunk deletion and observable scheduled purge. |
+| Remote bearer rejection, origin guard, GET-before-auth, provider refresh and target selection, scope gating, compact replay, safe/ambiguous failures and sanitized auth errors | `remoteMcpServer` | Kept through `Worker.fetch` and the SDK HTTP transport, using real repositories and deterministic external HTTP. |
+
+The old remote test “lists only tools allowed by PAT scopes” supplied an impossible narrowed PAT through an authenticator override. Migration `0003_mcp_personal_tokens.sql` requires exactly `notes:read notes:write`; the real creation API also issues that scope pair. A review mutation that replaced PAT scope extraction with the fixed pair survived 78 focused tests, but attempting to construct a narrowed PAT failed the migration CHECK before HTTP on both original and mutated source. That surviving mutation is behavior preserving for valid PAT rows, not evidence of a lost reachable denial contract. Do not bypass the migration to restore the old mock case. Narrowed OAuth grants remain independently tested for both listing and actual forbidden calls.
+
+The runtime smoke uses raw JSON-RPC requests under workerd, while the Node HTTP suite uses the actual SDK client. Neither establishes hosted D1 concurrency or a live provider contract. The preservation review did not rerun the workerd smoke or browser campaign; their evidence belongs to those runners.
