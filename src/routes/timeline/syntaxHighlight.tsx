@@ -1,5 +1,6 @@
 import { TODO_INTERACTION_HINT, todoStateLabel, type TodoAction } from '../../lib/editor/todoMarker'
-import { TODO_LINE_REGEX } from './todoToggle'
+
+const TODO_LINE_REGEX = /^(\s*-\s+)(\[[ xX-]\])(.*)$/
 
 export type RenderSyntaxLineOptions = {
   onToggleTodo?: (action?: TodoAction) => void

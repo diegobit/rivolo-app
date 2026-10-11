@@ -1,51 +1,15 @@
 import { EditorState } from '@codemirror/state'
 import { EditorView, runScopeHandlers } from '@codemirror/view'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { NON_TODO_LINE_CASES, TODO_TOGGLE_CASES } from './todoMarker.fixtures'
-import { todoKeymap, todoPointerHandler, toggleTodoAtPos } from './todoExtensions'
-import { matchTodoMarker } from './todoMarker'
-
-describe('toggleTodoAtPos (editor click path)', () => {
-  it.each(TODO_TOGGLE_CASES)('%s', (_label, input, expected) => {
-    const view = new EditorView({ state: EditorState.create({ doc: input }) })
-    const match = matchTodoMarker(input)
-    const checkboxPos = match ? match.prefix.length : 0
-
-    const handled = toggleTodoAtPos(view, checkboxPos)
-
-    expect(handled).toBe(true)
-    expect(view.state.doc.toString()).toBe(expected)
-    view.destroy()
-  })
-
-  it.each(NON_TODO_LINE_CASES)('does not toggle non-todo lines: %s', (_label, input) => {
-    const view = new EditorView({ state: EditorState.create({ doc: input }) })
-
-    const handled = toggleTodoAtPos(view, 0)
-
-    expect(handled).toBe(false)
-    expect(view.state.doc.toString()).toBe(input)
-    view.destroy()
-  })
-
-  it('matches the string-based toggle result for the same input line', () => {
-    const input = '  - [ ] nested task'
-    const match = matchTodoMarker(input)
-    const view = new EditorView({ state: EditorState.create({ doc: input }) })
-
-    toggleTodoAtPos(view, match!.prefix.length)
-
-    expect(view.state.doc.toString()).toBe('  - [x] nested task')
-    view.destroy()
-  })
-})
+import { todoKeymap, todoPointerHandler } from './todoExtensions'
+import { editorHighlights } from '../editorHighlights'
 
 describe('todo mouse, touch, and keyboard interactions', () => {
   let view: EditorView
   afterEach(() => { view?.destroy(); vi.restoreAllMocks() })
 
   const setup = (doc = '- [ ] buy milk') => {
-    view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: [todoPointerHandler, todoKeymap] }) })
+    view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: [editorHighlights, todoPointerHandler, todoKeymap] }) })
     vi.spyOn(view, 'posAtCoords').mockReturnValue(3)
     return view
   }
@@ -58,6 +22,37 @@ describe('todo mouse, touch, and keyboard interactions', () => {
     })
     view.contentDOM.dispatchEvent(event)
   }
+
+  it.each([
+    ['left bracket', 2, true],
+    ['state character', 3, true],
+    ['right bracket', 4, true],
+    ['before marker', 1, false],
+    ['after marker', 5, false],
+  ])('changes a todo only when the mouse reaches its marker: %s', (_label, position, toggles) => {
+    setup()
+    vi.mocked(view.posAtCoords).mockReturnValue(position)
+    const event = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true })
+
+    view.contentDOM.dispatchEvent(event)
+
+    expect(view.state.doc.toString()).toBe(toggles ? '- [x] buy milk' : '- [ ] buy milk')
+    // CodeMirror can also consume outside clicks to move its selection.
+    if (toggles) expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('uses the decorated marker target to change only its own line', () => {
+    setup('Una #novità\n  - [X] buy *milk* #errands\n- [ ] leave this task')
+    // Hit testing normally needs layout. A rendered marker instead provides a
+    // DOM position through CodeMirror's public posAtDOM interface.
+    vi.mocked(view.posAtCoords).mockReturnValue(null)
+    const marker = view.contentDOM.querySelector('.cm-todo-marker')!
+
+    marker.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true }))
+
+    expect(view.state.doc.toString()).toBe('Una #novità\n  - [ ] buy *milk* #errands\n- [ ] leave this task')
+    expect(view.hasFocus).toBe(true)
+  })
 
   it('keeps desktop completion binary and toggles cancellation on right-click', () => {
     setup()

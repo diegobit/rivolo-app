@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { NON_TODO_LINE_CASES, TODO_TOGGLE_CASES } from '../../lib/editor/todoMarker.fixtures'
-import { toggleTodoLineMarker } from './todoToggle'
+import { NON_TODO_LINE_CASES, TODO_TOGGLE_CASES } from './todoMarker.fixtures'
+import { toggleTodoLineMarker } from './todoMarker'
 
 describe('toggleTodoLineMarker', () => {
   it.each(TODO_TOGGLE_CASES)('%s', (_label, input, expected) => {
