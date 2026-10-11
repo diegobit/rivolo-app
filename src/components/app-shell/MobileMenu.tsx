@@ -100,6 +100,7 @@ export default function MobileMenu({
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [menuPresent, setMenuPresent] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
   const sheetRef = useRef<HTMLDivElement | null>(null)
   const menuClosingRef = useRef(false)
 
@@ -124,9 +125,15 @@ export default function MobileMenu({
       sheet.style.setProperty('--mobile-menu-exit-transform', window.getComputedStyle(sheet).transform)
     }
     setIsMenuOpen(false)
-    menuButtonRef.current?.focus({ preventScroll: true })
+    ;(returnFocusRef.current ?? menuButtonRef.current)?.focus({ preventScroll: true })
   }, [])
   const openMenu = useCallback(() => {
+    const active = document.activeElement
+    // The inline composer chip opens this sheet while the field keeps focus.
+    // Restore that field rather than the covered shell launcher on dismissal.
+    returnFocusRef.current = active instanceof HTMLElement && active !== document.body
+      ? active
+      : menuButtonRef.current
     menuClosingRef.current = false
     setNow(Date.now())
     setMenuPresent(true)

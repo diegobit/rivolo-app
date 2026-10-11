@@ -97,7 +97,7 @@ const LEADING_ACTION_CHIP_TEXT: Record<TrayLeadingAction['kind'], string> = {
 }
 
 const phoneComposerChipClassName =
-  'flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-active)] pl-2.5 pr-3.5 text-sm font-medium text-[var(--theme-text-soft)] transition active:opacity-75'
+  'flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-active)] pl-2.5 pr-3.5 text-sm font-medium text-[var(--theme-text-soft)] transition active:opacity-75'
 const maskIconClassName =
   'h-5 w-5 shrink-0 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]'
 
@@ -443,7 +443,7 @@ const TrayInput = memo(({
         {mode === 'chat' && (
           <button
             className={`flex shrink-0 items-center justify-center rounded-full shadow-sm transition ${
-              isPhoneChat ? 'tray-phone-send h-10 w-10' : 'h-11 w-11 sm:h-10 sm:w-10'
+              isPhoneChat ? 'tray-phone-send h-11 w-11' : 'h-11 w-11 sm:h-10 sm:w-10'
             } ${
               draftText.trim() && !sending ? 'bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)]' : 'bg-slate-300'
             }`}
@@ -463,13 +463,13 @@ const TrayInput = memo(({
         {mode === 'search' && (
           <div
             className={`flex shrink-0 items-center justify-center ${
-              phoneLayout ? 'tray-phone-clear h-10 w-10' : 'h-11 w-11 sm:h-10 sm:w-10'
+              phoneLayout ? 'tray-phone-clear h-11 w-11' : 'h-11 w-11 sm:h-10 sm:w-10'
             }`}
           >
             {hasSearchText ? (
               <button
                 className={`tray-input-clear group flex items-center justify-center rounded-full hover:bg-slate-500 ${
-                  phoneLayout ? 'h-10 w-10' : 'h-11 w-11 sm:h-8 sm:w-8'
+                  phoneLayout ? 'h-11 w-11' : 'h-11 w-11 sm:h-8 sm:w-8'
                 }`}
                 type="button"
                 aria-label="Clear search"

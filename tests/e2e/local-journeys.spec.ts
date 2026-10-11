@@ -118,7 +118,7 @@ test('J7: mobile menu preserves draft, restores focus, and exposes contained tou
   await insideViewport(page, mode.getByRole('button', { name: 'Search', exact: true }), 44)
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
-  await expect(menu).toBeFocused()
+  await expect(draft).toBeFocused()
   await expect(draft).toHaveValue('Keep this unsent draft 🙂')
   await insideViewport(page, page.getByRole('button', { name: 'Tomorrow', exact: true }), 44)
   await expect(draft).toHaveValue('Keep this unsent draft 🙂')
