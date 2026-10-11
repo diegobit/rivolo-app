@@ -70,7 +70,7 @@ type RemoteMcpAuthResult =
   | AuthenticatedMcpBearer
   | AuthenticatedMcpOAuthBearer
 
-export type RemoteMcpDependencies = {
+type RemoteMcpDependencies = {
   authenticate: (
     request: Request,
     env: RemoteMcpEnv,
@@ -101,29 +101,18 @@ type RemoteCompactWriteResult = CompactAddToDayWriterResult & {
 const bearerValue = (request: Request) =>
   request.headers.get('Authorization')?.match(/^Bearer ([^\s]+)$/i)?.[1] ?? null
 
-export const authenticateRemoteMcpBearer = async (
+const authenticateRemoteMcpBearer = async (
   request: Request,
   env: RemoteMcpEnv,
-  authenticators = {
-    personal: authenticateMcpBearer,
-    oauth: authenticateMcpOAuthBearer,
-  },
 ): Promise<RemoteMcpAuthResult | null> => {
-    const bearer = bearerValue(request)
-    if (bearer?.startsWith('rva_')) {
-      return authenticators.oauth(request, env)
-    }
-    if (bearer?.startsWith('rvl_')) {
-      return authenticators.personal(request, env)
-    }
-    return null
+  const bearer = bearerValue(request)
+  if (bearer?.startsWith('rva_')) {
+    return authenticateMcpOAuthBearer(request, env)
   }
-
-const defaultDependencies: RemoteMcpDependencies = {
-  authenticate: (request, env) => authenticateRemoteMcpBearer(request, env),
-  fetch,
-  refreshDropbox: refreshDropboxAccessToken,
-  refreshGoogle: refreshGoogleAccessToken,
+  if (bearer?.startsWith('rvl_')) {
+    return authenticateMcpBearer(request, env)
+  }
+  return null
 }
 
 const jsonResponse = (payload: unknown, status: number, headers: HeadersInit = {}) =>
@@ -286,9 +275,13 @@ const createDurableWriter = (
 export const handleRemoteMcpRequest = async (
   request: Request,
   env: RemoteMcpEnv,
-  overrides: Partial<RemoteMcpDependencies> = {},
 ): Promise<Response> => {
-  const dependencies = { ...defaultDependencies, ...overrides }
+  const dependencies: RemoteMcpDependencies = {
+    authenticate: (request, env) => authenticateRemoteMcpBearer(request, env),
+    fetch,
+    refreshDropbox: refreshDropboxAccessToken,
+    refreshGoogle: refreshGoogleAccessToken,
+  }
   if (request.method === 'GET') {
     return new Response('Method not allowed.', {
       status: 405,

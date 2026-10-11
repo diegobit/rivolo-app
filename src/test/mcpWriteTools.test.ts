@@ -4,17 +4,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   registerWriteTools,
-  resolveDayIdInTimeZone,
   type AddToDayWriter,
   type AddToDayWriterResult,
-  type ProfileTimeZone,
 } from '../../mcp/writeTools.js'
 import { MAX_NOTE_WRITE_CHARS } from '../lib/noteWrites.js'
-import {
-  MAX_WRITE_OPERATION_ID_CHARS,
-  MIN_WRITE_OPERATION_ID_CHARS,
-  WRITE_OPERATION_ID_PATTERN,
-} from '../lib/writeOperationId.js'
 
 const makeWriteResult = (
   dayId: string,
@@ -41,42 +34,6 @@ const readTextResult = (result: Awaited<ReturnType<Client['callTool']>>) => {
   return content.text
 }
 
-describe('resolveDayIdInTimeZone', () => {
-  it('resolves UTC and the previous calendar day west of UTC', () => {
-    const instant = new Date('2026-01-01T00:30:00.000Z')
-
-    expect(resolveDayIdInTimeZone('UTC', instant)).toEqual({
-      day_id: '2026-01-01',
-      time_zone: 'UTC',
-    })
-    expect(resolveDayIdInTimeZone('America/Los_Angeles', instant)).toEqual({
-      day_id: '2025-12-31',
-      time_zone: 'America/Los_Angeles',
-    })
-  })
-
-  it('resolves the next calendar day east of UTC', () => {
-    expect(
-      resolveDayIdInTimeZone(
-        'Pacific/Kiritimati',
-        new Date('2026-01-01T12:30:00.000Z'),
-      ),
-    ).toEqual({
-      day_id: '2026-01-02',
-      time_zone: 'Pacific/Kiritimati',
-    })
-  })
-
-  it('rejects blank and invalid IANA time zones', () => {
-    expect(() => resolveDayIdInTimeZone('  ')).toThrow(
-      'A valid IANA time zone is required.',
-    )
-    expect(() => resolveDayIdInTimeZone('Europe/Not-A-Zone')).toThrow(
-      'Invalid IANA time zone: Europe/Not-A-Zone.',
-    )
-  })
-})
-
 describe('registerWriteTools', () => {
   const openServers: McpServer[] = []
   const openClients: Client[] = []
@@ -93,7 +50,7 @@ describe('registerWriteTools', () => {
 
   const connect = async (
     writer: AddToDayWriter,
-    profileTimeZone: ProfileTimeZone = 'Europe/Rome',
+    profileTimeZone = 'Europe/Rome',
   ) => {
     const server = new McpServer({ name: 'test-rivolo-notes', version: '0.0.0' })
     const client = new Client({ name: 'test-client', version: '0.0.0' })
@@ -130,13 +87,13 @@ describe('registerWriteTools', () => {
           content_md: {
             type: 'string',
             minLength: 1,
-            maxLength: MAX_NOTE_WRITE_CHARS,
+            maxLength: 20_000,
           },
           operation_id: {
             type: 'string',
-            minLength: MIN_WRITE_OPERATION_ID_CHARS,
-            maxLength: MAX_WRITE_OPERATION_ID_CHARS,
-            pattern: WRITE_OPERATION_ID_PATTERN,
+            minLength: 8,
+            maxLength: 128,
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$',
           },
           position: {
             type: 'string',
@@ -224,39 +181,40 @@ describe('registerWriteTools', () => {
     )
   })
 
-  it('resolves add_to_today with an injected profile time-zone getter', async () => {
+  it.each([
+    ['UTC', '2026-01-01T00:30:00.000Z', '2026-01-01'],
+    ['America/Los_Angeles', '2026-01-01T00:30:00.000Z', '2025-12-31'],
+    ['Pacific/Kiritimati', '2026-01-01T12:30:00.000Z', '2026-01-02'],
+  ])('writes add_to_today to %s calendar day', async (timeZone, instant, dayId) => {
     vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-01-01T00:30:00.000Z'))
-    const writer = vi.fn<AddToDayWriter>().mockImplementation(async (input) =>
+    vi.setSystemTime(new Date(instant))
+    const writer = vi.fn<AddToDayWriter>().mockImplementation(async input =>
       makeWriteResult(input.day_id, input.position),
     )
-    const getTimeZone = vi.fn(async () => 'America/Los_Angeles')
-    const client = await connect(writer, getTimeZone)
-
+    const client = await connect(writer, timeZone)
     const result = await client.callTool({
       name: 'add_to_today',
-      arguments: {
-        content_md: 'Added note',
-        operation_id: 'operation-1',
-      },
+      arguments: { content_md: 'Added note', operation_id: 'operation-1' },
     })
-
-    expect(getTimeZone).toHaveBeenCalledOnce()
-    expect(writer).toHaveBeenCalledWith({
-      day_id: '2025-12-31',
-      content_md: 'Added note',
-      operation_id: 'operation-1',
-      position: 'append',
+    expect(writer).toHaveBeenCalledExactlyOnceWith({
+      day_id: dayId, content_md: 'Added note', operation_id: 'operation-1', position: 'append',
     })
     const payload = JSON.parse(readTextResult(result))
-    expect(payload).toMatchObject({
-      day_id: '2025-12-31',
-      time_zone: 'America/Los_Angeles',
-      content_chars: 10,
-      position: 'append',
-    })
+    expect(payload).toMatchObject({ day_id: dayId, time_zone: timeZone, content_chars: 10 })
     expect(payload).not.toHaveProperty('day')
     expect(payload).not.toHaveProperty('contentMd')
+  })
+
+  it.each(['  ', 'Europe/Not-A-Zone'])('refuses invalid profile timezone %j before writing', async timeZone => {
+    const writer = vi.fn<AddToDayWriter>()
+    const client = await connect(writer, timeZone)
+    const result = await client.callTool({
+      name: 'add_to_today',
+      arguments: { content_md: 'Added note', operation_id: 'operation-1' },
+    })
+    expect(result.isError).toBe(true)
+    expect(readTextResult(result)).toMatch(/time zone/)
+    expect(writer).not.toHaveBeenCalled()
   })
 
   it('returns writer errors without masking their message', async () => {
