@@ -5,6 +5,7 @@ import AppearanceSection from '../components/settings/AppearanceSection'
 import DataSection, { type CloudVersionHistory } from '../components/settings/DataSection'
 import LlmSection from '../components/settings/LlmSection'
 import AttentionBanner from '../components/settings/AttentionBanner'
+import McpOAuthPendingBanner from '../components/settings/McpOAuthPendingBanner'
 import SyncSection from '../components/settings/SyncSection'
 import { exportMarkdownFromDb, importMarkdownToDb } from '../lib/importExport'
 import { getBodyFontChoice, getFontPreset } from '../lib/fonts'
@@ -25,6 +26,7 @@ import {
   useAgentAccess,
 } from './settings/useAgentAccess'
 import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
+import { useMcpOAuthPending } from './settings/useMcpOAuthPending'
 import { useSyncProviderActions } from './settings/useSyncProviderActions'
 import { useDaysStore } from '../store/useDaysStore'
 import { useDropboxStore } from '../store/useDropboxStore'
@@ -111,6 +113,7 @@ export default function Settings() {
   const [googleDriveFileNameDraft, setGoogleDriveFileNameDraft] = useState<string | null>(null)
   const [initialLoadDone, setInitialLoadDone] = useState(false)
   const agentAccess = useAgentAccess(online)
+  const oauthPending = useMcpOAuthPending(online)
 
   const selectedSyncProvider = syncProviderDraft ?? activeProvider ?? 'dropbox'
   const settingsView = useSettingsStore((state) => state.settingsView)
@@ -357,6 +360,9 @@ export default function Settings() {
       loadProviderStates,
       loadSyncState,
       setActiveProvider: setActiveSyncProvider,
+      onConnected: async () => {
+        await oauthPending.continueAfterEnable()
+      },
     })
 
   const handleDisconnectWithAgentSafety = async () => {
@@ -376,12 +382,16 @@ export default function Settings() {
   }
 
   const handleEnableAgentAccess = async () => {
-    if (selectedSyncProvider === 'dropbox') {
-      await agentAccess.enable({ provider: 'dropbox', path: savedDropboxPath })
-      return
-    }
-    if (!googleDriveFileId) return
-    await agentAccess.enable({ provider: 'google-drive', fileId: googleDriveFileId })
+    const enabled =
+      selectedSyncProvider === 'dropbox'
+        ? await agentAccess.enable({ provider: 'dropbox', path: savedDropboxPath })
+        : googleDriveFileId
+          ? await agentAccess.enable({
+              provider: 'google-drive',
+              fileId: googleDriveFileId,
+            })
+          : false
+    if (enabled) await oauthPending.continueAfterEnable()
   }
 
   const handleDisableAgentAccess = async () => {
@@ -436,6 +446,19 @@ export default function Settings() {
             }}
           />
         </header>
+
+        {(oauthPending.view.state === 'pending' ||
+          oauthPending.view.state === 'restart' ||
+          oauthPending.view.state === 'error') && (
+          <McpOAuthPendingBanner
+            view={oauthPending.view}
+            onContinue={oauthPending.continueNow}
+            onCancel={oauthPending.cancel}
+            onRetry={() => {
+              void oauthPending.load()
+            }}
+          />
+        )}
 
         {initialLoadDone &&
           attentionItems.map((item) => (
