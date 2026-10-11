@@ -380,7 +380,7 @@ describe('Timeline mobile chat UX', () => {
     expect(screen.queryByRole('button', { name: 'Open chat' })).toBeNull()
   })
 
-  it('puts Menu, the Lines toggle and the filters inside the search box', () => {
+  it('puts Menu, Days | Lines and the Filter dropdown inside the search box', () => {
     useUIStore.setState({ mode: 'search' })
     const openMenu = vi.fn()
     window.addEventListener(MOBILE_MENU_OPEN_EVENT, openMenu)
@@ -396,7 +396,7 @@ describe('Timeline mobile chat UX', () => {
     expect(form).toHaveAttribute('data-mode', 'search')
     const lines = within(form).getByRole('button', { name: 'Lines' })
     expect(lines).toHaveAttribute('aria-pressed', 'false')
-    expect(within(form).getByRole('button', { name: 'TODOs' })).toBeInTheDocument()
+    expect(within(form).getByRole('button', { name: 'Filter' })).toBeInTheDocument()
 
     fireEvent.click(lines)
     expect(within(form).getByRole('button', { name: 'Lines' })).toHaveAttribute('aria-pressed', 'true')
