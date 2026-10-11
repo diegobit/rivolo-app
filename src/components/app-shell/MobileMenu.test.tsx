@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import MobileMenu from './MobileMenu'
 import type { AttentionItem } from '../../lib/attention'
-import { TIMELINE_NEW_CHAT_EVENT } from '../../lib/timelineEvents'
+import { MOBILE_MENU_OPEN_EVENT, TIMELINE_NEW_CHAT_EVENT } from '../../lib/timelineEvents'
 import { getEmptySyncStatus } from '../../lib/sync'
 import { pullFromSyncAndRefresh, pushToSyncAndRefresh } from '../../store/syncActions'
 import { useSettingsStore } from '../../store/useSettingsStore'
@@ -257,5 +257,36 @@ describe('Mobile menu quick actions', () => {
     openMenu()
     expect(screen.getByRole('button', { name: 'Pull, Push first' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Push, 2h ago, unsynced edits' })).toBeEnabled()
+  })
+
+  it('opens from the chat composer and shares its badge count with it', () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <MobileMenu
+          databaseStale={false}
+          syncing={false}
+          attentionItems={[
+            {
+              id: 'ai',
+              title: "AI assistant isn't set up",
+              description: 'Open a provider and add an API key.',
+              settingsSectionId: 'settings-ai',
+            },
+          ]}
+          onDismissSetupNotice={vi.fn()}
+          onNavigate={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+    expect(useUIStore.getState().menuAttentionCount).toBe(1)
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(MOBILE_MENU_OPEN_EVENT))
+    })
+    expect(screen.getByRole('dialog', { name: 'Menu' })).toBeInTheDocument()
+
+    unmount()
+    expect(useUIStore.getState().menuAttentionCount).toBe(0)
   })
 })

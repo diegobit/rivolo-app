@@ -1,14 +1,8 @@
 import { memo, useLayoutEffect, useRef, useState } from 'react'
-import SegmentedCapsule from '../../components/SegmentedCapsule'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import type { SearchFilter } from '../../lib/dayRepository'
 import { SEARCH_FILTER_OPTIONS } from '../../lib/searchFilters'
 import type { SearchResultMode } from '../Timeline'
-
-const resultModeSegments: { value: SearchResultMode; word: string }[] = [
-  { value: 'whole-day', word: 'Days' },
-  { value: 'matched-lines', word: 'Lines' },
-]
-
 
 const chipFocusClass =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]'
@@ -16,24 +10,35 @@ const chipFocusClass =
 const overflowFadeClass =
   '[-webkit-mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] after:w-6 after:shrink-0 after:content-[\'\']'
 
+// Inside the phone composer the chips match its Timeline and Menu chips; an
+// active one takes the accent tint.
+const composerChipClass =
+  'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition active:opacity-75'
+const composerChipIdleClass = 'bg-[var(--theme-active)] text-[var(--theme-text-soft)]'
+const composerChipActiveClass = 'bg-[var(--theme-accent-soft)] text-[var(--theme-accent-text)]'
+
+// Filter taps keep focus in the search field, so the keyboard stays up.
+const keepFieldFocus = (event: ReactMouseEvent) => event.preventDefault()
+
 const SearchModePills = memo(({
   searchFilter,
   resultMode,
-  showResultMode,
+  layout,
   onSearchFilterChange,
   onResultModeChange,
 }: {
   searchFilter: SearchFilter | null
   resultMode: SearchResultMode
-  // The desktop search card always lists every match, so it hides this toggle:
-  // there the "Days" mode only deduplicated to one hit per day rather than
-  // showing whole days the way the narrow-viewport timeline does.
-  showResultMode: boolean
+  // 'card': the desktop search card, which always lists every match, so it has
+  // no result toggle. 'composer': the row inside the phone search box, where a
+  // Lines chip switches the timeline from whole days to matching lines.
+  layout: 'card' | 'composer'
   onSearchFilterChange: (filter: SearchFilter | null) => void
   onResultModeChange: (mode: SearchResultMode) => void
 }) => {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const [overflows, setOverflows] = useState(false)
+  const inComposer = layout === 'composer'
 
   useLayoutEffect(() => {
     const scroller = scrollerRef.current
@@ -56,53 +61,71 @@ const SearchModePills = memo(({
     const observer = new ResizeObserver(update)
     observer.observe(scroller)
     return () => observer.disconnect()
-  }, [searchFilter, showResultMode])
+  }, [searchFilter, layout])
+
+  const activeFilterLabel = SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label
+  const removeFilterDisc = (
+    <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" aria-hidden="true">
+      <path d="M4 4l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M12 4L4 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
 
   return (
     <div
       ref={scrollerRef}
-      className={`pointer-events-auto flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-2 -mb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${overflows ? overflowFadeClass : ''}`}
+      className={`pointer-events-auto flex w-full min-w-0 items-center overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+        inComposer ? 'gap-1.5' : 'gap-2 pb-2 -mb-1'
+      } ${overflows ? overflowFadeClass : ''}`}
     >
-    {showResultMode && (
-      <SegmentedCapsule
-        className="mode-capsule-compact"
-        label="Show results as"
-        value={resultMode}
-        segments={resultModeSegments.map((segment) => ({
-          value: segment.value,
-          ariaLabel: `Show ${segment.word}`,
-          label: (
-            <span className="mode-capsule-lines" aria-hidden="true">
-              <span>Show</span>
-              <span>{segment.word}</span>
-            </span>
-          ),
-        }))}
-        onChange={onResultModeChange}
-      />
+    {inComposer && (
+      <button
+        type="button"
+        className={`${composerChipClass} ${resultMode === 'matched-lines' ? composerChipActiveClass : composerChipIdleClass} ${chipFocusClass}`}
+        aria-pressed={resultMode === 'matched-lines'}
+        onMouseDown={keepFieldFocus}
+        onClick={() => onResultModeChange(resultMode === 'matched-lines' ? 'whole-day' : 'matched-lines')}
+      >
+        Lines
+      </button>
     )}
     {searchFilter ? (
-      <button
-        data-active="true"
-        className={`capsule-chip group inline-flex h-11 shrink-0 items-center gap-2 pl-3.5 pr-2 text-xs font-semibold text-[var(--theme-text)] transition hover:border-[var(--theme-border-strong)] sm:h-8 ${chipFocusClass}`}
-        type="button"
-        onClick={() => onSearchFilterChange(null)}
-        aria-label={`Remove ${SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label ?? 'filter'} filter`}
-      >
-        {SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label}
-        <span className="capsule-chip-disc flex h-5 w-5 items-center justify-center rounded-full bg-[var(--theme-active)] text-[var(--theme-text-soft)] transition group-hover:bg-[var(--theme-border)] group-hover:text-[var(--theme-text)] sm:h-4 sm:w-4">
-          <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" aria-hidden="true">
-            <path d="M4 4l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            <path d="M12 4L4 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-        </span>
-      </button>
+      inComposer ? (
+        <button
+          type="button"
+          className={`${composerChipClass} ${composerChipActiveClass} pr-2.5 ${chipFocusClass}`}
+          onMouseDown={keepFieldFocus}
+          onClick={() => onSearchFilterChange(null)}
+          aria-label={`Remove ${activeFilterLabel ?? 'filter'} filter`}
+        >
+          {activeFilterLabel}
+          {removeFilterDisc}
+        </button>
+      ) : (
+        <button
+          data-active="true"
+          className={`capsule-chip group inline-flex h-11 shrink-0 items-center gap-2 pl-3.5 pr-2 text-xs font-semibold text-[var(--theme-text)] transition hover:border-[var(--theme-border-strong)] sm:h-8 ${chipFocusClass}`}
+          type="button"
+          onClick={() => onSearchFilterChange(null)}
+          aria-label={`Remove ${activeFilterLabel ?? 'filter'} filter`}
+        >
+          {activeFilterLabel}
+          <span className="capsule-chip-disc flex h-5 w-5 items-center justify-center rounded-full bg-[var(--theme-active)] text-[var(--theme-text-soft)] transition group-hover:bg-[var(--theme-border)] group-hover:text-[var(--theme-text)] sm:h-4 sm:w-4">
+            {removeFilterDisc}
+          </span>
+        </button>
+      )
     ) : (
       SEARCH_FILTER_OPTIONS.map((option) => (
         <button
           key={option.value}
-          className={`capsule-chip inline-flex h-11 shrink-0 items-center px-3.5 text-xs font-semibold text-[var(--theme-text-soft)] transition hover:border-[var(--theme-border-strong)] hover:text-[var(--theme-text)] sm:h-8 ${chipFocusClass}`}
+          className={
+            inComposer
+              ? `${composerChipClass} ${composerChipIdleClass} ${chipFocusClass}`
+              : `capsule-chip inline-flex h-11 shrink-0 items-center px-3.5 text-xs font-semibold text-[var(--theme-text-soft)] transition hover:border-[var(--theme-border-strong)] hover:text-[var(--theme-text)] sm:h-8 ${chipFocusClass}`
+          }
           type="button"
+          onMouseDown={inComposer ? keepFieldFocus : undefined}
           onClick={() => onSearchFilterChange(option.value)}
         >
           {option.label}

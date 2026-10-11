@@ -1,53 +1,56 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import SearchModePills from './SearchModePills'
+import type { SearchResultMode } from '../Timeline'
 
-const renderPills = (showResultMode: boolean) =>
+const renderPills = (
+  layout: 'card' | 'composer',
+  resultMode: SearchResultMode = 'whole-day',
+  onResultModeChange = vi.fn(),
+) =>
   render(
     <SearchModePills
       searchFilter={null}
-      resultMode="whole-day"
-      showResultMode={showResultMode}
+      resultMode={resultMode}
+      layout={layout}
       onSearchFilterChange={vi.fn()}
-      onResultModeChange={vi.fn()}
+      onResultModeChange={onResultModeChange}
     />,
   )
 
 describe('SearchModePills', () => {
-  it('offers the Days/Lines toggle where whole-day results exist', () => {
-    renderPills(true)
+  it('offers a Lines toggle in the phone composer, next to the filters', () => {
+    renderPills('composer')
 
-    expect(screen.getByRole('button', { name: 'Show Days' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Show Lines' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Lines' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: 'TODOs' })).toBeInTheDocument()
   })
 
-  it('hides the Days/Lines toggle but keeps the filters', () => {
-    renderPills(false)
+  it('hides the Lines toggle in the desktop card but keeps the filters', () => {
+    renderPills('card')
 
-    expect(screen.queryByRole('group', { name: 'Show results as' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Lines' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'TODOs' })).toBeInTheDocument()
   })
-  it('selects a specific result mode from either segment', () => {
+
+  it('switches between whole days and matching lines from the Lines toggle', () => {
     const onResultModeChange = vi.fn()
-    render(<SearchModePills searchFilter={null} resultMode="whole-day" showResultMode onSearchFilterChange={vi.fn()} onResultModeChange={onResultModeChange} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Show Lines' }))
+    const { unmount } = renderPills('composer', 'whole-day', onResultModeChange)
+    fireEvent.click(screen.getByRole('button', { name: 'Lines' }))
     expect(onResultModeChange).toHaveBeenLastCalledWith('matched-lines')
-    fireEvent.click(screen.getByRole('button', { name: 'Show Days' }))
+    unmount()
+
+    renderPills('composer', 'matched-lines', onResultModeChange)
+    expect(screen.getByRole('button', { name: 'Lines' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Lines' }))
     expect(onResultModeChange).toHaveBeenLastCalledWith('whole-day')
   })
 
-  it('slides the thumb to the selected half', () => {
-    const { rerender } = render(
-      <SearchModePills searchFilter={null} resultMode="whole-day" showResultMode onSearchFilterChange={vi.fn()} onResultModeChange={vi.fn()} />,
-    )
-    const thumb = () => document.querySelector<HTMLElement>('.mode-capsule-thumb')
+  it('keeps focus in the search field when a composer chip is tapped', () => {
+    renderPills('composer')
 
-    expect(thumb()).toHaveStyle({ transform: 'translateX(0%)' })
-    rerender(
-      <SearchModePills searchFilter={null} resultMode="matched-lines" showResultMode onSearchFilterChange={vi.fn()} onResultModeChange={vi.fn()} />,
-    )
-    expect(thumb()).toHaveStyle({ transform: 'translateX(100%)' })
+    // A prevented mousedown is what stops the tap from taking focus.
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Lines' }))).toBe(false)
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'TODOs' }))).toBe(false)
   })
-
 })

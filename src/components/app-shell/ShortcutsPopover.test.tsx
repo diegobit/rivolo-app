@@ -61,4 +61,17 @@ describe('ShortcutsPopover', () => {
 
     expect(onToggle).toHaveBeenCalledOnce()
   })
+
+  it('renders todo markers help text without touchscreen instructions', () => {
+    renderPopover(true)
+
+    const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' })
+    expect(dialog).toHaveTextContent(
+      'Todo markers: [ ] open, [x] completed, [-] cancelled.',
+    )
+    expect(dialog).toHaveTextContent(
+      'Click to complete or reopen; right-click to cancel or reopen.',
+    )
+    expect(dialog.textContent).not.toMatch(/touch\s*screen/i)
+  })
 })
