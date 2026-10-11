@@ -10,7 +10,8 @@ export default defineConfig({
   workers: process.env.CI ? 2 : 4,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:4175',
+    baseURL: 'https://127.0.0.1:4175',
+    ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -20,8 +21,9 @@ export default defineConfig({
     { name: 'webkit-mobile', testIgnore: '**/*.chromium.spec.ts', use: { ...devices['iPhone 13'], defaultBrowserType: 'webkit' } },
   ],
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1 --port 4175 --strictPort',
-    url: 'http://127.0.0.1:4175',
+    command: 'node scripts/serve-e2e.mjs',
+    url: 'https://127.0.0.1:4175',
+    ignoreHTTPSErrors: true,
     reuseExistingServer: false,
   },
 })
