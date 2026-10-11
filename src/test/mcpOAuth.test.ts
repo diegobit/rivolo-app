@@ -1,11 +1,10 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs'
-import { DatabaseSync } from 'node:sqlite'
+import { SqliteD1, closeTestDatabases } from './helpers/d1'
 import {
   OAuthMetadataSchema,
   OAuthProtectedResourceMetadataSchema,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   authenticateMcpOAuthBearer,
   McpOAuthAuthenticationError,
@@ -35,42 +34,6 @@ import {
   DEFAULT_MCP_RESOURCE_URL,
   getMcpProtectedResourceMetadataUrl,
 } from '../lib/mcpOAuthMetadata'
-
-class SqliteD1 {
-  readonly database = new DatabaseSync(':memory:')
-
-  constructor() {
-    this.database.exec('PRAGMA foreign_keys = ON')
-    for (const migration of [
-      'migrations/0001_mcp_provider_profiles.sql',
-      'migrations/0003_mcp_personal_tokens.sql',
-      'migrations/0004_mcp_oauth.sql',
-    ]) {
-      this.database.exec(readFileSync(migration, 'utf8'))
-    }
-  }
-
-  prepare(sql: string) {
-    return {
-      bind: (...values: unknown[]) => {
-        const statement = this.database.prepare(sql)
-        return {
-          first: async <T>() => (statement.get(...values) as T | undefined) ?? null,
-          all: async <T>() => ({ results: statement.all(...values) as T[] }),
-          run: async () => {
-            const result = statement.run(...values)
-            return {
-              meta: {
-                changes: Number(result.changes),
-                last_row_id: Number(result.lastInsertRowid),
-              },
-            }
-          },
-        }
-      },
-    }
-  }
-}
 
 const createEnv = (db: SqliteD1): McpOAuthEnv => ({
   MCP_DB: db as unknown as D1Database,
@@ -318,6 +281,10 @@ describe('MCP OAuth authorization and tokens', () => {
     )
     const consentHtml = await consent.text()
     expect(consent.status).toBe(200)
+    expect(consent.headers.get('Referrer-Policy')).toBe('same-origin')
+    expect(consent.headers.get('Content-Security-Policy')).toBe(
+      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' http://127.0.0.1:4567; base-uri 'none'; frame-ancestors 'none'",
+    )
     expect(consentHtml).toContain('Allow Codex?')
     expect(consentHtml).toContain('notes@example.com')
     expect(consentHtml).toContain(`name="profile_id" value="${profile.profileId}"`)
@@ -333,6 +300,7 @@ describe('MCP OAuth authorization and tokens', () => {
       env,
     )
     expect(mismatch.status).toBe(400)
+    expect(mismatch.headers.get('Content-Security-Policy')).not.toContain('localhost:4567')
     expect(await mismatch.text()).toContain(
       'redirect_uri does not match the registered value.',
     )
@@ -654,6 +622,17 @@ describe('MCP OAuth authorization and tokens', () => {
     expect(crossOrigin.status).toBe(400)
     expect(await crossOrigin.text()).toContain('Consent origin is invalid.')
 
+    const opaqueOrigin = await submitOAuthConsent(
+      formRequest(
+        `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`,
+        new URLSearchParams([...parameters, ['decision', 'allow']]),
+        { Origin: 'null', Cookie: cookie },
+      ),
+      env,
+    )
+    expect(opaqueOrigin.status).toBe(400)
+    expect(await opaqueOrigin.text()).toContain('Consent origin is invalid.')
+
     const changedProfile = await submitOAuthConsent(
       formRequest(
         `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`,
@@ -709,5 +688,70 @@ describe('MCP OAuth authorization and tokens', () => {
         env,
       ),
     ).toBeNull()
+  })
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  closeTestDatabases()
+})
+
+
+describe('OAuth expiry and grant isolation', () => {
+  it('rejects an expired authorization code without consuming it', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-07-16T12:00:00.000Z'))
+    const db = new SqliteD1()
+    const env = createEnv(db)
+    const profile = await createProfile(env)
+    const redirectUri = 'https://client.example/callback'
+    const clientId = await registerClient(env, redirectUri)
+    const { verifier, challenge } = await pkce()
+    const code = await completeConsent(env, await sessionCookie(env, profile.profileId), authorizationParameters(clientId, redirectUri, challenge), profile.profileId)
+    vi.setSystemTime(new Date('2026-07-16T12:05:00.000Z'))
+    const response = await exchangeCode(env, clientId, redirectUri, code, verifier)
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ error: 'invalid_grant' })
+    expect(db.get('SELECT used_at FROM mcp_oauth_authorization_codes')?.used_at).toBeNull()
+  })
+
+  it('expires access and refresh tokens at their own boundaries', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-07-16T12:00:00.000Z'))
+    const env = createEnv(new SqliteD1())
+    const profile = await createProfile(env)
+    const redirectUri = 'https://client.example/callback'
+    const clientId = await registerClient(env, redirectUri)
+    const { verifier, challenge } = await pkce()
+    const code = await completeConsent(env, await sessionCookie(env, profile.profileId), authorizationParameters(clientId, redirectUri, challenge), profile.profileId)
+    const token = await (await exchangeCode(env, clientId, redirectUri, code, verifier)).json() as { access_token: string; refresh_token: string }
+    const request = new Request(DEFAULT_MCP_RESOURCE_URL, { headers: { Authorization: `Bearer ${token.access_token}` } })
+    expect(await authenticateMcpOAuthBearer(request, env)).not.toBeNull()
+    vi.setSystemTime(new Date('2026-07-16T13:00:00.000Z'))
+    expect(await authenticateMcpOAuthBearer(request, env)).toBeNull()
+    vi.setSystemTime(new Date('2026-08-15T12:00:00.000Z'))
+    const expiredRefresh = await exchangeOAuthToken(formRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/token`, new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, refresh_token: token.refresh_token, resource: DEFAULT_MCP_RESOURCE_URL })), env)
+    expect(expiredRefresh.status).toBe(400)
+    expect(await expiredRefresh.json()).toMatchObject({ error: 'invalid_grant' })
+  })
+
+  it.each(['different-client', 'scope-escalation'])('rejects %s refresh without consuming the valid grant', async rejection => {
+    const db = new SqliteD1()
+    const env = createEnv(db)
+    const profile = await createProfile(env)
+    const redirectUri = 'https://client.example/callback'
+    const clientId = await registerClient(env, redirectUri)
+    const differentClientId = await registerClient(env, 'https://other.example/callback')
+    const { verifier, challenge } = await pkce()
+    const parameters = authorizationParameters(clientId, redirectUri, challenge)
+    parameters.set('scope', 'notes:read')
+    const code = await completeConsent(env, await sessionCookie(env, profile.profileId), parameters, profile.profileId)
+    const token = await (await exchangeCode(env, clientId, redirectUri, code, verifier)).json() as { refresh_token: string }
+    const refresh = (client: string, scope: string) => exchangeOAuthToken(formRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/token`, new URLSearchParams({ grant_type: 'refresh_token', client_id: client, refresh_token: token.refresh_token, resource: DEFAULT_MCP_RESOURCE_URL, scope })), env)
+    const rejected = await refresh(rejection === 'different-client' ? differentClientId : clientId, rejection === 'scope-escalation' ? 'notes:read notes:write' : 'notes:read')
+    expect(rejected.status).toBe(400)
+    expect(await rejected.json()).toMatchObject({ error: rejection === 'scope-escalation' ? 'invalid_scope' : 'invalid_grant' })
+    expect(db.get('SELECT refresh_used_at FROM mcp_oauth_token_grants')?.refresh_used_at).toBeNull()
+    expect((await refresh(clientId, 'notes:read')).status).toBe(200)
   })
 })

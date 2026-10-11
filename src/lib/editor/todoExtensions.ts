@@ -31,7 +31,7 @@ const createTodoLine = (lineText: string) => {
   return content ? `${indentation}- [ ] ${content}` : `${indentation}- [ ] `
 }
 
-export const toggleTodoAtPos = (view: EditorView, pos: number, action: TodoAction = 'complete') => {
+const toggleTodoAtPos = (view: EditorView, pos: number, action: TodoAction = 'complete') => {
   const line = view.state.doc.lineAt(pos)
   const marker = getTodoMarker(line)
   if (!marker) return false

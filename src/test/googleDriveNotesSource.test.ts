@@ -411,3 +411,44 @@ ${day('2026-07-16', 'Jul 16, 2026', 'existing note')}`,
     expect((error as Error).message).not.toContain('secret-token')
   })
 })
+
+it('does not replay an addition onto a revision saved after its upload', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(Response.json(metadata('10', 'rev-10')))
+    .mockResolvedValueOnce(new Response(day('2026-07-16', 'Jul 16, 2026', 'base')))
+    .mockResolvedValueOnce(Response.json(metadata('11', 'rev-11')))
+    .mockResolvedValueOnce(Response.json(metadata('12', 'rev-12')))
+    .mockResolvedValueOnce(Response.json({
+      revisions: [10, 11, 12].map(version => ({
+        id: `rev-${version}`,
+        modifiedTime: `2026-07-16T12:00:${version}.000Z`,
+      })),
+    }))
+    .mockResolvedValueOnce(new Response(day('2026-07-16', 'Jul 16, 2026', 'base\n\nagent addition\n\nsecond writer')))
+    .mockResolvedValueOnce(Response.json(metadata('13', 'rev-13')))
+  const result = await createGoogleDriveNotesSource(fetchMock, target).addToDay({
+    day_id: '2026-07-16',
+    content_md: 'agent addition',
+    operation_id: 'operation-review',
+  })
+  expect(result).toMatchObject({ status: 'attention', recovered: false })
+  expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(1)
+})
+
+
+it.each(['', ' \n\t'])('writes the first note to an empty Google file (%j)', async (content) => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(Response.json(metadata('10', 'rev-10')))
+    .mockResolvedValueOnce(new Response(content))
+    .mockResolvedValueOnce(Response.json(metadata('11', 'rev-11')))
+    .mockResolvedValueOnce(Response.json(metadata('11', 'rev-11')))
+    .mockResolvedValueOnce(Response.json({ revisions: [] }))
+  const result = await createGoogleDriveNotesSource(fetchMock, target).addToDay({
+    day_id: '2026-07-16',
+    content_md: 'first note',
+    operation_id: 'operation-empty',
+  })
+  expect(result).toMatchObject({
+    status: 'written', created: true, day: { contentMd: 'first note' },
+  })
+})

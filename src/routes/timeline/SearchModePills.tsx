@@ -13,7 +13,7 @@ const overflowFadeClass =
 // Inside the phone composer the chips match its Timeline and Menu chips; an
 // active one takes the accent tint.
 const composerChipClass =
-  'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition active:opacity-75'
+  'inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition active:opacity-75'
 const composerChipIdleClass = 'bg-[var(--theme-active)] text-[var(--theme-text-soft)]'
 const composerChipActiveClass = 'bg-[var(--theme-accent-soft)] text-[var(--theme-accent-text)]'
 
