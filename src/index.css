@@ -1535,14 +1535,15 @@
 
 /* Phone composer, chat and search alike: always a box, with the field on
    top and an action row under it. Chat: Menu, Timeline/Chat, then Send alone
-   at the right. Search: Menu, then the Lines toggle and filters, scrolling
-   sideways. 8px of padding plus the 20px radius of the 40px buttons matches
+   at the right. Search: Menu, then Days | Lines and the Filter dropdown.
+   8px of padding plus the 20px radius of the 40px buttons matches
    the box's 28px corner. */
 #bottom-tray.bottom-tray-shell:has(.tray-phone-composer) {
   border-radius: var(--bottom-tray-radius, 28px);
 }
 
 .tray-phone-composer {
+  position: relative;
   display: grid;
   align-items: center;
   row-gap: 0.25rem;
@@ -1595,6 +1596,50 @@
 
 .tray-phone-filters {
   grid-area: filters;
+}
+
+/* Days | Lines in the search box: the menu's capsule, sized like the chips
+   beside it, on their fill instead of its glow. */
+.mode-capsule.mode-capsule-compact {
+  width: 6.75rem;
+  height: 2.5rem;
+  padding: 3px;
+  border: none;
+  background: var(--theme-active);
+}
+
+.mode-capsule-compact .mode-capsule-thumb {
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  box-shadow:
+    0 0 0 1px var(--theme-border),
+    0 1px 2px rgb(var(--theme-shadow-color) / 0.12);
+}
+
+/* On the dark chip fill the usual thumb nearly disappears. */
+html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
+  background: var(--theme-border-strong);
+  box-shadow: 0 1px 2px rgb(var(--theme-shadow-color) / 0.3);
+}
+
+.mode-capsule-compact .mode-capsule-button {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Opens upward, clear of the box; the left offset comes from the Filter pill. */
+.tray-phone-filter-menu {
+  position: absolute;
+  bottom: calc(100% + 1rem);
+  z-index: 40;
+  min-width: 11rem;
+  padding: 4px;
+  border: 1px solid var(--theme-border);
+  border-radius: 1.25rem;
+  background: var(--theme-surface);
+  box-shadow: 0 10px 28px -8px rgb(var(--theme-shadow-color) / 0.28);
 }
 
 .bottom-tray-blur,
