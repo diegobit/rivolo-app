@@ -160,7 +160,9 @@ export default function ShortcutsPopover({
                 </div>
               </div>
               <p className="text-xs text-slate-500">
-                Todo markers: [ ] open, [x] completed, [-] cancelled. Click to complete or reopen; right-click to cancel or reopen. On touch screens, tap to cycle through all three states.
+                Todo markers: [ ] open, [x] completed, [-] cancelled.
+                <br />
+                Click to complete or reopen; right-click to cancel or reopen.
               </p>
             </div>
           </div>
