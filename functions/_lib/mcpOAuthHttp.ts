@@ -31,7 +31,7 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
-const page = (title: string, body: string, status = 200) =>
+const page = (title: string, body: string, status = 200, headers = htmlHeaders) =>
   new Response(
     `<!doctype html>
 <html lang="en">
@@ -64,7 +64,7 @@ const page = (title: string, body: string, status = 200) =>
 </head>
 <body><main>${body}</main></body>
 </html>`,
-    { status, headers: htmlHeaders },
+    { status, headers },
   )
 
 const errorPage = (message: string, status = 400) =>
@@ -118,6 +118,17 @@ const consentPage = (
     <button type="submit" name="decision" value="allow">Allow</button>
   </div>
 </form>`,
+    200,
+    {
+      ...htmlHeaders,
+      // no-referrer makes Chromium send Origin:null on a form POST. Preserve
+      // the same-origin CSRF check and suppress referrers on external redirects.
+      'Referrer-Policy': 'same-origin',
+      'Content-Security-Policy': htmlHeaders['Content-Security-Policy'].replace(
+        "form-action 'self'",
+        `form-action 'self' ${new URL(authorization.redirectUri).origin}`,
+      ),
+    },
   )
 }
 

@@ -281,6 +281,10 @@ describe('MCP OAuth authorization and tokens', () => {
     )
     const consentHtml = await consent.text()
     expect(consent.status).toBe(200)
+    expect(consent.headers.get('Referrer-Policy')).toBe('same-origin')
+    expect(consent.headers.get('Content-Security-Policy')).toBe(
+      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' http://127.0.0.1:4567; base-uri 'none'; frame-ancestors 'none'",
+    )
     expect(consentHtml).toContain('Allow Codex?')
     expect(consentHtml).toContain('notes@example.com')
     expect(consentHtml).toContain(`name="profile_id" value="${profile.profileId}"`)
@@ -296,6 +300,7 @@ describe('MCP OAuth authorization and tokens', () => {
       env,
     )
     expect(mismatch.status).toBe(400)
+    expect(mismatch.headers.get('Content-Security-Policy')).not.toContain('localhost:4567')
     expect(await mismatch.text()).toContain(
       'redirect_uri does not match the registered value.',
     )
@@ -616,6 +621,17 @@ describe('MCP OAuth authorization and tokens', () => {
     )
     expect(crossOrigin.status).toBe(400)
     expect(await crossOrigin.text()).toContain('Consent origin is invalid.')
+
+    const opaqueOrigin = await submitOAuthConsent(
+      formRequest(
+        `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`,
+        new URLSearchParams([...parameters, ['decision', 'allow']]),
+        { Origin: 'null', Cookie: cookie },
+      ),
+      env,
+    )
+    expect(opaqueOrigin.status).toBe(400)
+    expect(await opaqueOrigin.text()).toContain('Consent origin is invalid.')
 
     const changedProfile = await submitOAuthConsent(
       formRequest(
