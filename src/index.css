@@ -2049,6 +2049,11 @@ html[data-theme='dark'] .bg-gray-300 {
   background-color: var(--theme-surface-strong) !important;
 }
 
+/* On the dark idle Send button a white arrow reads as enabled; dim it. */
+html[data-theme='dark'] .tray-send-idle-arrow {
+  opacity: 0.6;
+}
+
 html[data-theme='dark'] .bg-\[\#EBF4FF\],
 html[data-theme='dark'] .bg-\[\#d9efff\],
 html[data-theme='dark'] .bg-\[\#dcecff\] {

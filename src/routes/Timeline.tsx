@@ -456,7 +456,7 @@ const TrayInput = memo(({
             <img
               src="/arrow-up.svg"
               alt=""
-              className="h-5 w-5"
+              className={`h-5 w-5 transition-opacity ${draftText.trim() && !sending ? '' : 'tray-send-idle-arrow'}`}
               style={{ filter: 'brightness(0) invert(1)' }}
             />
           </button>
