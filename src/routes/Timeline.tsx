@@ -746,6 +746,11 @@ export default function Timeline() {
           fontSynthesis: 'weight style',
           color: 'var(--theme-editor-text)',
         },
+        // iOS zooms into focused fields under 16px. Only .cm-content takes
+        // focus, so it keeps 16px while iA Writer's lines inside it use 15px.
+        ...(isIosDevice && fontPreference === 'monospace' && monospaceFont === 'iawriter'
+          ? { '.cm-line': { fontSize: '0.9375rem' } }
+          : {}),
         '.cm-content': {
           minHeight: '30px',
           padding: '0',
