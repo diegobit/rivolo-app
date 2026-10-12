@@ -746,6 +746,9 @@ export default function Timeline() {
           fontSynthesis: 'weight style',
           color: 'var(--theme-editor-text)',
         },
+        // Experiment: iOS zooms into focused fields under 16px, so the
+        // focused .cm-content keeps 16px while the lines inside it use 15px.
+        ...(isIosDevice ? { '.cm-line': { fontSize: '0.9375rem' } } : {}),
         '.cm-content': {
           minHeight: '30px',
           padding: '0',
