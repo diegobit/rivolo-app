@@ -2,7 +2,7 @@ import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/lang
 import { TODO_INTERACTION_HINT, todoStateLabel } from './editor/todoMarker'
 import { tags } from '@lezer/highlight'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, type DecorationSet } from '@codemirror/view'
-import { RangeSetBuilder, type EditorState, type Extension } from '@codemirror/state'
+import { RangeSetBuilder, StateEffect, type EditorState, type Extension } from '@codemirror/state'
 
 const highlightStyle = HighlightStyle.define([
   {
@@ -164,34 +164,144 @@ const headingLinePlugin = ViewPlugin.fromClass(
   },
 )
 
-// Give list and todo rows a little air: a 4px indent, 4px between two list
-// rows, 8px between a list and plain text. Headings sit 12px below what precedes them
-// and 4px above what follows. This lives in an editor theme because
-// CodeMirror's own .cm-line padding beats layered CSS.
+// A list row's marker and the spaces after it, e.g. "- ", "- [ ] " or "1. ".
+const listPrefixRegex = /^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX-]\]\s+)?/
+
+const refreshListIndent = StateEffect.define<null>()
+
+// Hang wrapped list rows under the item's text rather than under its marker.
+// Marker widths depend on the font, so they're measured from the layout and
+// exposed to the theme below as --list-hang.
+const listIndentPlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+    widths = new Map<string, number>()
+    destroyed = false
+    view: EditorView
+
+    constructor(view: EditorView) {
+      this.view = view
+      this.decorations = this.build()
+      this.measure()
+    }
+
+    update(update: ViewUpdate) {
+      const refreshed = update.transactions.some((tr) => tr.effects.some((effect) => effect.is(refreshListIndent)))
+      if (update.docChanged || update.viewportChanged || refreshed) {
+        this.decorations = this.build()
+      }
+      if (update.docChanged || update.viewportChanged || update.geometryChanged) {
+        this.measure()
+      }
+    }
+
+    destroy() {
+      this.destroyed = true
+    }
+
+    visibleListRows() {
+      const rows: Array<{ from: number; prefix: string }> = []
+      const { doc } = this.view.state
+      let lastLine = 0
+      for (const range of this.view.visibleRanges) {
+        for (let pos = range.from; pos <= range.to; ) {
+          const line = doc.lineAt(pos)
+          if (line.number > lastLine) {
+            lastLine = line.number
+            const prefix = listPrefixRegex.exec(line.text)?.[0]
+            if (prefix) rows.push({ from: line.from, prefix })
+          }
+          pos = line.to + 1
+        }
+      }
+      return rows
+    }
+
+    build() {
+      const builder = new RangeSetBuilder<Decoration>()
+      for (const { from, prefix } of this.visibleListRows()) {
+        const width = this.widths.get(prefix)
+        if (width != null) {
+          builder.add(from, from, Decoration.line({ attributes: { style: `--list-hang: ${width}px` } }))
+        }
+      }
+      return builder.finish()
+    }
+
+    measure() {
+      this.view.requestMeasure({
+        key: this,
+        read: (view) => {
+          const measured = new Map<string, number>()
+          for (const { from, prefix } of this.visibleListRows()) {
+            if (measured.has(prefix)) continue
+            const start = view.coordsAtPos(from, 1)
+            const end = view.coordsAtPos(from + prefix.length, -1)
+            if (start && end) measured.set(prefix, Math.round((end.left - start.left) * 10) / 10)
+          }
+          return measured
+        },
+        write: (measured, view) => {
+          let changed = false
+          for (const [prefix, width] of measured) {
+            if (this.widths.get(prefix) !== width) {
+              this.widths.set(prefix, width)
+              changed = true
+            }
+          }
+          // Decorations can't change mid-measure, so apply them in a fresh update.
+          if (changed) {
+            setTimeout(() => {
+              if (!this.destroyed) view.dispatch({ effects: refreshListIndent.of(null) })
+            })
+          }
+        },
+      })
+    }
+  },
+  {
+    decorations: (value) => value.decorations,
+  },
+)
+
+// Lists sit 8px in from plain text and 8px away from it vertically. Headings
+// drop CodeMirror's 6px line padding to line up with the day title, and sit
+// 12px below what precedes them and 4px above what follows. This lives in an
+// editor theme because CodeMirror's own .cm-line padding beats layered CSS.
 const lineSpacingTheme = EditorView.theme({
   '.cm-line.cm-list-line': {
-    marginLeft: '4px',
-    paddingTop: '2px',
-    paddingBottom: '2px',
+    marginLeft: 'calc(8px + var(--list-hang, 0px))',
+    textIndent: 'calc(-1 * var(--list-hang, 0px))',
   },
   '.cm-line:not(.cm-list-line):not(.cm-heading-line) + .cm-line.cm-list-line': {
     paddingTop: '8px',
   },
   '.cm-line.cm-list-line + .cm-line:not(.cm-list-line):not(.cm-heading-line)': {
-    paddingTop: '6px',
+    paddingTop: '8px',
   },
   '.cm-line.cm-heading-line': {
+    paddingLeft: '0',
     paddingBottom: '4px',
   },
   '.cm-line + .cm-line.cm-heading-line': {
     paddingTop: '12px',
   },
-  '.cm-line.cm-list-line + .cm-line.cm-heading-line': {
-    paddingTop: '10px',
-  },
-  '.cm-line.cm-heading-line + .cm-line.cm-list-line': {
-    paddingTop: '0',
+  // On touch screens, 4px between list rows gives todo markers room to tap.
+  '@media (max-width: 640px), (pointer: coarse)': {
+    '.cm-line.cm-list-line': {
+      paddingTop: '2px',
+      paddingBottom: '2px',
+    },
+    '.cm-line.cm-list-line + .cm-line:not(.cm-list-line):not(.cm-heading-line)': {
+      paddingTop: '6px',
+    },
+    '.cm-line.cm-list-line + .cm-line.cm-heading-line': {
+      paddingTop: '10px',
+    },
+    '.cm-line.cm-heading-line + .cm-line.cm-list-line': {
+      paddingTop: '0',
+    },
   },
 })
 
-export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin, headingLinePlugin, lineSpacingTheme]
+export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin, headingLinePlugin, listIndentPlugin, lineSpacingTheme]
