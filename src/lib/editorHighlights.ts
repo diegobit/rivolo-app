@@ -264,13 +264,12 @@ const listIndentPlugin = ViewPlugin.fromClass(
   },
 )
 
-// Lists sit 6px in from plain text and 8px away from it vertically. Headings
-// drop CodeMirror's 6px line padding to line up with the day title, and sit
-// 12px below what precedes them and 4px above what follows. This lives in an
-// editor theme because CodeMirror's own .cm-line padding beats layered CSS.
+// Lists sit 8px away from plain text vertically. Headings sit 12px below what
+// precedes them and 4px above what follows. This lives in an editor theme
+// because CodeMirror's own .cm-line padding beats layered CSS.
 const lineSpacingTheme = EditorView.theme({
   '.cm-line.cm-list-line': {
-    marginLeft: 'calc(6px + var(--list-hang, 0px))',
+    marginLeft: 'var(--list-hang, 0px)',
     textIndent: 'calc(-1 * var(--list-hang, 0px))',
   },
   '.cm-line:not(.cm-list-line):not(.cm-heading-line) + .cm-line.cm-list-line': {
@@ -280,7 +279,6 @@ const lineSpacingTheme = EditorView.theme({
     paddingTop: '8px',
   },
   '.cm-line.cm-heading-line': {
-    paddingLeft: '0',
     paddingBottom: '4px',
   },
   '.cm-line + .cm-line.cm-heading-line': {
