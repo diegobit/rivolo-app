@@ -164,12 +164,13 @@ const headingLinePlugin = ViewPlugin.fromClass(
   },
 )
 
-// Give list and todo rows a little air: 4px between two list rows, 8px
-// between a list and plain text. Headings sit 12px below what precedes them
+// Give list and todo rows a little air: a 4px indent, 4px between two list
+// rows, 8px between a list and plain text. Headings sit 12px below what precedes them
 // and 4px above what follows. This lives in an editor theme because
 // CodeMirror's own .cm-line padding beats layered CSS.
 const lineSpacingTheme = EditorView.theme({
   '.cm-line.cm-list-line': {
+    marginLeft: '4px',
     paddingTop: '2px',
     paddingBottom: '2px',
   },
