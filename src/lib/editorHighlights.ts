@@ -1,8 +1,8 @@
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language'
 import { TODO_INTERACTION_HINT, todoStateLabel } from './editor/todoMarker'
 import { tags } from '@lezer/highlight'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, type DecorationSet } from '@codemirror/view'
-import { RangeSetBuilder, type Extension } from '@codemirror/state'
+import { RangeSetBuilder, type EditorState, type Extension } from '@codemirror/state'
 
 const highlightStyle = HighlightStyle.define([
   {
@@ -128,20 +128,69 @@ const tagHighlightPlugin = ViewPlugin.fromClass(
   },
 )
 
+const headingLineDecoration = Decoration.line({ class: 'cm-heading-line' })
+
+// Read headings from the markdown tree so a `#` inside a code block doesn't count.
+const buildHeadingLineDecorations = (state: EditorState) => {
+  const builder = new RangeSetBuilder<Decoration>()
+  syntaxTree(state).iterate({
+    enter: (node) => {
+      if (node.name.startsWith('ATXHeading')) {
+        const lineStart = state.doc.lineAt(node.from).from
+        builder.add(lineStart, lineStart, headingLineDecoration)
+      }
+      return node.name === 'Document'
+    },
+  })
+  return builder.finish()
+}
+
+const headingLinePlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+
+    constructor(view: EditorView) {
+      this.decorations = buildHeadingLineDecorations(view.state)
+    }
+
+    update(update: ViewUpdate) {
+      if (update.docChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+        this.decorations = buildHeadingLineDecorations(update.state)
+      }
+    }
+  },
+  {
+    decorations: (value) => value.decorations,
+  },
+)
+
 // Give list and todo rows a little air: 4px between two list rows, 8px
-// between a list and plain text. This lives in an editor theme because
+// between a list and plain text. Headings sit 12px below what precedes them
+// and 4px above what follows. This lives in an editor theme because
 // CodeMirror's own .cm-line padding beats layered CSS.
-const listLineTheme = EditorView.theme({
+const lineSpacingTheme = EditorView.theme({
   '.cm-line.cm-list-line': {
     paddingTop: '2px',
     paddingBottom: '2px',
   },
-  '.cm-line:not(.cm-list-line) + .cm-line.cm-list-line': {
+  '.cm-line:not(.cm-list-line):not(.cm-heading-line) + .cm-line.cm-list-line': {
     paddingTop: '8px',
   },
-  '.cm-line.cm-list-line + .cm-line:not(.cm-list-line)': {
+  '.cm-line.cm-list-line + .cm-line:not(.cm-list-line):not(.cm-heading-line)': {
     paddingTop: '6px',
+  },
+  '.cm-line.cm-heading-line': {
+    paddingBottom: '4px',
+  },
+  '.cm-line + .cm-line.cm-heading-line': {
+    paddingTop: '12px',
+  },
+  '.cm-line.cm-list-line + .cm-line.cm-heading-line': {
+    paddingTop: '10px',
+  },
+  '.cm-line.cm-heading-line + .cm-line.cm-list-line': {
+    paddingTop: '0',
   },
 })
 
-export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin, listLineTheme]
+export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin, headingLinePlugin, lineSpacingTheme]
