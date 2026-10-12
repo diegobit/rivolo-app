@@ -1,4 +1,5 @@
 import type { Database, Sqlite3Static, SqlValue } from '@sqlite.org/sqlite-wasm'
+import { ensureHashtagIndexSchema } from './hashtagIndex'
 
 export type RivoloDatabase = Database
 export type RivoloSqlite = Sqlite3Static
@@ -96,7 +97,8 @@ export const ensureDatabaseSchema = (db: RivoloDatabase) => {
     );
   `)
 
-  return { ftsAvailable: true, ftsRebuilt: ftsNeedsRebuild }
+  const hashtagIndexCreated = ensureHashtagIndexSchema(db)
+  return { ftsAvailable: true, ftsRebuilt: ftsNeedsRebuild, hashtagIndexCreated }
 }
 
 export const queryRows = <T>(db: RivoloDatabase, sql: string, params: SqlParam[] = []) => {

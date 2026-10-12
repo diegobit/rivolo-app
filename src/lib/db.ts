@@ -130,7 +130,7 @@ export const getDatabase = async () => {
       const db = openSerializedDatabase(sqlite, stored ? new Uint8Array(stored) : null)
       const schema = ensureDatabaseSchema(db)
       ftsAvailable = schema.ftsAvailable
-      if (schema.ftsRebuilt) scheduleSave(db)
+      if (schema.ftsRebuilt || schema.hashtagIndexCreated) scheduleSave(db)
       return db
     })().catch((error) => {
       dbPromise = null
@@ -146,6 +146,17 @@ export const run = async (sql: string, params: (string | number | null)[] = []) 
   const db = await getDatabase()
   executeSql(db, sql, params)
   markDatabaseChanged(db)
+}
+
+// Guards and writes run synchronously in one transaction: editor events cannot
+// slip between a revision check and replacing a downloaded day's content.
+export const runAtomicDatabaseMutation = async <T>(callback: (db: RivoloDatabase) => T) => {
+  assertDatabaseWritable()
+  const db = await getDatabase()
+  let result!: T
+  db.transaction(() => { result = callback(db) })
+  markDatabaseChanged(db)
+  return result
 }
 
 export const runBulkDatabaseMutation = async <T>(callback: () => Promise<T>) => {

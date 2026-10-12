@@ -7,6 +7,7 @@ import { todoKeymap, todoPointerHandler } from '../../lib/editor/todoExtensions'
 import { wrapSelectionOnDelimiter } from '../../lib/editor/wrapSelection'
 import { editorHighlights } from '../../lib/editorHighlights'
 import type { Day } from '../../lib/dayRepository'
+import { hashtagCompletion } from '../../lib/editor/hashtagCompletion'
 
 type DayEditorCardProps = {
   day: Day
@@ -248,6 +249,7 @@ const DayEditorCard = memo(({
 }: DayEditorCardProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const searchHighlight = useMemo(() => createHighlightPlugin(searchQuery), [searchQuery])
+  const hashtagSuggestions = useMemo(() => hashtagCompletion(day.dayId), [day.dayId])
   const quoteHighlight = useMemo(() => (quote ? createHighlightPlugin(quote) : null), [quote])
   const previewContent = useMemo(() => {
     const trimmed = day.contentMd.trim()
@@ -322,6 +324,7 @@ const DayEditorCard = memo(({
       navigationKeymap,
       todoKeymap,
       todoPointerHandler,
+      hashtagSuggestions,
       ...editorHighlights,
     ]
     if (searchHighlight) {
@@ -334,6 +337,7 @@ const DayEditorCard = memo(({
   }, [
     clearActiveLine,
     editorTheme,
+    hashtagSuggestions,
     markdownExtension,
     navigationKeymap,
     quoteHighlight,
@@ -392,7 +396,7 @@ const DayEditorCard = memo(({
             }}
             onBlur={(event) => void onBlur(day.dayId, event.nativeEvent)}
             onCreateEditor={(view) => registerEditor(day.dayId, view)}
-            basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLineGutter: false }}
+            basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLineGutter: false, autocompletion: false }}
           />
         ) : (
           <button

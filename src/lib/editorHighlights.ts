@@ -3,6 +3,7 @@ import { TODO_INTERACTION_HINT, todoStateLabel } from './editor/todoMarker'
 import { tags } from '@lezer/highlight'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, type DecorationSet } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, type EditorState, type Extension, type Line } from '@codemirror/state'
+import { createNoteTokenRegex } from './noteTokens'
 
 const highlightStyle = HighlightStyle.define([
   {
@@ -32,7 +33,7 @@ const highlightStyle = HighlightStyle.define([
 
 export const findTagHighlightRanges = (text: string) => {
   const ranges: Array<{ from: number; to: number; className: string; title?: string }> = []
-  const tagRegex = /(^|[^\p{L}\p{M}\p{N}_])([#@][\p{L}\p{M}\p{N}_/-]+)/gu
+  const tagRegex = createNoteTokenRegex('#@')
   let match = tagRegex.exec(text)
 
   while (match) {

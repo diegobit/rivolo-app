@@ -29,7 +29,7 @@ describe('official SQLite wasm migration', () => {
     const db = openSerializedDatabase(sqlite, decodeFixture())
     const migration = ensureDatabaseSchema(db)
 
-    expect(migration).toEqual({ ftsAvailable: true, ftsRebuilt: true })
+    expect(migration).toEqual({ ftsAvailable: true, ftsRebuilt: true, hashtagIndexCreated: true })
     expect(
       db.selectValue("SELECT sql FROM sqlite_master WHERE name = 'days_fts'"),
     ).toContain("tokenize='trigram'")
@@ -44,6 +44,7 @@ describe('official SQLite wasm migration', () => {
     expect(ensureDatabaseSchema(reopened)).toEqual({
       ftsAvailable: true,
       ftsRebuilt: false,
+      hashtagIndexCreated: false,
     })
     expect(
       reopened.selectObject(
