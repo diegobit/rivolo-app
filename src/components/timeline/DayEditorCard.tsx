@@ -353,7 +353,7 @@ const DayEditorCard = memo(({
     <div
       ref={handleContainerRef}
       data-scroll-target={isToday ? 'today' : undefined}
-      className={`day-editor-card scroll-anchor group rounded-[4px] border p-4 transition ${
+      className={`day-editor-card scroll-anchor group rounded-[4px] border p-4 transition max-sm:rounded-none max-sm:border-x-0 ${
         heroReveal ? 'hero-reveal' : ''
       } ${
         isFuture
