@@ -590,7 +590,7 @@
     .cm-todo-marker {
       /* Grow the touch area, but keep it inside its own row so taps on
          neighbouring lines don't land on this marker. */
-      padding: 3px 6px;
+      padding: 2px 6px;
       margin: 0 -6px;
     }
   }

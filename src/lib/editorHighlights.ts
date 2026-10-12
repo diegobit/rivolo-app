@@ -128,14 +128,19 @@ const tagHighlightPlugin = ViewPlugin.fromClass(
   },
 )
 
-// Give list and todo rows a little air on touch screens. This lives in an
-// editor theme because CodeMirror's own .cm-line padding beats layered CSS.
+// Give list and todo rows a little air: 4px between two list rows, 8px
+// between a list and plain text. This lives in an editor theme because
+// CodeMirror's own .cm-line padding beats layered CSS.
 const listLineTheme = EditorView.theme({
-  '@media (max-width: 640px), (pointer: coarse)': {
-    '.cm-line.cm-list-line': {
-      paddingTop: '3px',
-      paddingBottom: '3px',
-    },
+  '.cm-line.cm-list-line': {
+    paddingTop: '2px',
+    paddingBottom: '2px',
+  },
+  '.cm-line:not(.cm-list-line) + .cm-line.cm-list-line': {
+    paddingTop: '8px',
+  },
+  '.cm-line.cm-list-line + .cm-line:not(.cm-list-line)': {
+    paddingTop: '6px',
   },
 })
 
