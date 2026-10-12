@@ -2,7 +2,7 @@ import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/lang
 import { TODO_INTERACTION_HINT, todoStateLabel } from './editor/todoMarker'
 import { tags } from '@lezer/highlight'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, type DecorationSet } from '@codemirror/view'
-import { RangeSetBuilder, StateEffect, type EditorState, type Extension } from '@codemirror/state'
+import { RangeSetBuilder, StateEffect, type EditorState, type Extension, type Line } from '@codemirror/state'
 
 const highlightStyle = HighlightStyle.define([
   {
@@ -164,6 +164,71 @@ const headingLinePlugin = ViewPlugin.fromClass(
   },
 )
 
+// The "- " before a todo's checkbox, shown only while the row is being edited.
+const todoDashRegex = /^(\s*)(-\s+)\[[ xX-]\]/
+const hiddenTodoDash = Decoration.replace({})
+
+const editedLineNumbers = (view: EditorView) => {
+  const numbers = new Set<number>()
+  if (!view.hasFocus) return numbers
+  const { doc, selection } = view.state
+  for (const range of selection.ranges) {
+    const last = doc.lineAt(range.to).number
+    for (let number = doc.lineAt(range.from).number; number <= last; number++) numbers.add(number)
+  }
+  return numbers
+}
+
+const isTodoDashHidden = (edited: Set<number>, lineNumber: number, text: string) =>
+  !edited.has(lineNumber) && todoDashRegex.test(text)
+
+const forEachVisibleLine = (view: EditorView, callback: (line: Line) => void) => {
+  const { doc } = view.state
+  let lastLine = 0
+  for (const range of view.visibleRanges) {
+    for (let pos = range.from; pos <= range.to; ) {
+      const line = doc.lineAt(pos)
+      if (line.number > lastLine) {
+        lastLine = line.number
+        callback(line)
+      }
+      pos = line.to + 1
+    }
+  }
+}
+
+const buildTodoDashDecorations = (view: EditorView) => {
+  const builder = new RangeSetBuilder<Decoration>()
+  const edited = editedLineNumbers(view)
+  forEachVisibleLine(view, (line) => {
+    const match = isTodoDashHidden(edited, line.number, line.text) && todoDashRegex.exec(line.text)
+    if (match) {
+      const from = line.from + match[1].length
+      builder.add(from, from + match[2].length, hiddenTodoDash)
+    }
+  })
+  return builder.finish()
+}
+
+const todoDashPlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+
+    constructor(view: EditorView) {
+      this.decorations = buildTodoDashDecorations(view)
+    }
+
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged) {
+        this.decorations = buildTodoDashDecorations(update.view)
+      }
+    }
+  },
+  {
+    decorations: (value) => value.decorations,
+  },
+)
+
 // A list row's marker and the spaces after it, e.g. "- ", "- [ ] " or "1. ".
 const listPrefixRegex = /^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX-]\]\s+)?/
 
@@ -187,10 +252,11 @@ const listIndentPlugin = ViewPlugin.fromClass(
 
     update(update: ViewUpdate) {
       const refreshed = update.transactions.some((tr) => tr.effects.some((effect) => effect.is(refreshListIndent)))
-      if (update.docChanged || update.viewportChanged || refreshed) {
+      const todoDashToggled = update.selectionSet || update.focusChanged
+      if (update.docChanged || update.viewportChanged || todoDashToggled || refreshed) {
         this.decorations = this.build()
       }
-      if (update.docChanged || update.viewportChanged || update.geometryChanged) {
+      if (update.docChanged || update.viewportChanged || todoDashToggled || update.geometryChanged) {
         this.measure()
       }
     }
@@ -199,28 +265,24 @@ const listIndentPlugin = ViewPlugin.fromClass(
       this.destroyed = true
     }
 
+    // Rows are keyed by prefix, and by whether the todo dash is hidden, since
+    // that changes the prefix's width.
     visibleListRows() {
-      const rows: Array<{ from: number; prefix: string }> = []
-      const { doc } = this.view.state
-      let lastLine = 0
-      for (const range of this.view.visibleRanges) {
-        for (let pos = range.from; pos <= range.to; ) {
-          const line = doc.lineAt(pos)
-          if (line.number > lastLine) {
-            lastLine = line.number
-            const prefix = listPrefixRegex.exec(line.text)?.[0]
-            if (prefix) rows.push({ from: line.from, prefix })
-          }
-          pos = line.to + 1
-        }
-      }
+      const rows: Array<{ from: number; prefix: string; key: string }> = []
+      const edited = editedLineNumbers(this.view)
+      forEachVisibleLine(this.view, (line) => {
+        const prefix = listPrefixRegex.exec(line.text)?.[0]
+        if (!prefix) return
+        const hidden = isTodoDashHidden(edited, line.number, line.text)
+        rows.push({ from: line.from, prefix, key: hidden ? `hidden:${prefix}` : prefix })
+      })
       return rows
     }
 
     build() {
       const builder = new RangeSetBuilder<Decoration>()
-      for (const { from, prefix } of this.visibleListRows()) {
-        const width = this.widths.get(prefix)
+      for (const { from, key } of this.visibleListRows()) {
+        const width = this.widths.get(key)
         if (width != null) {
           builder.add(from, from, Decoration.line({ attributes: { style: `--list-hang: ${width}px` } }))
         }
@@ -233,11 +295,11 @@ const listIndentPlugin = ViewPlugin.fromClass(
         key: this,
         read: (view) => {
           const measured = new Map<string, number>()
-          for (const { from, prefix } of this.visibleListRows()) {
-            if (measured.has(prefix)) continue
+          for (const { from, prefix, key } of this.visibleListRows()) {
+            if (measured.has(key)) continue
             const start = view.coordsAtPos(from, 1)
             const end = view.coordsAtPos(from + prefix.length, -1)
-            if (start && end) measured.set(prefix, Math.round((end.left - start.left) * 10) / 10)
+            if (start && end) measured.set(key, Math.round((end.left - start.left) * 10) / 10)
           }
           return measured
         },
@@ -302,4 +364,4 @@ const lineSpacingTheme = EditorView.theme({
   },
 })
 
-export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin, headingLinePlugin, listIndentPlugin, lineSpacingTheme]
+export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin, headingLinePlugin, todoDashPlugin, listIndentPlugin, lineSpacingTheme]
