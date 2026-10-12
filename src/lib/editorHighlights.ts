@@ -48,8 +48,11 @@ export const findTagHighlightRanges = (text: string) => {
   return ranges
 }
 
+const listLineDecoration = Decoration.line({ class: 'cm-list-line' })
+
 const buildTagDecorations = (text: string) => {
   const ranges = findTagHighlightRanges(text)
+  const lineStarts = new Set<number>()
 
   const todoRegex = /(^|\n)([ \t]*-\s+\[[ xX-]\])([^\n]*)/g
   let match = todoRegex.exec(text)
@@ -79,17 +82,31 @@ const buildTagDecorations = (text: string) => {
     const start = match.index + prefixLength
     const end = start + token.length
     ranges.push({ from: start, to: end, className: 'cm-list-marker' })
+    lineStarts.add(text.lastIndexOf('\n', end - 1) + 1)
     match = listRegex.exec(text)
   }
 
   ranges.sort((a, b) => a.from - b.from || a.to - b.to)
 
   const builder = new RangeSetBuilder<Decoration>()
-  for (const range of ranges) {
-    builder.add(range.from, range.to, Decoration.mark({ class: range.className, attributes: range.title ? { title: range.title } : undefined }))
+  let rangeIndex = 0
+  for (const lineStart of [...lineStarts].sort((a, b) => a - b)) {
+    for (; rangeIndex < ranges.length && ranges[rangeIndex].from < lineStart; rangeIndex++) {
+      addMark(builder, ranges[rangeIndex])
+    }
+    // Line decorations sort before marks that start at the same position.
+    builder.add(lineStart, lineStart, listLineDecoration)
   }
+  for (; rangeIndex < ranges.length; rangeIndex++) addMark(builder, ranges[rangeIndex])
 
   return builder.finish()
+}
+
+const addMark = (
+  builder: RangeSetBuilder<Decoration>,
+  range: { from: number; to: number; className: string; title?: string },
+) => {
+  builder.add(range.from, range.to, Decoration.mark({ class: range.className, attributes: range.title ? { title: range.title } : undefined }))
 }
 
 const tagHighlightPlugin = ViewPlugin.fromClass(
@@ -111,4 +128,15 @@ const tagHighlightPlugin = ViewPlugin.fromClass(
   },
 )
 
-export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin]
+// Give list and todo rows a little air on touch screens. This lives in an
+// editor theme because CodeMirror's own .cm-line padding beats layered CSS.
+const listLineTheme = EditorView.theme({
+  '@media (max-width: 640px), (pointer: coarse)': {
+    '.cm-line.cm-list-line': {
+      paddingTop: '3px',
+      paddingBottom: '3px',
+    },
+  },
+})
+
+export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin, listLineTheme]

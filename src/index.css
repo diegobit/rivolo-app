@@ -588,9 +588,10 @@
 
   @media (max-width: 640px), (pointer: coarse) {
     .cm-todo-marker {
-      /* Grow the marker's touch area without changing the editor line height. */
-      padding: 12.5px 9px;
-      margin: 0 -9px;
+      /* Grow the touch area, but keep it inside its own row so taps on
+         neighbouring lines don't land on this marker. */
+      padding: 3px 6px;
+      margin: 0 -6px;
     }
   }
 
