@@ -49,10 +49,12 @@ export const findTagHighlightRanges = (text: string) => {
 }
 
 const listLineDecoration = Decoration.line({ class: 'cm-list-line' })
+const todoLineDecoration = Decoration.line({ class: 'cm-list-line cm-todo-line' })
 
 const buildTagDecorations = (text: string) => {
   const ranges = findTagHighlightRanges(text)
   const lineStarts = new Set<number>()
+  const todoLineStarts = new Set<number>()
 
   const todoRegex = /(^|\n)([ \t]*-\s+\[[ xX-]\])([^\n]*)/g
   let match = todoRegex.exec(text)
@@ -61,6 +63,7 @@ const buildTagDecorations = (text: string) => {
     const prefixLength = match[1].length
     const token = match[2]
     const start = match.index + prefixLength
+    todoLineStarts.add(start)
     const bracketMatch = token.match(/\[[ xX-]\]/)
     if (bracketMatch) {
       const bracketStart = start + (bracketMatch.index ?? 0)
@@ -95,7 +98,7 @@ const buildTagDecorations = (text: string) => {
       addMark(builder, ranges[rangeIndex])
     }
     // Line decorations sort before marks that start at the same position.
-    builder.add(lineStart, lineStart, listLineDecoration)
+    builder.add(lineStart, lineStart, todoLineStarts.has(lineStart) ? todoLineDecoration : listLineDecoration)
   }
   for (; rangeIndex < ranges.length; rangeIndex++) addMark(builder, ranges[rangeIndex])
 
@@ -346,19 +349,19 @@ const lineSpacingTheme = EditorView.theme({
   '.cm-line + .cm-line.cm-heading-line': {
     paddingTop: '12px',
   },
-  // On touch screens, 4px between list rows gives todo markers room to tap.
+  // On touch screens, 4px between todo rows gives their markers room to tap.
   '@media (max-width: 640px), (pointer: coarse)': {
-    '.cm-line.cm-list-line': {
+    '.cm-line.cm-todo-line': {
       paddingTop: '2px',
       paddingBottom: '2px',
     },
-    '.cm-line.cm-list-line + .cm-line:not(.cm-list-line):not(.cm-heading-line)': {
+    '.cm-line.cm-todo-line + .cm-line:not(.cm-list-line):not(.cm-heading-line)': {
       paddingTop: '6px',
     },
-    '.cm-line.cm-list-line + .cm-line.cm-heading-line': {
+    '.cm-line.cm-todo-line + .cm-line.cm-heading-line': {
       paddingTop: '10px',
     },
-    '.cm-line.cm-heading-line + .cm-line.cm-list-line': {
+    '.cm-line.cm-heading-line + .cm-line.cm-todo-line': {
       paddingTop: '0',
     },
   },
