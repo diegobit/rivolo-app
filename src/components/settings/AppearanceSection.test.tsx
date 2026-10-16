@@ -52,7 +52,7 @@ describe('AppearanceSection', () => {
     expect(screen.getByRole('button', { name: 'Proportional' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('switch', { name: 'Autocorrection' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'No background' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('switch', { name: 'Highlight input mode' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Highlight input mode (mobile only)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Bree Serif' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Inconsolata' })).not.toBeInTheDocument()
 
@@ -77,7 +77,7 @@ describe('AppearanceSection', () => {
     expect(screen.getByRole('img', { name: 'No background preview' })).toHaveClass(
       'sm:hidden',
     )
-    expect(screen.getByRole('switch', { name: 'Highlight input mode' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Highlight input mode (mobile only)' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Rivolo Light' }))
     expect(onWallpaperChange).toHaveBeenCalledExactlyOnceWith('thoughts-light')

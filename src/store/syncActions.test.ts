@@ -92,6 +92,7 @@ describe('sync action tab coordination', () => {
       expect.objectContaining({
         operation: 'push',
         message: expect.stringContaining('Google Drive changed remotely'),
+        blocked: true,
       }),
     )
   })

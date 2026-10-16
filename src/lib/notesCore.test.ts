@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { searchDaysInMemory, type Day } from './notesCore'
+import { listOpenTodosFromDays, searchDaysInMemory, type Day } from './notesCore'
 
 const makeDay = (dayId: string, lines: string[]): Day => ({
   dayId,
@@ -65,5 +65,15 @@ describe('searchDaysInMemory filters', () => {
     const [result] = searchDaysInMemory([day], 'widgets')
     expect(result.blockKind).toBe('line')
     expect(result.matchedBlocks).toEqual(['Plain line mentioning widgets'])
+  })
+})
+
+
+describe('cancelled todos in open-task queries', () => {
+  it('excludes cancelled tasks from both search and MCP listings', () => {
+    const note = makeDay('2026-10-10', ['- [ ] open', '- [x] completed', '- [-] cancelled'])
+    expect(searchDaysInMemory([note], '', { filter: 'open-todos' })[0].matchedBlocks).toEqual(['- [ ] open'])
+    expect(listOpenTodosFromDays([note]).map((todo) => todo.text)).toEqual(['- [ ] open'])
+    expect(searchDaysInMemory([note], 'cancelled')[0].matchedBlocks).toEqual(['- [-] cancelled'])
   })
 })

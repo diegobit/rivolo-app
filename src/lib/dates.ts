@@ -79,3 +79,15 @@ export const addDays = (dayId: string, days: number) => {
   date.setDate(date.getDate() + days)
   return getDayIdFromDate(date)
 }
+
+// A compact "how long ago" label for small status text, e.g. "5m ago".
+export const formatTimeAgo = (timestamp: number, now = Date.now()) => {
+  const minutes = Math.floor(Math.max(0, now - timestamp) / 60_000)
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(timestamp))
+}

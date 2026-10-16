@@ -33,7 +33,7 @@ type AppearanceSectionProps = {
 }
 
 const selectClass =
-  'min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-slate-400'
+  'min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none [@media(pointer:coarse)]:text-base transition focus:border-slate-400'
 
 export default function AppearanceSection({
   themePreference,
@@ -210,7 +210,7 @@ export default function AppearanceSection({
             <div className="-mx-3">
               <SettingsToggle
                 checked={highlightInputMode}
-                label="Highlight input mode"
+                label="Highlight input mode (mobile only)"
                 onChange={onHighlightInputModeChange}
               />
             </div>

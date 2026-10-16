@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDayTitle, isValidDayId } from './dates'
+import { formatDayTitle, formatTimeAgo, isValidDayId } from './dates'
 
 describe('day IDs', () => {
   it.each([
@@ -21,5 +21,20 @@ describe('day IDs', () => {
   ])('accepts and formats calendar day ID %s', (dayId, title) => {
     expect(isValidDayId(dayId)).toBe(true)
     expect(formatDayTitle(dayId)).toBe(title)
+  })
+})
+
+describe('formatTimeAgo', () => {
+  const now = new Date(2026, 9, 10, 12, 0).getTime()
+
+  it.each([
+    [now - 20_000, 'Just now'],
+    [now + 5_000, 'Just now'],
+    [now - 5 * 60_000, '5m ago'],
+    [now - 3 * 60 * 60_000, '3h ago'],
+    [now - 2 * 24 * 60 * 60_000, '2d ago'],
+    [new Date(2026, 8, 12, 9, 0).getTime(), 'Sep 12'],
+  ])('formats %d', (timestamp, label) => {
+    expect(formatTimeAgo(timestamp, now)).toBe(label)
   })
 })

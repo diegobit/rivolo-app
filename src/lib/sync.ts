@@ -10,6 +10,8 @@ export type SyncStatus = {
   targetName: string | null
   lastRemoteVersion: string | null
   lastSyncAt: number | null
+  lastPullAt: number | null
+  lastPushAt: number | null
   localDirty: boolean
   accountName: string | null
   accountEmail: string | null
@@ -53,6 +55,8 @@ const EMPTY_STATUS: SyncStatus = {
   targetName: null,
   lastRemoteVersion: null,
   lastSyncAt: null,
+  lastPullAt: null,
+  lastPushAt: null,
   localDirty: false,
   accountName: null,
   accountEmail: null,

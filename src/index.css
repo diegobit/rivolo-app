@@ -128,11 +128,14 @@
     --keyboard-offset: 0px;
     --bottom-tray-height: 3.5rem;
     --bottom-tray-radius: 28px;
+    --mobile-control-surface: var(--theme-surface-soft);
     --theme-page: #ffffff;
     --theme-page-rgb: 255 255 255;
     --theme-surface: #ffffff;
     --theme-surface-rgb: 255 255 255;
     --theme-surface-soft: #f8fafc;
+    --theme-thumb: #ffffff;
+    --theme-scrim: rgb(15 23 42 / 0.40);
     --theme-surface-soft-rgb: 248 250 252;
     --theme-surface-elevated: #ffffff;
     --theme-surface-elevated-rgb: 255 255 255;
@@ -205,6 +208,9 @@
     --theme-surface: #111318;
     --theme-surface-rgb: 17 19 24;
     --theme-surface-soft: #0b0d12;
+    --mobile-control-surface: var(--theme-surface);
+    --theme-thumb: #2a3340;
+    --theme-scrim: rgb(0 0 0 / 0.55);
     --theme-surface-soft-rgb: 11 13 18;
     --theme-surface-elevated: #171a21;
     --theme-surface-elevated-rgb: 23 26 33;
@@ -580,6 +586,20 @@
     transition: background-color 120ms ease;
   }
 
+  @media (max-width: 640px), (pointer: coarse) {
+    .cm-todo-marker {
+      /* Grow the touch area, but keep it inside its own row so taps on
+         neighbouring lines don't land on this marker. */
+      padding: 2px 6px;
+      margin: 0 -6px;
+    }
+  }
+
+  .cm-todo-cancelled {
+    color: var(--theme-text-muted);
+    text-decoration: line-through;
+  }
+
   .cm-todo-marker:hover {
     background-color: rgb(237 155 56 / 0.15);
   }
@@ -672,6 +692,8 @@
     color: var(--theme-text-soft);
     line-height: 1.6;
     word-break: break-word;
+    /* Long unbroken tokens (URLs, hashes) wrap instead of widening the chat. */
+    overflow-wrap: anywhere;
   }
 
   .assistant-markdown > * + * {
@@ -860,96 +882,492 @@
 
   @media (min-width: 700px) {
     .app-shell-root {
-      --desktop-chat-sidebar-width: clamp(300px, 40vw, 600px);
+      --desktop-chat-sidebar-width: clamp(260px, 36vw, 440px);
+      --desktop-chat-sidebar-inset: 20px;
       --desktop-chat-shift: 0px;
-      padding-right: var(--desktop-chat-shift);
-      transition: padding-right 260ms cubic-bezier(0.22, 1, 0.36, 1);
+      --desktop-search-shift: 0px;
     }
 
-    .app-shell-root[data-desktop-chat-sidebar-open='true'] {
-      --desktop-chat-shift: var(--desktop-chat-sidebar-width);
+    /* Below 1080px the card and the timeline narrow together so neither is
+       squeezed out; from 1080px up there is room for the roomier card. */
+    @media (min-width: 1080px) {
+      .app-shell-root {
+        --desktop-chat-sidebar-width: clamp(400px, min(38vw, calc(50vw - 170px)), 600px);
+      }
     }
 
-    .app-shell-fixed-right-aware {
-      right: var(--desktop-chat-shift);
-      transition: right 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    .app-shell-root[data-desktop-panel-expanded='true'] {
+      --desktop-chat-sidebar-width: min(66vw, calc(100vw - 360px));
     }
 
     .app-shell-fixed-header-width {
-      width: min(calc((100vw - var(--desktop-chat-shift, 0px)) * 0.96), 720px);
+      width: min(calc((100vw - var(--desktop-chat-shift, 0px) - var(--desktop-search-shift, 0px)) * 0.96), 720px);
     }
 
     .app-shell-fixed-tray-width {
-      width: min(calc((100vw - var(--desktop-chat-shift, 0px)) * 0.96), 620px);
+      width: min(calc((100vw - var(--desktop-chat-shift, 0px) - var(--desktop-search-shift, 0px)) * 0.96), 620px);
     }
 
-    .timeline-chat-layout {
-      position: relative;
-      min-width: 0;
+    .app-shell-root {
+      padding-right: var(--desktop-chat-shift);
+      padding-left: var(--desktop-search-shift);
+      transition:
+        padding-right 260ms cubic-bezier(0.22, 1, 0.36, 1),
+        padding-left 260ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    .timeline-chat-main {
-      min-width: 0;
+    .app-shell-root[data-desktop-chat-sidebar-open='true'] {
+      --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
     }
 
-    .timeline-chat-edge-handle {
+    .app-shell-root[data-desktop-search-sidebar-open='true'] {
+      --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
+    }
+
+    /* Expanded panels use a fixed gutter instead of adding the timeline's
+       proportional margins to the panel inset. Mirror the layout for search. */
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] {
+      --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset) + 24px);
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] {
+      --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset) + 24px);
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) {
+      --desktop-expanded-timeline-width: min(720px, calc(100% - var(--desktop-chat-shift) - var(--desktop-search-shift) - var(--desktop-chat-sidebar-inset)));
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-main {
+      width: min(720px, calc(100% - var(--desktop-chat-sidebar-inset)));
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-shell-fixed-header-width {
+      width: var(--desktop-expanded-timeline-width);
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] .app-main {
+      margin-right: 0;
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] .app-main {
+      margin-left: 0;
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] .app-shell-fixed-header-width {
+      left: auto;
+      right: var(--desktop-chat-shift);
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] .app-shell-fixed-header-width {
+      left: var(--desktop-search-shift);
+      right: auto;
+    }
+
+    .app-shell-root[data-desktop-panel-expanded='true'] .timeline-floating-card {
+      box-shadow:
+        0 24px 44px -32px rgb(var(--theme-shadow-color) / 0.4),
+        0 8px 20px -16px rgb(var(--theme-shadow-color) / 0.18);
+    }
+
+    .app-shell-fixed-right-aware {
+      left: var(--desktop-search-shift);
       right: var(--desktop-chat-shift);
       transition:
-        right 260ms cubic-bezier(0.22, 1, 0.36, 1),
-        border-color 160ms ease;
-    }
-
-    .timeline-chat-sidebar {
-      position: fixed;
-      top: 0;
-      right: calc(var(--desktop-chat-shift) - var(--desktop-chat-sidebar-width));
-      bottom: 0;
-      width: var(--desktop-chat-sidebar-width);
-      overflow: hidden;
-      background: var(--theme-surface);
-      border-left: 1px solid var(--theme-border);
-      box-shadow: -10px 0 22px -20px rgb(var(--theme-shadow-color) / 0.5);
-      opacity: 0;
-      pointer-events: none;
-      z-index: 25;
-      transition:
-        opacity 220ms ease,
+        left 260ms cubic-bezier(0.22, 1, 0.36, 1),
         right 260ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    .timeline-chat-sidebar::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: -14px;
-      width: 14px;
-      pointer-events: none;
-      background: linear-gradient(to left, rgb(var(--theme-shadow-color) / 0.18), rgb(var(--theme-shadow-color) / 0));
+    .timeline-floating-card {
+      position: fixed;
+      top: calc(env(safe-area-inset-top) + var(--desktop-chat-sidebar-inset));
+      bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + var(--desktop-chat-sidebar-inset));
+      width: min(var(--desktop-chat-sidebar-width), calc(100vw - 2 * var(--desktop-chat-sidebar-inset)));
+      overflow: hidden;
+      background: var(--theme-surface);
+      border: 1px solid var(--theme-border);
+      border-radius: 24px;
+      box-shadow:
+        0 28px 60px -36px rgb(var(--theme-shadow-color) / 0.5),
+        0 10px 26px -20px rgb(var(--theme-shadow-color) / 0.28);
+      z-index: 25;
+      transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    .timeline-chat-layout.is-chat-open .timeline-chat-sidebar {
+    .timeline-chat-sidebar,
+    .timeline-search-sidebar {
+      opacity: 0;
+      transform: translateX(var(--desktop-panel-entry-offset));
+      pointer-events: none;
+      transition:
+        opacity 220ms ease,
+        width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+        transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .timeline-chat-sidebar {
+      right: var(--desktop-chat-sidebar-inset);
+      --desktop-panel-entry-offset: 16px;
+    }
+
+    .timeline-chat-sidebar.is-chat-open,
+    .timeline-search-sidebar.is-search-open {
       opacity: 1;
+      transform: translateX(0);
       pointer-events: auto;
     }
 
+    /* When a card is too short for its controls (a landscape phone, the
+       on-screen keyboard) the card scrolls as a whole and the composer stays
+       pinned to its bottom edge, so the field being typed in never leaves it. */
     .timeline-chat-sidebar-inner {
-      height: 100%;
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      height: 100%;
       overflow-y: auto;
       overscroll-behavior-y: contain;
-      padding: calc(env(safe-area-inset-top) + 1rem) 1rem calc(env(safe-area-inset-bottom) + 1rem) 1rem;
+    }
+
+    .timeline-chat-sidebar-header {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 1.1rem 1.5rem 0.85rem 1.5rem;
+    }
+
+    .timeline-chat-sidebar-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--theme-text);
+    }
+
+    .timeline-chat-sidebar-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .timeline-chat-sidebar-icon-button {
+      display: inline-flex;
+      height: 2.25rem;
+      width: 2.25rem;
+      align-items: center;
+      justify-content: center;
+      border-radius: 9999px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--theme-text-soft);
+      transition:
+        background-color 160ms ease,
+        border-color 160ms ease,
+        color 160ms ease;
+    }
+
+    /* An icon button that also carries its label, e.g. "Clear chat". */
+    .timeline-chat-sidebar-icon-button.timeline-chat-sidebar-text-button {
+      width: auto;
+      gap: 0.4rem;
+      padding: 0 0.75rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* The chat card's header holds two labelled buttons, which do not fit
+       beside the title below about 300px (windows under ~850px). There it keeps
+       just the icons; each button still has its aria-label and tooltip. */
+    .timeline-floating-card {
+      container-type: inline-size;
+    }
+
+    @container (max-width: 359px) {
+      .timeline-chat-sidebar .timeline-chat-sidebar-text-button {
+        width: 2.25rem;
+        padding: 0;
+      }
+
+      .timeline-chat-sidebar .timeline-chat-sidebar-button-label {
+        display: none;
+      }
+    }
+
+    .timeline-chat-sidebar-icon-button:hover {
+      border-color: var(--theme-border);
+      background: var(--theme-hover);
+      color: var(--theme-text);
+    }
+
+    .timeline-chat-sidebar-icon-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .timeline-chat-sidebar-icon-button:focus-visible {
+      outline: 2px solid var(--theme-accent);
+      outline-offset: 2px;
+    }
+
+    @media (pointer: coarse) {
+      .timeline-chat-sidebar-icon-button {
+        height: 2.75rem;
+        width: 2.75rem;
+      }
+    }
+
+    .timeline-chat-sidebar-messages {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      gap: 1.5rem;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      padding: 0.5rem 1.5rem 1.5rem;
+    }
+
+    /* While following the latest message, the end is kept in view in JS and the
+       browser's scroll anchoring would fight it on reflow. A reader who scrolled
+       up keeps anchoring, so a resize keeps their place. */
+    .timeline-chat-sidebar-messages[data-following='true'] {
+      overflow-anchor: none;
+    }
+
+    /* Pinned to the bottom of the message list while newer messages are below. */
+    .timeline-chat-jump-latest {
+      position: sticky;
+      bottom: 0.5rem;
+      align-self: center;
+      min-height: 2.25rem;
+      padding: 0 1rem;
+      border: 1px solid var(--theme-border);
+      border-radius: 9999px;
       background: var(--theme-surface);
+      color: var(--theme-text);
+      font-size: 0.85rem;
+      font-weight: 600;
+      box-shadow: 0 4px 14px -6px rgb(var(--theme-shadow-color) / 0.35);
+    }
+
+    .timeline-chat-jump-latest:focus-visible {
+      outline: 2px solid var(--theme-accent);
+      outline-offset: 2px;
+    }
+
+    .timeline-chat-sidebar-empty {
+      margin: auto 0;
+      color: var(--theme-text-muted);
+      font-size: 0.95rem;
+      text-align: center;
+    }
+
+    .timeline-chat-sidebar-composer {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+      flex-shrink: 0;
+      padding: 0.9rem 1.5rem 1.15rem;
+      background: var(--theme-surface);
+    }
+
+    .timeline-chat-composer-field {
+      border: 1px solid var(--theme-border);
+      border-radius: 9999px;
+      background: var(--theme-surface-soft);
+      padding: 0.4rem 0.4rem 0.4rem 0.15rem;
+      transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        background-color 160ms ease;
+    }
+
+    .timeline-chat-composer-field:has(textarea[data-multiline='true']) {
+      border-radius: 1.5rem;
+    }
+
+    /* A focused field brightens and takes a soft Rivolo-blue ring, so it is
+       clear where typing goes. */
+    .timeline-chat-composer-field:focus-within {
+      border-color: var(--theme-accent-border);
+      background: var(--theme-surface);
+      box-shadow: 0 0 0 3px rgb(var(--theme-accent-soft-rgb));
+    }
+
+    /* Desktop search card: mirrors the chat card's visual language anchored to the left edge. */
+    .timeline-search-sidebar {
+      left: var(--desktop-chat-sidebar-inset);
+      --desktop-panel-entry-offset: -16px;
+    }
+
+    .timeline-search-sidebar-composer {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+      flex-shrink: 0;
+      padding: 0 1.1rem 1.15rem;
+      background: var(--theme-surface);
+    }
+
+    /* The tray's error badge is a single unbreakable line; inside a card it
+       wraps within the composer and grows upwards. */
+    .timeline-floating-card .tray-input-error {
+      top: auto;
+      bottom: calc(100% + 0.5rem);
+      max-width: 100%;
+      border-radius: 1rem;
+      white-space: normal;
+    }
+
+    /* Touch screens wide enough for the desktop cards get 44px targets inside
+       them; the controls come from the tray, which sizes them down for mice. */
+    @media (pointer: coarse) {
+      .timeline-search-sidebar-pills button,
+      .timeline-floating-card .tray-input-clear,
+      .timeline-floating-card .result-open-button,
+      .timeline-floating-card button[aria-label='Send'] {
+        min-height: 44px;
+        min-width: 44px;
+      }
+
+      /* Full-width text buttons only need the height. */
+      .timeline-floating-card .timeline-search-show-more,
+      .timeline-floating-card .timeline-chat-jump-latest {
+        min-height: 44px;
+      }
+
+      /* The todo marker keeps its inline look; only its tap area grows. */
+      .timeline-floating-card button[aria-label='Toggle todo'] {
+        position: relative;
+      }
+
+      .timeline-floating-card button[aria-label='Toggle todo']::after {
+        content: '';
+        position: absolute;
+        inset: -10px -6px;
+      }
+    }
+
+    .timeline-search-sidebar-pills {
+      flex-shrink: 0;
+      padding: 0.35rem 1.1rem 0.6rem;
+    }
+
+    .timeline-search-sidebar-pills > div {
+      flex-wrap: wrap;
+      overflow-x: visible;
+    }
+
+    .timeline-search-sidebar-results {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      gap: 0.75rem;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      padding: 0.5rem 1.1rem 0.25rem;
+    }
+
+    .timeline-search-sidebar-status {
+      padding: 0 0.25rem;
+      color: var(--theme-text-muted);
+      font-size: 0.8rem;
+    }
+
+    .timeline-search-sidebar-status.is-message {
+      margin: auto 0;
+      font-size: 0.95rem;
+      text-align: center;
+    }
+
+    .timeline-search-show-more {
+      align-self: center;
+      min-height: 2.25rem;
+      padding: 0 1rem;
+      border: 1px solid var(--theme-border);
+      border-radius: 9999px;
+      background: var(--theme-surface);
+      color: var(--theme-text-soft);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .timeline-search-show-more:hover {
+      background: var(--theme-hover);
+    }
+
+    .timeline-search-show-more:focus-visible {
+      outline: 2px solid var(--theme-accent);
+      outline-offset: 2px;
+    }
+
+    .timeline-search-sidebar-results .is-pending {
+      opacity: 0.55;
+      transition: opacity 150ms ease;
+    }
+
+    .timeline-search-sidebar-status-error {
+      color: var(--theme-danger-text);
+    }
+    /* Short cards (a landscape phone, the on-screen keyboard). This block
+       comes last in the desktop rules so it overrides them. With the keyboard
+       up, the header and the filters step aside for the results; a long chat
+       draft scrolls inside the composer instead of pushing Send out. */
+    @media (max-height: 520px) {
+      .timeline-chat-sidebar-header {
+        padding-top: 0.6rem;
+        padding-bottom: 0.4rem;
+      }
+
+      /* Only while the on-screen keyboard is up; a hardware keyboard leaves the
+         card room for everything. Keyed to the keyboard flag alone, never to
+         focus: a tap moves focus on press, and anything that showed or hid then
+         would shift the card under the finger and lose the tap. The flag only
+         clears once the keyboard has closed, after the tap is over. */
+      body[data-keyboard-open='true'] .timeline-floating-card .timeline-chat-sidebar-header,
+      body[data-keyboard-open='true'] .timeline-floating-card .timeline-search-sidebar-pills {
+        display: none;
+      }
+
+      .timeline-chat-sidebar-messages,
+      .timeline-search-sidebar-results {
+        min-height: 4.5rem;
+      }
+
+      /* One sideways-scrolling row; the fade at the right edge shows there is
+         more, and the end padding lets the last pill clear it. */
+      .timeline-search-sidebar-pills > div {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-right: 1.5rem;
+        mask-image: linear-gradient(to right, black calc(100% - 1.5rem), transparent);
+      }
+
+      /* The chat composer sets its height limit and overflow inline. */
+      .timeline-chat-sidebar-composer textarea {
+        max-height: 4.5rem !important;
+        overflow-y: auto !important;
+      }
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .timeline-search-sidebar-results .is-pending,
+    .timeline-chat-composer-field {
+      transition: none;
+    }
+
     .app-shell-root,
     .app-shell-fixed-right-aware,
-    .timeline-chat-edge-handle,
+    .timeline-floating-card,
     .timeline-chat-sidebar {
+      transition: none;
+    }
+
+    .timeline-search-sidebar,
+    .bottom-tray-row {
+      animation: none;
       transition: none;
     }
   }
@@ -1001,24 +1419,227 @@
   display: none;
 }
 
-#bottom-tray-pills:empty {
-  display: none;
+@media not all and (min-width: 700px) {
+  /* The chat transcript clears the composer with a small gap: the tray sits
+     1rem + 6px above the safe area, then about 14px of air. With the keyboard
+     up the tray sits on the keyboard (see .bottom-tray-row below), so the
+     safe area drops out. */
+  .app-shell-root[data-mobile-home='true'] {
+    --mobile-home-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 2rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
+    --mobile-chat-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 2.25rem + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
+  }
+
+  body[data-keyboard-open='true'] .app-shell-root[data-mobile-home='true'] {
+    --mobile-chat-bottom-clearance: calc(var(--bottom-tray-height, 3.5rem) + 1.25rem + var(--keyboard-offset, 0px));
+  }
 }
 
-#bottom-tray-pills {
-  min-height: 2.25rem;
+/* The mobile menu's Chat | Search switch: the capsule + sliding-thumb language
+   shared with the desktop launchers, so the app reads as one system. In the
+   sheet it uses the same 1px lift as the tiles beside it. */
+.mode-capsule {
+  /* Gentle AI glow rising from under Chat (the left half), fixed there
+     regardless of the thumb. Blue is the AI colour, so it only appears here as
+     a glow: the soft-blue token keeps it in the Rivolo palette in both themes
+     instead of desaturating to grey. */
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  height: 4rem;
+  padding: 4px;
+  border: 1px solid var(--theme-border);
+  border-radius: 9999px;
+  background:
+    radial-gradient(ellipse 36% 130% at 25% 110%, rgb(var(--theme-accent-soft-rgb)), transparent 72%),
+    var(--mobile-control-surface);
+  box-shadow: 0 1px 2px rgb(var(--theme-shadow-color) / 0.08);
 }
 
-@media (max-width: 639px) {
-  #bottom-tray-pills[data-mode='search'] {
-    left: -3.25rem;
+.mode-capsule-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border-radius: 9999px;
+  background: var(--theme-thumb);
+  box-shadow: 0 1px 2px rgb(var(--theme-shadow-color) / 0.08);
+  pointer-events: none;
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mode-capsule-button {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  color: var(--theme-text-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mode-capsule-button[aria-pressed='true'] {
+  color: var(--theme-text);
+}
+
+.mode-capsule-button > img {
+  width: 20px;
+  height: 20px;
+}
+
+.mode-capsule-button:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+  border-radius: 9999px;
+}
+
+/* Filter chips are a single raised button. Lift steps up the stack: pills < capsule < field. */
+.capsule-chip {
+  border: 1px solid var(--theme-border);
+  border-radius: 9999px;
+  background: var(--theme-surface);
+  box-shadow:
+    0 4px 12px -8px rgb(var(--theme-shadow-color) / 0.22),
+    0 1px 2px rgb(var(--theme-shadow-color) / 0.08);
+}
+
+.capsule-chip[data-active='true'] {
+  border-color: var(--theme-accent-border);
+  background: var(--theme-accent-soft);
+  color: var(--theme-accent-muted-text);
+}
+
+.capsule-chip[data-active='true'] .capsule-chip-disc {
+  background: var(--theme-surface);
+  color: var(--theme-accent-muted-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-capsule-thumb {
+    transition: none;
   }
 }
 
 #bottom-tray.bottom-tray-shell {
   border-color: var(--theme-border);
-  border-radius: var(--bottom-tray-radius, 28px);
+  border-radius: 9999px;
   box-shadow: 0 6px 18px rgb(var(--theme-shadow-color) / 0.16);
+}
+
+/* Phone composer, chat and search alike: always a box, with the field on
+   top and an action row under it. Chat: Menu, Timeline/Chat, then Send alone
+   at the right. Search: Menu, then Days | Lines and the Filter dropdown.
+   8px of padding plus the 20px radius of the 40px buttons matches
+   the box's 28px corner. */
+#bottom-tray.bottom-tray-shell:has(.tray-phone-composer) {
+  border-radius: var(--bottom-tray-radius, 28px);
+}
+
+.tray-phone-composer {
+  position: relative;
+  display: grid;
+  align-items: center;
+  row-gap: 0.25rem;
+}
+
+.tray-phone-composer[data-mode='chat'] {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'field field field field'
+    'menu lead . send';
+}
+
+.tray-phone-composer[data-mode='search'] {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'field field clear'
+    'menu filters filters';
+}
+
+.tray-phone-menu {
+  grid-area: menu;
+}
+
+.tray-phone-lead {
+  grid-area: lead;
+}
+
+.tray-phone-menu + .tray-phone-lead,
+.tray-phone-menu ~ .tray-phone-filters {
+  margin-left: 0.375rem;
+}
+
+.tray-phone-field {
+  grid-area: field;
+}
+
+/* Lines the draft up with the chip icons below it. Search keeps its wider
+   inset for the lens, which already lines up with the Menu icon. */
+.tray-phone-composer[data-mode='chat'] .tray-phone-field .tray-field {
+  padding-left: 0.625rem;
+}
+
+.tray-phone-send {
+  grid-area: send;
+}
+
+.tray-phone-clear {
+  grid-area: clear;
+}
+
+.tray-phone-filters {
+  grid-area: filters;
+}
+
+/* Days | Lines in the search box: the menu's capsule, sized like the chips
+   beside it, on their fill instead of its glow. */
+.mode-capsule.mode-capsule-compact {
+  width: 6.75rem;
+  height: 2.5rem;
+  padding: 3px;
+  border: none;
+  background: var(--theme-active);
+}
+
+.mode-capsule-compact .mode-capsule-thumb {
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  box-shadow:
+    0 0 0 1px var(--theme-border),
+    0 1px 2px rgb(var(--theme-shadow-color) / 0.12);
+}
+
+/* On the dark chip fill the usual thumb nearly disappears. */
+html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
+  background: var(--theme-border-strong);
+  box-shadow: 0 1px 2px rgb(var(--theme-shadow-color) / 0.3);
+}
+
+.mode-capsule-compact .mode-capsule-button {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Opens upward, clear of the box; the left offset comes from the Filter pill. */
+.tray-phone-filter-menu {
+  position: absolute;
+  bottom: calc(100% + 1rem);
+  z-index: 40;
+  min-width: 11rem;
+  padding: 4px;
+  border: 1px solid var(--theme-border);
+  border-radius: 1.25rem;
+  background: var(--theme-surface);
+  box-shadow: 0 10px 28px -8px rgb(var(--theme-shadow-color) / 0.28);
 }
 
 .bottom-tray-blur,
@@ -1033,10 +1654,6 @@
   height: calc(var(--bottom-tray-height, 3.5rem) + env(safe-area-inset-bottom) + 2.5rem);
 }
 
-.bottom-tray-blur.bottom-tray-blur-search {
-  height: calc(var(--bottom-tray-height, 3.5rem) + env(safe-area-inset-bottom) + 5.5rem);
-}
-
 .bottom-tray-row {
   bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 0.5rem);
 }
@@ -1045,6 +1662,168 @@
   .bottom-tray-row {
     bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1.5rem);
   }
+
+  /* The launchers form one capsule pinned to the viewport centre, outside the
+     tray row, so opening or closing a card never shifts them. A raised thumb
+     slides behind whichever half's card is open. The descendant selectors
+     outrank the buttons' Tailwind utilities. The AI glow matches the mobile
+     menu's .mode-capsule: the soft-blue token, fixed under Chat, here the right
+     half, centred at 75%. */
+  .bottom-tray-launchers {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1.5rem);
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 4px;
+    border: 1px solid var(--theme-border);
+    border-radius: 9999px;
+    background:
+      radial-gradient(ellipse 36% 130% at 75% 110%, rgb(var(--theme-accent-soft-rgb)), transparent 72%),
+      var(--theme-surface-soft);
+    box-shadow:
+      0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
+      0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
+    z-index: 30;
+    transition: left 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] .bottom-tray-launchers {
+    left: calc(100% - var(--desktop-chat-shift) - var(--desktop-expanded-timeline-width) / 2);
+  }
+
+  .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] .bottom-tray-launchers {
+    left: calc(var(--desktop-search-shift) + var(--desktop-expanded-timeline-width) / 2);
+  }
+
+  .bottom-tray-launchers::before {
+    content: '';
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 4px;
+    width: calc(50% - 4px);
+    border-radius: 9999px;
+    background: var(--theme-surface);
+    box-shadow:
+      0 1px 2px rgb(var(--theme-shadow-color) / 0.08),
+      0 3px 8px -4px rgb(var(--theme-shadow-color) / 0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 180ms ease;
+  }
+
+  .bottom-tray-launchers[data-open]::before {
+    opacity: 1;
+  }
+
+  .bottom-tray-launchers[data-position='chat']::before {
+    transform: translateX(100%);
+  }
+
+  /* From no selection, fade in at the chosen half. Only glide between two
+     active panels, and keep the last position while fading out. */
+  .bottom-tray-launchers[data-slide='false']::before {
+    transition: opacity 180ms ease;
+  }
+
+  html[data-theme='dark'] .bottom-tray-launchers::before {
+    background: #2a3340;
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.4),
+      0 4px 14px -4px rgb(0 0 0 / 0.6);
+  }
+
+  .bottom-tray-launchers .bottom-tray-launcher-button {
+    position: relative;
+    z-index: 1;
+    width: 48px;
+    height: 40px;
+    gap: 8px;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--theme-text);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* Inside the capsule the halves have no fill or border of their own, not even
+     Tailwind's hover styles; only the thumb marks a half. */
+  .bottom-tray-launchers .bottom-tray-launcher-button:hover {
+    border-color: transparent;
+    background: transparent;
+  }
+
+  /* Same focus ring as the floating cards' header buttons. */
+  .bottom-tray-launchers .bottom-tray-launcher-button:focus-visible {
+    outline: 2px solid var(--theme-accent);
+    outline-offset: 2px;
+  }
+
+  .bottom-tray-launchers .bottom-tray-launcher-button img {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Coarse-pointer (touch) desktops keep 44px launcher targets. */
+  @media (pointer: coarse) {
+    .bottom-tray-launchers .bottom-tray-launcher-button {
+      height: 44px;
+    }
+  }
+
+  @media (min-width: 1150px) {
+    .bottom-tray-launchers .bottom-tray-launcher-button {
+      width: 132px;
+    }
+
+    .bottom-tray-launchers .launcher-label {
+      display: inline;
+    }
+  }
+
+  /* Shortcut hints only where there is likely a physical keyboard. */
+  @media (min-width: 1150px) and (hover: hover) and (pointer: fine) {
+    .bottom-tray-launchers .launcher-kbd {
+      display: inline;
+      font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      opacity: 0.45;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bottom-tray-launchers,
+    .bottom-tray-launchers[data-slide]::before {
+      transition: none;
+    }
+  }
+}
+
+/* Labels and hints are desktop-capsule only; the mobile launchers stay icons. */
+.launcher-label,
+.launcher-kbd {
+  display: none;
+}
+
+@media (min-width: 700px) {
+  /* Header/tray use Tailwind left-0 (utilities); this unlayered left wins so they
+     shift with --desktop-search-shift when the left card reserves space. */
+  .app-shell-fixed-right-aware {
+    left: var(--desktop-search-shift);
+  }
+}
+
+/* Spans the full width and fades out downwards, like the bottom tray's blur,
+   so it never ends in a hard line or stops short of a floating card. */
+.app-shell-header-blur {
+  height: 6.5rem;
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent);
+  mask-image: linear-gradient(to bottom, #000 45%, transparent);
 }
 
 .bottom-tray-blur-tail {
@@ -1052,6 +1831,8 @@
   height: 4rem;
 }
 
+/* While a day editor is focused the on-screen keyboard owns the bottom of the
+   screen: the whole bottom row (controls and veils) gets out of the way. */
 body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-row,
 body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur,
 body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-tail {
@@ -1071,16 +1852,151 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
     -webkit-backdrop-filter: none;
   }
 
-  .bottom-tray-row {
-    bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 0.5rem + 2px);
-  }
-
-  body[data-keyboard-open='false'] .bottom-tray-row {
-    bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1rem + 2px);
-  }
-
   #bottom-tray.bottom-tray-shell {
     box-shadow: 0 2px 8px rgb(var(--theme-shadow-color) / 0.22);
+  }
+}
+
+/* Phone layout, including a desktop window narrower than 700px, and any touch
+   device. Keyboard closed is the default (4px higher than the previous
+   1rem + 2px) so the first paint does not use the open-keyboard position.
+   Keyboard open sits 12px closer than the previous 0.5rem + 2px, clamped so
+   the bar never slides under the keyboard when there is no home-indicator inset. */
+@media (hover: none), not all and (min-width: 700px) {
+  .bottom-tray-row {
+    --bottom-tray-offset: calc(1rem + 2px + 4px);
+    --bottom-tray-inset: max(0px, env(safe-area-inset-bottom) + var(--bottom-tray-offset));
+    bottom: calc(var(--keyboard-offset, 0px) + var(--bottom-tray-inset));
+  }
+
+  body[data-keyboard-open='true'] .bottom-tray-row {
+    --bottom-tray-offset: calc(0.5rem + 2px - 12px);
+  }
+
+  /* The tray is 96vw and not itself screen-centred, so centring the button
+     inside the row leaves it left of the phone. Pin it to the viewport, at the
+     same 0.5rem gap above the tray in chat and search: the search filters now
+     sit inside the box, so there is no filter row to clear. */
+  .bottom-tray-row > .bottom-tray-scroll-today {
+    position: fixed;
+    top: auto;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(
+      var(--keyboard-offset, 0px)
+      + var(--bottom-tray-inset)
+      + var(--bottom-tray-height, 3.5rem)
+      + 0.5rem
+    );
+  }
+}
+
+
+/* Mobile: the composer box should read as a sibling of the controls around
+   it: same border, one step more lift, and the soft shadow recipe instead of
+   the tight touch override above. */
+@media not all and (min-width: 700px) {
+  /* The phone composer sits on the keyboard: the home-indicator inset is
+     under the keyboard, so it adds no gap. */
+  body[data-keyboard-open='true'] .bottom-tray-row:has(.tray-phone-composer) {
+    --bottom-tray-inset: 0.375rem;
+  }
+
+  /* The phone composer carries its own Menu chip, so the outside button
+     gives its column to the box. */
+  .bottom-tray-row:has(.tray-phone-composer) > .bottom-tray-menu {
+    display: none;
+  }
+
+  #bottom-tray.bottom-tray-shell:has(.tray-phone-composer) {
+    padding: 0.5rem;
+  }
+}
+
+@media not all and (min-width: 700px) {
+  #bottom-tray.bottom-tray-shell {
+    box-shadow:
+      0 8px 20px -10px rgb(var(--theme-shadow-color) / 0.26),
+      0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
+  }
+
+  html[data-theme='dark'] #bottom-tray.bottom-tray-shell {
+    background: var(--mobile-control-surface);
+    box-shadow:
+      0 8px 20px -10px rgb(var(--theme-shadow-color) / 0.6),
+      0 1px 3px rgb(var(--theme-shadow-color) / 0.4);
+  }
+
+  html[data-theme='dark'] .capsule-chip {
+    background: var(--mobile-control-surface);
+  }
+}
+
+.mobile-menu-sheet {
+  --mobile-menu-shadow: 0 -28px 72px rgb(var(--theme-shadow-color) / 0.16);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 2.5rem);
+  box-shadow: var(--mobile-menu-shadow);
+  animation: mobile-menu-rise 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Sheet grabber: 40×4, the light grey from the reference (shadow ink at 9%
+   on white). Dark sheets need a light bar or it disappears. */
+.mobile-menu-grabber {
+  width: 2.5rem;
+  height: 4px;
+  margin: 0 auto 0.75rem;
+  border-radius: 999px;
+  background: rgb(var(--theme-shadow-color) / 0.09);
+}
+
+html[data-theme='dark'] .mobile-menu-grabber {
+  background: rgb(255 255 255 / 0.28);
+}
+
+.mobile-menu-scrim {
+  background: rgb(255 255 255 / 0.28);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  animation: mobile-menu-fade 180ms ease-out both;
+}
+
+html[data-theme='dark'] .mobile-menu-scrim {
+  background: rgb(0 0 0 / 0.35);
+}
+
+.mobile-menu-overlay[data-state='closing'] .mobile-menu-sheet {
+  animation: mobile-menu-lower 180ms ease-in both;
+}
+
+.mobile-menu-overlay[data-state='closing'] .mobile-menu-scrim {
+  animation: mobile-menu-fade-out 180ms ease-in both;
+}
+
+@keyframes mobile-menu-rise {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes mobile-menu-lower {
+  from { transform: var(--mobile-menu-exit-transform, translateY(0)); }
+  to { transform: translateY(100%); }
+}
+
+@keyframes mobile-menu-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mobile-menu-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-menu-overlay[data-state] .mobile-menu-sheet,
+  .mobile-menu-overlay[data-state] .mobile-menu-scrim {
+    animation: none;
   }
 }
 
@@ -1131,6 +2047,11 @@ html[data-theme='dark'] .bg-slate-200,
 html[data-theme='dark'] .bg-slate-300,
 html[data-theme='dark'] .bg-gray-300 {
   background-color: var(--theme-surface-strong) !important;
+}
+
+/* On the dark idle Send button a white arrow reads as enabled; dim it. */
+html[data-theme='dark'] .tray-send-idle-arrow {
+  opacity: 0.6;
 }
 
 html[data-theme='dark'] .bg-\[\#EBF4FF\],
@@ -1271,4 +2192,27 @@ html[data-theme='dark'] .shadow-lg {
 
 html[data-theme='dark'] .focus-visible\:ring-offset-2:focus-visible {
   --tw-ring-offset-color: var(--theme-page);
+}
+
+.matched-result-group {
+  overflow: hidden;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface);
+  box-shadow: var(--theme-card-shadow-soft);
+}
+
+.matched-result-row + .matched-result-row {
+  border-top: 1px solid var(--theme-border);
+}
+
+.matched-result-row {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+}
+
+.matched-result-row > div {
+  min-width: 0;
+  width: 100%;
 }

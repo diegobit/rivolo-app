@@ -7,6 +7,7 @@ import { todoKeymap, todoPointerHandler } from '../../lib/editor/todoExtensions'
 import { wrapSelectionOnDelimiter } from '../../lib/editor/wrapSelection'
 import { editorHighlights } from '../../lib/editorHighlights'
 import type { Day } from '../../lib/dayRepository'
+import { hashtagCompletion } from '../../lib/editor/hashtagCompletion'
 
 type DayEditorCardProps = {
   day: Day
@@ -172,7 +173,7 @@ const DayEditorCardHeader = ({
           {showDeleteMenu && (
             <div className="absolute right-0 top-12 z-10 min-w-[150px] rounded-xl border border-slate-200 bg-white p-1 shadow-lg sm:top-10">
               <button
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
                 type="button"
                 onClick={() => {
                   setShowDeleteMenu(false)
@@ -248,6 +249,7 @@ const DayEditorCard = memo(({
 }: DayEditorCardProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const searchHighlight = useMemo(() => createHighlightPlugin(searchQuery), [searchQuery])
+  const hashtagSuggestions = useMemo(() => hashtagCompletion(day.dayId), [day.dayId])
   const quoteHighlight = useMemo(() => (quote ? createHighlightPlugin(quote) : null), [quote])
   const previewContent = useMemo(() => {
     const trimmed = day.contentMd.trim()
@@ -322,6 +324,7 @@ const DayEditorCard = memo(({
       navigationKeymap,
       todoKeymap,
       todoPointerHandler,
+      hashtagSuggestions,
       ...editorHighlights,
     ]
     if (searchHighlight) {
@@ -334,6 +337,7 @@ const DayEditorCard = memo(({
   }, [
     clearActiveLine,
     editorTheme,
+    hashtagSuggestions,
     markdownExtension,
     navigationKeymap,
     quoteHighlight,
@@ -353,12 +357,12 @@ const DayEditorCard = memo(({
     <div
       ref={handleContainerRef}
       data-scroll-target={isToday ? 'today' : undefined}
-      className={`day-editor-card scroll-anchor group rounded-[4px] border p-4 transition ${
+      className={`day-editor-card scroll-anchor group rounded-[4px] border p-4 transition max-sm:rounded-none max-sm:border-x-0 ${
         heroReveal ? 'hero-reveal' : ''
       } ${
         isFuture
-          ? 'day-editor-card-future border-dashed border-slate-200/60 bg-white/70 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.03)] hover:border-slate-300/60'
-          : 'border-slate-200/60 bg-white shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] hover:border-slate-300/60'
+          ? 'day-editor-card-future border-dashed border-slate-200/60 bg-white/70 [box-shadow:var(--theme-card-shadow-soft)] hover:border-slate-300/60'
+          : 'border-slate-200/60 bg-white [box-shadow:var(--theme-card-shadow)] hover:border-slate-300/60'
       }`}
     >
       <DayEditorCardHeader
@@ -392,7 +396,7 @@ const DayEditorCard = memo(({
             }}
             onBlur={(event) => void onBlur(day.dayId, event.nativeEvent)}
             onCreateEditor={(view) => registerEditor(day.dayId, view)}
-            basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLineGutter: false }}
+            basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLineGutter: false, autocompletion: false }}
           />
         ) : (
           <button

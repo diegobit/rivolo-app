@@ -42,6 +42,8 @@ const connectedState = {
   lastRemoteVersion: null,
   lastPushedHash: null,
   lastSyncAt: null,
+  lastPullAt: null,
+  lastPushAt: null,
   localDirty: true,
   localRevision: 1,
   accountId: 'account',

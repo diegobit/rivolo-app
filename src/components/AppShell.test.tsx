@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -41,11 +41,10 @@ const stores = vi.hoisted(() => ({
     setMode: vi.fn(),
     chatPanelOpen: false,
     setChatPanelOpen: vi.fn(),
-    desktopChatPanelOpen: false,
-    setDesktopChatPanelOpen: vi.fn(),
     chatMessageCount: 0,
     timelineEmpty: null as boolean | null,
     setTimelineEmpty: vi.fn(),
+    setMenuAttentionCount: vi.fn(),
   },
   viewport: {
     isNarrow: false,
@@ -70,26 +69,6 @@ vi.mock('../hooks/useTabSyncState', () => ({
   useTabSyncState: () => stores.tabSync,
 }))
 vi.mock('./app-shell/useAutoSync', () => ({ useAutoSync: vi.fn() }))
-vi.mock('./app-shell/BottomTrayRow', () => ({
-  default: ({
-    showMobileNewChatButton,
-    onNewChat,
-    showScrollToToday,
-  }: {
-    showMobileNewChatButton: boolean
-    onNewChat: () => void
-    showScrollToToday: boolean
-  }) => (
-    <>
-      {showMobileNewChatButton ? (
-        <button type="button" aria-label="New chat" onClick={onNewChat}>
-          New chat
-        </button>
-      ) : null}
-      {showScrollToToday ? <div data-testid="scroll-to-today-visible" /> : null}
-    </>
-  ),
-}))
 vi.mock('./app-shell/ShortcutsPopover', () => ({
   default: ({ shortcutsRef }: { shortcutsRef: { current: HTMLDivElement | null } }) => (
     <div ref={shortcutsRef}>
@@ -145,9 +124,9 @@ describe('AppShell attention and stale tab states', () => {
     stores.sync.syncAttention = null
     stores.ui.mode = 'timeline'
     stores.ui.chatPanelOpen = false
-    stores.ui.desktopChatPanelOpen = false
     stores.ui.chatMessageCount = 0
     stores.ui.timelineEmpty = null
+    stores.ui.setMode.mockClear()
     stores.viewport.isNarrow = false
   })
 
@@ -331,39 +310,102 @@ describe('AppShell attention and stale tab states', () => {
     expect(stores.settings.updateThemePreference).toHaveBeenCalledExactlyOnceWith('system')
   })
 
-  it('uses mobile home header slots with settings on the right and no theme shortcut', () => {
+  it.each(['chat', 'search'] as const)('shows the menu button and no header controls in %s mode', (mode) => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
     stores.sync.activeProvider = 'google-drive'
     stores.viewport.isNarrow = true
+    stores.ui.mode = mode
 
-    const renderShell = (initialEntry: string) => (
-      <MemoryRouter initialEntries={[initialEntry]}>
+    render(
+      <MemoryRouter initialEntries={['/']}>
         <Routes>
           <Route path="/" element={<AppShell />}>
             <Route index element={<div>Timeline content</div>} />
-            <Route path="settings" element={<div>Settings content</div>} />
-            <Route path="privacy" element={<div>Privacy content</div>} />
           </Route>
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter>,
     )
-    render(renderShell('/'))
 
-    const settingsLink = screen.getByRole('link', { name: 'Settings' })
-    const { left, right } = getHeaderSlots()
-
+    // The top bar keeps the brand but has no controls: they live in the menu.
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Theme: System' })).not.toBeInTheDocument()
-    expect(left).toBeEmptyDOMElement()
-    expect(right).toContainElement(settingsLink)
     expect(screen.queryByRole('button', { name: 'Shortcuts' })).not.toBeInTheDocument()
+    // The brand is in the shell header whenever the full-screen chat is not up
+    // (with no messages there is no overlay, even in chat mode).
+    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveClass('pt-0')
+    expect(screen.getByRole('main')).toHaveStyle({ paddingBottom: 'var(--mobile-home-bottom-clearance)' })
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Switch to/ })).not.toBeInTheDocument()
+    expect(document.querySelector('#bottom-tray')).toBeInTheDocument()
   })
 
-  it('shows mobile new chat in the left header slot during chat', async () => {
+  it('moves a phone out of the plain timeline mode, which has no controls there', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'timeline'
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('chat')
+  })
+
+  it('hands the brand to the full-screen chat overlay when a thread is up', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = true
     stores.ui.mode = 'chat'
+    stores.ui.chatPanelOpen = true
     stores.ui.chatMessageCount = 1
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('link', { name: 'Home' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeVisible()
+  })
+
+  it('shows the shell brand on mobile when chat overlay is dismissed to timeline', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    stores.ui.chatPanelOpen = false
+    stores.ui.chatMessageCount = 1
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Home' })).toBeVisible()
+  })
+
+  it('clears the chat from the menu without changing mode', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'search'
+    stores.ui.chatMessageCount = 2
     const onNewChat = vi.fn()
     window.addEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
 
@@ -377,15 +419,130 @@ describe('AppShell attention and stale tab states', () => {
       </MemoryRouter>,
     )
 
-    const newChatButton = screen.getByRole('button', { name: 'New chat' })
-    const { left } = getHeaderSlots()
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Clear chat' }))
 
-    expect(left).toContainElement(newChatButton)
-
-    await userEvent.click(newChatButton)
+    expect(stores.ui.setMode).not.toHaveBeenCalled()
     expect(onNewChat).toHaveBeenCalledOnce()
 
     window.removeEventListener(TIMELINE_NEW_CHAT_EVENT, onNewChat)
+  })
+
+  it('keeps the page locked through the menu exit animation, then releases it', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    const view = render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    await userEvent.click(document.querySelector('.mobile-menu-scrim')!)
+
+    expect(document.querySelector('.mobile-menu-overlay')).toHaveAttribute('data-state', 'closing')
+    expect(view.container.querySelector('main')).toHaveAttribute('inert')
+    expect(document.documentElement.style.overflow).toBe('hidden')
+    expect(document.body.style.overflow).toBe('')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument())
+    await waitFor(() => expect(view.container.querySelector('main')).not.toHaveAttribute('inert'))
+    expect(document.documentElement.style.overflow).toBe('')
+    expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus()
+  })
+
+  it('releases Menu inert state when the viewport crosses into desktop mode', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    const shell = () => (
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    )
+    const view = render(shell())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    expect(view.container.querySelector('main')).toHaveAttribute('inert')
+
+    stores.viewport.isNarrow = false
+    view.rerender(shell())
+    await waitFor(() => expect(view.container.querySelector('main')).not.toHaveAttribute('inert'))
+  })
+
+  it('keeps the welcome hero clean: the bottom bar fades out with it on mobile', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    document.body.dataset.heroUi = 'true'
+
+    try {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<AppShell />}>
+              <Route index element={<div>Timeline content</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      // The hero is clean: the row (composer + dock) fades out with it.
+      expect(document.querySelector('.bottom-tray-row')).toHaveClass('hero-ui-fade-down')
+    } finally {
+      delete document.body.dataset.heroUi
+    }
+  })
+
+  it('offers settings but greys out Clear chat while the chat is empty', async () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    // The brand stays in the shell header; the sheet no longer repeats it.
+    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    expect(document.querySelector('#mobile-chat-menu img[src="/logo.svg"]')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Close menu' })).not.toBeInTheDocument()
+    expect(document.querySelector('.mobile-menu-grabber')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
+    expect(screen.getByRole('button', { name: 'Clear chat' })).toBeDisabled()
+  })
+
+  it('keeps Menu as its accessible name when the tab needs reloading', async () => {
+    stores.viewport.isNarrow = true
+    stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
+    stores.sync.activeProvider = 'google-drive'
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const menuButton = screen.getByRole('button', { name: 'Menu' })
+    expect(menuButton).toHaveAccessibleDescription('Reload needed')
+    await userEvent.click(menuButton)
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
   })
 
   it('uses mobile route header slots with back on the left and no theme shortcut', () => {
@@ -465,6 +622,56 @@ describe('AppShell attention and stale tab states', () => {
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
   })
 
+  it('focuses the chat composer when the chat shortcut is pressed while chat is already open', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.ui.mode = 'chat'
+    stores.ui.setMode.mockClear()
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+
+    const composer = document.createElement('textarea')
+    composer.id = 'chat-input'
+    document.body.appendChild(composer)
+
+    try {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<AppShell />}>
+              <Route index element={<div>Timeline content</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      fireEvent.keyDown(window, { key: 'k', metaKey: true })
+
+      expect(stores.ui.setMode).not.toHaveBeenCalled()
+      expect(document.activeElement).toBe(composer)
+    } finally {
+      composer.remove()
+    }
+  })
+
+  it('toggles the desktop chat card with the sidebar shortcut while it is open', () => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.ui.mode = 'chat'
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.keyDown(window, { key: 's', metaKey: true, shiftKey: true })
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+  })
+
   it('delays attention after welcome and hides it immediately when welcome returns', async () => {
     vi.useFakeTimers()
     stores.tabSync = { isPrimary: true, databaseStale: false }
@@ -502,6 +709,7 @@ describe('AppShell attention and stale tab states', () => {
 
   it('coalesces rapid scroll/resize events into a single rAF-scheduled update, preserving scroll-to-today visibility', () => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = true
 
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
     let scrollY = 0
@@ -556,12 +764,12 @@ describe('AppShell attention and stale tab states', () => {
 
     expect(rafSpy).toHaveBeenCalledTimes(1)
     expect(rectSpy).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('scroll-to-today-visible')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Scroll to Today' })).not.toBeInTheDocument()
 
     act(() => flushRaf())
 
     expect(rectSpy).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId('scroll-to-today-visible')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Scroll to Today' })).toBeInTheDocument()
 
     rafSpy.mockClear()
     rectSpy.mockClear()
@@ -569,6 +777,283 @@ describe('AppShell attention and stale tab states', () => {
     fireEvent.scroll(window)
     act(() => flushRaf())
 
-    expect(screen.queryByTestId('scroll-to-today-visible')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Scroll to Today' })).not.toBeInTheDocument()
+  })
+})
+
+describe('AppShell launcher mode buttons', () => {
+  const renderHome = () => (
+    <MemoryRouter initialEntries={['/']}>
+      <Routes>
+        <Route path="/" element={<AppShell />}>
+          <Route index element={<div>Timeline content</div>} />
+        </Route>
+      </Routes>
+    </MemoryRouter>
+  )
+
+  beforeEach(() => {
+    installMatchMedia(false)
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.days = { loaded: true, loading: false, days: [{}] }
+    stores.settings.dismissedSetupNotices = { ai: true, sync: true }
+    stores.settings.llmSecrets = { gemini: { apiKey: 'test-key' } }
+    stores.sync.activeProvider = 'google-drive'
+    stores.ui.mode = 'timeline'
+    stores.ui.chatPanelOpen = false
+    stores.ui.chatMessageCount = 0
+    stores.ui.timelineEmpty = null
+    stores.viewport.isNarrow = false
+    stores.ui.setMode.mockClear()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('opens chat or search from the desktop launcher buttons', () => {
+    // BottomTrayRow is mocked here; the real launcher order is covered in its own tests.
+    render(renderHome())
+
+    const buttons = [
+      screen.getByRole('button', { name: 'Search' }),
+      screen.getByRole('button', { name: 'Chat' }),
+    ]
+    // Desktop launchers carry visible labels that match their accessible names.
+    expect(buttons[0]).toHaveTextContent('Search')
+    expect(buttons[1]).toHaveTextContent('Chat')
+    expect(buttons[0]).toHaveAttribute('type', 'button')
+    expect(buttons[1]).toHaveAttribute('type', 'button')
+    expect(buttons[0]).not.toHaveAttribute('aria-controls')
+    expect(buttons[1]).not.toHaveAttribute('aria-controls')
+    expect(buttons[0]).toHaveAttribute('aria-expanded', 'false')
+    expect(buttons[1]).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+    expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('search')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    expect(stores.ui.setMode).toHaveBeenLastCalledWith('chat')
+    expect(stores.ui.setMode).toHaveBeenCalledTimes(2)
+  })
+
+  it('clicking the lens while the search card is open returns to the timeline', () => {
+    stores.ui.mode = 'search'
+    render(renderHome())
+
+    const searchBtn = screen.getByRole('button', { name: 'Hide search' })
+    expect(searchBtn).toHaveAttribute('aria-expanded', 'true')
+    expect(searchBtn).toHaveAttribute('aria-controls', 'desktop-search-card')
+    fireEvent.click(searchBtn)
+
+    expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('timeline')
+  })
+
+  it('clicking the AI button while the chat card is open returns to the timeline', () => {
+    stores.ui.mode = 'chat'
+    render(renderHome())
+
+    const chatBtn = screen.getByRole('button', { name: 'Hide chat' })
+    expect(chatBtn).toHaveAttribute('aria-expanded', 'true')
+    expect(chatBtn).toHaveAttribute('aria-controls', 'desktop-chat-card')
+    fireEvent.click(chatBtn)
+
+    expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('timeline')
+  })
+
+  it('marks the open desktop cards on the shell root for the tray layout', () => {
+    stores.ui.mode = 'search'
+    const view = render(renderHome())
+
+    expect(document.querySelector('.app-shell-root')).toHaveAttribute(
+      'data-desktop-search-sidebar-open',
+      'true',
+    )
+    expect(document.querySelector('.app-shell-root')).toHaveAttribute(
+      'data-desktop-chat-sidebar-open',
+      'false',
+    )
+
+    stores.ui.mode = 'chat'
+    view.rerender(renderHome())
+
+    expect(document.querySelector('.app-shell-root')).toHaveAttribute(
+      'data-desktop-search-sidebar-open',
+      'false',
+    )
+    expect(document.querySelector('.app-shell-root')).toHaveAttribute(
+      'data-desktop-chat-sidebar-open',
+      'true',
+    )
+  })
+
+  it('switches between chat and search from the mobile menu', () => {
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    render(renderHome())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    const modes = within(screen.getByRole('group', { name: 'Mode' }))
+    expect(modes.getByRole('button', { name: 'Chat' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(modes.getByRole('button', { name: 'Search' }))
+    expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('search')
+  })
+
+  it('opens chat from the AI button in timeline mode', () => {
+    stores.ui.mode = 'timeline'
+    render(renderHome())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('chat')
+  })
+
+  it('closes open search card on Escape and returns focus to search launcher', () => {
+    stores.ui.mode = 'search'
+    render(renderHome())
+
+    const searchLauncher = screen.getByRole('button', { name: 'Hide search' })
+    expect(searchLauncher).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+    expect(document.activeElement).toBe(searchLauncher)
+  })
+
+  it('closes open chat card on Escape and returns focus to AI chat launcher', () => {
+    stores.ui.mode = 'chat'
+    render(renderHome())
+
+    const chatLauncher = screen.getByRole('button', { name: 'Hide chat' })
+    expect(chatLauncher).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+    expect(document.activeElement).toBe(chatLauncher)
+  })
+
+  it('leaves Escape to a focused day note and keeps the card open', () => {
+    stores.ui.mode = 'search'
+    render(renderHome())
+    const note = document.createElement('div')
+    note.contentEditable = 'true'
+    note.tabIndex = 0
+    document.body.appendChild(note)
+    note.focus()
+
+    fireEvent.keyDown(note, { key: 'Escape' })
+
+    expect(stores.ui.setMode).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(note)
+    note.remove()
+  })
+
+  it('moves focus to the Chat launcher when the chat shortcut closes a focused composer', () => {
+    stores.ui.mode = 'chat'
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    render(renderHome())
+    const card = document.createElement('aside')
+    card.id = 'desktop-chat-card'
+    const composer = document.createElement('textarea')
+    card.appendChild(composer)
+    document.body.appendChild(card)
+    composer.focus()
+
+    fireEvent.keyDown(window, { key: 's', metaKey: true, shiftKey: true })
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide chat' }))
+    card.remove()
+  })
+
+  it('leaves focus in a day note when the chat shortcut closes the card', () => {
+    stores.ui.mode = 'chat'
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    render(renderHome())
+    const note = document.createElement('div')
+    note.contentEditable = 'true'
+    note.tabIndex = 0
+    document.body.appendChild(note)
+    note.focus()
+
+    fireEvent.keyDown(window, { key: 's', metaKey: true, shiftKey: true })
+
+    expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+    expect(document.activeElement).toBe(note)
+    note.remove()
+  })
+
+  it.each([
+    ['k', 'chat', 'chat-input', 'Hide chat'],
+    ['f', 'search', 'search-input', 'Hide search'],
+  ] as const)(
+    'closes the desktop %s-shortcut card when its field already has focus',
+    (key, openMode, inputId, launcherName) => {
+      stores.ui.mode = openMode
+      vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+      render(renderHome())
+      const launcher = screen.getByRole('button', { name: launcherName })
+      const field = document.createElement('textarea')
+      field.id = inputId
+      document.body.appendChild(field)
+      field.focus()
+
+      fireEvent.keyDown(window, { key, metaKey: true })
+
+      expect(stores.ui.setMode).toHaveBeenCalledWith('timeline')
+      expect(document.activeElement).toBe(document.body)
+      expect(launcher).not.toHaveFocus()
+      field.remove()
+    },
+  )
+
+  it('keeps the shortcut as focus-only on narrow viewports', () => {
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    render(renderHome())
+    const field = document.createElement('textarea')
+    field.id = 'chat-input'
+    document.body.appendChild(field)
+    field.focus()
+
+    fireEvent.keyDown(window, { key: 'k', metaKey: true })
+
+    expect(stores.ui.setMode).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(field)
+    field.remove()
+  })
+
+  it('treats chat mode as an open chat card once a narrow viewport flips to wide', () => {
+    stores.viewport.isNarrow = true
+    stores.ui.mode = 'chat'
+    const view = render(renderHome())
+
+    stores.viewport.isNarrow = false
+    view.rerender(renderHome())
+
+    // Desktop card visibility is derived from the mode, so there is no stale
+    // closed state left over from the narrow layout.
+    expect(screen.getByRole('button', { name: 'Hide chat' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('opens search from the timeline with the find shortcut and switches cards with the mode shortcuts', () => {
+    stores.ui.mode = 'timeline'
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    const view = render(renderHome())
+
+    fireEvent.keyDown(window, { key: 'f', metaKey: true })
+    expect(stores.ui.setMode).toHaveBeenLastCalledWith('search')
+
+    // Cmd+K while the search card is open switches to the chat card.
+    stores.ui.mode = 'search'
+    stores.ui.setMode.mockClear()
+    view.rerender(renderHome())
+
+    fireEvent.keyDown(window, { key: 'k', metaKey: true })
+    expect(stores.ui.setMode).toHaveBeenLastCalledWith('chat')
   })
 })

@@ -1,4 +1,5 @@
-import { memo } from 'react'
+import { memo, useId, type ComponentProps } from 'react'
+import type { TodoAction } from '../../lib/editor/todoMarker'
 import type { Day } from '../../lib/dayRepository'
 import { addDays, formatHumanDate, parseDayId } from '../../lib/dates'
 import { renderSyntaxLine } from './syntaxHighlight'
@@ -10,7 +11,10 @@ export type MatchedLineResultItem = {
   openQuote: string
   hasMore: boolean
   blockIndex: number
+  // The line holding a todo marker, for toggling it; null for sections.
   sourceLineIndex: number | null
+  // The line to open at, so repeated identical matches open where they are.
+  openLineIndex: number | null
 }
 
 const getMatchedResultDayLabel = (dayId: string, todayId: string) => {
@@ -41,6 +45,7 @@ const MatchedLineResultCard = memo(({
   hasMore,
   blockIndex,
   sourceLineIndex,
+  openLineIndex,
   enableTodoToggle,
   todayId,
   contentTextStyle,
@@ -54,31 +59,43 @@ const MatchedLineResultCard = memo(({
   hasMore: boolean
   blockIndex: number
   sourceLineIndex: number | null
+  openLineIndex: number | null
   enableTodoToggle: boolean
   todayId: string
   contentTextStyle: React.CSSProperties
   searchQuery: string
-  onOpen: (dayId: string, quote: string) => void
-  onToggleTodo: (dayId: string, blockIndex: number, sourceLineIndex: number) => void
+  onOpen: (dayId: string, quote: string, lineIndex?: number) => void
+  onToggleTodo: (dayId: string, blockIndex: number, sourceLineIndex: number, action?: TodoAction) => void
 }) => {
   const dayLabel = getMatchedResultDayLabel(day.dayId, todayId)
+  // Several matches can share a day, so each Open button is described by its
+  // own snippet to tell them apart.
+  const snippetId = useId()
 
   return (
-    <section className="scroll-anchor relative rounded-[4px] border border-slate-200/60 bg-white px-3 py-2.5 pr-14 shadow-[0_6px_6px_-4px_rgba(0,0,0,0.10),0_2px_12px_rgba(0,0,0,0.06)] transition hover:border-slate-300/60">
+    <section
+      className="matched-result-row relative cursor-pointer px-3 py-3 pr-16 transition-colors hover:bg-[var(--theme-hover)]"
+      onClick={(event) => {
+        const target = event.target as HTMLElement
+        if (target.closest('button[aria-label="Toggle todo"]')) return
+        // A click that ends a text selection is the user copying, not opening.
+        if (window.getSelection()?.toString()) return
+        onOpen(day.dayId, openQuote, openLineIndex ?? undefined)
+      }}
+    >
       <button
-        className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700 sm:h-9 sm:w-9"
+        className="result-open-button absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700 sm:h-9 sm:w-9"
         type="button"
         aria-label={`Open note for ${dayLabel}`}
-        onClick={() => onOpen(day.dayId, openQuote)}
+        aria-describedby={snippetId}
+        onClick={(event) => {
+          event.stopPropagation()
+          onOpen(day.dayId, openQuote, openLineIndex ?? undefined)
+        }}
       >
         <img src="/arrow-square-in.svg" alt="" className="h-5 w-5" />
       </button>
-      <div className="mb-1.5">
-        <p className="m-0" style={{ ...contentTextStyle, color: 'var(--theme-text-muted)' }}>
-          {dayLabel}
-        </p>
-      </div>
-      <div className="space-y-0" style={contentTextStyle}>
+      <div id={snippetId} className="space-y-0" style={contentTextStyle}>
         {block.split('\n').map((line, lineIndex) => (
           <p key={`${day.dayId}-${lineIndex}`} className="m-0 whitespace-pre-wrap break-words px-[2px] pl-[6px] text-[var(--theme-editor-text)]">
             {line
@@ -88,8 +105,8 @@ const MatchedLineResultCard = memo(({
                   `${day.dayId}-${lineIndex}`,
                   enableTodoToggle && sourceLineIndex !== null && lineIndex === 0
                     ? {
-                        onToggleTodo: () => {
-                          onToggleTodo(day.dayId, blockIndex, sourceLineIndex)
+                        onToggleTodo: (action) => {
+                          onToggleTodo(day.dayId, blockIndex, sourceLineIndex, action)
                         },
                       }
                     : undefined,
@@ -104,3 +121,29 @@ const MatchedLineResultCard = memo(({
 })
 
 export default MatchedLineResultCard
+
+export function MatchedLineResultList({
+  items,
+  ...sharedProps
+}: {
+  items: MatchedLineResultItem[]
+} & Pick<ComponentProps<typeof MatchedLineResultCard>,
+  'enableTodoToggle' | 'todayId' | 'contentTextStyle' | 'searchQuery' | 'onOpen' | 'onToggleTodo'>) {
+  const groups = new Map<string, MatchedLineResultItem[]>()
+  for (const item of items) {
+    const group = groups.get(item.day.dayId)
+    if (group) group.push(item)
+    else groups.set(item.day.dayId, [item])
+  }
+
+  return Array.from(groups, ([dayId, matches]) => (
+    <section key={dayId} className="matched-result-group scroll-anchor">
+      <p className="m-0 px-3 pt-3 pb-1" style={{ ...sharedProps.contentTextStyle, color: 'var(--theme-text-muted)' }}>
+        {getMatchedResultDayLabel(dayId, sharedProps.todayId)}
+      </p>
+      {matches.map(({ key, ...item }) => (
+        <MatchedLineResultCard key={key} {...item} {...sharedProps} />
+      ))}
+    </section>
+  ))
+}

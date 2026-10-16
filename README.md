@@ -45,6 +45,10 @@ npm run build
 npm run preview
 ```
 
+## Hashtag suggestions
+
+While writing a note, type a hashtag prefix such as `#ne` to see matching tags already used in the notebook. Choose with Up/Down and Enter, Tab, or a click/tap; Escape dismisses the suggestions. New tags remain free-form. Suggestions use a derived SQLite index of all locally stored days, plus the current unsaved draft. Import, sync, date changes and deletions mark affected days for incremental reindexing. The index is rebuilt from notes as needed; it does not rename tags or create a fixed project catalog. Case and Unicode normalization deduplicate suggestions while preserving the original note text.
+
 ## Cloud sync setup
 
 > Only needed if you run your own copy of Rivolo and want Google Drive or Dropbox sync. The hosted app at [rivolo.app](https://rivolo.app) already has this configured — nothing to do.

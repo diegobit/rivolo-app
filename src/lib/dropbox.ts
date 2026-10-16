@@ -135,6 +135,8 @@ export const disconnectDropbox = async () => {
     lastRemoteRev: null,
     lastPushedHash: null,
     lastSyncAt: null,
+    lastPullAt: null,
+    lastPushAt: null,
   })
 }
 
@@ -145,6 +147,8 @@ export const getDropboxStatus = async (): Promise<SyncStatus> => {
     targetName: state.filePath,
     lastRemoteVersion: state.lastRemoteRev,
     lastSyncAt: state.lastSyncAt,
+    lastPullAt: state.lastPullAt,
+    lastPushAt: state.lastPushAt,
     localDirty: state.localDirty,
     accountName: state.accountName,
     accountEmail: state.accountEmail,
@@ -168,6 +172,8 @@ export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
 
   if (metadata.rev === state.lastRemoteRev && !(force && state.localDirty)) {
     console.info('[Dropbox] pull:noop', { filePath: path, rev: metadata.rev })
+    // The remote was checked and matches, so this still counts as a pull.
+    await updateDropboxState({ lastPullAt: Date.now() })
     return { status: 'noop' as const, metadata }
   }
 
@@ -185,6 +191,7 @@ export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
     // re-push what we just pulled.
     lastPushedHash: await hashSyncContent(content),
     lastSyncAt: Date.now(),
+    lastPullAt: Date.now(),
     localDirty: false,
   })
 

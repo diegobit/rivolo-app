@@ -43,15 +43,16 @@ const activeProviderLabel = () => {
   return providerId ? SYNC_PROVIDER_LABELS[providerId] : 'Sync provider'
 }
 
-export const recordSyncAttention = (operation: 'pull' | 'push', message: string) => {
+export const recordSyncAttention = (operation: 'pull' | 'push', message: string, blocked = false) => {
   const state = useSyncStore.getState()
   if (
     state.syncAttention?.operation === operation &&
-    state.syncAttention.message === message
+    state.syncAttention.message === message &&
+    (state.syncAttention.blocked ?? false) === blocked
   ) {
     return
   }
-  state.setSyncAttention({ operation, message, at: Date.now() })
+  state.setSyncAttention({ operation, message, at: Date.now(), ...(blocked ? { blocked } : {}) })
 }
 
 const clearSyncAttention = () => {
@@ -69,6 +70,9 @@ export const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') 
     ? `${label} file is missing. Local data is safe — keep this device's notes to recreate it.`
     : `${label} changed remotely. Choose which copy to keep.`
 }
+
+export const recordBlockedPush = (reason: 'remote_missing' | 'remote_changed') =>
+  recordSyncAttention('push', blockedPushMessage(reason), true)
 
 export const pullFromSyncAndRefresh = async (options?: {
   force?: boolean
@@ -124,7 +128,7 @@ const runAutoPush = () => {
   const run = pushToSyncAndRefresh().then(
     (result) => {
       if (result.status === 'blocked') {
-        recordSyncAttention('push', blockedPushMessage(result.reason))
+        recordBlockedPush(result.reason)
       }
     },
     (error: unknown) => {

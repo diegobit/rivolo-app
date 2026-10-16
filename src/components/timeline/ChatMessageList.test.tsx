@@ -56,6 +56,24 @@ describe('ChatMessageList insert status', () => {
 })
 
 describe('ChatMessageList copy button', () => {
+  it('keeps message text and focusable controls in chronological DOM order', () => {
+    render(
+      <ChatMessageList
+        mobile
+        messages={[
+          { id: 'first', role: 'user', content: 'First message' },
+          { id: 'second', role: 'assistant', content: 'Second message' },
+        ]}
+        onAssistantMarkdownClick={vi.fn()}
+        onAssistantMarkdownKeyDown={vi.fn()}
+        onChatInsert={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('First message').compareDocumentPosition(screen.getByText('Second message')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(2)
+  })
+
   it('copies the assistant message and confirms', async () => {
     renderMessage({ id: 'assistant-2', role: 'assistant', content: 'Hello there.' })
 

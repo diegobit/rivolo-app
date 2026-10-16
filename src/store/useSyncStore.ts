@@ -8,6 +8,9 @@ export type SyncAttention = {
   operation: 'pull' | 'push'
   message: string
   at: number
+  // A push the cloud refused (changed or missing remote), as opposed to an
+  // error that a plain retry might fix.
+  blocked?: boolean
 }
 
 export type SyncViewState = {

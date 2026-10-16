@@ -278,23 +278,138 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
     expect(authenticate).toHaveBeenCalledTimes(1)
   })
 
-  it('declines the standalone SSE notification stream before auth', async () => {
-    const authenticate = vi.fn().mockResolvedValue(dropboxAuth())
-    const response = await handleRemoteMcpRequest(
+  it('challenges unauthenticated GET and POST before treating them as healthy', async () => {
+    const authenticate = vi.fn().mockResolvedValue(null)
+    const env = createEnv()
+    const challenge =
+      'Bearer resource_metadata="https://mcp.rivolo.app/.well-known/oauth-protected-resource/mcp", scope="notes:read notes:write"'
+
+    for (const accept of [
+      'text/event-stream',
+      'application/json',
+      'application/json, text/event-stream',
+      null,
+    ]) {
+      for (const method of ['GET', 'POST']) {
+        const headers = new Headers()
+        if (accept) headers.set('Accept', accept)
+        const response = await handleRemoteMcpRequest(
+          new Request('https://mcp.rivolo.app/mcp', { method, headers }),
+          env,
+          { ...defaultDependencies(null), authenticate },
+        )
+        expect(response.status).toBe(401)
+        expect(response.headers.get('WWW-Authenticate')).toBe(challenge)
+        expect(response.headers.get('Cache-Control')).toBe('no-store')
+      }
+    }
+
+    const malformed = await handleRemoteMcpRequest(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'GET',
+        headers: { Authorization: 'Bearer not-a-token' },
+      }),
+      env,
+      { ...defaultDependencies(null), authenticate },
+    )
+    expect(malformed.status).toBe(401)
+    expect(malformed.headers.get('WWW-Authenticate')).toBe(challenge)
+  })
+
+  it('returns 405 for an authenticated GET without opening a stream', async () => {
+    const refreshDropbox = vi.fn()
+    const providerFetch = vi.fn<typeof fetch>()
+    for (const authorization of [dropboxAuth(), oauthAuth()]) {
+      const authenticate = vi.fn().mockResolvedValue(authorization)
+      const response = await handleRemoteMcpRequest(
+        new Request('https://mcp.rivolo.app/mcp', {
+          method: 'GET',
+          headers: {
+            Accept: 'text/event-stream',
+            Authorization: 'Bearer credential',
+            'Last-Event-ID': 'event-1',
+            'MCP-Protocol-Version': '2025-06-18',
+          },
+        }),
+        createEnv(),
+        {
+          authenticate,
+          fetch: providerFetch,
+          refreshDropbox,
+          refreshGoogle: vi.fn(),
+        },
+      )
+      expect(response.status).toBe(405)
+      expect(response.headers.get('Allow')).toBe('POST')
+      expect(response.headers.get('Cache-Control')).toBe('no-store')
+      expect(response.headers.get('Content-Type')).not.toContain('text/event-stream')
+      expect(authenticate).toHaveBeenCalledTimes(1)
+    }
+    expect(refreshDropbox).not.toHaveBeenCalled()
+    expect(providerFetch).not.toHaveBeenCalled()
+
+    const absentVersion = await handleRemoteMcpRequest(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'GET',
+        headers: { Authorization: 'Bearer credential' },
+      }),
+      createEnv(),
+      { ...defaultDependencies(dropboxAuth()), authenticate: vi.fn().mockResolvedValue(dropboxAuth()) },
+    )
+    expect(absentVersion.status).toBe(405)
+
+    const unsupported = await handleRemoteMcpRequest(
       new Request('https://mcp.rivolo.app/mcp', {
         method: 'GET',
         headers: {
-          Accept: 'text/event-stream',
-          Authorization: 'Bearer rvl_test',
+          Authorization: 'Bearer credential',
+          'MCP-Protocol-Version': '1999-01-01',
         },
       }),
       createEnv(),
-      { ...defaultDependencies(dropboxAuth()), authenticate },
+      {
+        ...defaultDependencies(dropboxAuth()),
+        authenticate: vi.fn().mockResolvedValue(dropboxAuth()),
+        refreshDropbox,
+      },
     )
+    expect(unsupported.status).toBe(400)
+    expect(refreshDropbox).not.toHaveBeenCalled()
 
-    expect(response.status).toBe(405)
-    expect(response.headers.get('Allow')).toBe('POST')
-    expect(authenticate).not.toHaveBeenCalled()
+    const unsupportedPost = await handleRemoteMcpRequest(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer credential',
+          'Content-Type': 'application/json',
+          'MCP-Protocol-Version': '1999-01-01',
+        },
+        body: '{}',
+      }),
+      createEnv(),
+      {
+        ...defaultDependencies(dropboxAuth()),
+        authenticate: vi.fn().mockResolvedValue(dropboxAuth()),
+        fetch: providerFetch,
+      },
+    )
+    expect(unsupportedPost.status).toBe(400)
+    expect(providerFetch).not.toHaveBeenCalled()
+
+    const blockedAuthenticate = vi.fn().mockResolvedValue(dropboxAuth())
+    const disallowed = await handleRemoteMcpRequest(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'GET',
+        headers: { Origin: 'https://evil.example', Authorization: 'Bearer credential' },
+      }),
+      createEnv(),
+      {
+        ...defaultDependencies(dropboxAuth()),
+        authenticate: blockedAuthenticate,
+      },
+    )
+    expect(disallowed.status).toBe(403)
+    expect(blockedAuthenticate).not.toHaveBeenCalled()
   })
 
   it('lists only tools allowed by PAT scopes', async () => {
@@ -530,7 +645,7 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
 })
 
 describe('hosted MCP Worker discovery', () => {
-  it('answers a GET notification stream on the MCP endpoint with 405', async () => {
+  it('answers an unauthenticated MCP GET with the protected-resource challenge', async () => {
     const response = await worker.fetch(
       new Request('https://mcp.rivolo.app/mcp', {
         method: 'GET',
@@ -539,8 +654,11 @@ describe('hosted MCP Worker discovery', () => {
       createEnv(),
     )
 
-    expect(response.status).toBe(405)
-    expect(response.headers.get('Allow')).toBe('POST')
+    expect(response.status).toBe(401)
+    expect(response.headers.get('WWW-Authenticate')).toContain(
+      'resource_metadata="https://mcp.rivolo.app/.well-known/oauth-protected-resource/mcp"',
+    )
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 
   it('serves protected-resource metadata from the MCP origin', async () => {

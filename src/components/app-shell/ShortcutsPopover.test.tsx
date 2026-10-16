@@ -41,6 +41,17 @@ describe('ShortcutsPopover', () => {
     expect(trigger).toHaveFocus()
   })
 
+  it('marks Escape as handled so other listeners can skip it', () => {
+    renderPopover(true)
+
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    const stopSpy = vi.spyOn(event, 'stopPropagation')
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(stopSpy).toHaveBeenCalled()
+  })
+
   it('can be opened from the keyboard', async () => {
     const onToggle = renderPopover(false)
     const trigger = screen.getByRole('button', { name: 'Shortcuts' })
@@ -49,5 +60,18 @@ describe('ShortcutsPopover', () => {
     await userEvent.keyboard('{Enter}')
 
     expect(onToggle).toHaveBeenCalledOnce()
+  })
+
+  it('renders todo markers help text without touchscreen instructions', () => {
+    renderPopover(true)
+
+    const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' })
+    expect(dialog).toHaveTextContent(
+      'Todo markers: [ ] open, [x] completed, [-] cancelled.',
+    )
+    expect(dialog).toHaveTextContent(
+      'Click to complete or reopen; right-click to cancel or reopen.',
+    )
+    expect(dialog.textContent).not.toMatch(/touch\s*screen/i)
   })
 })

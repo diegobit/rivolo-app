@@ -42,6 +42,24 @@ export type OAuthAuthorizationRequest = {
   resource: string
 }
 
+export type OAuthCallbackContext = {
+  client: RegisteredOAuthClient
+  redirectUri: string
+  state: string | null
+}
+
+export type AuthorizationCallbackResult =
+  | { type: 'code'; code: string }
+  | { type: 'error'; error: AuthorizationRedirectError; description: string }
+
+export type AuthorizationRedirectError =
+  | 'invalid_request'
+  | 'invalid_scope'
+  | 'unsupported_response_type'
+  | 'access_denied'
+  | 'server_error'
+  | 'temporarily_unavailable'
+
 export type OAuthTokenResponse = {
   access_token: string
   token_type: 'Bearer'
@@ -111,6 +129,19 @@ const MAX_REDIRECT_URI_LENGTH = 2048
 const CODE_TTL_MS = 5 * 60 * 1000
 const ACCESS_TTL_MS = 60 * 60 * 1000
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000
+export const OAUTH_AUTHORIZATION_FIELDS = [
+  'client_id',
+  'redirect_uri',
+  'state',
+  'response_type',
+  'scope',
+  'code_challenge',
+  'code_challenge_method',
+  'resource',
+] as const
+
+export const MAX_AUTHORIZATION_INPUT_BYTES = 16 * 1024
+
 const CLIENT_ID_PATTERN = /^rvc_[A-Za-z0-9_-]{22}$/
 const AUTHORIZATION_CODE_PATTERN = /^rvc_code_[A-Za-z0-9_-]{43}$/
 const ACCESS_TOKEN_PATTERN = /^rva_[A-Za-z0-9_-]{43}$/
@@ -131,12 +162,57 @@ export class McpOAuthProtocolError extends Error {
       | 'invalid_grant'
       | 'invalid_scope'
       | 'unsupported_grant_type'
-      | 'unsupported_response_type',
+      | 'unsupported_response_type'
+      | 'access_denied'
+      | 'server_error'
+      | 'temporarily_unavailable',
     message: string,
   ) {
     super(message)
     this.name = 'McpOAuthProtocolError'
   }
+}
+
+export class McpOAuthTrustError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'McpOAuthTrustError'
+  }
+}
+
+export class McpOAuthUnavailableError extends Error {
+  constructor() {
+    super('Authorization is temporarily unavailable.')
+    this.name = 'McpOAuthUnavailableError'
+  }
+}
+
+export class McpOAuthGrantDeniedError extends Error {
+  readonly code = 'access_denied' as const
+
+  constructor() {
+    super('Rivolo agent access is not active.')
+    this.name = 'McpOAuthGrantDeniedError'
+  }
+}
+
+const TRANSIENT_ERROR_CODES = new Set([
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'UND_ERR_CONNECT_TIMEOUT',
+])
+
+export const classifyOAuthServiceFailure = (
+  error: unknown,
+): 'transient' | 'internal' => {
+  if (error instanceof McpOAuthUnavailableError) return 'transient'
+  if (error instanceof Error && 'code' in error) {
+    const code = (error as { code?: unknown }).code
+    if (typeof code === 'string' && TRANSIENT_ERROR_CODES.has(code)) return 'transient'
+  }
+  return 'internal'
 }
 
 export class McpOAuthAuthenticationError extends Error {
@@ -197,8 +273,21 @@ const validateClientId = (value: string) => {
   return value
 }
 
-const validateRedirectUri = (value: string) => {
-  if (!value || value.length > MAX_REDIRECT_URI_LENGTH) {
+const isLoopbackHostname = (hostname: string) =>
+  hostname === 'localhost' ||
+  hostname === '127.0.0.1' ||
+  hostname === '::1' ||
+  hostname === '[::1]'
+
+export const assertSafeRedirectUri = (value: string) => {
+  if (
+    !value ||
+    value.length > MAX_REDIRECT_URI_LENGTH ||
+    hasControlCharacter(value) ||
+    value.includes('#') ||
+    value.includes('\\') ||
+    /\s/.test(value)
+  ) {
     throw new McpOAuthProtocolError('invalid_request', 'redirect_uri is invalid.')
   }
   let redirect: URL
@@ -207,21 +296,83 @@ const validateRedirectUri = (value: string) => {
   } catch {
     throw new McpOAuthProtocolError('invalid_request', 'redirect_uri is invalid.')
   }
-  const isLoopback =
-    redirect.protocol === 'http:' &&
-    (redirect.hostname === 'localhost' ||
-      redirect.hostname === '127.0.0.1' ||
-      redirect.hostname === '[::1]')
+  const loopback = redirect.protocol === 'http:' && isLoopbackHostname(redirect.hostname)
   if (
-    redirect.hash ||
     redirect.username ||
     redirect.password ||
-    (redirect.protocol !== 'https:' && !isLoopback)
+    redirect.origin === 'null' ||
+    redirect.hostname.includes('*') ||
+    (redirect.protocol !== 'https:' && !loopback)
   ) {
     throw new McpOAuthProtocolError('invalid_request', 'redirect_uri is not allowed.')
   }
-  return redirect.href
+  return value
 }
+
+const validateRedirectUri = (value: string) => {
+  assertSafeRedirectUri(value)
+  return new URL(value).href
+}
+
+const FORM_ACTION_ORIGIN_PATTERN =
+  /^https:\/\/[^\s;,"']+$|^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]+)?$/
+
+export const formActionOriginForRedirect = (redirectUri: string) => {
+  assertSafeRedirectUri(redirectUri)
+  const origin = new URL(redirectUri).origin
+  if (!FORM_ACTION_ORIGIN_PATTERN.test(origin)) {
+    throw new McpOAuthTrustError('redirect_uri is not allowed.')
+  }
+  return origin
+}
+
+const CALLBACK_RESPONSE_PARAMS = [
+  'code',
+  'error',
+  'error_description',
+  'error_uri',
+  'state',
+  'iss',
+] as const
+
+export const buildAuthorizationCallbackUrl = (
+  context: OAuthCallbackContext,
+  issuer: string,
+  result: AuthorizationCallbackResult,
+) => {
+  const url = new URL(context.redirectUri)
+  for (const key of CALLBACK_RESPONSE_PARAMS) url.searchParams.delete(key)
+  if (result.type === 'code') {
+    url.searchParams.set('code', result.code)
+  } else {
+    url.searchParams.set('error', result.error)
+    url.searchParams.set('error_description', result.description)
+  }
+  if (context.state !== null) url.searchParams.set('state', context.state)
+  url.searchParams.set('iss', issuer)
+  return url
+}
+
+export const assertBoundedAuthorizationInput = (serialized: string) => {
+  if (new TextEncoder().encode(serialized).byteLength > MAX_AUTHORIZATION_INPUT_BYTES) {
+    throw new McpOAuthTrustError('The authorization request is too large.')
+  }
+}
+
+export const assertUniqueFields = (
+  params: URLSearchParams,
+  fields: readonly string[],
+) => {
+  if (fields.some((field) => params.getAll(field).length > 1)) {
+    throw new McpOAuthTrustError('The authorization request is ambiguous.')
+  }
+}
+
+export const hasAuthorizationFields = (params: URLSearchParams) =>
+  OAUTH_AUTHORIZATION_FIELDS.some((field) => params.getAll(field).length > 0)
+
+const redirectIsRegistered = (redirectUri: string, registered: string[]) =>
+  registered.some((candidate) => candidate === redirectUri)
 
 const validateClientName = (value: unknown) => {
   if (value === undefined || value === null || value === '') return null
@@ -384,26 +535,60 @@ export class McpOAuthRepository {
     return row ? toClient(row) : null
   }
 
-  async parseAuthorizationRequest(
+  async resolveCallbackContext(input: URLSearchParams): Promise<OAuthCallbackContext> {
+    assertUniqueFields(input, OAUTH_AUTHORIZATION_FIELDS)
+    let client: RegisteredOAuthClient | null
+    try {
+      client = await this.getClient(input.get('client_id') ?? '')
+    } catch (error) {
+      if (error instanceof McpOAuthProtocolError) {
+        throw new McpOAuthTrustError('Client is not registered.')
+      }
+      throw error
+    }
+    if (!client) throw new McpOAuthTrustError('Client is not registered.')
+    try {
+      if (!client.redirectUris.length) {
+        throw new McpOAuthProtocolError('invalid_request', 'redirect_uri is invalid.')
+      }
+      for (const uri of client.redirectUris) assertSafeRedirectUri(uri)
+    } catch (error) {
+      if (error instanceof McpOAuthProtocolError) {
+        throw new McpOAuthTrustError('The registered client is invalid.')
+      }
+      throw error
+    }
+    const redirectUri = input.get('redirect_uri')
+    if (!redirectUri) throw new McpOAuthTrustError('redirect_uri is invalid.')
+    if (!redirectIsRegistered(redirectUri, client.redirectUris)) {
+      throw new McpOAuthTrustError(
+        'redirect_uri does not match the registered value.',
+      )
+    }
+    try {
+      assertSafeRedirectUri(redirectUri)
+    } catch (error) {
+      if (error instanceof McpOAuthProtocolError) {
+        throw new McpOAuthTrustError('redirect_uri is not allowed.')
+      }
+      throw error
+    }
+    const state = input.get('state')
+    if (state !== null && (state.length > 1024 || hasControlCharacter(state))) {
+      throw new McpOAuthTrustError('state is invalid.')
+    }
+    return { client, redirectUri, state }
+  }
+
+  validateAuthorizationDetails(
+    context: OAuthCallbackContext,
     input: URLSearchParams,
     expectedResource: string,
-  ): Promise<OAuthAuthorizationRequest> {
+  ): OAuthAuthorizationRequest {
     if (input.get('response_type') !== 'code') {
       throw new McpOAuthProtocolError(
         'unsupported_response_type',
         'response_type must be code.',
-      )
-    }
-    const clientId = validateClientId(input.get('client_id') ?? '')
-    const client = await this.getClient(clientId)
-    if (!client) {
-      throw new McpOAuthProtocolError('invalid_client', 'Client is not registered.')
-    }
-    const redirectUri = validateRedirectUri(input.get('redirect_uri') ?? '')
-    if (!client.redirectUris.includes(redirectUri)) {
-      throw new McpOAuthProtocolError(
-        'invalid_request',
-        'redirect_uri does not match the registered value.',
       )
     }
     const codeChallenge = input.get('code_challenge') ?? ''
@@ -411,10 +596,7 @@ export class McpOAuthRepository {
       input.get('code_challenge_method') !== 'S256' ||
       !PKCE_CHALLENGE_PATTERN.test(codeChallenge)
     ) {
-      throw new McpOAuthProtocolError(
-        'invalid_request',
-        'S256 PKCE is required.',
-      )
+      throw new McpOAuthProtocolError('invalid_request', 'S256 PKCE is required.')
     }
     const resource = input.get('resource') ?? ''
     if (resource !== expectedResource) {
@@ -423,14 +605,10 @@ export class McpOAuthRepository {
         'resource does not match the Rivolo MCP server.',
       )
     }
-    const state = input.get('state')
-    if (state !== null && (state.length > 1024 || hasControlCharacter(state))) {
-      throw new McpOAuthProtocolError('invalid_request', 'state is invalid.')
-    }
     return {
-      client,
-      redirectUri,
-      state,
+      client: context.client,
+      redirectUri: context.redirectUri,
+      state: context.state,
       scopes: parseScopes(input.get('scope') ?? ''),
       codeChallenge,
       resource,
@@ -479,10 +657,7 @@ export class McpOAuthRepository {
       )
       .run()
     if (result.meta.changes !== 1) {
-      throw new McpOAuthProtocolError(
-        'invalid_request',
-        'Rivolo agent access is not active.',
-      )
+      throw new McpOAuthGrantDeniedError()
     }
     return code
   }
@@ -522,11 +697,20 @@ export class McpOAuthRepository {
       )
       .bind(await hash(input.code))
       .first<AuthorizationCodeRow>()
+    const redirectMatches = (() => {
+      try {
+        assertSafeRedirectUri(input.redirectUri)
+        if (row) assertSafeRedirectUri(row.redirect_uri)
+      } catch {
+        return false
+      }
+      return row?.redirect_uri === input.redirectUri
+    })()
     if (
       !row ||
       row.used_at ||
       row.client_id !== clientId ||
-      row.redirect_uri !== validateRedirectUri(input.redirectUri) ||
+      !redirectMatches ||
       row.resource !== input.resource ||
       Date.parse(row.expires_at) <= this.now().getTime()
     ) {

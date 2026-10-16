@@ -27,15 +27,17 @@ export default function AttentionPopover({
     }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
       setIsOpen(false)
       triggerRef.current?.focus()
     }
 
     document.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown, true)
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keydown', handleKeyDown, true)
     }
   }, [isOpen])
 

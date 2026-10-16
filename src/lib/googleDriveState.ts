@@ -13,6 +13,8 @@ export type GoogleDriveState = {
   lastRemoteVersion: string | null
   lastPushedHash: string | null
   lastSyncAt: number | null
+  lastPullAt: number | null
+  lastPushAt: number | null
   localDirty: boolean
   localRevision: number
   accountId: string | null
@@ -28,6 +30,8 @@ const DEFAULT_STATE: GoogleDriveState = {
   lastRemoteVersion: null,
   lastPushedHash: null,
   lastSyncAt: null,
+  lastPullAt: null,
+  lastPushAt: null,
   localDirty: false,
   localRevision: 0,
   accountId: null,
@@ -82,6 +86,8 @@ export const updateGoogleDriveFileName = async (fileName: string) =>
       lastRemoteVersion: changed ? null : current.lastRemoteVersion,
       lastPushedHash: changed ? null : current.lastPushedHash,
       lastSyncAt: changed ? null : current.lastSyncAt,
+      lastPullAt: changed ? null : current.lastPullAt,
+      lastPushAt: changed ? null : current.lastPushAt,
       localDirty: changed ? true : current.localDirty,
       localRevision: changed ? current.localRevision + 1 : current.localRevision,
     }
@@ -112,6 +118,7 @@ export const finalizeGoogleDrivePushState = async (
       lastRemoteVersion: remoteVersion,
       lastPushedHash: pushedHash === undefined ? current.lastPushedHash : pushedHash,
       lastSyncAt: Date.now(),
+      lastPushAt: Date.now(),
       localDirty: current.localRevision === sourceRevision ? false : current.localDirty,
     }
     return { next, result: next }

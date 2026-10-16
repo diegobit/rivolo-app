@@ -1,6 +1,6 @@
 import { EditorSelection, Prec, type Line } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
-import { getToggledValue, matchTodoMarker } from './todoMarker'
+import { getToggledValue, matchTodoMarker, type TodoAction } from './todoMarker'
 
 const LIST_MARKER_REGEX = /^(\s*)(?:[-+*]|\d+[.)])\s+(.*)$/
 
@@ -31,7 +31,7 @@ const createTodoLine = (lineText: string) => {
   return content ? `${indentation}- [ ] ${content}` : `${indentation}- [ ] `
 }
 
-export const toggleTodoAtPos = (view: EditorView, pos: number) => {
+export const toggleTodoAtPos = (view: EditorView, pos: number, action: TodoAction = 'complete') => {
   const line = view.state.doc.lineAt(pos)
   const marker = getTodoMarker(line)
   if (!marker) return false
@@ -40,13 +40,13 @@ export const toggleTodoAtPos = (view: EditorView, pos: number) => {
     changes: {
       from: marker.toggleFrom,
       to: marker.toggleTo,
-      insert: getToggledValue(marker.value),
+      insert: getToggledValue(marker.value, action),
     },
   })
   return true
 }
 
-const toggleOrCreateTodosInSelection = (view: EditorView) => {
+const toggleOrCreateTodosInSelection = (view: EditorView, action: TodoAction = 'complete') => {
   const changes: Array<{ from: number; to: number; insert: string }> = []
   const seenLines = new Set<number>()
   const shouldMoveCursorToEnd =
@@ -74,11 +74,12 @@ const toggleOrCreateTodosInSelection = (view: EditorView) => {
         changes.push({
           from: marker.toggleFrom,
           to: marker.toggleTo,
-          insert: getToggledValue(marker.value),
+          insert: getToggledValue(marker.value, action),
         })
         continue
       }
 
+      if (action === 'cancel') continue
       const todoLineText = createTodoLine(line.text)
       changes.push({
         from: line.from,
@@ -108,21 +109,78 @@ const toggleOrCreateTodosInSelection = (view: EditorView) => {
   return true
 }
 
+const getPointerPos = (view: EditorView, x: number, y: number, target: EventTarget | null) => {
+  const element = target instanceof Element ? target.closest('.cm-todo-marker') : null
+  if (element && view.contentDOM.contains(element)) {
+    return view.posAtDOM(element)
+  }
+  return view.posAtCoords({ x, y })
+}
+
+// Track taps separately from scrolling and suppress the synthetic mouse event
+// after a touch activation. State belongs to each editor, including on hybrids.
+const touches = new WeakMap<EditorView, { pos: number; x: number; y: number }>()
+const lastTouchActivation = new WeakMap<EditorView, { time: number; pos: number }>()
+
 export const todoPointerHandler = EditorView.domEventHandlers({
   mousedown: (event, view) => {
-    if (event.button !== 0) return false
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+    if (event.button !== 0 || event.ctrlKey) return false
+    const pos = getPointerPos(view, event.clientX, event.clientY, event.target)
     if (pos == null) return false
-    if (!toggleTodoAtPos(view, pos)) return false
+    const lastTouch = lastTouchActivation.get(view)
+    if (lastTouch?.pos === pos && Date.now() - lastTouch.time < 700) {
+      event.preventDefault()
+      return true
+    }
+    if (!toggleTodoAtPos(view, pos, 'complete')) return false
+    event.preventDefault()
+    view.focus()
+    return true
+  },
+  contextmenu: (event, view) => {
+    // Preserve the native text menu on a touch long-press.
+    if (touches.has(view)) {
+      touches.delete(view)
+      return false
+    }
+    const pos = getPointerPos(view, event.clientX, event.clientY, event.target)
+    if (pos == null || !toggleTodoAtPos(view, pos, 'cancel')) return false
+    event.preventDefault()
     view.focus()
     return true
   },
   touchstart: (event, view) => {
+    touches.delete(view)
+    if (event.touches.length !== 1) return false
     const touch = event.touches.item(0)
     if (!touch) return false
-    const pos = view.posAtCoords({ x: touch.clientX, y: touch.clientY })
+    const pos = getPointerPos(view, touch.clientX, touch.clientY, event.target)
     if (pos == null) return false
-    if (!toggleTodoAtPos(view, pos)) return false
+    const marker = getTodoMarker(view.state.doc.lineAt(pos))
+    if (!marker || pos < marker.bracketFrom || pos >= marker.bracketTo) return false
+    touches.set(view, { pos, x: touch.clientX, y: touch.clientY })
+    return false
+  },
+  touchmove: (event, view) => {
+    const start = touches.get(view)
+    const touch = event.touches.item(0)
+    if (start && (!touch || Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > 10)) {
+      touches.delete(view)
+    }
+    return false
+  },
+  touchcancel: (_event, view) => {
+    touches.delete(view)
+    return false
+  },
+  touchend: (event, view) => {
+    const start = touches.get(view)
+    touches.delete(view)
+    const touch = event.changedTouches.item(0)
+    if (!start || !touch || event.touches.length ||
+      Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > 10) return false
+    if (!toggleTodoAtPos(view, start.pos, 'cycle')) return false
+    lastTouchActivation.set(view, { time: Date.now(), pos: start.pos })
     event.preventDefault()
     return true
   },
@@ -130,6 +188,10 @@ export const todoPointerHandler = EditorView.domEventHandlers({
 
 export const todoKeymap = Prec.high(
   keymap.of([
+    {
+      key: 'Mod-Shift-Enter',
+      run: (view) => toggleOrCreateTodosInSelection(view, 'cancel'),
+    },
     {
       key: 'Mod-Enter',
       run: (view) => toggleOrCreateTodosInSelection(view),

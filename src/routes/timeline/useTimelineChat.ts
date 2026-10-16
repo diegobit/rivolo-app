@@ -18,9 +18,7 @@ type UseTimelineChatParams = {
   activeLlmConfig: ActiveLlmConfig
   isNarrowViewport: boolean
   chatPanelOpen: boolean
-  desktopChatPanelOpen: boolean
   setChatPanelOpen: (open: boolean) => void
-  setDesktopChatPanelOpen: (open: boolean) => void
   onInsertNote: (targetDay: string, text: string) => Promise<void>
 }
 
@@ -39,9 +37,7 @@ export const useTimelineChat = ({
   activeLlmConfig,
   isNarrowViewport,
   chatPanelOpen,
-  desktopChatPanelOpen,
   setChatPanelOpen,
-  setDesktopChatPanelOpen,
   onInsertNote,
 }: UseTimelineChatParams) => {
   const [sending, setSending] = useState(false)
@@ -52,17 +48,14 @@ export const useTimelineChat = ({
     messagesRef.current = messages
   }, [messages])
 
+  // Resolves false when the draft was not sent, so the composer can keep it.
   const handleChatSend = useCallback(
-    async (draft: string) => {
+    async (draft: string): Promise<boolean> => {
       const trimmed = draft.trim()
-      if (!trimmed) return
+      if (!trimmed) return false
 
       if (isNarrowViewport && !chatPanelOpen) {
         setChatPanelOpen(true)
-      }
-
-      if (!isNarrowViewport && !desktopChatPanelOpen) {
-        setDesktopChatPanelOpen(true)
       }
 
       setChatError(null)
@@ -70,7 +63,7 @@ export const useTimelineChat = ({
       const configError = validateActiveLlmConfig(activeLlmConfig)
       if (configError) {
         setChatError(configError)
-        return
+        return false
       }
       const requestConfig = { ...activeLlmConfig } as ActiveLlmConfig
 
@@ -382,16 +375,15 @@ export const useTimelineChat = ({
       } finally {
         setSending(false)
       }
+      return true
     },
     [
       aiLanguage,
       activeLlmConfig,
       allowWebSearch,
       chatPanelOpen,
-      desktopChatPanelOpen,
       isNarrowViewport,
       onInsertNote,
-      setDesktopChatPanelOpen,
       setChatPanelOpen,
       setMessages,
     ],
@@ -445,7 +437,12 @@ export const useTimelineChat = ({
     if (isNarrowViewport) {
       setChatPanelOpen(false)
       document.getElementById('chat-input')?.blur()
+      return
     }
+
+    requestAnimationFrame(() => {
+      document.getElementById('chat-input')?.focus()
+    })
   }, [isNarrowViewport, sending, setChatPanelOpen, setMessages])
 
   return {
