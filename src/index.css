@@ -1857,6 +1857,37 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
   }
 }
 
+/* Touch at tablet width (iPad): the header is fixed, and at top: 0 the logo sits in
+   Safari's top scroll-edge band, which blurs it. Drop it 1rem below the safe area like
+   the phone header (b002575) and push the content and scroll anchors down to match. The top veil gets the
+   bottom tray's treatment: no backdrop-filter, an opaque page colour that fades out.
+   Safari then tints its own top band with that colour instead of stacking a second,
+   lighter blur above ours. */
+@media (hover: none) and (min-width: 640px) {
+  .app-shell-top-header {
+    top: calc(env(safe-area-inset-top) + 1rem);
+  }
+
+  .app-main {
+    padding-top: calc(env(safe-area-inset-top) + 6rem);
+  }
+
+  /* html outranks the plain .scroll-anchor rule further down. */
+  html .scroll-anchor {
+    scroll-margin-top: calc(env(safe-area-inset-top) + 6rem);
+  }
+
+  .app-shell-header-blur {
+    height: calc(env(safe-area-inset-top) + 7.5rem);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .app-shell-header-blur[data-scrolled='true'] {
+    background: var(--theme-page);
+  }
+}
+
 /* Phone layout, including a desktop window narrower than 700px, and any touch
    device. Keyboard closed is the default (4px higher than the previous
    1rem + 2px) so the first paint does not use the open-keyboard position.
