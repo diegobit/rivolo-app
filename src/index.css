@@ -964,6 +964,39 @@
       right: auto;
     }
 
+    /* Narrow desktop windows (and iPad portrait) can't spare the roomy gutters:
+       a card's 20px inset plus the timeline's 2% margins left about 30px between
+       them. Tighten everything to one 12px gutter, so the timeline's outer edge,
+       the gap to the card and the card's own edge all match. The shift counts the
+       card's outer inset only; the timeline's margin supplies the gap. The fixed
+       header and tray use 100% rather than 100vw so the scrollbar gutter does
+       not make them wider than the timeline. */
+    @media (max-width: 1079.98px) {
+      .app-shell-root:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) {
+        --desktop-chat-sidebar-inset: 12px;
+      }
+
+      .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-chat-sidebar-open='true'] {
+        --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset));
+      }
+
+      .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-search-sidebar-open='true'] {
+        --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset));
+      }
+
+      .app-shell-root[data-desktop-panel-expanded='false']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-main {
+        width: min(720px, calc(100% - 2 * var(--desktop-chat-sidebar-inset)));
+      }
+
+      .app-shell-root[data-desktop-panel-expanded='false']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-shell-fixed-header-width {
+        width: min(720px, calc(100% - var(--desktop-chat-shift) - var(--desktop-search-shift) - 2 * var(--desktop-chat-sidebar-inset)));
+      }
+
+      .app-shell-root[data-desktop-panel-expanded='false']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-shell-fixed-tray-width {
+        width: min(620px, calc(100% - var(--desktop-chat-shift) - var(--desktop-search-shift) - 2 * var(--desktop-chat-sidebar-inset)));
+      }
+    }
+
     .app-shell-root[data-desktop-panel-expanded='true'] .timeline-floating-card {
       box-shadow:
         0 24px 44px -32px rgb(var(--theme-shadow-color) / 0.4),
