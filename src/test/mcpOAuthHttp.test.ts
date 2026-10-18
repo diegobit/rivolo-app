@@ -464,9 +464,10 @@ describe('pending authorization cookie', () => {
       new Request(`${ISSUER}/pending`, {
         headers: { Cookie: `${MCP_OAUTH_PENDING_COOKIE}=${encodeURIComponent(cookieValue)}` },
       })
-    expect((await readPendingRequest(requestWith(`${value.slice(0, -1)}A`), secret)).status).toBe(
-      'invalid',
-    )
+    // Tamper the first base64url character: it always changes the IV. Replacing
+    // the last character can be a no-op when it only carries padding bits.
+    const tampered = `${value[0] === 'A' ? 'B' : 'A'}${value.slice(1)}`
+    expect((await readPendingRequest(requestWith(tampered), secret)).status).toBe('invalid')
     expect(
       (await readPendingRequest(requestWith(value), 'other-secret')).status,
     ).toBe('invalid')
