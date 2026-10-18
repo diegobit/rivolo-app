@@ -93,6 +93,10 @@ vi.mock('../lib/dayRepository', () => ({
   appendToDay: vi.fn().mockResolvedValue(undefined),
   searchDays: vi.fn().mockResolvedValue([]),
 }))
+vi.mock('../lib/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/db')>()),
+  flushDatabaseSave: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('../components/timeline/DayEditorCard', () => ({
   default: () => <div data-testid="day-editor-card" />,
 }))
@@ -561,7 +565,7 @@ describe('Timeline desktop search card', () => {
     fireEvent.keyDown(lastLoaded, { key: 'ArrowDown' })
 
     await waitForResults(60)
-    expect(document.activeElement).toBe(getResultOpenButtons()[50])
+    await waitFor(() => expect(document.activeElement).toBe(getResultOpenButtons()[50]))
   })
 
   it('opens the exact occurrence of a repeated section heading', async () => {
@@ -638,7 +642,7 @@ describe('Timeline desktop search card', () => {
     typeQuery('hello')
     await waitForResults(2)
 
-    expect(screen.queryByRole('button', { name: /Toggle result mode/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Lines', exact: true })).not.toBeInTheDocument()
   })
 
   it('shows No results in the card when nothing matches', async () => {

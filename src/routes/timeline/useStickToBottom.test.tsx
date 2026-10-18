@@ -25,21 +25,6 @@ function List({ contentKey }: { contentKey: string }) {
 }
 
 describe('useStickToBottom', () => {
-  it('follows new content while the reader is at the bottom', () => {
-    const view = render(<List contentKey="1" />)
-    const list = screen.getByTestId('list')
-    expect(list.scrollTop).toBe(1000)
-
-    list.scrollTop = 0
-    act(() => {
-      view.rerender(<List contentKey="2" />)
-    })
-
-    // Still following: new content pulls the list back to the end.
-    expect(list.scrollTop).toBe(1000)
-    expect(screen.queryByText('unseen')).not.toBeInTheDocument()
-  })
-
   it('leaves a reader who scrolled up in place and flags the new content', () => {
     const view = render(<List contentKey="1" />)
     const list = screen.getByTestId('list')

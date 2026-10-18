@@ -31,7 +31,7 @@ const highlightStyle = HighlightStyle.define([
   },
 ])
 
-export const findTagHighlightRanges = (text: string) => {
+const findTagHighlightRanges = (text: string) => {
   const ranges: Array<{ from: number; to: number; className: string; title?: string }> = []
   const tagRegex = createNoteTokenRegex('#@')
   let match = tagRegex.exec(text)

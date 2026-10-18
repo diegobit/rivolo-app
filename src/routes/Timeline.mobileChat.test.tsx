@@ -90,6 +90,10 @@ vi.mock('../lib/dayRepository', () => ({
   appendToDay: vi.fn().mockResolvedValue(undefined),
   searchDays: vi.fn().mockResolvedValue([]),
 }))
+vi.mock('../lib/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/db')>()),
+  flushDatabaseSave: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('../components/timeline/DayEditorCard', () => ({
   default: () => <div data-testid="day-editor-card" />,
 }))

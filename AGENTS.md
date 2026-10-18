@@ -13,3 +13,6 @@
 - Build new features on a branch and open a PR. For GUI changes, include before/after screenshots and the Cloudflare Pages preview URL to test with, which is listed in the PR's Cloudflare check. Long branch names are cut short in it, e.g. `feat-floating-desktop-chat-c.rivolo.pages.dev`. Host screenshots on an image-only `pr-assets/<branch>` branch.
 - Write PR descriptions with the `writing-for-humans` skill.
 - Ship to `dev` first (deployed at dev.rivolo.pages.dev), then merge into `main`. Keep feature and `pr-assets/*` branches after merging: deleting them breaks their previews and the PR's screenshots.
+
+## Test changes
+Read [test ownership](tests/AGENTS.md) before changing tests anywhere in the repository, including `src/`.

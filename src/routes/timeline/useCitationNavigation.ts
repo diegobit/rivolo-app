@@ -120,7 +120,9 @@ export const useCitationNavigation = ({
           resolve(true)
         }
 
-        run()
+        // revealDay queues the containing card's scroll in this frame. Resolve
+        // the quote afterward so that card scrolling cannot overwrite it.
+        requestAnimationFrame(run)
       })
     },
     [editorRefs],

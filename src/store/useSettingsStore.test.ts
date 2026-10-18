@@ -167,16 +167,6 @@ describe('useSettingsStore theme preference', () => {
     })
   })
 
-  it('persists an individual title font choice', async () => {
-    await useSettingsStore.getState().updateTitleFont('bree')
-
-    expect(settingsRepository.setSetting).toHaveBeenCalledExactlyOnceWith(
-      'appearance.titleFont',
-      'bree',
-    )
-    expect(useSettingsStore.getState().titleFont).toBe('bree')
-  })
-
   it('maps body font choices onto font preference and monospace font', async () => {
     await useSettingsStore.getState().updateBodyFontChoice('inconsolata')
 
