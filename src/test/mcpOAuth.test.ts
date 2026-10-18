@@ -756,6 +756,74 @@ describe('MCP OAuth authorization and tokens', () => {
       ),
     ).toBeNull()
   })
+
+  it('accepts a null consent origin only with same-origin fetch metadata', async () => {
+    const db = new SqliteD1()
+    const env = createEnv(db)
+    const profile = await createProfile(env)
+    const cookie = await sessionCookie(env, profile.profileId)
+    const redirectUri = 'https://client.example/callback'
+    const clientId = await registerClient(env, redirectUri)
+    const { challenge } = await pkce()
+    const parameters = authorizationParameters(clientId, redirectUri, challenge)
+
+    const consent = await showOAuthConsent(
+      new Request(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize?${parameters.toString()}`, {
+        headers: { Cookie: cookie },
+      }),
+      env,
+    )
+    expect(consent.status).toBe(200)
+    const transactionId = (await consent.text()).match(
+      /name="transaction_id" value="([^"]+)"/,
+    )?.[1]
+    if (!transactionId) throw new Error('Missing consent transaction.')
+    const pending = consent.headers
+      .getSetCookie()
+      .map(cookiePair)
+      .find((pair) => pair.startsWith('rivolo_oauth_pending='))
+    if (!pending) throw new Error('Missing pending cookie.')
+
+    const consentBody = () =>
+      new URLSearchParams([
+        ...parameters,
+        ['transaction_id', transactionId],
+        ['profile_id', profile.profileId],
+        ['decision', 'allow'],
+      ])
+
+    const withoutMetadata = await submitOAuthConsent(
+      formRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`, consentBody(), {
+        Origin: 'null',
+        Cookie: `${cookie}; ${pending}`,
+      }),
+      env,
+    )
+    expect(withoutMetadata.status).toBe(400)
+    expect(await withoutMetadata.text()).toContain('Consent origin is invalid.')
+
+    const crossSite = await submitOAuthConsent(
+      formRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`, consentBody(), {
+        Origin: 'null',
+        'Sec-Fetch-Site': 'cross-site',
+        Cookie: `${cookie}; ${pending}`,
+      }),
+      env,
+    )
+    expect(crossSite.status).toBe(400)
+    expect(await crossSite.text()).toContain('Consent origin is invalid.')
+
+    const accepted = await submitOAuthConsent(
+      formRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`, consentBody(), {
+        Origin: 'null',
+        'Sec-Fetch-Site': 'same-origin',
+        Cookie: `${cookie}; ${pending}`,
+      }),
+      env,
+    )
+    expect(accepted.status).toBe(302)
+    expect(new URL(accepted.headers.get('Location') ?? '').searchParams.get('code')).toBeTruthy()
+  })
 })
 
 describe('hosted MCP worker credentials', () => {
