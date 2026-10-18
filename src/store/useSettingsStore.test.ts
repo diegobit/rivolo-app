@@ -270,10 +270,10 @@ describe('useSettingsStore theme preference', () => {
     })
     useSettingsStore.setState({ providerSettings: DEFAULT_LLM_PROVIDER_SETTINGS })
 
-    await useSettingsStore.getState().saveProviderSettings('gemini', {
-      ...DEFAULT_LLM_PROVIDER_SETTINGS.gemini,
-      model: 'gemini-custom-model',
-    })
+    await useSettingsStore.getState().saveProviderSettings('gemini', (current) => ({
+      ...current,
+      gemini: { ...current.gemini, model: 'gemini-custom-model' },
+    }))
 
     expect(settingsRepository.setJsonSetting).toHaveBeenCalledWith(
       'llm.providers',
@@ -284,6 +284,76 @@ describe('useSettingsStore theme preference', () => {
         }),
       }),
     )
+  })
+
+  it('keeps queued provider field edits together while a durable save is pending', async () => {
+    const endpoint = 'https://local.example/v1'
+    const currentSettings = {
+      ...DEFAULT_LLM_PROVIDER_SETTINGS,
+      openai: { ...DEFAULT_LLM_PROVIDER_SETTINGS.openai, model: 'openai-custom-model' },
+    }
+    let storedProviders: Record<string, unknown> = {
+      openai: {
+        model: 'openai-custom-model',
+        modelSource: 'custom',
+        reasoning: { effort: 'medium' },
+        accountTag: 'keep-openai-metadata',
+      },
+      'openai-compatible': {
+        model: '',
+        baseUrl: '',
+        endpointTag: 'keep-compatible-metadata',
+      },
+    }
+    let beginFirstWrite!: () => void
+    let releaseFirstWrite!: () => void
+    const firstWriteStarted = new Promise<void>((resolve) => { beginFirstWrite = resolve })
+    const firstWriteGate = new Promise<void>((resolve) => { releaseFirstWrite = resolve })
+    let writeCount = 0
+    settingsRepository.updateJsonSetting.mockImplementation(async (_key, update) => {
+      const next = update(storedProviders) as Record<string, unknown>
+      writeCount += 1
+      if (writeCount === 1) {
+        beginFirstWrite()
+        await firstWriteGate
+      }
+      storedProviders = next
+      return next
+    })
+    useSettingsStore.setState({ providerSettings: currentSettings })
+
+    const firstSave = useSettingsStore.getState().saveProviderSettings(
+      'openai-compatible',
+      (current) => ({
+        ...current,
+        'openai-compatible': { ...current['openai-compatible'], baseUrl: endpoint },
+      }),
+    )
+    await firstWriteStarted
+    const secondSave = useSettingsStore.getState().saveProviderSettings(
+      'openai-compatible',
+      (current) => ({
+        ...current,
+        'openai-compatible': { ...current['openai-compatible'], model: 'qa-intermediate-model' },
+      }),
+    )
+    const thirdSave = useSettingsStore.getState().saveProviderSettings(
+      'openai-compatible',
+      (current) => ({
+        ...current,
+        'openai-compatible': { ...current['openai-compatible'], model: 'qa-model' },
+      }),
+    )
+    releaseFirstWrite()
+    await Promise.all([firstSave, secondSave, thirdSave])
+
+    expect(storedProviders['openai-compatible']).toMatchObject({ model: 'qa-model', baseUrl: endpoint })
+    expect(storedProviders.openai).toMatchObject({
+      model: 'openai-custom-model',
+      modelSource: 'custom',
+      accountTag: 'keep-openai-metadata',
+    })
+    expect(storedProviders['openai-compatible']).toMatchObject({ endpointTag: 'keep-compatible-metadata' })
   })
 })
 

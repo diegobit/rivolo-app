@@ -19,6 +19,7 @@ import {
   normalizeSecrets,
   type LlmProviderId,
   type LlmProviderSettings,
+  type LlmProviderSettingsUpdater,
   type LlmSecrets,
 } from '../lib/llm/types'
 import {
@@ -62,7 +63,7 @@ type SettingsState = {
   selectProvider: (provider: LlmProviderId) => Promise<void>
   saveProviderSettings: (
     provider: LlmProviderId,
-    settings: LlmProviderSettings[LlmProviderId],
+    update: LlmProviderSettingsUpdater,
   ) => Promise<void>
   saveProviderKey: (provider: LlmProviderId, apiKey: string) => Promise<void>
   clearProviderKey: (provider: LlmProviderId) => Promise<void>
@@ -379,22 +380,25 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     })
   },
 
-  saveProviderSettings: async (provider, settings) => {
+  saveProviderSettings: async (provider, update) => {
     return serializeSettingsOperation(async () => {
+      const currentSettings = get().providerSettings
+      const requestedProviderSettings = update(currentSettings)[provider]
       const normalizedSettings = provider === 'gemini'
         ? {
-            ...(settings as LlmProviderSettings['gemini']),
+            ...(requestedProviderSettings as LlmProviderSettings['gemini']),
             allowThinking:
-              (settings as LlmProviderSettings['gemini']).reasoning.thinkingLevel !== 'minimal',
+              (requestedProviderSettings as LlmProviderSettings['gemini']).reasoning.thinkingLevel !== 'minimal',
           }
-        : settings
-      const currentSettings = get().providerSettings
+        : requestedProviderSettings
+      const currentProviderSettings = currentSettings[provider]
+      if (JSON.stringify(normalizedSettings) === JSON.stringify(currentProviderSettings)) return
       const currentModel = currentSettings[provider].model
       const nextModel = normalizedSettings.model
+      const mergedSettings = { ...currentSettings, [provider]: normalizedSettings } as LlmProviderSettings
 
       await updateJsonSetting<unknown>('llm.providers', (currentStored) => {
         const currentRoot = isRecord(currentStored) ? currentStored : {}
-        const mergedSettings = { ...currentSettings, [provider]: normalizedSettings } as LlmProviderSettings
         const persistedProviders = mergePersistedProviderSettings(currentStored, mergedSettings)
         if (provider !== 'openai-compatible') {
           const providerRecord = readProviderRecord(currentRoot, provider)

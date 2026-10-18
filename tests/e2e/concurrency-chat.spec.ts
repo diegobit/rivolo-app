@@ -1,6 +1,6 @@
 import { test, expect, type Page, type Locator } from 'playwright/test'
 import { downloadArchive } from './helpers/archive'
-import { waitForPersistedContent } from './helpers/persisted'
+import { readPersistedContent, waitForPersistedContent } from './helpers/persisted'
 import { createFixtureProvider } from './helpers/fixtureProvider'
 
 const note = (page: Page) => page.locator('.cm-content[contenteditable="true"]').first()
@@ -90,6 +90,20 @@ async function configure(page: Page, url: string, origin: string) {
   await page.getByLabel('Model', { exact: true }).fill('qa-model')
   await page.getByLabel('Model', { exact: true }).press('Enter')
   await expect(page.getByLabel('Model', { exact: true })).toHaveValue('qa-model')
+  await expect.poll(async () => {
+    const saved = await readPersistedContent(page)
+    const providers = JSON.parse(saved.settings['llm.providers'] ?? '{}') as Record<
+      string,
+      { model?: string; baseUrl?: string }
+    >
+    return providers['openai-compatible']?.model
+  }).toBe('qa-model')
+  const configured = await readPersistedContent(page)
+  const providers = JSON.parse(configured.settings['llm.providers'] ?? '{}') as Record<
+    string,
+    { model?: string; baseUrl?: string }
+  >
+  expect(providers['openai-compatible']).toMatchObject({ model: 'qa-model', baseUrl: url })
   await page.getByRole('button', { name: 'Use OpenAI-compatible', exact: true }).click()
   await expect(page.getByText('OpenAI-compatible is now the active provider.', { exact: true })).toBeVisible()
   await waitForPersistedContent(page, saved => {
