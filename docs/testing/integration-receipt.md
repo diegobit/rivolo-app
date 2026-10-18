@@ -87,7 +87,7 @@ The refreshed base reproduced F8 on Chromium desktop: resizing 1440×900 to 1050
 | `npm run test:mcp-runtime` | Passed: local migrations, metadata, initialize/list, auth, GET 405 and re-enable/revocation |
 | `git diff --check` | Passed |
 
-The test-audit skill's OpenClaw-only commands were unavailable; these results are from the repository's real Vitest, built-app Playwright, native SQLite/IndexedDB and MCP runtime commands. The hosted PR checks have not yet completed. Screenshots for the chat resize are published on the retained image-only `pr-assets/fix-chat-resize-following` branch; their links and both PR URLs are recorded in the findings plan after PR creation.
+The test-audit skill's OpenClaw-only commands were unavailable; these results are from the repository's real Vitest, built-app Playwright, native SQLite/IndexedDB and MCP runtime commands. Persistence is proposed in [PR #59](https://github.com/diegobit/rivolo-app/pull/59); chat resize is proposed in stacked [PR #60](https://github.com/diegobit/rivolo-app/pull/60). Chat screenshots are on the retained image-only `pr-assets/fix-chat-resize-following` branch: [before](https://raw.githubusercontent.com/diegobit/rivolo-app/pr-assets/fix-chat-resize-following/chat-resize-before.png) and [after](https://raw.githubusercontent.com/diegobit/rivolo-app/pr-assets/fix-chat-resize-following/chat-resize-after.png). Hosted checks are running; Cloudflare has not yet emitted the preview URL.
 
 Physical installed Mac PWA Cmd-W, physical iOS standalone/keyboard behavior and live-provider credentials were not tested. The provider proof uses an isolated synthetic HTTP fixture. These remain acceptance limits for parent review.
 
