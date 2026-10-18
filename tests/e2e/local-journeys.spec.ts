@@ -161,8 +161,11 @@ test('J7: mobile menu preserves draft, restores focus, and exposes contained tou
   test.skip(!mobile(page), 'Narrow viewport interaction contract')
   await start(page)
   const draft = page.getByPlaceholder('Ask Rivolo')
-  await draft.pressSequentially('Keep this unsent draft 🙂')
+  // Pace real key events so the test covers a user typing while the new day
+  // editor finishes mounting and requesting focus.
+  await draft.pressSequentially('Keep this unsent draft 🙂', { delay: 100 })
   await expect(draft).toHaveValue('Keep this unsent draft 🙂')
+  await expect(draft).toBeFocused()
   const menu = page.getByRole('button', { name: /^Menu(?:,|$)/ })
   await insideViewport(page, menu, 44)
   await insideViewport(page, page.getByRole('button', { name: 'Send', exact: true }), 44)
