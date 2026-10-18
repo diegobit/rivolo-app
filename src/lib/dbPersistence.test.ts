@@ -1,7 +1,7 @@
 // @vitest-environment node
 import initSqlite from '@sqlite.org/sqlite-wasm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { closeStorage, createStorage, loadStorage, type Storage } from '../test/helpers/storage'
+import { closeStorage, createStorage, loadStorage, reopenStorage, type Storage } from '../test/helpers/storage'
 import { openSerializedDatabase, queryRows } from './sqliteRuntime'
 
 let storage: Storage
@@ -138,7 +138,7 @@ describe('database IndexedDB commit boundary', () => {
     expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toBeNull()
   })
 
-  it('does not replay a session draft over a newer saved day from another tab', async () => {
+  it('retains a conflicting recovery draft across unrelated commits until a same-day edit resolves it', async () => {
     const dayId = '2026-07-14'
     await storage.repository.saveDay(dayId, 'newer saved from another tab', undefined, { markDirty: false })
     await storage.db.flushDatabaseSave()
@@ -163,6 +163,49 @@ describe('database IndexedDB commit boundary', () => {
     expect(await persistedNotes()).toEqual([[dayId, 'newer saved from another tab']])
     expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).not.toBeNull()
     expect(storage.db.getDatabasePersistFailureSnapshot()).toContain('could not be saved')
+
+    const unrelatedDayId = '2026-07-15'
+    await storage.repository.ensureDay(unrelatedDayId)
+    storage.db.registerPendingDayDraft(
+      unrelatedDayId,
+      'unrelated saved draft',
+      storage.repository.commitDayDraftInDatabase,
+    )
+    expect(storage.db.checkpointDatabaseSynchronously()).toBe(true)
+    await storage.db.flushDatabaseSave()
+
+    const savedJournal = JSON.parse(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1') ?? '{}')
+    const retained = savedJournal.drafts?.find((draft: { dayId?: string }) => draft.dayId === dayId)
+    expect(retained).toMatchObject({
+      contentMd: 'stale tab draft',
+      recoveryConflict: true,
+      requiredAppliedGeneration: null,
+    })
+    expect(storage.db.getDatabasePersistFailureSnapshot()).toContain('could not be saved')
+    expect(await persistedNotes()).toEqual([
+      [unrelatedDayId, 'unrelated saved draft'],
+      [dayId, 'newer saved from another tab'],
+    ])
+
+    storage = await reopenStorage(storage)
+    expect((await storage.repository.getDay(dayId))?.contentMd).toBe('newer saved from another tab')
+    expect((await storage.repository.getDay(unrelatedDayId))?.contentMd).toBe('unrelated saved draft')
+    expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toContain('stale tab draft')
+    expect(storage.db.getDatabasePersistFailureSnapshot()).toContain('could not be saved')
+
+    const resolutionGeneration = storage.db.registerPendingDayDraft(
+      dayId,
+      'same-day edit resolved the recovery conflict',
+      storage.repository.commitDayDraftInDatabase,
+    )
+    await storage.repository.saveDay(dayId, 'same-day edit resolved the recovery conflict', undefined, {
+      draftGeneration: resolutionGeneration,
+    })
+    expect(await persistedNotes()).toEqual(expect.arrayContaining([
+      [dayId, 'same-day edit resolved the recovery conflict'],
+    ]))
+    expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toBeNull()
+    expect(storage.db.getDatabasePersistFailureSnapshot()).toBeNull()
   })
 
   it('prevents an older async editor save from replacing a newer lifecycle draft', async () => {
@@ -285,7 +328,12 @@ describe('database IndexedDB commit boundary', () => {
     unsubscribe()
   })
 
-  it('reopens a warm IndexedDB handle after a version change closes it', async () => {
+  it('journals pending drafts while a version change leaves the warm IndexedDB handle unavailable', async () => {
+    const dayId = '2026-07-14'
+    const latest = 'Saved after the IndexedDB handle reopens'
+    await storage.repository.ensureDay(dayId)
+    storage.db.registerPendingDayDraft(dayId, latest, storage.repository.commitDayDraftInDatabase)
+
     const currentRequest = indexedDB.open('keyval-store')
     const currentDatabase = await new Promise<IDBDatabase>((resolve, reject) => {
       currentRequest.onsuccess = () => resolve(currentRequest.result)
@@ -300,18 +348,82 @@ describe('database IndexedDB commit boundary', () => {
     })
     upgradedDatabase.close()
 
+    expect(storage.db.checkpointDatabaseSynchronously()).toBe(false)
+    expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toContain(latest)
+    await storage.db.flushDatabaseSave()
+    expect(await persistedNotes()).toEqual([[dayId, latest]])
+    expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toBeNull()
+
     await storage.settings.setSetting('settings.view', 'advanced')
     expect(await storage.settings.getSetting('settings.view')).toBe('advanced')
     expect((await persistedSnapshot()).settings['settings.view']).toBe('advanced')
   })
 
-  it('persists a bulk mutation only after all writes complete', async () => {
+  it('defers prior timers and explicit snapshot waiters until the bulk mutation completes', async () => {
+    await storage.repository.saveDay('2026-07-11', 'prior dirty generation', undefined, { markDirty: false })
+    await storage.repository.ensureDay('2026-07-14')
+    let persistWaiter: Promise<void> | undefined
+    let flushWaiter: Promise<void> | undefined
     await storage.db.runBulkDatabaseMutation(async () => {
       await storage.repository.saveDay('2026-07-12', 'first', undefined, { markDirty: false })
-      await vi.advanceTimersByTimeAsync(1000)
+      const lifecycleDraft = 'Lifecycle draft saved after the bulk mutation'
+      storage.db.registerPendingDayDraft(
+        '2026-07-14',
+        lifecycleDraft,
+        storage.repository.commitDayDraftInDatabase,
+      )
+      expect(storage.db.checkpointDatabaseSynchronously()).toBe(false)
+      expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toContain(lifecycleDraft)
+      persistWaiter = storage.db.persistDatabase(storage.database)
+      flushWaiter = storage.db.flushDatabaseSave()
+      await vi.advanceTimersByTimeAsync(400)
       expect(await persistedNotes()).toEqual([])
       await storage.repository.saveDay('2026-07-13', 'second', undefined, { markDirty: false })
     })
-    expect(await persistedNotes()).toEqual([['2026-07-13', 'second'], ['2026-07-12', 'first']])
+    await Promise.all([persistWaiter, flushWaiter])
+    expect(await persistedNotes()).toEqual([
+      ['2026-07-14', 'Lifecycle draft saved after the bulk mutation'],
+      ['2026-07-13', 'second'],
+      ['2026-07-12', 'first'],
+      ['2026-07-11', 'prior dirty generation'],
+    ])
+    expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toBeNull()
+  })
+
+  it('preserves a prior dirty generation when a bulk operation fails after its timer fires', async () => {
+    await storage.repository.saveDay('2026-07-11', 'prior dirty generation', undefined, { markDirty: false })
+
+    await expect(storage.db.runBulkDatabaseMutation(async () => {
+      await vi.advanceTimersByTimeAsync(400)
+      expect(await persistedNotes()).toEqual([])
+      throw new Error('simulated bulk failure')
+    })).rejects.toThrow('simulated bulk failure')
+
+    await storage.db.flushDatabaseSave()
+    expect(await persistedNotes()).toEqual([['2026-07-11', 'prior dirty generation']])
+  })
+
+  it('defers timer snapshots until an awaited SQL transaction commits', async () => {
+    await storage.repository.saveDay('2026-07-11', 'prior dirty generation', undefined, { markDirty: false })
+
+    await storage.db.runDatabaseTransaction(async () => {
+      await storage.db.run(
+        'INSERT INTO days (day_id, human_title, content_md, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        ['2026-07-12', '2026-07-12', 'first transaction write', 1, 1],
+      )
+      await vi.advanceTimersByTimeAsync(400)
+      expect(await persistedNotes()).toEqual([])
+      await storage.db.run(
+        'INSERT INTO days (day_id, human_title, content_md, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        ['2026-07-13', '2026-07-13', 'last transaction write', 1, 1],
+      )
+    })
+
+    await storage.db.flushDatabaseSave()
+    expect(await persistedNotes()).toEqual([
+      ['2026-07-13', 'last transaction write'],
+      ['2026-07-12', 'first transaction write'],
+      ['2026-07-11', 'prior dirty generation'],
+    ])
   })
 })

@@ -61,6 +61,11 @@ type PendingSnapshot = {
   settled: boolean
 }
 
+type DatabaseMutationBarrier = {
+  promise: Promise<void>
+  resolve: () => void
+}
+
 let sqlPromise: Promise<RivoloSqlite> | null = null
 let dbPromise: Promise<RivoloDatabase> | null = null
 let idbPromise: Promise<IDBDatabase> | null = null
@@ -72,6 +77,8 @@ let bulkMutationDepth = 0
 let bulkMutationDirty = false
 let databaseTransactionDepth = 0
 let databaseTransactionDirty = false
+let databaseMutationBarrier: DatabaseMutationBarrier | null = null
+let snapshotRequestedDuringMutation = false
 let ftsAvailable: boolean | null = null
 
 let appliedGeneration = 0
@@ -89,6 +96,38 @@ let dayDraftRecoveryHandler: DayDraftRecoveryHandler | null = null
 
 let persistFailureMessage: string | null = null
 const persistFailureListeners = new Set<() => void>()
+
+const beginDatabaseMutationBarrier = () => {
+  if (databaseMutationBarrier) return
+  let resolve!: () => void
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  databaseMutationBarrier = { promise, resolve }
+}
+
+const isDatabaseMutationActive = () =>
+  databaseMutationBarrier !== null || bulkMutationDepth > 0 || databaseTransactionDepth > 0
+
+const waitForDatabaseMutation = async () => {
+  while (databaseMutationBarrier) await databaseMutationBarrier.promise
+}
+
+const releaseDatabaseMutationBarrier = () => {
+  if (bulkMutationDepth > 0 || databaseTransactionDepth > 0) return
+  const barrier = databaseMutationBarrier
+  databaseMutationBarrier = null
+  barrier?.resolve()
+  if (!snapshotRequestedDuringMutation) return
+
+  snapshotRequestedDuringMutation = false
+  queueMicrotask(() => {
+    void flushDatabaseSave().catch((error) => {
+      if (error instanceof Error && error.message === DATABASE_STALE_RELOAD_MESSAGE) return
+      if (!persistFailureMessage) console.error('[DB] persist:blocked', { error })
+    })
+  })
+}
 
 const setPersistFailureMessage = (message: string | null) => {
   if (persistFailureMessage === message) return
@@ -200,15 +239,18 @@ const markJournalDraftApplied = (draft: PendingDayDraft, requiredAppliedGenerati
   const journal = readSessionDraftJournal()
   if (!journal) return
   let found = false
-  const drafts = journal.drafts.map((entry) => {
-    if (entry.dayId !== draft.dayId) return entry
+  const drafts = journal.drafts.filter((entry) => {
+    if (entry.dayId !== draft.dayId) return true
     found = true
-    return {
+    return false
+  })
+  if (found) {
+    drafts.push({
       ...toRecoverableDraft(draft),
       requiredAppliedGeneration,
       recoveryConflict: false,
-    }
-  })
+    })
+  }
   if (found) writeSessionDraftJournal(drafts)
 }
 
@@ -224,6 +266,17 @@ const draftsForSessionJournal = () => {
     drafts.set(dayId, { ...toRecoverableDraft(draft), requiredAppliedGeneration: null })
   }
   return [...drafts.values()]
+}
+
+const mergeSessionDraftJournal = (drafts: SessionDraftEntry[]) => {
+  const journal = readSessionDraftJournal()
+  if (!journal?.drafts.length) return drafts
+
+  const currentDayIds = new Set(drafts.map((draft) => draft.dayId))
+  // An edit on the same day intentionally supersedes its older recovery text;
+  // unrelated drafts leave that conflict intact until a same-day edit or deletion.
+  const retained = journal.drafts.filter((draft) => !currentDayIds.has(draft.dayId))
+  return [...retained, ...drafts]
 }
 
 export const subscribeDatabasePersistFailure = (listener: () => void) => {
@@ -368,7 +421,11 @@ const submitSnapshot = (
   db: RivoloDatabase,
   sqlite: RivoloSqlite,
   database: IDBDatabase,
-) => {
+): Promise<void> => {
+  if (isDatabaseMutationActive()) {
+    return waitForDatabaseMutation().then(() => submitSnapshot(db, sqlite, database))
+  }
+
   const generation = appliedGeneration
   if (generation <= durableGeneration) return Promise.resolve()
   const inFlight = findInFlightSnapshot(generation)
@@ -476,6 +533,7 @@ const applyPendingDayDrafts = (db: RivoloDatabase) => {
       ...current,
       requiredAppliedGeneration: appliedGeneration,
     })
+    markJournalDraftApplied(current, appliedGeneration)
   }
   return true
 }
@@ -585,30 +643,43 @@ export const runAtomicDatabaseMutation = async <T>(
   const db = await getDatabase()
   let result!: T
   const outermostTransaction = databaseTransactionDepth === 0
+  const ownsMutationBarrier =
+    outermostTransaction && bulkMutationDepth === 0 && databaseMutationBarrier === null
+  if (ownsMutationBarrier) beginDatabaseMutationBarrier()
   if (outermostTransaction) databaseTransactionDirty = false
   databaseTransactionDepth += 1
+  let transactionCommitted = false
   try {
     db.transaction(() => {
       result = callback(db)
     })
+    transactionCommitted = true
   } catch (error) {
     reportPersistFailure(error)
     throw error
   } finally {
     databaseTransactionDepth -= 1
+    if (outermostTransaction) databaseTransactionDirty = false
+    if (ownsMutationBarrier && !transactionCommitted) releaseDatabaseMutationBarrier()
   }
-  if (outermostTransaction) databaseTransactionDirty = false
-  const changed = options.shouldMarkChanged?.(result) ?? true
-  if (changed) {
-    markDatabaseChanged(db)
+  let changed = false
+  try {
+    changed = options.shouldMarkChanged?.(result) ?? true
+    if (changed) markDatabaseChanged(db)
+    options.onCommit?.(result)
+  } finally {
+    if (ownsMutationBarrier) releaseDatabaseMutationBarrier()
   }
-  options.onCommit?.(result)
-  if (changed && options.persistImmediately && bulkMutationDepth === 0) {
-    if (saveTimer !== null) {
-      window.clearTimeout(saveTimer)
-      saveTimer = null
+  if (changed && options.persistImmediately) {
+    if (isDatabaseMutationActive()) {
+      snapshotRequestedDuringMutation = true
+    } else {
+      if (saveTimer !== null) {
+        window.clearTimeout(saveTimer)
+        saveTimer = null
+      }
+      await persistDatabase(db)
     }
-    await persistDatabase(db)
   }
   return result
 }
@@ -623,6 +694,7 @@ export const run = async (sql: string, params: (string | number | null)[] = []) 
 export const persistDatabase = async (db: RivoloDatabase) => {
   assertDatabaseWritable()
   try {
+    await waitForDatabaseMutation()
     const [sqlite, database] = await Promise.all([ensureSql(), ensureIdb()])
     return await submitSnapshot(db, sqlite, database)
   } catch (error) {
@@ -634,8 +706,10 @@ export const persistDatabase = async (db: RivoloDatabase) => {
 export const flushDatabaseSave = async () => {
   assertDatabaseWritable()
   try {
+    await waitForDatabaseMutation()
     const db = await getDatabase()
 
+    await waitForDatabaseMutation()
     applyPendingDayDrafts(db)
     if (saveTimer !== null) {
       window.clearTimeout(saveTimer)
@@ -656,10 +730,17 @@ export const flushDatabaseSave = async () => {
 
 export const checkpointDatabaseSynchronously = () => {
   assertDatabaseWritable()
-  if (databaseTransactionDepth > 0 || bulkMutationDepth > 0) return false
+  if (isDatabaseMutationActive()) {
+    const drafts = draftsForSessionJournal()
+    if (drafts.length) writeSessionDraftJournal(mergeSessionDraftJournal(drafts))
+    snapshotRequestedDuringMutation = true
+    return false
+  }
 
   const hasWork = pendingDayDrafts.size > 0 || appliedGeneration > durableGeneration
   if (!hasWork) return true
+  const draftsBeforeApply = draftsForSessionJournal()
+  if (draftsBeforeApply.length) writeSessionDraftJournal(mergeSessionDraftJournal(draftsBeforeApply))
   const db = dbHandle
   const sqlite = sqliteHandle
   const database = idbHandle
@@ -669,11 +750,9 @@ export const checkpointDatabaseSynchronously = () => {
   }
 
   try {
-    const draftsBeforeApply = draftsForSessionJournal()
-    if (draftsBeforeApply.length) writeSessionDraftJournal(draftsBeforeApply)
     applyPendingDayDrafts(db)
     const draftsAfterApply = draftsForSessionJournal()
-    if (draftsAfterApply.length) writeSessionDraftJournal(draftsAfterApply)
+    if (draftsAfterApply.length) writeSessionDraftJournal(mergeSessionDraftJournal(draftsAfterApply))
     if (saveTimer !== null) {
       window.clearTimeout(saveTimer)
       saveTimer = null
@@ -770,26 +849,47 @@ export const getDatabase = async () => {
 export const runBulkDatabaseMutation = async <T>(callback: () => Promise<T>) => {
   assertDatabaseWritable()
   const isOutermostBulk = bulkMutationDepth === 0
+  if (isOutermostBulk) beginDatabaseMutationBarrier()
   bulkMutationDepth += 1
-  let result: T
+  let result!: T
+  let operationError: unknown
+  let operationFailed = false
 
   try {
     result = await callback()
   } catch (error) {
-    bulkMutationDepth -= 1
-    if (isOutermostBulk) bulkMutationDirty = false
-    throw error
+    operationFailed = true
+    operationError = error
   }
 
   bulkMutationDepth -= 1
 
-  if (isOutermostBulk && bulkMutationDirty) {
-    bulkMutationDirty = false
-    const db = await getDatabase()
-    appliedGeneration += 1
-    scheduleSave(db)
+  const changed = isOutermostBulk && bulkMutationDirty
+  if (isOutermostBulk) bulkMutationDirty = false
+  try {
+    if (changed) {
+      const db = dbHandle ?? await getDatabase()
+      appliedGeneration += 1
+      scheduleSave(db)
+    }
+  } finally {
+    if (isOutermostBulk) releaseDatabaseMutationBarrier()
+  }
+
+  if (isOutermostBulk && operationFailed) {
+    if (appliedGeneration > durableGeneration) {
+      try {
+        await flushDatabaseSave()
+      } catch {
+        // Keep the original bulk error; the persistence failure remains visible.
+      }
+    }
+    throw operationError
+  }
+  if (isOutermostBulk && changed) {
     await flushDatabaseSave()
   }
+  if (operationFailed) throw operationError
 
   return result
 }
@@ -798,6 +898,9 @@ export const runDatabaseTransaction = async <T>(callback: () => Promise<T>) => {
   assertDatabaseWritable()
   const db = await getDatabase()
   const outermostTransaction = databaseTransactionDepth === 0
+  const ownsMutationBarrier =
+    outermostTransaction && bulkMutationDepth === 0 && databaseMutationBarrier === null
+  if (ownsMutationBarrier) beginDatabaseMutationBarrier()
   if (outermostTransaction) databaseTransactionDirty = false
   databaseTransactionDepth += 1
   let started = false
@@ -824,6 +927,7 @@ export const runDatabaseTransaction = async <T>(callback: () => Promise<T>) => {
       databaseTransactionDirty = false
       if (changed && !started) markDatabaseChanged(db)
     }
+    if (ownsMutationBarrier) releaseDatabaseMutationBarrier()
   }
 }
 
