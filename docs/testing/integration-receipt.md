@@ -75,7 +75,7 @@ The repair gives normal saves, Settings, explicit flush and app lifecycle checkp
 
 The refreshed base reproduced F8 on Chromium desktop: resizing 1440×900 to 1050×820 left 1050 px below the chat while `following=true` before reflow. The first fix observed only the scrollport and passed macOS, but the Linux arm64 Chromium run exposed that row rewrap can change message heights without a scrollport resize notification. The final hook observes message rows and newly added rows as well as the scrollport, and treats layout scrolls separately from reader input. The existing J6 `<2 px` bottom assertion is unchanged; J6 also checks resize while reading older messages and unseen feedback.
 
-### Final local verification
+### Initial implementation local verification
 
 | Command/environment | Result |
 | --- | --- |
@@ -87,7 +87,7 @@ The refreshed base reproduced F8 on Chromium desktop: resizing 1440×900 to 1050
 | `npm run test:mcp-runtime` | Passed: local migrations, metadata, initialize/list, auth, GET 405 and re-enable/revocation |
 | `git diff --check` | Passed |
 
-The test-audit skill's OpenClaw-only commands were unavailable; these results are from the repository's real Vitest, built-app Playwright, native SQLite/IndexedDB and MCP runtime commands. Persistence is proposed in [PR #59](https://github.com/diegobit/rivolo-app/pull/59); chat resize is proposed in stacked [PR #60](https://github.com/diegobit/rivolo-app/pull/60). Chat screenshots are on the retained image-only `pr-assets/fix-chat-resize-following` branch: [before](https://raw.githubusercontent.com/diegobit/rivolo-app/pr-assets/fix-chat-resize-following/chat-resize-before.png) and [after](https://raw.githubusercontent.com/diegobit/rivolo-app/pr-assets/fix-chat-resize-following/chat-resize-after.png). Hosted checks are running; Cloudflare has not yet emitted the preview URL.
+The test-audit skill's OpenClaw-only commands were unavailable; these results are from the repository's real Vitest, built-app Playwright, native SQLite/IndexedDB and MCP runtime commands. Persistence is proposed in [PR #59](https://github.com/diegobit/rivolo-app/pull/59); chat resize is proposed in stacked [PR #60](https://github.com/diegobit/rivolo-app/pull/60). Chat screenshots are on the retained image-only `pr-assets/fix-chat-resize-following` branch: [before](https://raw.githubusercontent.com/diegobit/rivolo-app/pr-assets/fix-chat-resize-following/chat-resize-before.png) and [after](https://raw.githubusercontent.com/diegobit/rivolo-app/pr-assets/fix-chat-resize-following/chat-resize-after.png). These hosted and preview statuses describe the initial implementation heads; see Correction round 2 below for current status.
 
 Physical installed Mac PWA Cmd-W, physical iOS standalone/keyboard behavior and live-provider credentials were not tested. The provider proof uses an isolated synthetic HTTP fixture. These remain acceptance limits for parent review.
 
@@ -423,3 +423,68 @@ existing inapplicable desktop skip, zero retries. The focused J3 passed in
 Chromium desktop and WebKit mobile on Linux arm64 using the official Playwright
 1.63.0 Noble image: 2/2, zero retries. Lint/diff checks passed. This Linux arm64
 receipt is separate from the required final-head hosted Linux x64 result.
+
+
+## Product correction round 2 — 2026-10-18
+
+Status: correction source and regression coverage are pushed to the existing
+PRs. PR #59 remains open against `dev`; PR #60 remains open on top of PR #59.
+Neither has parent approval or is merged.
+
+### Corrected findings
+
+- **R1, recovery journal:** on `0202721`, an unrelated day checkpoint replaced
+  a retained recovery conflict and discarded its text. Checkpoints now merge
+  current drafts with unresolved entries. The conflicting text and save error
+  survive unrelated commits and reloads while the newer stored note stays
+  intact. A new same-day edit supersedes that day’s older recovery text and is
+  kept until its own durable commit; explicit draft invalidation removes that
+  day’s recovery entry.
+- **R2, partial snapshots:** on `0202721`, a prior 400 ms save timer exported
+  the first writes of a bulk operation before it finished. Snapshot requests
+  now wait for active bulk and asynchronous SQL mutations to complete. This
+  covers scheduled saves, direct persistence, explicit flushes, lifecycle
+  checkpoints, and the retained transaction API. A deferred checkpoint journals
+  pending editor text. A failed bulk still commits prior dirty work after the
+  operation has settled.
+- **R3, J6 setup:** hosted run
+  [39156613862](https://github.com/diegobit/rivolo-app/actions/runs/39156613862)
+  on `c4a4006` failed after a fixed `-1000` wheel event moved `scrollTop` from
+  1849 to 849 while the existing near-top assertion expected below 110. This
+  was insufficient reader input at that layout, not evidence of a production
+  following defect. J6 now sizes the real wheel input from the current
+  `scrollTop`; the `<110` assertion and older-reader, unseen, citation, insert,
+  and resize `<2 px` checks remain.
+
+### Fail-before and local pass-after evidence
+
+On `0202721`, the extended real SQLite/WASM and IndexedDB owner test failed 4
+cases with 10 passing. The failures showed the recovery entry disappearing
+after an unrelated checkpoint and actual stored bytes containing bulk/SQL
+work that had not completed. The parent independently reproduced the two
+persistence findings with native-storage probes.
+
+On persistence head `22fcb12`, `node scripts/run-vitest.mjs run
+src/lib/dbPersistence.test.ts src/lib/dayRepository.test.ts
+src/lib/importExport.test.ts src/hooks/useDatabaseLifecycle.test.tsx` passed 4
+files / 58 tests on macOS arm64. `npm run test:pwa-interruption` passed 8/8
+immediate reload/navigation cases on Chromium desktop and WebKit mobile, retries
+zero.
+
+On final stacked head `27f24ca`, `npm test` passed 77 files / 713 tests;
+`npm run lint` and `npm run build` passed. The focused built J6 passed 2/2 on
+Chromium desktop and WebKit mobile. Full `npm run test:e2e:built` passed 36
+cases with one existing inapplicable desktop skip. Playwright retries are zero.
+`npm run test:mcp-runtime` passed. Build keeps the existing large-chunk warning.
+
+### Current hosted status and preview URLs
+
+- PR #59 head `22fcb12`, base `dev`: Cloudflare passed. [Commit preview](https://54d9fe4a.rivolo.pages.dev) · [branch preview](https://fix-local-persistence-durabi.rivolo.pages.dev). Hosted Linux x64 Sengi run [39158688307](https://github.com/diegobit/rivolo-app/actions/runs/39158688307) passed 77 files / 712 tests, lint, build, 36 browser passes with one existing inapplicable desktop skip, and MCP Worker runtime.
+- PR #60 source head `27f24ca`, based on PR #59: Cloudflare passed. [Commit preview](https://c2fe77a3.rivolo.pages.dev) · [branch preview](https://fix-chat-resize-following.rivolo.pages.dev). Hosted Linux x64 Sengi run [39158810175](https://github.com/diegobit/rivolo-app/actions/runs/39158810175) passed 77 files / 713 tests, lint, build, 36 browser passes with one existing inapplicable desktop skip, and MCP Worker runtime.
+- Before/after chat screenshots remain on `pr-assets/fix-chat-resize-following`: [before](https://raw.githubusercontent.com/diegobit/rivolo-app/pr-assets/fix-chat-resize-following/chat-resize-before.png) and [after](https://raw.githubusercontent.com/diegobit/rivolo-app/pr-assets/fix-chat-resize-following/chat-resize-after.png).
+
+Physical installed Mac PWA close/reopen, physical iOS standalone/keyboard
+behavior, and live provider credentials remain unverified. Automated provider
+traffic uses an isolated local HTTP fixture. Local Linux arm64 is not a hosted
+Linux x64 result; the hosted runs above provide that separate evidence. Parent
+review remains pending and neither PR is approved or merged.
