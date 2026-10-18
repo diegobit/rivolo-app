@@ -9,10 +9,11 @@ const fakeGeometry = (element: HTMLElement, scrollHeight: number, clientHeight: 
 }
 
 function List({ contentKey }: { contentKey: string }) {
-  const { ref, onScroll, hasUnseen } = useStickToBottom(true, contentKey)
+  const { ref, onScroll, following, hasUnseen } = useStickToBottom(true, contentKey)
   return (
     <div
       data-testid="list"
+      data-following={following}
       ref={(element) => {
         if (element) fakeGeometry(element, 1000, 200)
         ref.current = element
@@ -29,6 +30,7 @@ describe('useStickToBottom', () => {
     const view = render(<List contentKey="1" />)
     const list = screen.getByTestId('list')
 
+    fireEvent.wheel(list, { deltaY: -100 })
     list.scrollTop = 100
     fireEvent.scroll(list)
     act(() => {
@@ -39,6 +41,7 @@ describe('useStickToBottom', () => {
     expect(screen.getByText('unseen')).toBeInTheDocument()
 
     // Scrolling back to the end clears the flag.
+    fireEvent.wheel(list, { deltaY: 100 })
     list.scrollTop = 800
     fireEvent.scroll(list)
     expect(screen.queryByText('unseen')).not.toBeInTheDocument()
@@ -52,9 +55,24 @@ describe('useStickToBottom', () => {
     act(() => {
       view.rerender(<List contentKey="2" />)
     })
+    fireEvent.wheel(list, { deltaY: -100 })
     list.scrollTop = 100
     fireEvent.scroll(list)
 
+    expect(screen.queryByText('unseen')).not.toBeInTheDocument()
+  })
+
+  it('keeps following when a scroll event comes from layout movement without user input', () => {
+    const view = render(<List contentKey="1" />)
+    const list = screen.getByTestId('list')
+
+    list.scrollTop = 100
+    fireEvent.scroll(list)
+    act(() => {
+      view.rerender(<List contentKey="2" />)
+    })
+
+    expect(list).toHaveAttribute('data-following', 'true')
     expect(screen.queryByText('unseen')).not.toBeInTheDocument()
   })
 })
