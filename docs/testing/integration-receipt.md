@@ -133,12 +133,19 @@ owners and QA workflow, not complete release/device/live coverage.
 
 ## Batch A persistence sync follow-up — 2026-10-18
 
-This follow-up refreshes the existing audit PR onto `dev` at `5f1ed2e8` and
-adds exact-value save gates. The source change is commit
-`533d1e02e8b0cb5fb84f27dff08e29ed47f1751f`; the PR remains open against `dev`:
+This follow-up refreshes the existing audit PR onto `dev` at `5f1ed2e8` with
+merge commit `1c4699d05a2d57e810af5316d28c56ca33f6c60b` and adds exact-value
+save gates. The source change is commit
+`533d1e02e8b0cb5fb84f27dff08e29ed47f1751f`; this receipt records the exact
+tested source. The PR remains open against `dev`:
 [PR #47](https://github.com/diegobit/rivolo-app/pull/47). The isolated checkout
 is `/Users/diego/.t3/worktrees/rivolo-app/t3-418a42a4`, branch
 `test/real-boundaries-persisted-content`.
+
+The source commit changes `tests/e2e/helpers/persisted.ts`,
+`tests/e2e/concurrency-chat.spec.ts`, `tests/e2e/local-journeys.spec.ts`,
+`tests/e2e/agent-access.spec.ts`, and `scripts/test-mcp-runtime.mjs`. No app
+production owner changed.
 
 `tests/e2e/helpers/persisted.ts` reads the native IndexedDB
 `keyval-store`/`keyval` value `single-note-db`, copies its bytes to a temporary
@@ -168,11 +175,15 @@ the existing 405 method contract.
 | `npm run lint` | Passed |
 | `npm run build` | Passed; real SQLite WASM and generated service worker; existing large-chunk warning remains |
 | `npm run test:mcp-runtime` | Passed after the synthetic authenticated-GET probe correction |
-| Focused J1/J2/J8 browser cases | 8 passed on macOS arm64 across Chromium and WebKit |
-| Full `npm run test:e2e:built` on macOS arm64 | Latest run: 27 passed, 1 failed, 1 skipped. J6 Chromium still fails the resize-anchor assertion (`remainingScroll` 1050, expected under 2); the same failure reproduced with the original pre-edit J6 spec. An earlier run also lost the J7 WebKit draft once; J7 passed on the later run. |
-| `npm run test:pwa-interruption` | All four intended immediate-reload assertions fail. The runner remains enabled and unannotated; product loss is still open. |
-| Official Playwright 1.63.0 Noble image, local Linux arm64, J4/J5/J6 with `--repeat-each=2` | 14 passed, 2 failed. Both Chromium J6 repeats hit the same resize-anchor failure; all eight WebKit J4/J5/J6 executions passed. J4 and both J5 transports passed in both engines. |
-| Full browser suite in the same local Linux arm64 image | 27 passed, 1 failed, 1 skipped. The lone failure was J1 WebKit: its page closed while clicking the visible Start Today button. The full run is local arm64 evidence, not hosted x64 CI. |
+
+Browser commands and results:
+
+- `npm run test:e2e:built -- --grep 'J1: edit|J2: search toggles|J8: missing profile|J8: tampered profile'`: 8 passed on macOS arm64 across Chromium and WebKit.
+- `npm run test:e2e:built -- --grep 'J4:|J5:|J6:'` on macOS arm64: 7 passed, 1 failed; all J4/J5 cases and WebKit J6 passed. Chromium J6 failed the resize-anchor assertion.
+- `npm run test:e2e:built -- --output=.playwright-mcp/20261018-batch-a/mac-full-results`: latest full macOS arm64 run was 27 passed, 1 failed, 1 skipped. Chromium J6 still fails the resize-anchor assertion (`remainingScroll` 1050, expected under 2); the same failure reproduced with the original pre-edit J6 spec. An earlier full run also lost the J7 WebKit draft once; J7 passed on the later run.
+- `npm run test:pwa-interruption`: all four intended immediate-reload assertions fail. The runner remains enabled and unannotated; product loss is still open.
+- In the official Playwright 1.63.0 Noble image on local Linux arm64, `npm run test:e2e:built -- --grep 'J4:|J5:|J6:' --repeat-each=2` produced 14 passes and 2 failures. Both Chromium J6 repeats hit the same resize-anchor failure; all eight WebKit J4/J5/J6 executions passed. J4 and both J5 transports passed in both engines.
+- In the same local Linux arm64 image, `npm run test:e2e:built` (4 workers) produced 27 passes, 1 failure, and 1 skip. The failure was J1 WebKit: its page closed while clicking the visible Start Today button. This local arm64 run is separate from hosted x64 CI.
 
 Linux browser logs and retained failure artifacts are under
 `.playwright-mcp/20261018-batch-a/` (`linux-j456.log`, `linux-full-e2e.log`,
@@ -181,9 +192,10 @@ and their result directories). The latest preserved macOS full-suite output is
 `mac-full-results/`. The earlier current-head/original-spec J6 comparison is
 under `.playwright-mcp/20261018-batch-a/failures/`.
 
-At the time this receipt was written, GitHub Actions and Cloudflare checks for
-the refreshed PR head were running. No hosted CI pass is claimed. The earlier
-line-count table above records the preceding UI consolidation and has not been
+At the last inspection before this receipt-only commit, GitHub Actions and
+Cloudflare checks for PR head `bb38b6c` were running. This receipt commit will
+trigger a new hosted run; no hosted CI pass is claimed. The earlier line-count
+table above records the preceding UI consolidation and has not been
 recalculated for this follow-up. The real note/settings interruption defects,
 Batch B, and Batch C remain open. Installed-PWA/iOS behavior and live provider
 acceptance remain untested.
