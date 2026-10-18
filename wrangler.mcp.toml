@@ -15,7 +15,9 @@ migrations_dir = "migrations"
 [vars]
 GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"
 DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
-MCP_ALLOWED_ORIGINS = "https://mcp.rivolo.app"
+# ChatGPT's connector can send this origin; the worker otherwise rejects the
+# request with 403 before authentication, so no OAuth challenge is returned.
+MCP_ALLOWED_ORIGINS = "https://mcp.rivolo.app,https://chatgpt.com"
 MCP_OAUTH_ISSUER_URL = "https://rivolo.app/api/mcp/oauth"
 MCP_RESOURCE_URL = "https://mcp.rivolo.app/mcp"
 
@@ -31,7 +33,8 @@ crons = ["0 3 * * *"]
 [env.dev.vars]
 GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"
 DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
-MCP_ALLOWED_ORIGINS = "https://mcp-dev.rivolo.app"
+# Same ChatGPT origin allowance as production, against the dev worker.
+MCP_ALLOWED_ORIGINS = "https://mcp-dev.rivolo.app,https://chatgpt.com"
 MCP_OAUTH_ISSUER_URL = "https://dev.rivolo.pages.dev/api/mcp/oauth"
 MCP_RESOURCE_URL = "https://mcp-dev.rivolo.app/mcp"
 
