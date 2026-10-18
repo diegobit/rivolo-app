@@ -370,3 +370,26 @@ once its hosted checks pass, while product repairs proceed separately:
 The four note-interruption failures and arm64 resize defect remain open.
 Hosted x64 passing results do not resolve those findings. No installed-PWA,
 physical iOS, live sync/provider or arbitrary process-kill guarantee is claimed.
+
+
+## Completed-search synchronization — 2026-10-18
+
+Hosted run [39144283944](https://github.com/diegobit/rivolo-app/actions/runs/39144283944)
+on `caf5f75` passed 700 fast tests, lint/build and 27 browser cases but failed
+WebKit J3 after search again; one desktop case was inapplicable and Worker
+runtime was skipped. The menu wait completed and main was interactive. The
+trace then shows J3 checking text from the original timeline and scrolling
+before the asynchronous search result rendered. The final results subsequently
+reset scroll from 3056 to 80. The menu race was real but was not the only setup
+race; the prior local pass did not establish hosted readiness.
+
+J3 now waits for the app's public completed-search status, `2 days`, before
+checking the two results and scrolling. The status is rendered only after the
+search finishes, so original timeline text cannot satisfy that readiness check.
+The existing result, return navigation, size and placement assertions remain.
+
+The final local owner/sibling journeys passed on macOS arm64: 9 passed, one
+existing inapplicable desktop skip, zero retries. The focused J3 passed in
+Chromium desktop and WebKit mobile on Linux arm64 using the official Playwright
+1.63.0 Noble image: 2/2, zero retries. Lint/diff checks passed. This Linux arm64
+receipt is separate from the required final-head hosted Linux x64 result.

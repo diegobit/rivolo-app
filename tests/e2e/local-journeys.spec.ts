@@ -244,6 +244,9 @@ test('J3: import, export, malformed import, and reopen preserve actual notes', a
   })).toBe(true)
   if (mobile(page)) {
     await search(page, 'Archive')
+    // Both notes also exist in the unfiltered timeline. Wait for the actual
+    // search response before scrolling the newly rendered results.
+    await expect(page.getByRole('status')).toHaveText('2 days')
     await expect(page.getByText(todayNote, { exact: false }).first()).toBeVisible()
     await expect(page.getByText('Archive café 100%', { exact: false }).first()).toBeVisible()
     await checkReturnGeometry()
