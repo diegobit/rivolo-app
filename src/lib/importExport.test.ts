@@ -168,14 +168,22 @@ describe('import/export durable storage boundary', () => {
   })
 
   it('exports over 10000 real rows and includes the oldest day in safety checks and rollback', async () => {
-    const statement = storage.database.prepare('INSERT INTO days VALUES (?, ?, ?, ?, ?)')
     storage.database.transaction(() => {
-      for (let i = 0; i < 10001; i++) {
-        const dayId = addDays('1999-12-31', i)
-        statement.bind([dayId, dayId, i === 0 ? 'oldest important archive' : `record ${i}`, 1, 1]).stepReset()
-      }
+      storage.database.exec(`
+        WITH RECURSIVE date_rows(day_index, day_id) AS (
+          SELECT 0, '1999-12-31'
+          UNION ALL
+          SELECT day_index + 1, date(day_id, '+1 day')
+          FROM date_rows
+          WHERE day_index < 10000
+        )
+        INSERT INTO days (day_id, human_title, content_md, created_at, updated_at)
+        SELECT day_id, day_id,
+          CASE WHEN day_index = 0 THEN 'oldest important archive' ELSE 'record ' || day_index END,
+          1, 1
+        FROM date_rows
+      `)
     })
-    statement.finalize()
     const exported = await storage.importer.exportMarkdownFromDb()
     expect(parseMarkdown(exported).days).toHaveLength(10001)
     expect(exported).toContain('oldest important archive')
@@ -187,7 +195,13 @@ describe('import/export durable storage boundary', () => {
     storage = await reopenStorage(storage)
     const backup = (await storage.importer.listRollbackBackups())[0]
     expect(backup.dayCount).toBe(10001)
-    expect(parseMarkdown(backup.contentMd).days.find((day) => day.dayId === '1999-12-31')?.contentMd).toBe('oldest important archive')
+    expect(backup.contentMd).toContain([
+      '<!-- day:1999-12-31 -->',
+      '1999-12-31',
+      '----------',
+      '',
+      'oldest important archive',
+    ].join('\n'))
     expect(await notes()).toEqual([[addDays('1999-12-31', 10000), 'newest']])
   })
 })

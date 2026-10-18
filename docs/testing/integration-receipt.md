@@ -199,3 +199,70 @@ table above records the preceding UI consolidation and has not been
 recalculated for this follow-up. The real note/settings interruption defects,
 Batch B, and Batch C remain open. Installed-PWA/iOS behavior and live provider
 acceptance remain untested.
+
+## Persistence gate correction round 2 — 2026-10-18
+
+This correction starts from PR #47 head `6b17f20` and changes only tests. No
+production persistence or UI owner changed. The PR remains open against `dev`;
+Batch B on AIT remains deferred and the Diego backport remains dependent on that
+repair.
+
+### Hosted failure at the previous PR head
+
+GitHub Actions run
+[`39140669719`](https://github.com/diegobit/rivolo-app/actions/runs/39140669719/job/117714266507)
+failed in `npm test` before build, browser, or Worker steps. Vitest reported 699
+passed and 1 failed out of 700 tests. The failing 10,001-row export/import test
+ran for 5,125 ms against its default 5,000 ms limit. Its real SQLite/WASM and
+IndexedDB assertions did not fail; the test exceeded the runner limit during
+the four-worker CI run. The isolated test took about 1 second on this Mac.
+
+The same job logged 172 missing-WASM errors from the desktop and mobile
+Timeline chat UI fixtures: 112 from `Timeline.desktopChat.test.tsx` and 60 from
+`Timeline.mobileChat.test.tsx`. Those UI tests mock their stores and repository
+but their unmount cleanup still called the real database flush. The log does
+not establish that these messages caused the timeout. The fixtures now stub
+only that incidental flush call. The import/export, database, and persistence
+owner tests continue to use real SQLite/WASM and IndexedDB.
+
+### Correction and local proof
+
+The large fixture now seeds its 10,001 rows with one recursive CTE rather than
+10,001 JavaScript-to-WASM insert calls. It still exports and parses all rows,
+checks the oldest day in the unsafe-replacement result, writes and reloads the
+full rollback from IndexedDB, verifies its `dayCount` and exact oldest-day
+block, then reopens the database and checks the replacement. The backup check
+uses the exact stored block rather than parsing the same 10,001-row document a
+second time.
+
+Local checks on macOS arm64, Playwright 1.63.0:
+
+| Command | Result |
+| --- | --- |
+| `node scripts/run-vitest.mjs run src/lib/importExport.test.ts -t 'exports over 10000' --reporter=verbose` | Passed; 734 ms for the test, 1 test selected |
+| `npx -y node@24 scripts/run-vitest.mjs run src/lib/importExport.test.ts src/routes/Timeline.desktopChat.test.tsx src/routes/Timeline.mobileChat.test.tsx --reporter=dot` | Passed; 3 files, 56 tests. No missing-WASM errors. |
+| `npx -y node@24 scripts/run-vitest.mjs run` | Passed; 76 files, 700 tests |
+| `npm test` (Node 26.8.2) | Passed; 76 files, 700 tests |
+| `npm run lint` | Passed |
+| `npm run build` | Passed; existing large-chunk warning remains |
+| `npm run test:mcp-runtime` | Passed; local Worker migrations, metadata, initialize/list, auth, GET 405, and revocation |
+
+The built browser suite ran 29 cases on macOS arm64: 27 passed, 1 failed, and 1
+desktop-only mobile-menu case was skipped as inapplicable. J4 and both J5
+transports passed in both engines, as did WebKit J6. Chromium J6 again failed
+the unchanged resize-follow assertion after narrowing the viewport:
+`remainingScroll` was `1050`, expected under `2`. The failure is at
+`tests/e2e/concurrency-chat.spec.ts:175`; screenshot, video, trace, and error
+context are in `test-results/concurrency-chat-J6-actual-98365--safely-persists-one-insert-chromium-desktop/`.
+This is a product behavior blocker to ordinary-gate acceptance. The resize
+assertion remains intact; no UI repair was authorized in Batch A.
+
+`npm run test:pwa-interruption` still fails all four immediate-reload checks:
+new notes reopen without an editor and saved notes reopen with the baseline
+instead of the latest edit. This separate product data-loss defect remains
+visible and is not treated as an ordinary gate result.
+
+At the time this correction was prepared, no hosted run had yet started for its
+new head. The prior hosted run is failed as recorded above; the correction
+requires a new run. No hosted x64 pass is claimed. Independent parent review is
+still pending, and the J6 resize-follow failure blocks Batch A acceptance.
