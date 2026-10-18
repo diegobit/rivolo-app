@@ -61,7 +61,9 @@ describe('Mobile menu swipe dismissal', () => {
     expect(document.documentElement.style.overflow).toBe('hidden')
     expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument())
-    expect(document.documentElement.style.overflow).toBe('')
+    // The unlock runs in a passive effect cleanup, which can flush after the
+    // removal is observed.
+    await waitFor(() => expect(document.documentElement.style.overflow).toBe(''))
   })
 
   it.each([
