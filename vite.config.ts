@@ -18,6 +18,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        // The service worker must never answer navigations to /api/* with the
+        // cached app shell: the ChatGPT MCP connector opens
+        // /api/mcp/oauth/authorize in a popup, and a precache-served shell
+        // dead-ends the OAuth flow before it reaches the Pages Function.
+        navigateFallbackDenylist: [/^\/api\//],
+      },
       // Public files referenced by absolute URLs bypass Vite's module graph, so
       // list them for Workbox to keep the installed app's shell usable offline.
       includeAssets: ['favicon.ico', '**/*.{svg,png,jpg,ttf}'],
