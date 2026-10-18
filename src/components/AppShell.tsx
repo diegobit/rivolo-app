@@ -521,13 +521,14 @@ export default function AppShell() {
     >
       {/* Fixed header blur: full width, fading out downwards (see .app-shell-header-blur) */}
       <div
+        data-scrolled={isScrolled ? 'true' : 'false'}
         className={`app-shell-header-blur pointer-events-none hidden inset-x-0 top-0 z-20 transition-all sm:fixed sm:block ${
           isScrolled ? 'bg-[var(--theme-blur-surface)] backdrop-blur-md' : ''
         }`}
       />
       {!isMobileHome && (
         <header
-          className="app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:mt-0 sm:px-0"
+          className="app-shell-top-header app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:mt-0 sm:px-0"
         >
           <div className="relative z-10 flex items-center gap-2">
             {showBackButton && (

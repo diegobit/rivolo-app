@@ -17,6 +17,7 @@ type UseSyncProviderActionsParams = {
   loadProviderStates: () => Promise<void>
   loadSyncState: () => Promise<void>
   setActiveProvider: (providerId: SyncProviderId | null) => Promise<void>
+  onConnected?: () => void | Promise<void>
 }
 
 export const useSyncProviderActions = ({
@@ -29,6 +30,7 @@ export const useSyncProviderActions = ({
   loadProviderStates,
   loadSyncState,
   setActiveProvider,
+  onConnected,
 }: UseSyncProviderActionsParams) => {
   const label = SYNC_PROVIDER_LABELS[provider]
   const isActive = activeProvider === provider
@@ -81,6 +83,7 @@ export const useSyncProviderActions = ({
           await loadProviderStates()
           await setActiveProvider('google-drive')
           setStatus('Google Drive connected and activated.')
+          await onConnected?.()
         })
         .catch((error) => {
           setStatus(error instanceof Error ? error.message : 'Google Drive connect failed.')

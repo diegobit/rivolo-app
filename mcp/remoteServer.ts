@@ -31,6 +31,7 @@ import {
   type AddToDayWriter,
   type CompactAddToDayWriterResult,
 } from './writeTools.js'
+import { SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/sdk/types.js'
 import {
   createMcpBearerChallenge,
   type McpOAuthMetadataConfig,
@@ -70,7 +71,7 @@ type RemoteMcpAuthResult =
   | AuthenticatedMcpBearer
   | AuthenticatedMcpOAuthBearer
 
-type RemoteMcpDependencies = {
+export type RemoteMcpDependencies = {
   authenticate: (
     request: Request,
     env: RemoteMcpEnv,
@@ -101,18 +102,29 @@ type RemoteCompactWriteResult = CompactAddToDayWriterResult & {
 const bearerValue = (request: Request) =>
   request.headers.get('Authorization')?.match(/^Bearer ([^\s]+)$/i)?.[1] ?? null
 
-const authenticateRemoteMcpBearer = async (
+export const authenticateRemoteMcpBearer = async (
   request: Request,
   env: RemoteMcpEnv,
+  authenticators = {
+    personal: authenticateMcpBearer,
+    oauth: authenticateMcpOAuthBearer,
+  },
 ): Promise<RemoteMcpAuthResult | null> => {
-  const bearer = bearerValue(request)
-  if (bearer?.startsWith('rva_')) {
-    return authenticateMcpOAuthBearer(request, env)
+    const bearer = bearerValue(request)
+    if (bearer?.startsWith('rva_')) {
+      return authenticators.oauth(request, env)
+    }
+    if (bearer?.startsWith('rvl_')) {
+      return authenticators.personal(request, env)
+    }
+    return null
   }
-  if (bearer?.startsWith('rvl_')) {
-    return authenticateMcpBearer(request, env)
-  }
-  return null
+
+const defaultDependencies: RemoteMcpDependencies = {
+  authenticate: (request, env) => authenticateRemoteMcpBearer(request, env),
+  fetch,
+  refreshDropbox: refreshDropboxAccessToken,
+  refreshGoogle: refreshGoogleAccessToken,
 }
 
 const jsonResponse = (payload: unknown, status: number, headers: HeadersInit = {}) =>
@@ -132,6 +144,30 @@ const unauthorizedResponse = (env: RemoteMcpEnv) =>
     401,
     { 'WWW-Authenticate': createMcpBearerChallenge(oauthMetadataConfig(env)) },
   )
+
+const unsupportedProtocolVersion = (request: Request) => {
+  const protocolVersion = request.headers.get('mcp-protocol-version')
+  if (
+    protocolVersion === null ||
+    SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)
+  ) {
+    return null
+  }
+  const versionLabel = /^[A-Za-z0-9._-]{1,32}$/.test(protocolVersion)
+    ? protocolVersion
+    : 'unsupported'
+  return jsonResponse(
+    {
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: `Bad Request: Unsupported protocol version: ${versionLabel} (supported versions: ${SUPPORTED_PROTOCOL_VERSIONS.join(', ')})`,
+      },
+      id: null,
+    },
+    400,
+  )
+}
 
 const validateOrigin = (request: Request, env: RemoteMcpEnv) => {
   const origin = request.headers.get('Origin')
@@ -275,19 +311,9 @@ const createDurableWriter = (
 export const handleRemoteMcpRequest = async (
   request: Request,
   env: RemoteMcpEnv,
+  overrides: Partial<RemoteMcpDependencies> = {},
 ): Promise<Response> => {
-  const dependencies: RemoteMcpDependencies = {
-    authenticate: (request, env) => authenticateRemoteMcpBearer(request, env),
-    fetch,
-    refreshDropbox: refreshDropboxAccessToken,
-    refreshGoogle: refreshGoogleAccessToken,
-  }
-  if (request.method === 'GET') {
-    return new Response('Method not allowed.', {
-      status: 405,
-      headers: { Allow: 'POST' },
-    })
-  }
+  const dependencies = { ...defaultDependencies, ...overrides }
   if (!validateOrigin(request, env)) {
     return jsonResponse({ error: 'Origin is not allowed.' }, 403)
   }
@@ -310,6 +336,19 @@ export const handleRemoteMcpRequest = async (
   const canWrite = hasScope(principal, 'notes:write')
   if (!canRead && !canWrite) {
     return jsonResponse({ error: 'MCP token has no usable scopes.' }, 403)
+  }
+
+  const protocolError = unsupportedProtocolVersion(request)
+  if (protocolError) return protocolError
+
+  if (request.method === 'GET') {
+    return new Response('Method not allowed.', {
+      status: 405,
+      headers: {
+        Allow: 'POST',
+        'Cache-Control': 'no-store',
+      },
+    })
   }
 
   try {

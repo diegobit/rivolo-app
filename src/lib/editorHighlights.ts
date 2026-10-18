@@ -1,8 +1,9 @@
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language'
 import { TODO_INTERACTION_HINT, todoStateLabel } from './editor/todoMarker'
 import { tags } from '@lezer/highlight'
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, type DecorationSet } from '@codemirror/view'
-import { RangeSetBuilder, type Extension } from '@codemirror/state'
+import { RangeSetBuilder, StateEffect, type EditorState, type Extension, type Line } from '@codemirror/state'
+import { createNoteTokenRegex } from './noteTokens'
 
 const highlightStyle = HighlightStyle.define([
   {
@@ -32,7 +33,7 @@ const highlightStyle = HighlightStyle.define([
 
 const findTagHighlightRanges = (text: string) => {
   const ranges: Array<{ from: number; to: number; className: string; title?: string }> = []
-  const tagRegex = /(^|[^\p{L}\p{M}\p{N}_])([#@][\p{L}\p{M}\p{N}_/-]+)/gu
+  const tagRegex = createNoteTokenRegex('#@')
   let match = tagRegex.exec(text)
 
   while (match) {
@@ -48,8 +49,13 @@ const findTagHighlightRanges = (text: string) => {
   return ranges
 }
 
+const listLineDecoration = Decoration.line({ class: 'cm-list-line' })
+const todoLineDecoration = Decoration.line({ class: 'cm-list-line cm-todo-line' })
+
 const buildTagDecorations = (text: string) => {
   const ranges = findTagHighlightRanges(text)
+  const lineStarts = new Set<number>()
+  const todoLineStarts = new Set<number>()
 
   const todoRegex = /(^|\n)([ \t]*-\s+\[[ xX-]\])([^\n]*)/g
   let match = todoRegex.exec(text)
@@ -58,6 +64,7 @@ const buildTagDecorations = (text: string) => {
     const prefixLength = match[1].length
     const token = match[2]
     const start = match.index + prefixLength
+    todoLineStarts.add(start)
     const bracketMatch = token.match(/\[[ xX-]\]/)
     if (bracketMatch) {
       const bracketStart = start + (bracketMatch.index ?? 0)
@@ -79,17 +86,31 @@ const buildTagDecorations = (text: string) => {
     const start = match.index + prefixLength
     const end = start + token.length
     ranges.push({ from: start, to: end, className: 'cm-list-marker' })
+    lineStarts.add(text.lastIndexOf('\n', end - 1) + 1)
     match = listRegex.exec(text)
   }
 
   ranges.sort((a, b) => a.from - b.from || a.to - b.to)
 
   const builder = new RangeSetBuilder<Decoration>()
-  for (const range of ranges) {
-    builder.add(range.from, range.to, Decoration.mark({ class: range.className, attributes: range.title ? { title: range.title } : undefined }))
+  let rangeIndex = 0
+  for (const lineStart of [...lineStarts].sort((a, b) => a - b)) {
+    for (; rangeIndex < ranges.length && ranges[rangeIndex].from < lineStart; rangeIndex++) {
+      addMark(builder, ranges[rangeIndex])
+    }
+    // Line decorations sort before marks that start at the same position.
+    builder.add(lineStart, lineStart, todoLineStarts.has(lineStart) ? todoLineDecoration : listLineDecoration)
   }
+  for (; rangeIndex < ranges.length; rangeIndex++) addMark(builder, ranges[rangeIndex])
 
   return builder.finish()
+}
+
+const addMark = (
+  builder: RangeSetBuilder<Decoration>,
+  range: { from: number; to: number; className: string; title?: string },
+) => {
+  builder.add(range.from, range.to, Decoration.mark({ class: range.className, attributes: range.title ? { title: range.title } : undefined }))
 }
 
 const tagHighlightPlugin = ViewPlugin.fromClass(
@@ -111,4 +132,240 @@ const tagHighlightPlugin = ViewPlugin.fromClass(
   },
 )
 
-export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin]
+const headingLineDecoration = Decoration.line({ class: 'cm-heading-line' })
+
+// Read headings from the markdown tree so a `#` inside a code block doesn't count.
+const buildHeadingLineDecorations = (state: EditorState) => {
+  const builder = new RangeSetBuilder<Decoration>()
+  syntaxTree(state).iterate({
+    enter: (node) => {
+      if (node.name.startsWith('ATXHeading')) {
+        const lineStart = state.doc.lineAt(node.from).from
+        builder.add(lineStart, lineStart, headingLineDecoration)
+      }
+      return node.name === 'Document'
+    },
+  })
+  return builder.finish()
+}
+
+const headingLinePlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+
+    constructor(view: EditorView) {
+      this.decorations = buildHeadingLineDecorations(view.state)
+    }
+
+    update(update: ViewUpdate) {
+      if (update.docChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+        this.decorations = buildHeadingLineDecorations(update.state)
+      }
+    }
+  },
+  {
+    decorations: (value) => value.decorations,
+  },
+)
+
+// The "- " before a todo's checkbox, shown only while the row is being edited.
+const todoDashRegex = /^(\s*)(-\s+)\[[ xX-]\]/
+const hiddenTodoDash = Decoration.replace({})
+
+const editedLineNumbers = (view: EditorView) => {
+  const numbers = new Set<number>()
+  if (!view.hasFocus) return numbers
+  const { doc, selection } = view.state
+  for (const range of selection.ranges) {
+    const last = doc.lineAt(range.to).number
+    for (let number = doc.lineAt(range.from).number; number <= last; number++) numbers.add(number)
+  }
+  return numbers
+}
+
+const isTodoDashHidden = (edited: Set<number>, lineNumber: number, text: string) =>
+  !edited.has(lineNumber) && todoDashRegex.test(text)
+
+const forEachVisibleLine = (view: EditorView, callback: (line: Line) => void) => {
+  const { doc } = view.state
+  let lastLine = 0
+  for (const range of view.visibleRanges) {
+    for (let pos = range.from; pos <= range.to; ) {
+      const line = doc.lineAt(pos)
+      if (line.number > lastLine) {
+        lastLine = line.number
+        callback(line)
+      }
+      pos = line.to + 1
+    }
+  }
+}
+
+const buildTodoDashDecorations = (view: EditorView) => {
+  const builder = new RangeSetBuilder<Decoration>()
+  const edited = editedLineNumbers(view)
+  forEachVisibleLine(view, (line) => {
+    const match = isTodoDashHidden(edited, line.number, line.text) && todoDashRegex.exec(line.text)
+    if (match) {
+      const from = line.from + match[1].length
+      builder.add(from, from + match[2].length, hiddenTodoDash)
+    }
+  })
+  return builder.finish()
+}
+
+const todoDashPlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+
+    constructor(view: EditorView) {
+      this.decorations = buildTodoDashDecorations(view)
+    }
+
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged) {
+        this.decorations = buildTodoDashDecorations(update.view)
+      }
+    }
+  },
+  {
+    decorations: (value) => value.decorations,
+  },
+)
+
+// A list row's marker and the spaces after it, e.g. "- ", "- [ ] " or "1. ".
+const listPrefixRegex = /^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX-]\]\s+)?/
+
+const refreshListIndent = StateEffect.define<null>()
+
+// Hang wrapped list rows under the item's text rather than under its marker.
+// Marker widths depend on the font, so they're measured from the layout and
+// exposed to the theme below as --list-hang.
+const listIndentPlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+    widths = new Map<string, number>()
+    destroyed = false
+    view: EditorView
+
+    constructor(view: EditorView) {
+      this.view = view
+      this.decorations = this.build()
+      this.measure()
+    }
+
+    update(update: ViewUpdate) {
+      const refreshed = update.transactions.some((tr) => tr.effects.some((effect) => effect.is(refreshListIndent)))
+      const todoDashToggled = update.selectionSet || update.focusChanged
+      if (update.docChanged || update.viewportChanged || todoDashToggled || refreshed) {
+        this.decorations = this.build()
+      }
+      if (update.docChanged || update.viewportChanged || todoDashToggled || update.geometryChanged) {
+        this.measure()
+      }
+    }
+
+    destroy() {
+      this.destroyed = true
+    }
+
+    // Rows are keyed by prefix, and by whether the todo dash is hidden, since
+    // that changes the prefix's width.
+    visibleListRows() {
+      const rows: Array<{ from: number; prefix: string; key: string }> = []
+      const edited = editedLineNumbers(this.view)
+      forEachVisibleLine(this.view, (line) => {
+        const prefix = listPrefixRegex.exec(line.text)?.[0]
+        if (!prefix) return
+        const hidden = isTodoDashHidden(edited, line.number, line.text)
+        rows.push({ from: line.from, prefix, key: hidden ? `hidden:${prefix}` : prefix })
+      })
+      return rows
+    }
+
+    build() {
+      const builder = new RangeSetBuilder<Decoration>()
+      for (const { from, key } of this.visibleListRows()) {
+        const width = this.widths.get(key)
+        if (width != null) {
+          builder.add(from, from, Decoration.line({ attributes: { style: `--list-hang: ${width}px` } }))
+        }
+      }
+      return builder.finish()
+    }
+
+    measure() {
+      this.view.requestMeasure({
+        key: this,
+        read: (view) => {
+          const measured = new Map<string, number>()
+          for (const { from, prefix, key } of this.visibleListRows()) {
+            if (measured.has(key)) continue
+            const start = view.coordsAtPos(from, 1)
+            const end = view.coordsAtPos(from + prefix.length, -1)
+            if (start && end) measured.set(key, Math.round((end.left - start.left) * 10) / 10)
+          }
+          return measured
+        },
+        write: (measured, view) => {
+          let changed = false
+          for (const [prefix, width] of measured) {
+            if (this.widths.get(prefix) !== width) {
+              this.widths.set(prefix, width)
+              changed = true
+            }
+          }
+          // Decorations can't change mid-measure, so apply them in a fresh update.
+          if (changed) {
+            setTimeout(() => {
+              if (!this.destroyed) view.dispatch({ effects: refreshListIndent.of(null) })
+            })
+          }
+        },
+      })
+    }
+  },
+  {
+    decorations: (value) => value.decorations,
+  },
+)
+
+// Lists sit 8px away from plain text vertically. Headings sit 12px below what
+// precedes them and 4px above what follows. This lives in an editor theme
+// because CodeMirror's own .cm-line padding beats layered CSS.
+const lineSpacingTheme = EditorView.theme({
+  '.cm-line.cm-list-line': {
+    marginLeft: 'var(--list-hang, 0px)',
+    textIndent: 'calc(-1 * var(--list-hang, 0px))',
+  },
+  '.cm-line:not(.cm-list-line):not(.cm-heading-line) + .cm-line.cm-list-line': {
+    paddingTop: '8px',
+  },
+  '.cm-line.cm-list-line + .cm-line:not(.cm-list-line):not(.cm-heading-line)': {
+    paddingTop: '8px',
+  },
+  '.cm-line.cm-heading-line': {
+    paddingBottom: '4px',
+  },
+  '.cm-line + .cm-line.cm-heading-line': {
+    paddingTop: '12px',
+  },
+  // On touch screens, 4px between todo rows gives their markers room to tap.
+  '@media (max-width: 640px), (pointer: coarse)': {
+    '.cm-line.cm-todo-line': {
+      paddingTop: '2px',
+      paddingBottom: '2px',
+    },
+    '.cm-line.cm-todo-line + .cm-line:not(.cm-list-line):not(.cm-heading-line)': {
+      paddingTop: '6px',
+    },
+    '.cm-line.cm-todo-line + .cm-line.cm-heading-line': {
+      paddingTop: '10px',
+    },
+    '.cm-line.cm-heading-line + .cm-line.cm-todo-line': {
+      paddingTop: '0',
+    },
+  },
+})
+
+export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin, headingLinePlugin, todoDashPlugin, listIndentPlugin, lineSpacingTheme]

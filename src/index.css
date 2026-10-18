@@ -588,10 +588,10 @@
 
   @media (max-width: 640px), (pointer: coarse) {
     .cm-todo-marker {
-      /* Space task rows apart and grow the marker's touch area. */
-      line-height: 46px;
-      padding: 12.5px 9px;
-      margin: 0 -9px;
+      /* Grow the touch area, but keep it inside its own row so taps on
+         neighbouring lines don't land on this marker. */
+      padding: 2px 6px;
+      margin: 0 -6px;
     }
   }
 
@@ -962,6 +962,39 @@
     .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] .app-shell-fixed-header-width {
       left: var(--desktop-search-shift);
       right: auto;
+    }
+
+    /* Narrow desktop windows (and iPad portrait) can't spare the roomy gutters:
+       a card's 20px inset plus the timeline's 2% margins left about 30px between
+       them. Tighten everything to one 12px gutter, so the timeline's outer edge,
+       the gap to the card and the card's own edge all match. The shift counts the
+       card's outer inset only; the timeline's margin supplies the gap. The fixed
+       header and tray use 100% rather than 100vw so the scrollbar gutter does
+       not make them wider than the timeline. */
+    @media (max-width: 1079.98px) {
+      .app-shell-root:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) {
+        --desktop-chat-sidebar-inset: 12px;
+      }
+
+      .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-chat-sidebar-open='true'] {
+        --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset));
+      }
+
+      .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-search-sidebar-open='true'] {
+        --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset));
+      }
+
+      .app-shell-root[data-desktop-panel-expanded='false']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-main {
+        width: min(720px, calc(100% - 2 * var(--desktop-chat-sidebar-inset)));
+      }
+
+      .app-shell-root[data-desktop-panel-expanded='false']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-shell-fixed-header-width {
+        width: min(720px, calc(100% - var(--desktop-chat-shift) - var(--desktop-search-shift) - 2 * var(--desktop-chat-sidebar-inset)));
+      }
+
+      .app-shell-root[data-desktop-panel-expanded='false']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-shell-fixed-tray-width {
+        width: min(620px, calc(100% - var(--desktop-chat-shift) - var(--desktop-search-shift) - 2 * var(--desktop-chat-sidebar-inset)));
+      }
     }
 
     .app-shell-root[data-desktop-panel-expanded='true'] .timeline-floating-card {
@@ -1535,14 +1568,15 @@
 
 /* Phone composer, chat and search alike: always a box, with the field on
    top and an action row under it. Chat: Menu, Timeline/Chat, then Send alone
-   at the right. Search: Menu, then the Lines toggle and filters, scrolling
-   sideways. 8px of padding plus the 20px radius of the 40px buttons matches
+   at the right. Search: Menu, then Days | Lines and the Filter dropdown.
+   8px of padding plus the 20px radius of the 40px buttons matches
    the box's 28px corner. */
 #bottom-tray.bottom-tray-shell:has(.tray-phone-composer) {
   border-radius: var(--bottom-tray-radius, 28px);
 }
 
 .tray-phone-composer {
+  position: relative;
   display: grid;
   align-items: center;
   row-gap: 0.25rem;
@@ -1595,6 +1629,50 @@
 
 .tray-phone-filters {
   grid-area: filters;
+}
+
+/* Days | Lines in the search box: the menu's capsule, sized like the chips
+   beside it, on their fill instead of its glow. */
+.mode-capsule.mode-capsule-compact {
+  width: 6.75rem;
+  height: 2.5rem;
+  padding: 3px;
+  border: none;
+  background: var(--theme-active);
+}
+
+.mode-capsule-compact .mode-capsule-thumb {
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  box-shadow:
+    0 0 0 1px var(--theme-border),
+    0 1px 2px rgb(var(--theme-shadow-color) / 0.12);
+}
+
+/* On the dark chip fill the usual thumb nearly disappears. */
+html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
+  background: var(--theme-border-strong);
+  box-shadow: 0 1px 2px rgb(var(--theme-shadow-color) / 0.3);
+}
+
+.mode-capsule-compact .mode-capsule-button {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Opens upward, clear of the box; the left offset comes from the Filter pill. */
+.tray-phone-filter-menu {
+  position: absolute;
+  bottom: calc(100% + 1rem);
+  z-index: 40;
+  min-width: 11rem;
+  padding: 4px;
+  border: 1px solid var(--theme-border);
+  border-radius: 1.25rem;
+  background: var(--theme-surface);
+  box-shadow: 0 10px 28px -8px rgb(var(--theme-shadow-color) / 0.28);
 }
 
 .bottom-tray-blur,
@@ -1812,6 +1890,37 @@ body[data-keyboard-open='true'][data-day-editor-focus='true'] .bottom-tray-blur-
   }
 }
 
+/* Touch at tablet width (iPad): the header is fixed, and at top: 0 the logo sits in
+   Safari's top scroll-edge band, which blurs it. Drop it 1rem below the safe area like
+   the phone header (b002575) and push the content and scroll anchors down to match. The top veil gets the
+   bottom tray's treatment: no backdrop-filter, an opaque page colour that fades out.
+   Safari then tints its own top band with that colour instead of stacking a second,
+   lighter blur above ours. */
+@media (hover: none) and (min-width: 640px) {
+  .app-shell-top-header {
+    top: calc(env(safe-area-inset-top) + 1rem);
+  }
+
+  .app-main {
+    padding-top: calc(env(safe-area-inset-top) + 6rem);
+  }
+
+  /* html outranks the plain .scroll-anchor rule further down. */
+  html .scroll-anchor {
+    scroll-margin-top: calc(env(safe-area-inset-top) + 6rem);
+  }
+
+  .app-shell-header-blur {
+    height: calc(env(safe-area-inset-top) + 7.5rem);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .app-shell-header-blur[data-scrolled='true'] {
+    background: var(--theme-page);
+  }
+}
+
 /* Phone layout, including a desktop window narrower than 700px, and any touch
    device. Keyboard closed is the default (4px higher than the previous
    1rem + 2px) so the first paint does not use the open-keyboard position.
@@ -2002,6 +2111,11 @@ html[data-theme='dark'] .bg-slate-200,
 html[data-theme='dark'] .bg-slate-300,
 html[data-theme='dark'] .bg-gray-300 {
   background-color: var(--theme-surface-strong) !important;
+}
+
+/* On the dark idle Send button a white arrow reads as enabled; dim it. */
+html[data-theme='dark'] .tray-send-idle-arrow {
+  opacity: 0.6;
 }
 
 html[data-theme='dark'] .bg-\[\#EBF4FF\],

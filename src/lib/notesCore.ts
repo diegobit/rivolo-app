@@ -1,3 +1,5 @@
+import { createNoteTokenRegex, normalizeNoteToken } from './noteTokens.js'
+
 export type Day = {
   dayId: string
   humanTitle: string
@@ -35,10 +37,10 @@ export type TokenSummary = {
 }
 
 const TODO_LINE_REGEX = /^\s*-\s+\[ \]/
-const TAG_REGEX = /(^|[^A-Za-z0-9_])#[A-Za-z0-9_/-]+/g
-const MENTION_REGEX = /(^|[^A-Za-z0-9_])@[A-Za-z0-9_/-]+/g
-const TAG_TOKEN_REGEX = /(^|[^A-Za-z0-9_])(#[A-Za-z0-9_/-]+)/g
-const MENTION_TOKEN_REGEX = /(^|[^A-Za-z0-9_])(@[A-Za-z0-9_/-]+)/g
+const TAG_REGEX = createNoteTokenRegex('#')
+const MENTION_REGEX = createNoteTokenRegex('@')
+const TAG_TOKEN_REGEX = createNoteTokenRegex('#')
+const MENTION_TOKEN_REGEX = createNoteTokenRegex('@')
 const HEADING_REGEX = /^\s{0,3}(#{1,6})\s+/
 
 const includesText = (value: string, query: string) => value.toLocaleLowerCase().includes(query)
@@ -155,7 +157,7 @@ const collectTokens = (days: Day[], regex: RegExp) => {
       let match = regex.exec(line)
 
       while (match) {
-        const token = match[2].toLocaleLowerCase()
+        const token = normalizeNoteToken(match[2])
         const summary = tokenMap.get(token) ?? { count: 0, days: new Set<string>() }
         summary.count += 1
         summary.days.add(day.dayId)

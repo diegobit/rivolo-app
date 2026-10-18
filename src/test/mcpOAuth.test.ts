@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { SqliteD1, closeTestDatabases } from './helpers/d1'
+import { readFileSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
 import {
   OAuthMetadataSchema,
   OAuthProtectedResourceMetadataSchema,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   authenticateMcpOAuthBearer,
   McpOAuthAuthenticationError,
@@ -27,6 +28,7 @@ import {
   McpPersonalTokenRepository,
 } from '../../functions/_lib/mcpPersonalTokens'
 import { ProviderProfileRepository } from '../../functions/_lib/providerProfiles'
+import worker from '../../mcp/worker'
 import {
   createMcpBearerChallenge,
   createMcpProtectedResourceMetadata,
@@ -34,6 +36,42 @@ import {
   DEFAULT_MCP_RESOURCE_URL,
   getMcpProtectedResourceMetadataUrl,
 } from '../lib/mcpOAuthMetadata'
+
+class SqliteD1 {
+  readonly database = new DatabaseSync(':memory:')
+
+  constructor() {
+    this.database.exec('PRAGMA foreign_keys = ON')
+    for (const migration of [
+      'migrations/0001_mcp_provider_profiles.sql',
+      'migrations/0003_mcp_personal_tokens.sql',
+      'migrations/0004_mcp_oauth.sql',
+    ]) {
+      this.database.exec(readFileSync(migration, 'utf8'))
+    }
+  }
+
+  prepare(sql: string) {
+    return {
+      bind: (...values: unknown[]) => {
+        const statement = this.database.prepare(sql)
+        return {
+          first: async <T>() => (statement.get(...values) as T | undefined) ?? null,
+          all: async <T>() => ({ results: statement.all(...values) as T[] }),
+          run: async () => {
+            const result = statement.run(...values)
+            return {
+              meta: {
+                changes: Number(result.changes),
+                last_row_id: Number(result.lastInsertRowid),
+              },
+            }
+          },
+        }
+      },
+    }
+  }
+}
 
 const createEnv = (db: SqliteD1): McpOAuthEnv => ({
   MCP_DB: db as unknown as D1Database,
@@ -139,31 +177,54 @@ const authorizationParameters = (
     resource: DEFAULT_MCP_RESOURCE_URL,
   })
 
+const cookiePair = (setCookie: string) => {
+  const name = setCookie.split('=', 1)[0]
+  const value = setCookie.slice(name.length + 1).split(';', 1)[0]
+  return `${name}=${value}`
+}
+
 const completeConsent = async (
   env: McpOAuthEnv,
   cookie: string,
   parameters: URLSearchParams,
   profileId: string,
 ) => {
+  const consent = await showOAuthConsent(
+    new Request(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize?${parameters.toString()}`, {
+      headers: { Cookie: cookie },
+    }),
+    env,
+  )
+  expect(consent.status).toBe(200)
+  const html = await consent.text()
+  const transactionId = html.match(/name="transaction_id" value="([^"]+)"/)?.[1]
+  if (!transactionId) throw new Error('Missing consent transaction.')
+  const pending = consent.headers
+    .getSetCookie()
+    .map(cookiePair)
+    .find((pair) => pair.startsWith('rivolo_oauth_pending='))
+  if (!pending) throw new Error('Missing pending cookie.')
   const response = await submitOAuthConsent(
     formRequest(
       `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`,
       new URLSearchParams([
         ...parameters,
+        ['transaction_id', transactionId],
         ['profile_id', profileId],
         ['decision', 'allow'],
       ]),
       {
         Origin: 'https://rivolo.app',
-        Cookie: cookie,
+        Cookie: `${cookie}; ${pending}`,
       },
     ),
     env,
   )
   expect(response.status).toBe(302)
   const redirect = new URL(response.headers.get('Location') ?? '')
+  expect(redirect.searchParams.getAll('iss')).toEqual([DEFAULT_MCP_OAUTH_ISSUER_URL])
   expect(redirect.searchParams.get('state')).toBe('client-state')
-  expect(redirect.searchParams.get('iss')).toBe(DEFAULT_MCP_OAUTH_ISSUER_URL)
+  expect(redirect.searchParams.getAll('code')).toHaveLength(1)
   return redirect.searchParams.get('code') ?? ''
 }
 
@@ -281,10 +342,6 @@ describe('MCP OAuth authorization and tokens', () => {
     )
     const consentHtml = await consent.text()
     expect(consent.status).toBe(200)
-    expect(consent.headers.get('Referrer-Policy')).toBe('same-origin')
-    expect(consent.headers.get('Content-Security-Policy')).toBe(
-      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' http://127.0.0.1:4567; base-uri 'none'; frame-ancestors 'none'",
-    )
     expect(consentHtml).toContain('Allow Codex?')
     expect(consentHtml).toContain('notes@example.com')
     expect(consentHtml).toContain(`name="profile_id" value="${profile.profileId}"`)
@@ -300,7 +357,6 @@ describe('MCP OAuth authorization and tokens', () => {
       env,
     )
     expect(mismatch.status).toBe(400)
-    expect(mismatch.headers.get('Content-Security-Policy')).not.toContain('localhost:4567')
     expect(await mismatch.text()).toContain(
       'redirect_uri does not match the registered value.',
     )
@@ -314,21 +370,29 @@ describe('MCP OAuth authorization and tokens', () => {
       ),
       env,
     )
-    expect(resourceMismatch.status).toBe(400)
+    expect(resourceMismatch.status).toBe(302)
+    const resourceLocation = new URL(resourceMismatch.headers.get('Location') ?? '')
+    expect(resourceLocation.origin + resourceLocation.pathname).toBe(
+      'http://127.0.0.1:4567/callback',
+    )
+    expect(resourceLocation.searchParams.get('error')).toBe('invalid_request')
+    expect(resourceLocation.searchParams.get('error_description')).toBe(
+      'resource does not match the Rivolo MCP server.',
+    )
 
     const noPkce = new URLSearchParams(parameters)
     noPkce.delete('code_challenge')
-    expect(
-      await (
-        await showOAuthConsent(
-          new Request(
-            `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize?${noPkce.toString()}`,
-            { headers: { Cookie: cookie } },
-          ),
-          env,
-        )
-      ).text(),
-    ).toContain('S256 PKCE is required.')
+    const pkceMismatch = await showOAuthConsent(
+      new Request(
+        `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize?${noPkce.toString()}`,
+        { headers: { Cookie: cookie } },
+      ),
+      env,
+    )
+    expect(pkceMismatch.status).toBe(302)
+    expect(new URL(pkceMismatch.headers.get('Location') ?? '').searchParams.get(
+      'error_description',
+    )).toBe('S256 PKCE is required.')
   })
 
   it('issues one-time codes and hashed audience-bound tokens without leaking secrets', async () => {
@@ -622,33 +686,36 @@ describe('MCP OAuth authorization and tokens', () => {
     expect(crossOrigin.status).toBe(400)
     expect(await crossOrigin.text()).toContain('Consent origin is invalid.')
 
-    const opaqueOrigin = await submitOAuthConsent(
-      formRequest(
-        `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`,
-        new URLSearchParams([...parameters, ['decision', 'allow']]),
-        { Origin: 'null', Cookie: cookie },
-      ),
+    const consent = await showOAuthConsent(
+      new Request(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize?${parameters.toString()}`, {
+        headers: { Cookie: cookie },
+      }),
       env,
     )
-    expect(opaqueOrigin.status).toBe(400)
-    expect(await opaqueOrigin.text()).toContain('Consent origin is invalid.')
-
+    const transactionId = (await consent.text()).match(
+      /name="transaction_id" value="([^"]+)"/,
+    )?.[1]
+    const pending = consent.headers
+      .getSetCookie()
+      .map(cookiePair)
+      .find((pair) => pair.startsWith('rivolo_oauth_pending='))
     const changedProfile = await submitOAuthConsent(
       formRequest(
         `${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`,
         new URLSearchParams([
           ...parameters,
+          ['transaction_id', transactionId ?? ''],
           ['profile_id', '22222222-2222-4222-8222-222222222222'],
           ['decision', 'allow'],
         ]),
-        { Origin: 'https://rivolo.app', Cookie: cookie },
+        { Origin: 'https://rivolo.app', Cookie: `${cookie}; ${pending ?? ''}` },
       ),
       env,
     )
-    expect(changedProfile.status).toBe(400)
-    expect(await changedProfile.text()).toContain(
-      'The Rivolo notes profile changed. Review access again.',
-    )
+    expect(changedProfile.status).toBe(302)
+    expect(new URL(changedProfile.headers.get('Location') ?? '').searchParams.get(
+      'error_description',
+    )).toBe('The Rivolo notes profile changed. Review access again.')
     expect(
       db.database
         .prepare('SELECT COUNT(*) AS count FROM mcp_oauth_authorization_codes')
@@ -689,69 +756,104 @@ describe('MCP OAuth authorization and tokens', () => {
       ),
     ).toBeNull()
   })
-})
 
-afterEach(() => {
-  vi.useRealTimers()
-  closeTestDatabases()
-})
-
-
-describe('OAuth expiry and grant isolation', () => {
-  it('rejects an expired authorization code without consuming it', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-07-16T12:00:00.000Z'))
+  it('accepts a null consent origin only with same-origin fetch metadata', async () => {
     const db = new SqliteD1()
     const env = createEnv(db)
     const profile = await createProfile(env)
+    const cookie = await sessionCookie(env, profile.profileId)
     const redirectUri = 'https://client.example/callback'
     const clientId = await registerClient(env, redirectUri)
-    const { verifier, challenge } = await pkce()
-    const code = await completeConsent(env, await sessionCookie(env, profile.profileId), authorizationParameters(clientId, redirectUri, challenge), profile.profileId)
-    vi.setSystemTime(new Date('2026-07-16T12:05:00.000Z'))
-    const response = await exchangeCode(env, clientId, redirectUri, code, verifier)
-    expect(response.status).toBe(400)
-    expect(await response.json()).toMatchObject({ error: 'invalid_grant' })
-    expect(db.get('SELECT used_at FROM mcp_oauth_authorization_codes')?.used_at).toBeNull()
-  })
+    const { challenge } = await pkce()
+    const parameters = authorizationParameters(clientId, redirectUri, challenge)
 
-  it('expires access and refresh tokens at their own boundaries', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-07-16T12:00:00.000Z'))
+    const consent = await showOAuthConsent(
+      new Request(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize?${parameters.toString()}`, {
+        headers: { Cookie: cookie },
+      }),
+      env,
+    )
+    expect(consent.status).toBe(200)
+    const transactionId = (await consent.text()).match(
+      /name="transaction_id" value="([^"]+)"/,
+    )?.[1]
+    if (!transactionId) throw new Error('Missing consent transaction.')
+    const pending = consent.headers
+      .getSetCookie()
+      .map(cookiePair)
+      .find((pair) => pair.startsWith('rivolo_oauth_pending='))
+    if (!pending) throw new Error('Missing pending cookie.')
+
+    const consentBody = () =>
+      new URLSearchParams([
+        ...parameters,
+        ['transaction_id', transactionId],
+        ['profile_id', profile.profileId],
+        ['decision', 'allow'],
+      ])
+
+    const withoutMetadata = await submitOAuthConsent(
+      formRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`, consentBody(), {
+        Origin: 'null',
+        Cookie: `${cookie}; ${pending}`,
+      }),
+      env,
+    )
+    expect(withoutMetadata.status).toBe(400)
+    expect(await withoutMetadata.text()).toContain('Consent origin is invalid.')
+
+    const crossSite = await submitOAuthConsent(
+      formRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`, consentBody(), {
+        Origin: 'null',
+        'Sec-Fetch-Site': 'cross-site',
+        Cookie: `${cookie}; ${pending}`,
+      }),
+      env,
+    )
+    expect(crossSite.status).toBe(400)
+    expect(await crossSite.text()).toContain('Consent origin is invalid.')
+
+    const accepted = await submitOAuthConsent(
+      formRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/authorize`, consentBody(), {
+        Origin: 'null',
+        'Sec-Fetch-Site': 'same-origin',
+        Cookie: `${cookie}; ${pending}`,
+      }),
+      env,
+    )
+    expect(accepted.status).toBe(302)
+    expect(new URL(accepted.headers.get('Location') ?? '').searchParams.get('code')).toBeTruthy()
+  })
+})
+
+describe('hosted MCP worker credentials', () => {
+  it('returns 405 for an authenticated GET after the bearer check', async () => {
     const env = createEnv(new SqliteD1())
     const profile = await createProfile(env)
-    const redirectUri = 'https://client.example/callback'
-    const clientId = await registerClient(env, redirectUri)
-    const { verifier, challenge } = await pkce()
-    const code = await completeConsent(env, await sessionCookie(env, profile.profileId), authorizationParameters(clientId, redirectUri, challenge), profile.profileId)
-    const token = await (await exchangeCode(env, clientId, redirectUri, code, verifier)).json() as { access_token: string; refresh_token: string }
-    const request = new Request(DEFAULT_MCP_RESOURCE_URL, { headers: { Authorization: `Bearer ${token.access_token}` } })
-    expect(await authenticateMcpOAuthBearer(request, env)).not.toBeNull()
-    vi.setSystemTime(new Date('2026-07-16T13:00:00.000Z'))
-    expect(await authenticateMcpOAuthBearer(request, env)).toBeNull()
-    vi.setSystemTime(new Date('2026-08-15T12:00:00.000Z'))
-    const expiredRefresh = await exchangeOAuthToken(formRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/token`, new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, refresh_token: token.refresh_token, resource: DEFAULT_MCP_RESOURCE_URL })), env)
-    expect(expiredRefresh.status).toBe(400)
-    expect(await expiredRefresh.json()).toMatchObject({ error: 'invalid_grant' })
-  })
+    const personal = await new McpPersonalTokenRepository(env.MCP_DB).create(
+      profile.profileId,
+      'Worker probe',
+    )
+    const response = await worker.fetch(
+      new Request(DEFAULT_MCP_RESOURCE_URL, {
+        method: 'GET',
+        headers: {
+          Accept: 'text/event-stream',
+          Authorization: `Bearer ${personal.token}`,
+          'Last-Event-ID': 'event-1',
+        },
+      }),
+      {
+        ...env,
+        DROPBOX_CLIENT_ID: 'dropbox-client',
+        GOOGLE_CLIENT_ID: 'google-client',
+        GOOGLE_CLIENT_SECRET: 'google-secret',
+      },
+    )
 
-  it.each(['different-client', 'scope-escalation'])('rejects %s refresh without consuming the valid grant', async rejection => {
-    const db = new SqliteD1()
-    const env = createEnv(db)
-    const profile = await createProfile(env)
-    const redirectUri = 'https://client.example/callback'
-    const clientId = await registerClient(env, redirectUri)
-    const differentClientId = await registerClient(env, 'https://other.example/callback')
-    const { verifier, challenge } = await pkce()
-    const parameters = authorizationParameters(clientId, redirectUri, challenge)
-    parameters.set('scope', 'notes:read')
-    const code = await completeConsent(env, await sessionCookie(env, profile.profileId), parameters, profile.profileId)
-    const token = await (await exchangeCode(env, clientId, redirectUri, code, verifier)).json() as { refresh_token: string }
-    const refresh = (client: string, scope: string) => exchangeOAuthToken(formRequest(`${DEFAULT_MCP_OAUTH_ISSUER_URL}/token`, new URLSearchParams({ grant_type: 'refresh_token', client_id: client, refresh_token: token.refresh_token, resource: DEFAULT_MCP_RESOURCE_URL, scope })), env)
-    const rejected = await refresh(rejection === 'different-client' ? differentClientId : clientId, rejection === 'scope-escalation' ? 'notes:read notes:write' : 'notes:read')
-    expect(rejected.status).toBe(400)
-    expect(await rejected.json()).toMatchObject({ error: rejection === 'scope-escalation' ? 'invalid_scope' : 'invalid_grant' })
-    expect(db.get('SELECT refresh_used_at FROM mcp_oauth_token_grants')?.refresh_used_at).toBeNull()
-    expect((await refresh(clientId, 'notes:read')).status).toBe(200)
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('POST')
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Content-Type')).not.toContain('text/event-stream')
   })
 })

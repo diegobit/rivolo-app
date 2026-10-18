@@ -1,249 +1,682 @@
 // @vitest-environment node
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { McpOAuthRepository } from '../../functions/_lib/mcpOAuth'
-import { McpPersonalTokenRepository } from '../../functions/_lib/mcpPersonalTokens'
-import { ProviderProfileRepository } from '../../functions/_lib/providerProfiles'
-import worker, { type RemoteMcpEnv } from '../../mcp/worker'
-import { SqliteD1, closeTestDatabases } from './helpers/d1'
+import { describe, expect, it, vi } from 'vitest'
+import type { AuthenticatedMcpOAuthBearer } from '../../functions/_lib/mcpOAuth'
+import type { AuthenticatedMcpBearer } from '../../functions/_lib/mcpPersonalTokens'
+import {
+  authenticateRemoteMcpBearer,
+  handleRemoteMcpRequest,
+  type RemoteMcpDependencies,
+  type RemoteMcpEnv,
+} from '../../mcp/remoteServer'
+import worker from '../../mcp/worker'
 
-const RESOURCE = 'https://mcp.rivolo.app/mcp'
+type OperationRow = {
+  input_hash: string
+  state: 'pending' | 'completed'
+  result_json: string | null
+}
+
+class FakeWriteD1 {
+  readonly operations = new Map<string, OperationRow>()
+
+  prepare(sql: string) {
+    return {
+      bind: (...values: unknown[]) => ({
+        first: async <T>() => this.first(sql, values) as T | null,
+        run: async () => this.run(sql, values),
+      }),
+    }
+  }
+
+  private key(profileId: unknown, operationId: unknown) {
+    return `${String(profileId)}:${String(operationId)}`
+  }
+
+  private first(sql: string, values: unknown[]) {
+    if (!sql.includes('SELECT input_hash, state, result_json')) {
+      throw new Error(`Unexpected first query: ${sql}`)
+    }
+    return this.operations.get(this.key(values[0], values[1])) ?? null
+  }
+
+  private async run(sql: string, values: unknown[]) {
+    if (sql.includes('INSERT INTO mcp_write_operations')) {
+      const [profileId, operationId, inputHash] = values
+      const key = this.key(profileId, operationId)
+      if (this.operations.has(key)) return { meta: { changes: 0 } }
+      this.operations.set(key, {
+        input_hash: String(inputHash),
+        state: 'pending',
+        result_json: null,
+      })
+      return { meta: { changes: 1 } }
+    }
+
+    if (sql.includes("SET state = 'completed'")) {
+      const [resultJson, , profileId, operationId, inputHash] = values
+      const key = this.key(profileId, operationId)
+      const operation = this.operations.get(key)
+      if (
+        !operation
+        || operation.state !== 'pending'
+        || operation.input_hash !== inputHash
+      ) {
+        return { meta: { changes: 0 } }
+      }
+      this.operations.set(key, {
+        ...operation,
+        state: 'completed',
+        result_json: String(resultJson),
+      })
+      return { meta: { changes: 1 } }
+    }
+
+    if (sql.includes('DELETE FROM mcp_write_operations')) {
+      const [profileId, operationId, inputHash] = values
+      const key = this.key(profileId, operationId)
+      const operation = this.operations.get(key)
+      if (
+        !operation
+        || operation.state !== 'pending'
+        || operation.input_hash !== inputHash
+      ) {
+        return { meta: { changes: 0 } }
+      }
+      this.operations.delete(key)
+      return { meta: { changes: 1 } }
+    }
+
+    throw new Error(`Unexpected run query: ${sql}`)
+  }
+}
+
+const PROFILE_ID = '11111111-1111-4111-8111-111111111111'
 const MODIFIED_AT = '2026-07-16T12:00:00.000Z'
-const initialMarkdown = '<!-- day:2026-07-16 -->\nJul 16, 2026\n------------\n\nCloud note'
-const clients: Client[] = []
+const markdown = [
+  '<!-- day:2026-07-16 -->',
+  'Jul 16, 2026',
+  '------------',
+  '',
+  'Cloud note',
+].join('\n')
 
-afterEach(async () => {
-  await Promise.all(clients.splice(0).map(client => client.close()))
-  vi.unstubAllGlobals()
-  closeTestDatabases()
+const dropboxAuth = (
+  scopes: AuthenticatedMcpBearer['token']['scopes'] = [
+    'notes:read',
+    'notes:write',
+  ],
+): AuthenticatedMcpBearer => ({
+  profile: {
+    profileId: PROFILE_ID,
+    provider: 'dropbox',
+    providerAccountId: 'dbid:account',
+    providerEmail: 'user@example.com',
+    providerName: 'User',
+    target: { path: '/inbox.md' },
+    timeZone: 'Europe/Rome',
+    createdAt: MODIFIED_AT,
+    updatedAt: MODIFIED_AT,
+    revokedAt: null,
+  },
+  token: {
+    tokenId: '22222222-2222-4222-8222-222222222222',
+    name: 'Agent',
+    prefix: 'rvl_example1',
+    scopes,
+    createdAt: MODIFIED_AT,
+    lastUsedAt: null,
+    revokedAt: null,
+  },
+  providerRefreshToken: 'dropbox-refresh-secret',
 })
 
-const fixture = async (provider: 'dropbox' | 'google-drive' = 'dropbox') => {
-  const db = new SqliteD1()
-  const env: RemoteMcpEnv = {
-    MCP_DB: db as unknown as D1Database,
-    MCP_PROVIDER_TOKEN_ENCRYPTION_KEY: 'profile-secret',
-    MCP_ALLOWED_ORIGINS: 'https://trusted.example',
-    DROPBOX_CLIENT_ID: 'dropbox-client',
-    GOOGLE_CLIENT_ID: 'google-client',
-    GOOGLE_CLIENT_SECRET: 'google-secret',
-  }
-  const profile = await new ProviderProfileRepository(env.MCP_DB, env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY)
-    .createOrUpdate({
-      providerAccountId: 'account-1', timeZone: 'Europe/Rome', refreshToken: 'provider-refresh-secret',
-      ...(provider === 'dropbox'
-        ? { provider, target: { path: '/inbox.md' } }
-        : { provider, target: { fileId: 'file-1', fileName: 'inbox.md', folderId: 'folder-1' } }),
-    })
-  const personal = await new McpPersonalTokenRepository(env.MCP_DB).create(profile.profileId, 'SDK agent')
-  const state = { markdown: initialMarkdown, rev: 'rev-1', uploads: 0 }
-  const providerFetch = vi.fn<typeof fetch>(async (input, init) => {
-    const request = new Request(input, init)
-    const url = new URL(request.url)
-    if (url.pathname.endsWith('/token')) {
-      const body = new URLSearchParams(await request.text())
-      expect(body.get('refresh_token')).toBe('provider-refresh-secret')
-      expect(body.get('client_id')).toBe(provider === 'dropbox' ? 'dropbox-client' : 'google-client')
-      return Response.json({ access_token: 'provider-access', expires_in: 3600 })
-    }
-    expect(request.headers.get('Authorization')).toBe('Bearer provider-access')
-    if (url.hostname === 'content.dropboxapi.com') {
-      const args = JSON.parse(request.headers.get('Dropbox-API-Arg') ?? '{}')
-      expect(args.path).toBe('/inbox.md')
-      if (url.pathname.endsWith('/download')) {
-        return new Response(state.markdown, {
-          headers: { 'Dropbox-API-Result': JSON.stringify({ rev: state.rev, server_modified: MODIFIED_AT, size: state.markdown.length }) },
-        })
-      }
-      if (url.pathname.endsWith('/upload')) {
-        if (args.mode?.['.tag'] !== 'update' || args.mode.update !== state.rev) {
-          return Response.json({ error_summary: 'path/conflict/file/..' }, { status: 409 })
-        }
-        state.markdown = await request.text()
-        state.rev = `rev-${++state.uploads + 1}`
-        return Response.json({ rev: state.rev, server_modified: MODIFIED_AT, size: state.markdown.length })
-      }
-    }
-    if (url.hostname === 'www.googleapis.com' && url.pathname === '/drive/v3/files/file-1') {
-      if (url.searchParams.get('alt') === 'media') return new Response(state.markdown)
-      return Response.json({ id: 'file-1', name: 'inbox.md', mimeType: 'text/markdown', size: String(state.markdown.length), version: '7', headRevisionId: 'rev-7', modifiedTime: MODIFIED_AT })
-    }
-    throw new Error(`Unexpected provider request ${request.method} ${request.url}`)
-  })
-  vi.stubGlobal('fetch', providerFetch)
-  const requestFetch = vi.fn<typeof fetch>(async (input, init) => worker.fetch(new Request(input, init), env))
-  const connect = async (token = personal.token) => {
-    const client = new Client({ name: 'integration-sdk-client', version: '1.0.0' })
-    clients.push(client)
-    await client.connect(new StreamableHTTPClientTransport(new URL(RESOURCE), {
-      requestInit: { headers: { Authorization: `Bearer ${token}` } },
-      fetch: requestFetch,
-    }))
-    return client
-  }
-  const oauth = async (scope: string) => {
-    const repository = new McpOAuthRepository(env.MCP_DB)
-    const client = await repository.registerClient({ redirectUris: ['https://client.example/callback'] })
-    const verifier = 'v'.repeat(64)
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
-    const challenge = Buffer.from(digest).toString('base64url')
-    const authorization = await repository.parseAuthorizationRequest(new URLSearchParams({
-      response_type: 'code', client_id: client.clientId, redirect_uri: client.redirectUris[0],
-      code_challenge: challenge, code_challenge_method: 'S256', scope, resource: RESOURCE,
-    }), RESOURCE)
-    const code = await repository.issueAuthorizationCode(profile.profileId, authorization)
-    return repository.exchangeAuthorizationCode({ clientId: client.clientId, code, codeVerifier: verifier, redirectUri: client.redirectUris[0], resource: RESOURCE })
-  }
-  return { db, env, profile, personal, state, providerFetch, requestFetch, connect, oauth }
-}
-
-const text = (result: Awaited<ReturnType<Client['callTool']>>) => {
-  const content = result.content as Array<{ type: string; text: string }>
-  expect(content[0]?.type).toBe('text')
-  return content[0].text
-}
-const addition = { name: 'add_to_day', arguments: { day_id: '2026-07-16', content_md: 'Agent addition', operation_id: 'operation-replay-1' } }
-const rawRequest = (headers: HeadersInit = {}) => new Request(RESOURCE, {
-  method: 'POST', headers: { Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json', ...headers },
-  body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+const googleAuth = (): AuthenticatedMcpBearer => ({
+  ...dropboxAuth(),
+  profile: {
+    ...dropboxAuth().profile,
+    provider: 'google-drive',
+    providerAccountId: 'google-account',
+    target: {
+      fileId: 'file-1',
+      folderId: 'folder-1',
+      fileName: 'inbox.md',
+    },
+  },
+  providerRefreshToken: 'google-refresh-secret',
 })
 
-describe('MCP Worker HTTP and durable security boundary', () => {
-  it('initializes an SDK client, reads Dropbox, writes once and replays durable metadata', async () => {
-    const f = await fixture()
-    const client = await f.connect()
-    expect(client.getServerVersion()?.name).toBe('rivolo-notes')
-    const tools = (await client.listTools()).tools.map(tool => tool.name)
-    expect(tools).toContain('list_days')
-    expect(tools).toContain('add_to_day')
-    expect(tools).toContain('add_to_today')
-    expect(JSON.parse(text(await client.callTool({ name: 'get_day', arguments: { day_id: '2026-07-16' } })))).toMatchObject({ found: true, day: { content_md: 'Cloud note' } })
-    const first = JSON.parse(text(await client.callTool(addition)))
-    const replay = JSON.parse(text(await client.callTool(addition)))
-    expect(replay).toEqual(first)
-    expect(replay).toMatchObject({ day_id: '2026-07-16', operation_id: 'operation-replay-1', source: { provider: 'dropbox', rev: 'rev-2' } })
-    expect(replay).not.toHaveProperty('day')
-    expect(replay).not.toHaveProperty('content_md')
-    expect(f.state.uploads).toBe(1)
-    expect(f.state.markdown).toBe(`${initialMarkdown}\n\nAgent addition`)
-    const stored = f.db.get('SELECT * FROM mcp_write_operations')
-    expect(stored?.state).toBe('completed')
-    expect(JSON.stringify(stored)).not.toContain('Agent addition')
-    expect(f.db.get('SELECT last_used_at FROM mcp_personal_tokens')?.last_used_at).not.toBeNull()
-    const messages = await Promise.all(f.requestFetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([, init]) => JSON.parse(String(init?.body)).method))
-    expect(messages).toContain('initialize')
-    expect(messages).toContain('notifications/initialized')
+const oauthAuth = (
+  scopes: AuthenticatedMcpOAuthBearer['scopes'] = ['notes:read', 'notes:write'],
+): AuthenticatedMcpOAuthBearer => ({
+  profile: dropboxAuth().profile,
+  providerRefreshToken: 'dropbox-refresh-secret',
+  clientId: 'rvc_oauth-client-example',
+  scopes,
+  expiresAt: 1_800_000_000,
+  resource: 'https://mcp.rivolo.app/mcp',
+})
+
+const createEnv = (db = new FakeWriteD1()): RemoteMcpEnv => ({
+  MCP_DB: db as unknown as D1Database,
+  MCP_PROVIDER_TOKEN_ENCRYPTION_KEY: 'profile-encryption-secret',
+  MCP_ALLOWED_ORIGINS: 'https://trusted.example',
+  DROPBOX_CLIENT_ID: 'dropbox-client',
+  GOOGLE_CLIENT_ID: 'google-client',
+  GOOGLE_CLIENT_SECRET: 'google-secret',
+})
+
+const mcpRequest = (
+  method: string,
+  params?: Record<string, unknown>,
+  options: { origin?: string; token?: string } = {},
+) =>
+  new Request('https://mcp.rivolo.app/mcp', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${options.token ?? 'rvl_test'}`,
+      'Content-Type': 'application/json',
+      'MCP-Protocol-Version': '2025-06-18',
+      ...(options.origin ? { Origin: options.origin } : {}),
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method,
+      ...(params ? { params } : {}),
+    }),
   })
 
-  it.each(['notes:read', 'notes:write'])('enforces actual OAuth %s grants at list and call boundaries', async scope => {
-    const f = await fixture()
-    const token = await f.oauth(scope)
-    const client = await f.connect(token.access_token)
-    const tools = (await client.listTools()).tools.map(tool => tool.name)
-    const forbidden = scope === 'notes:read' ? addition : { name: 'get_day', arguments: { day_id: '2026-07-16' } }
-    expect(tools).not.toContain(forbidden.name)
-    const callsBefore = f.providerFetch.mock.calls.length
-    const rejected = await client.callTool(forbidden)
-    expect(rejected.isError).toBe(true)
-    expect(text(rejected)).toContain(`Tool ${forbidden.name} not found`)
-    expect(f.providerFetch).toHaveBeenCalledTimes(callsBefore)
-    expect(f.state.uploads).toBe(0)
-    expect(f.db.all('SELECT * FROM mcp_write_operations')).toHaveLength(0)
-    if (scope === 'notes:write') {
-      expect(JSON.parse(text(await client.callTool(addition)))).toMatchObject({ day_id: '2026-07-16' })
-    } else {
-      expect(JSON.parse(text(await client.callTool({ name: 'get_day', arguments: { day_id: '2026-07-16' } })))).toMatchObject({ found: true })
+const json = (body: unknown, init: ResponseInit = {}) => Response.json(body, init)
+
+const dropboxDownload = (content = markdown, rev = 'rev-1') =>
+  new Response(content, {
+    headers: {
+      'Dropbox-API-Result': JSON.stringify({
+        rev,
+        server_modified: MODIFIED_AT,
+        size: content.length,
+      }),
+    },
+  })
+
+const defaultDependencies = (
+  auth: AuthenticatedMcpBearer | null,
+  providerFetch = vi.fn<typeof fetch>(),
+): Partial<RemoteMcpDependencies> => ({
+  authenticate: vi.fn().mockResolvedValue(auth),
+  fetch: providerFetch,
+  refreshDropbox: vi.fn().mockResolvedValue({
+    access_token: 'dropbox-access',
+    expires_in: 14400,
+  }),
+  refreshGoogle: vi.fn().mockResolvedValue({
+    access_token: 'google-access',
+    expires_in: 3600,
+  }),
+})
+
+const responsePayload = async (response: Response) => {
+  expect(response.headers.get('Content-Type')).toContain('application/json')
+  return response.json() as Promise<{
+    result?: {
+      tools?: Array<{ name: string }>
+      content?: Array<{ type: string; text: string }>
+      isError?: boolean
     }
+    error?: unknown
+  }>
+}
+
+describe('hosted MCP Streamable HTTP endpoint', () => {
+  it('dispatches PAT and OAuth bearer prefixes without trial authentication', async () => {
+    const personal = vi.fn().mockResolvedValue(dropboxAuth())
+    const oauth = vi.fn().mockResolvedValue(oauthAuth())
+    const env = createEnv()
+
+    await expect(
+      authenticateRemoteMcpBearer(
+        mcpRequest('tools/list', undefined, { token: `rvl_${'A'.repeat(43)}` }),
+        env,
+        { personal, oauth },
+      ),
+    ).resolves.toMatchObject({ token: { prefix: 'rvl_example1' } })
+    expect(personal).toHaveBeenCalledTimes(1)
+    expect(oauth).not.toHaveBeenCalled()
+
+    await expect(
+      authenticateRemoteMcpBearer(
+        mcpRequest('tools/list', undefined, { token: `rva_${'B'.repeat(43)}` }),
+        env,
+        { personal, oauth },
+      ),
+    ).resolves.toMatchObject({ clientId: 'rvc_oauth-client-example' })
+    expect(personal).toHaveBeenCalledTimes(1)
+    expect(oauth).toHaveBeenCalledTimes(1)
   })
 
-  it('selects the configured Google Drive file through real refresh and SDK read', async () => {
-    const f = await fixture('google-drive')
-    const client = await f.connect()
-    const payload = JSON.parse(text(await client.callTool({ name: 'list_days', arguments: { include_content: true } })))
-    expect(payload).toMatchObject({ source: { provider: 'google-drive', fileId: 'file-1' }, count: 1, days: [{ content_md: 'Cloud note' }] })
+  it('rejects missing bearer auth and disallowed browser origins before auth', async () => {
+    const authenticate = vi.fn().mockResolvedValue(null)
+    const env = createEnv()
+
+    const unauthorized = await handleRemoteMcpRequest(
+      mcpRequest('tools/list'),
+      env,
+      { ...defaultDependencies(null), authenticate },
+    )
+    expect(unauthorized.status).toBe(401)
+    expect(unauthorized.headers.get('WWW-Authenticate')).toBe(
+      'Bearer resource_metadata="https://mcp.rivolo.app/.well-known/oauth-protected-resource/mcp", scope="notes:read notes:write"',
+    )
+
+    const rejectedOrigin = await handleRemoteMcpRequest(
+      mcpRequest('tools/list', undefined, { origin: 'https://evil.example' }),
+      env,
+      { ...defaultDependencies(dropboxAuth()), authenticate },
+    )
+    expect(rejectedOrigin.status).toBe(403)
+    expect(authenticate).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects absent/unknown bearer and disallowed origin without reaching a provider', async () => {
-    const f = await fixture()
-    const absent = await worker.fetch(rawRequest(), f.env)
-    expect(absent.status).toBe(401)
-    expect(absent.headers.get('WWW-Authenticate')).toBe('Bearer resource_metadata="https://mcp.rivolo.app/.well-known/oauth-protected-resource/mcp", scope="notes:read notes:write"')
-    expect((await worker.fetch(rawRequest({ Authorization: 'Bearer unrecognized' }), f.env)).status).toBe(401)
-    const rejected = await worker.fetch(rawRequest({ Origin: 'https://evil.example', Authorization: `Bearer ${f.personal.token}` }), f.env)
-    expect(rejected.status).toBe(403)
-    expect(f.providerFetch).not.toHaveBeenCalled()
-    expect(f.db.get('SELECT last_used_at FROM mcp_personal_tokens')?.last_used_at).toBeNull()
-  })
+  it('challenges unauthenticated GET and POST before treating them as healthy', async () => {
+    const authenticate = vi.fn().mockResolvedValue(null)
+    const env = createEnv()
+    const challenge =
+      'Bearer resource_metadata="https://mcp.rivolo.app/.well-known/oauth-protected-resource/mcp", scope="notes:read notes:write"'
 
-  it('does not resurrect revoked OAuth and PAT grants after profile re-enable', async () => {
-    const f = await fixture()
-    const oauth = await f.oauth('notes:read notes:write')
-    const profiles = new ProviderProfileRepository(f.env.MCP_DB, f.env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY)
-    await profiles.revoke(f.profile.profileId)
-    await profiles.createOrUpdate({ provider: 'dropbox', providerAccountId: 'account-1', target: { path: '/inbox.md' }, timeZone: 'UTC', refreshToken: 'new-provider-secret' })
-    for (const token of [f.personal.token, oauth.access_token]) {
-      expect((await worker.fetch(rawRequest({ Authorization: `Bearer ${token}` }), f.env)).status).toBe(401)
+    for (const accept of [
+      'text/event-stream',
+      'application/json',
+      'application/json, text/event-stream',
+      null,
+    ]) {
+      for (const method of ['GET', 'POST']) {
+        const headers = new Headers()
+        if (accept) headers.set('Accept', accept)
+        const response = await handleRemoteMcpRequest(
+          new Request('https://mcp.rivolo.app/mcp', { method, headers }),
+          env,
+          { ...defaultDependencies(null), authenticate },
+        )
+        expect(response.status).toBe(401)
+        expect(response.headers.get('WWW-Authenticate')).toBe(challenge)
+        expect(response.headers.get('Cache-Control')).toBe('no-store')
+      }
     }
-    expect(f.providerFetch).not.toHaveBeenCalled()
+
+    const malformed = await handleRemoteMcpRequest(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'GET',
+        headers: { Authorization: 'Bearer not-a-token' },
+      }),
+      env,
+      { ...defaultDependencies(null), authenticate },
+    )
+    expect(malformed.status).toBe(401)
+    expect(malformed.headers.get('WWW-Authenticate')).toBe(challenge)
   })
 
-  it('releases a pre-upload failure and never reflects provider transport secrets', async () => {
-    const f = await fixture()
-    const client = await f.connect()
-    f.providerFetch.mockRejectedValueOnce(new Error('provider leaked secret'))
-    const result = await client.callTool(addition)
-    expect(result.isError).toBe(true)
-    expect(text(result)).toContain('Dropbox download request failed.')
-    expect(text(result)).not.toContain('provider leaked secret')
-    expect(f.db.all('SELECT * FROM mcp_write_operations')).toHaveLength(0)
-    expect(f.state.uploads).toBe(0)
-    expect((await client.callTool(addition)).isError).not.toBe(true)
-    expect(f.state.uploads).toBe(1)
+  it('returns 405 for an authenticated GET without opening a stream', async () => {
+    const refreshDropbox = vi.fn()
+    const providerFetch = vi.fn<typeof fetch>()
+    for (const authorization of [dropboxAuth(), oauthAuth()]) {
+      const authenticate = vi.fn().mockResolvedValue(authorization)
+      const response = await handleRemoteMcpRequest(
+        new Request('https://mcp.rivolo.app/mcp', {
+          method: 'GET',
+          headers: {
+            Accept: 'text/event-stream',
+            Authorization: 'Bearer credential',
+            'Last-Event-ID': 'event-1',
+            'MCP-Protocol-Version': '2025-06-18',
+          },
+        }),
+        createEnv(),
+        {
+          authenticate,
+          fetch: providerFetch,
+          refreshDropbox,
+          refreshGoogle: vi.fn(),
+        },
+      )
+      expect(response.status).toBe(405)
+      expect(response.headers.get('Allow')).toBe('POST')
+      expect(response.headers.get('Cache-Control')).toBe('no-store')
+      expect(response.headers.get('Content-Type')).not.toContain('text/event-stream')
+      expect(authenticate).toHaveBeenCalledTimes(1)
+    }
+    expect(refreshDropbox).not.toHaveBeenCalled()
+    expect(providerFetch).not.toHaveBeenCalled()
+
+    const absentVersion = await handleRemoteMcpRequest(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'GET',
+        headers: { Authorization: 'Bearer credential' },
+      }),
+      createEnv(),
+      { ...defaultDependencies(dropboxAuth()), authenticate: vi.fn().mockResolvedValue(dropboxAuth()) },
+    )
+    expect(absentVersion.status).toBe(405)
+
+    const unsupported = await handleRemoteMcpRequest(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer credential',
+          'MCP-Protocol-Version': '1999-01-01',
+        },
+      }),
+      createEnv(),
+      {
+        ...defaultDependencies(dropboxAuth()),
+        authenticate: vi.fn().mockResolvedValue(dropboxAuth()),
+        refreshDropbox,
+      },
+    )
+    expect(unsupported.status).toBe(400)
+    expect(refreshDropbox).not.toHaveBeenCalled()
+
+    const unsupportedPost = await handleRemoteMcpRequest(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer credential',
+          'Content-Type': 'application/json',
+          'MCP-Protocol-Version': '1999-01-01',
+        },
+        body: '{}',
+      }),
+      createEnv(),
+      {
+        ...defaultDependencies(dropboxAuth()),
+        authenticate: vi.fn().mockResolvedValue(dropboxAuth()),
+        fetch: providerFetch,
+      },
+    )
+    expect(unsupportedPost.status).toBe(400)
+    expect(providerFetch).not.toHaveBeenCalled()
+
+    const blockedAuthenticate = vi.fn().mockResolvedValue(dropboxAuth())
+    const disallowed = await handleRemoteMcpRequest(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'GET',
+        headers: { Origin: 'https://evil.example', Authorization: 'Bearer credential' },
+      }),
+      createEnv(),
+      {
+        ...defaultDependencies(dropboxAuth()),
+        authenticate: blockedAuthenticate,
+      },
+    )
+    expect(disallowed.status).toBe(403)
+    expect(blockedAuthenticate).not.toHaveBeenCalled()
   })
 
-  it('keeps an upload network failure pending and refuses a second append', async () => {
-    const f = await fixture()
-    const client = await f.connect()
-    const routed = f.providerFetch.getMockImplementation()!
-    f.providerFetch.mockImplementation(async (input, init) => {
-      if (String(input).endsWith('/upload')) throw new Error('upload transport secret')
-      return routed(input, init)
+  it('lists only tools allowed by PAT scopes', async () => {
+    const response = await handleRemoteMcpRequest(
+      mcpRequest('tools/list'),
+      createEnv(),
+      defaultDependencies(dropboxAuth(['notes:read'])),
+    )
+    const payload = await responsePayload(response)
+    const names = payload.result?.tools?.map((tool) => tool.name) ?? []
+
+    expect(response.status).toBe(200)
+    expect(names).toContain('list_days')
+    expect(names).not.toContain('add_to_day')
+    expect(names).not.toContain('add_to_today')
+  })
+
+  it('lists both additive write tools for the default read-write PAT', async () => {
+    const response = await handleRemoteMcpRequest(
+      mcpRequest('tools/list'),
+      createEnv(),
+      defaultDependencies(dropboxAuth()),
+    )
+    const payload = await responsePayload(response)
+    const names = payload.result?.tools?.map((tool) => tool.name) ?? []
+
+    expect(names).toContain('list_days')
+    expect(names).toContain('add_to_day')
+    expect(names).toContain('add_to_today')
+  })
+
+  it('normalizes OAuth grants into the same scope-gated tool boundary', async () => {
+    const response = await handleRemoteMcpRequest(
+      mcpRequest('tools/list', undefined, { token: `rva_${'A'.repeat(43)}` }),
+      createEnv(),
+      defaultDependencies(oauthAuth(['notes:write'])),
+    )
+    const payload = await responsePayload(response)
+    const names = payload.result?.tools?.map((tool) => tool.name) ?? []
+
+    expect(response.status).toBe(200)
+    expect(names).not.toContain('list_days')
+    expect(names).toContain('add_to_day')
+    expect(names).toContain('add_to_today')
+  })
+
+  it('reads a representative Dropbox day with a refreshed provider token', async () => {
+    const providerFetch = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      dropboxDownload(),
+    )
+    const dependencies = defaultDependencies(dropboxAuth(), providerFetch)
+    const response = await handleRemoteMcpRequest(
+      mcpRequest('tools/call', {
+        name: 'get_day',
+        arguments: { day_id: '2026-07-16' },
+      }),
+      createEnv(),
+      dependencies,
+    )
+    const payload = await responsePayload(response)
+    const toolResult = JSON.parse(payload.result?.content?.[0]?.text ?? '{}')
+
+    expect(toolResult).toMatchObject({
+      found: true,
+      day: { day_id: '2026-07-16', content_md: 'Cloud note' },
     })
-    const result = await client.callTool(addition)
-    expect(result.isError).toBe(true)
-    expect(text(result)).toContain('provider write outcome is unknown')
-    expect(text(result)).not.toContain('upload transport secret')
-    expect(f.db.get('SELECT state, result_json FROM mcp_write_operations')).toEqual({ state: 'pending', result_json: null })
-    const callsBefore = f.providerFetch.mock.calls.length
-    expect((await client.callTool(addition)).isError).toBe(true)
-    expect(f.providerFetch).toHaveBeenCalledTimes(callsBefore)
+    expect(dependencies.refreshDropbox).toHaveBeenCalledWith(
+      'dropbox-refresh-secret',
+      expect.anything(),
+    )
+    expect(
+      new Headers(providerFetch.mock.calls[0]?.[1]?.headers).get('Authorization'),
+    ).toBe('Bearer dropbox-access')
   })
 
-  it('sanitizes actual authentication storage failure', async () => {
-    const f = await fixture()
-    f.db.close()
-    const response = await worker.fetch(rawRequest({ Authorization: `Bearer ${f.personal.token}` }), f.env)
+  it('selects the configured Google Drive target', async () => {
+    const providerFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        json({
+          id: 'file-1',
+          name: 'inbox.md',
+          mimeType: 'text/markdown',
+          size: String(markdown.length),
+          version: '7',
+          headRevisionId: 'rev-7',
+          modifiedTime: MODIFIED_AT,
+          capabilities: {
+            canDownload: true,
+            canEdit: true,
+            canModifyContent: true,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(markdown))
+    const dependencies = defaultDependencies(googleAuth(), providerFetch)
+    const response = await handleRemoteMcpRequest(
+      mcpRequest('tools/call', {
+        name: 'list_days',
+        arguments: { include_content: true },
+      }),
+      createEnv(),
+      dependencies,
+    )
+    const payload = await responsePayload(response)
+    const toolResult = JSON.parse(payload.result?.content?.[0]?.text ?? '{}')
+
+    expect(toolResult).toMatchObject({
+      source: { provider: 'google-drive', fileId: 'file-1' },
+      count: 1,
+    })
+    expect(String(providerFetch.mock.calls[0]?.[0])).toContain('/files/file-1')
+    expect(dependencies.refreshGoogle).toHaveBeenCalledWith(
+      'google-refresh-secret',
+      expect.anything(),
+    )
+  })
+
+  it('replays a durable compact write result without a second provider write', async () => {
+    const providerFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(dropboxDownload())
+      .mockResolvedValueOnce(
+        json({
+          rev: 'rev-2',
+          server_modified: MODIFIED_AT,
+          size: markdown.length + 20,
+        }),
+      )
+    const env = createEnv()
+    const dependencies = defaultDependencies(dropboxAuth(), providerFetch)
+    const request = () =>
+      mcpRequest('tools/call', {
+        name: 'add_to_day',
+        arguments: {
+          day_id: '2026-07-16',
+          content_md: 'Agent addition',
+          operation_id: 'operation-replay-1',
+        },
+      })
+
+    const first = await responsePayload(
+      await handleRemoteMcpRequest(request(), env, dependencies),
+    )
+    const replay = await responsePayload(
+      await handleRemoteMcpRequest(request(), env, dependencies),
+    )
+    const firstResult = JSON.parse(first.result?.content?.[0]?.text ?? '{}')
+    const replayResult = JSON.parse(replay.result?.content?.[0]?.text ?? '{}')
+
+    expect(replayResult).toEqual(firstResult)
+    expect(replayResult).toMatchObject({
+      day_id: '2026-07-16',
+      operation_id: 'operation-replay-1',
+      source: { provider: 'dropbox', rev: 'rev-2' },
+    })
+    expect(replayResult).not.toHaveProperty('day')
+    expect(replayResult).not.toHaveProperty('content_md')
+    expect(providerFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('releases only provably not-applied writes and sanitizes unknown failures', async () => {
+    const db = new FakeWriteD1()
+    const providerFetch = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new Error('provider leaked secret'))
+    const env = createEnv(db)
+    const dependencies = defaultDependencies(dropboxAuth(), providerFetch)
+    const response = await handleRemoteMcpRequest(
+      mcpRequest('tools/call', {
+        name: 'add_to_day',
+        arguments: {
+          day_id: '2026-07-16',
+          content_md: 'Agent addition',
+          operation_id: 'operation-safe-failure',
+        },
+      }),
+      env,
+      dependencies,
+    )
+    const payload = await responsePayload(response)
+    const text = payload.result?.content?.[0]?.text ?? ''
+
+    expect(payload.result?.isError).toBe(true)
+    expect(text).toContain('Dropbox download request failed.')
+    expect(text).not.toContain('provider leaked secret')
+    expect(db.operations.size).toBe(0)
+  })
+
+  it('keeps an upload-network failure pending because its outcome is ambiguous', async () => {
+    const db = new FakeWriteD1()
+    const providerFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(dropboxDownload())
+      .mockRejectedValueOnce(new Error('upload transport secret'))
+    const env = createEnv(db)
+    const response = await handleRemoteMcpRequest(
+      mcpRequest('tools/call', {
+        name: 'add_to_day',
+        arguments: {
+          day_id: '2026-07-16',
+          content_md: 'Agent addition',
+          operation_id: 'operation-ambiguous-upload',
+        },
+      }),
+      env,
+      defaultDependencies(dropboxAuth(), providerFetch),
+    )
+    const payload = await responsePayload(response)
+    const text = payload.result?.content?.[0]?.text ?? ''
+    const operation = [...db.operations.values()][0]
+
+    expect(payload.result?.isError).toBe(true)
+    expect(text).toContain('provider write outcome is unknown')
+    expect(text).not.toContain('upload transport secret')
+    expect(operation).toMatchObject({ state: 'pending', result_json: null })
+  })
+
+  it('does not reflect authentication storage failures', async () => {
+    const response = await handleRemoteMcpRequest(
+      mcpRequest('tools/list'),
+      createEnv(),
+      {
+        ...defaultDependencies(dropboxAuth()),
+        authenticate: vi.fn().mockRejectedValue(new Error('secret database detail')),
+      },
+    )
+    const text = await response.text()
+
     expect(response.status).toBe(503)
-    expect(await response.text()).toBe('{"error":"MCP authentication is temporarily unavailable."}')
+    expect(text).not.toContain('secret database detail')
   })
+})
 
-  it('declines GET notification streaming before authentication', async () => {
-    const f = await fixture()
-    f.db.close()
-    const response = await worker.fetch(new Request(RESOURCE, { headers: { Accept: 'text/event-stream' } }), f.env)
-    expect(response.status).toBe(405)
-    expect(response.headers.get('Allow')).toBe('POST')
-    expect(f.providerFetch).not.toHaveBeenCalled()
-  })
+describe('hosted MCP Worker discovery', () => {
+  it('answers an unauthenticated MCP GET with the protected-resource challenge', async () => {
+    const response = await worker.fetch(
+      new Request('https://mcp.rivolo.app/mcp', {
+        method: 'GET',
+        headers: { Accept: 'text/event-stream' },
+      }),
+      createEnv(),
+    )
 
-  it('serves discovery with environment resource/issuer and rejects unknown routes', async () => {
-    const f = await fixture()
-    f.env.MCP_RESOURCE_URL = 'https://mcp-dev.rivolo.app/mcp'
-    f.env.MCP_OAUTH_ISSUER_URL = 'https://dev.rivolo.pages.dev/api/mcp/oauth'
-    const response = await worker.fetch(new Request('https://mcp-dev.rivolo.app/.well-known/oauth-protected-resource/mcp'), f.env)
+    expect(response.status).toBe(401)
+    expect(response.headers.get('WWW-Authenticate')).toContain(
+      'resource_metadata="https://mcp.rivolo.app/.well-known/oauth-protected-resource/mcp"',
+    )
     expect(response.headers.get('Cache-Control')).toBe('no-store')
-    expect(await response.json()).toEqual({ resource: f.env.MCP_RESOURCE_URL, authorization_servers: [f.env.MCP_OAUTH_ISSUER_URL], scopes_supported: ['notes:read', 'notes:write'], bearer_methods_supported: ['header'], resource_name: 'Rivolo notes' })
-    expect((await worker.fetch(new Request('https://mcp-dev.rivolo.app/not-mcp'), f.env)).status).toBe(404)
+  })
+
+  it('serves protected-resource metadata from the MCP origin', async () => {
+    const response = await worker.fetch(
+      new Request(
+        'https://mcp.rivolo.app/.well-known/oauth-protected-resource/mcp',
+      ),
+      createEnv(),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    await expect(response.json()).resolves.toEqual({
+      resource: 'https://mcp.rivolo.app/mcp',
+      authorization_servers: ['https://rivolo.app/api/mcp/oauth'],
+      scopes_supported: ['notes:read', 'notes:write'],
+      bearer_methods_supported: ['header'],
+      resource_name: 'Rivolo notes',
+    })
   })
 })

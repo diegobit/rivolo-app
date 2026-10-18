@@ -455,7 +455,7 @@ const TrayInput = memo(({
             <img
               src="/arrow-up.svg"
               alt=""
-              className="h-5 w-5"
+              className={`h-5 w-5 transition-opacity ${draftText.trim() && !sending ? '' : 'tray-send-idle-arrow'}`}
               style={{ filter: 'brightness(0) invert(1)' }}
             />
           </button>
@@ -745,6 +745,11 @@ export default function Timeline() {
           fontSynthesis: 'weight style',
           color: 'var(--theme-editor-text)',
         },
+        // iOS zooms into focused fields under 16px. Only .cm-content takes
+        // focus, so it keeps 16px while iA Writer's lines inside it use 15px.
+        ...(isIosDevice && fontPreference === 'monospace' && monospaceFont === 'iawriter'
+          ? { '.cm-line': { fontSize: '0.9375rem' } }
+          : {}),
         '.cm-content': {
           minHeight: '30px',
           padding: '0',
@@ -2220,7 +2225,7 @@ export default function Timeline() {
 
   const undoDeleteButton = (
     <button
-      className="group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-3 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white"
+      className="group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-accent-soft)] px-3 py-1 text-xs font-bold text-[var(--theme-accent-text)] transition hover:bg-[var(--theme-accent)] hover:text-white sm:min-h-7 sm:px-2.5"
       type="button"
       onClick={handleUndoDelete}
     >
@@ -2410,7 +2415,7 @@ export default function Timeline() {
       {pendingDeleteDayId && !hasNoNotes && !isNarrowViewportMode && (
         <BottomTrayPortal containerId="header-undo-slot">
           <div
-            className="flex h-9 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] pl-3 pr-1.5 shadow-sm"
+            className="flex h-9 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] pl-3 pr-1 shadow-sm"
             role="status"
             aria-live="polite"
           >

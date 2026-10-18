@@ -86,7 +86,7 @@ export default function AgentAccessTokensPanel({
           </label>
           <input
             id={`created-agent-token-${profileId}`}
-            className="mt-1 min-h-11 w-full rounded-xl border border-amber-300 bg-white px-3 py-2 font-mono text-sm text-slate-800"
+            className="mt-1 min-h-11 w-full rounded-xl border border-amber-300 bg-white px-3 py-2 font-mono text-sm text-slate-800 [@media(pointer:coarse)]:text-base"
             value={tokens.createdToken}
             readOnly
             spellCheck={false}

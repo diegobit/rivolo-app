@@ -4,23 +4,87 @@ import {
   type McpOAuthMetadataConfig,
 } from '../../src/lib/mcpOAuthMetadata'
 import {
+  buildAuthorizationCallbackUrl,
+  classifyOAuthServiceFailure,
+  formActionOriginForRedirect,
   getMcpOAuthConfig,
+  hasAuthorizationFields,
+  McpOAuthGrantDeniedError,
   McpOAuthProtocolError,
   McpOAuthRepository,
+  McpOAuthTrustError,
+  OAUTH_AUTHORIZATION_FIELDS,
+  assertBoundedAuthorizationInput,
+  assertUniqueFields,
+  type AuthorizationCallbackResult,
   type McpOAuthEnv,
   type OAuthAuthorizationRequest,
+  type OAuthCallbackContext,
 } from './mcpOAuth'
 import { readActiveMcpProfileSession } from './mcpAgentAccess'
+import {
+  clearPendingCookieHeader,
+  createPendingPayload,
+  pendingAuthorizationParams,
+  pendingCookieHeader,
+  readPendingRequest,
+  submittedAuthorizationMatches,
+  withPendingPhase,
+  type PendingPayload,
+} from './mcpOAuthPending'
 import { ProviderProfileRepository } from './providerProfiles'
 import { jsonResponse } from './tokenCookie'
 
-const htmlHeaders = {
-  'Content-Type': 'text/html; charset=utf-8',
-  'Cache-Control': 'no-store',
-  'Content-Security-Policy':
+const LOCAL_MESSAGES = new Set([
+  'The authorization request is ambiguous.',
+  'The authorization request is too large.',
+  'Client is not registered.',
+  'The registered client is invalid.',
+  'redirect_uri is invalid.',
+  'redirect_uri does not match the registered value.',
+  'redirect_uri is not allowed.',
+  'state is invalid.',
+  'Consent origin is invalid.',
+  'Content-Type must be application/x-www-form-urlencoded.',
+  'The request body is not valid form data.',
+  'This connection expired. Start again from the client.',
+  'Start again from the client that sent you here.',
+])
+
+const REDIRECT_DESCRIPTIONS = new Set([
+  'response_type must be code.',
+  'S256 PKCE is required.',
+  'resource does not match the Rivolo MCP server.',
+  'Requested scope is not supported.',
+  'The authorization decision is invalid.',
+  'The Rivolo notes profile changed. Review access again.',
+  'The authorization request did not match the reviewed connection.',
+  'The authorization request is too large to continue.',
+  'The request was denied.',
+  'Rivolo agent access is not active.',
+  'Rivolo agent access is not active. Start again from the client.',
+  'The authorization server encountered an error.',
+  'Authorization is temporarily unavailable. Try again from the client.',
+])
+
+const CONSENT_FIELDS = ['decision', 'profile_id', 'transaction_id'] as const
+
+const baseHtmlHeaders = () => {
+  const headers = new Headers()
+  headers.set('Content-Type', 'text/html; charset=utf-8')
+  headers.set('Cache-Control', 'no-store')
+  headers.set(
+    'Content-Security-Policy',
     "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
-  'Referrer-Policy': 'no-referrer',
-  'X-Content-Type-Options': 'nosniff',
+  )
+  headers.set('Referrer-Policy', 'no-referrer')
+  headers.set('X-Content-Type-Options', 'nosniff')
+  return headers
+}
+
+export const applyCookieHeaders = (headers: Headers, cookies: string[]) => {
+  for (const cookie of cookies) headers.append('Set-Cookie', cookie)
+  return headers
 }
 
 const escapeHtml = (value: string) =>
@@ -31,8 +95,21 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
-const page = (title: string, body: string, status = 200, headers = htmlHeaders) =>
-  new Response(
+const page = (
+  title: string,
+  body: string,
+  status = 200,
+  options: { formActionOrigin?: string; cookies?: string[] } = {},
+) => {
+  const headers = baseHtmlHeaders()
+  if (options.formActionOrigin) {
+    headers.set(
+      'Content-Security-Policy',
+      `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${options.formActionOrigin}; base-uri 'none'; frame-ancestors 'none'`,
+    )
+  }
+  applyCookieHeaders(headers, options.cookies ?? [])
+  return new Response(
     `<!doctype html>
 <html lang="en">
 <head>
@@ -50,15 +127,16 @@ const page = (title: string, body: string, status = 200, headers = htmlHeaders) 
     dd { margin: .15rem 0 0; overflow-wrap: anywhere; }
     .scopes { margin: .25rem 0 0; padding-left: 1.2rem; }
     .actions { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: 1.25rem; }
-    button { min-height: 2.8rem; border-radius: .7rem; border: 1px solid #cbd5e1; font: inherit; font-weight: 650; cursor: pointer; }
+    button, a.button { min-height: 2.8rem; border-radius: .7rem; border: 1px solid #cbd5e1; font: inherit; font-weight: 650; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; padding: 0 .75rem; }
     button[name="decision"][value="allow"] { background: #172033; color: white; border-color: #172033; }
-    button[name="decision"][value="deny"] { background: white; color: #172033; }
+    button[name="decision"][value="deny"], a.button { background: white; color: #172033; }
+    @media (max-width: 32rem) { .actions { grid-template-columns: 1fr; } }
     @media (prefers-color-scheme: dark) {
       body { background: #0f172a; color: #e5edf8; }
       main { background: #172033; border-color: #334155; }
       p, dt { color: #aebbd0; }
       button[name="decision"][value="allow"] { background: #e5edf8; color: #172033; border-color: #e5edf8; }
-      button[name="decision"][value="deny"] { background: #172033; color: #e5edf8; border-color: #64748b; }
+      button[name="decision"][value="deny"], a.button { background: #172033; color: #e5edf8; border-color: #64748b; }
     }
   </style>
 </head>
@@ -66,12 +144,32 @@ const page = (title: string, body: string, status = 200, headers = htmlHeaders) 
 </html>`,
     { status, headers },
   )
+}
 
-const errorPage = (message: string, status = 400) =>
+const localMessage = (error: unknown) => {
+  if (
+    (error instanceof McpOAuthTrustError || error instanceof McpOAuthProtocolError) &&
+    LOCAL_MESSAGES.has(error.message)
+  ) {
+    return error.message
+  }
+  if (classifyOAuthServiceFailure(error) === 'transient') {
+    return 'Authorization is temporarily unavailable.'
+  }
+  return 'The authorization request could not be completed.'
+}
+
+const localStatus = (error: unknown) => {
+  if (error instanceof McpOAuthTrustError || error instanceof McpOAuthProtocolError) return 400
+  return classifyOAuthServiceFailure(error) === 'transient' ? 503 : 500
+}
+
+const localAuthorizationError = (error: unknown, cookies: string[] = []) =>
   page(
     'Agent access',
-    `<h1>Connection could not continue</h1><p>${escapeHtml(message)}</p>`,
-    status,
+    `<h1>Connection could not continue</h1><p>${escapeHtml(localMessage(error))}</p>`,
+    localStatus(error),
+    { cookies },
   )
 
 const hidden = (name: string, value: string | null) =>
@@ -79,11 +177,115 @@ const hidden = (name: string, value: string | null) =>
     ? ''
     : `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`
 
+const settingsContinuationUrl = (issuerUrl: string) => {
+  const url = new URL('/settings', new URL(issuerUrl).origin)
+  url.searchParams.set('mcp_oauth', '1')
+  return url
+}
+
+const redirectResponse = (url: URL, cookies: string[] = []) => {
+  const headers = new Headers()
+  headers.set('Location', url.href)
+  headers.set('Cache-Control', 'no-store')
+  headers.set('Referrer-Policy', 'no-referrer')
+  applyCookieHeaders(headers, cookies)
+  return new Response(null, { status: 302, headers })
+}
+
+const safeRedirectDescription = (description: string) =>
+  REDIRECT_DESCRIPTIONS.has(description)
+    ? description
+    : 'The authorization server encountered an error.'
+
+const callbackRedirect = (
+  issuerUrl: string,
+  context: OAuthCallbackContext,
+  result: AuthorizationCallbackResult,
+  cookies: string[] = [],
+) =>
+  redirectResponse(
+    buildAuthorizationCallbackUrl(
+      context,
+      issuerUrl,
+      result.type === 'code'
+        ? result
+        : { ...result, description: safeRedirectDescription(result.description) },
+    ),
+    cookies,
+  )
+
+const serviceRedirect = (
+  issuerUrl: string,
+  context: OAuthCallbackContext,
+  error: unknown,
+  cookies: string[] = [],
+) => {
+  if (error instanceof McpOAuthGrantDeniedError) {
+    return callbackRedirect(
+      issuerUrl,
+      context,
+      {
+        type: 'error',
+        error: 'access_denied',
+        description: 'Rivolo agent access is not active.',
+      },
+      cookies,
+    )
+  }
+  if (error instanceof McpOAuthProtocolError && REDIRECT_DESCRIPTIONS.has(error.message)) {
+    const errorCode =
+      error.code === 'invalid_scope' ||
+      error.code === 'unsupported_response_type' ||
+      error.code === 'access_denied' ||
+      error.code === 'invalid_request'
+        ? error.code
+        : classifyOAuthServiceFailure(error) === 'transient'
+          ? 'temporarily_unavailable'
+          : 'server_error'
+    return callbackRedirect(
+      issuerUrl,
+      context,
+      { type: 'error', error: errorCode, description: error.message },
+      cookies,
+    )
+  }
+  const transient = classifyOAuthServiceFailure(error) === 'transient'
+  return callbackRedirect(
+    issuerUrl,
+    context,
+    {
+      type: 'error',
+      error: transient ? 'temporarily_unavailable' : 'server_error',
+      description: transient
+        ? 'Authorization is temporarily unavailable. Try again from the client.'
+        : 'The authorization server encountered an error.',
+    },
+    cookies,
+  )
+}
+
+const consentFields = (
+  authorization: OAuthAuthorizationRequest,
+  transactionId: string,
+  profileId: string | null,
+) => `${hidden('transaction_id', transactionId)}
+  ${hidden('profile_id', profileId)}
+  ${hidden('response_type', 'code')}
+  ${hidden('client_id', authorization.client.clientId)}
+  ${hidden('redirect_uri', authorization.redirectUri)}
+  ${hidden('state', authorization.state)}
+  ${hidden('scope', authorization.scopes.join(' '))}
+  ${hidden('code_challenge', authorization.codeChallenge)}
+  ${hidden('code_challenge_method', 'S256')}
+  ${hidden('resource', authorization.resource)}`
+
 const consentPage = (
   authorization: OAuthAuthorizationRequest,
   profileId: string,
   accountLabel: string,
   issuerUrl: string,
+  transactionId: string,
+  cookies: string[],
 ) => {
   const clientLabel = authorization.client.clientName ?? 'An MCP client'
   const redirectHost = new URL(authorization.redirectUri).host
@@ -104,15 +306,7 @@ const consentPage = (
 </dl>
 <p>Only the latest cloud-synced state is available. The client never receives your Dropbox or Google Drive credential.</p>
 <form method="post" action="${escapeHtml(`${issuerUrl}/authorize`)}">
-  ${hidden('profile_id', profileId)}
-  ${hidden('response_type', 'code')}
-  ${hidden('client_id', authorization.client.clientId)}
-  ${hidden('redirect_uri', authorization.redirectUri)}
-  ${hidden('state', authorization.state)}
-  ${hidden('scope', authorization.scopes.join(' '))}
-  ${hidden('code_challenge', authorization.codeChallenge)}
-  ${hidden('code_challenge_method', 'S256')}
-  ${hidden('resource', authorization.resource)}
+  ${consentFields(authorization, transactionId, profileId)}
   <div class="actions">
     <button type="submit" name="decision" value="deny">Cancel</button>
     <button type="submit" name="decision" value="allow">Allow</button>
@@ -120,16 +314,498 @@ const consentPage = (
 </form>`,
     200,
     {
-      ...htmlHeaders,
-      // no-referrer makes Chromium send Origin:null on a form POST. Preserve
-      // the same-origin CSRF check and suppress referrers on external redirects.
-      'Referrer-Policy': 'same-origin',
-      'Content-Security-Policy': htmlHeaders['Content-Security-Policy'].replace(
-        "form-action 'self'",
-        `form-action 'self' ${new URL(authorization.redirectUri).origin}`,
-      ),
+      formActionOrigin: formActionOriginForRedirect(authorization.redirectUri),
+      cookies,
     },
   )
+}
+
+const cancelForm = (issuerUrl: string, transactionId: string) =>
+  `<form method="post" action="${escapeHtml(`${issuerUrl}/pending`)}">
+    ${hidden('decision', 'deny')}
+    ${hidden('transaction_id', transactionId)}
+    <div class="actions">
+      <button type="submit">Cancel connection</button>
+    </div>
+  </form>`
+
+const continuationPage = (
+  title: string,
+  body: string,
+  redirectUri: string,
+  cookies: string[] = [],
+) =>
+  page(title, body, 200, {
+    formActionOrigin: formActionOriginForRedirect(redirectUri),
+    cookies,
+  })
+
+const accountLabelFor = async (env: McpOAuthEnv, profileId: string) => {
+  const profile = await new ProviderProfileRepository(
+    env.MCP_DB,
+    env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY,
+  ).getMetadata(profileId)
+  if (!profile || profile.revokedAt) return null
+  return profile.providerEmail ?? profile.providerName ?? profile.providerAccountId
+}
+
+const repository = (env: McpOAuthEnv) => new McpOAuthRepository(env.MCP_DB)
+
+const revalidatePending = async (env: McpOAuthEnv, payload: PendingPayload) => {
+  const params = pendingAuthorizationParams(payload.authorization)
+  const context = await repository(env).resolveCallbackContext(params)
+  return {
+    context,
+    validate: () =>
+      repository(env).validateAuthorizationDetails(
+        context,
+        params,
+        getMcpOAuthConfig(env).resourceUrl,
+      ),
+  }
+}
+
+const stashPending = async (
+  request: Request,
+  env: McpOAuthEnv,
+  authorization: OAuthAuthorizationRequest,
+  phase: PendingPayload['phase'],
+  profileId: string | null,
+  existing?: PendingPayload,
+) => {
+  const now = new Date()
+  const payload = existing
+    ? withPendingPhase(existing, phase, profileId)
+    : createPendingPayload(authorization, phase, profileId, now)
+  const cookie = await pendingCookieHeader(
+    request,
+    env.MCP_PROFILE_SESSION_ENCRYPTION_KEY,
+    payload,
+    now,
+  )
+  if (!cookie.ok) return cookie
+  return { ok: true as const, header: cookie.header, payload }
+}
+
+const pendingCookieFailure = (
+  request: Request,
+  issuerUrl: string,
+  context: OAuthCallbackContext,
+  reason: 'expired' | 'too_large',
+) =>
+  reason === 'too_large'
+    ? oversizedRedirect(request, issuerUrl, context)
+    : localAuthorizationError(
+        new McpOAuthTrustError('This connection expired. Start again from the client.'),
+        [clearPendingCookieHeader(request)],
+      )
+
+const oversizedRedirect = (
+  request: Request,
+  issuerUrl: string,
+  context: OAuthCallbackContext,
+) =>
+  callbackRedirect(
+    issuerUrl,
+    context,
+    {
+      type: 'error',
+      error: 'invalid_request',
+      description: 'The authorization request is too large to continue.',
+    },
+    [clearPendingCookieHeader(request)],
+  )
+
+export const showOAuthConsent = async (request: Request, env: McpOAuthEnv) => {
+  let config: ReturnType<typeof getMcpOAuthConfig>
+  try {
+    config = getMcpOAuthConfig(env)
+    const url = new URL(request.url)
+    assertBoundedAuthorizationInput(url.search)
+    assertUniqueFields(url.searchParams, ['resume', 'cancel'])
+    const resume = url.searchParams.get('resume')
+    const cancel = url.searchParams.get('cancel')
+    if (cancel !== null && (cancel !== '1' || resume === null)) {
+      throw new McpOAuthTrustError('The authorization request is ambiguous.')
+    }
+    if (resume !== null) {
+      if (hasAuthorizationFields(url.searchParams)) {
+        throw new McpOAuthTrustError('The authorization request is ambiguous.')
+      }
+      return resumeAuthorization(request, env, config.issuerUrl, resume, cancel === '1')
+    }
+    assertUniqueFields(url.searchParams, OAUTH_AUTHORIZATION_FIELDS)
+    return startAuthorization(request, env, config.issuerUrl, url.searchParams)
+  } catch (error) {
+    return localAuthorizationError(error)
+  }
+}
+
+const startAuthorization = async (
+  request: Request,
+  env: McpOAuthEnv,
+  issuerUrl: string,
+  params: URLSearchParams,
+) => {
+  let context: OAuthCallbackContext | null = null
+  try {
+    context = await repository(env).resolveCallbackContext(params)
+    const resource = getMcpOAuthConfig(env).resourceUrl
+    const authorization = repository(env).validateAuthorizationDetails(
+      context,
+      params,
+      resource,
+    )
+    const profileId = await readActiveMcpProfileSession(request, env)
+    if (!profileId) {
+      const cookie = await stashPending(request, env, authorization, 'setup', null)
+      if (!cookie.ok) return pendingCookieFailure(request, issuerUrl, context, cookie.reason)
+      return redirectResponse(settingsContinuationUrl(issuerUrl), [cookie.header])
+    }
+    const accountLabel = await accountLabelFor(env, profileId)
+    if (!accountLabel) {
+      return callbackRedirect(
+        issuerUrl,
+        context,
+        {
+          type: 'error',
+          error: 'access_denied',
+          description: 'Rivolo agent access is not active.',
+        },
+        [clearPendingCookieHeader(request)],
+      )
+    }
+    const cookie = await stashPending(request, env, authorization, 'consent', profileId)
+    if (!cookie.ok) return pendingCookieFailure(request, issuerUrl, context, cookie.reason)
+    return consentPage(
+      authorization,
+      profileId,
+      accountLabel,
+      issuerUrl,
+      cookie.payload.transactionId,
+      [cookie.header],
+    )
+  } catch (error) {
+    if (context && !(error instanceof McpOAuthTrustError)) {
+      return serviceRedirect(issuerUrl, context, error, [clearPendingCookieHeader(request)])
+    }
+    return localAuthorizationError(error)
+  }
+}
+
+const resumeAuthorization = async (
+  request: Request,
+  env: McpOAuthEnv,
+  issuerUrl: string,
+  resume: string,
+  cancel: boolean,
+) => {
+  const pending = await readPendingRequest(request, env.MCP_PROFILE_SESSION_ENCRYPTION_KEY)
+  if (pending.status !== 'valid') {
+    return localAuthorizationError(
+      new McpOAuthTrustError('This connection expired. Start again from the client.'),
+      pending.status === 'invalid' ? [clearPendingCookieHeader(request)] : [],
+    )
+  }
+  if (pending.payload.transactionId !== resume) {
+    return localAuthorizationError(
+      new McpOAuthTrustError('Start again from the client that sent you here.'),
+    )
+  }
+  let context: OAuthCallbackContext | null = null
+  try {
+    const revalidated = await revalidatePending(env, pending.payload)
+    context = revalidated.context
+    const authorization = revalidated.validate()
+    if (cancel) {
+      const clientLabel = authorization.client.clientName ?? 'An MCP client'
+      return continuationPage(
+        'Cancel connection',
+        `<h1>Cancel this connection?</h1>
+<p>${escapeHtml(clientLabel)} will not receive access to your Rivolo notes.</p>
+${cancelForm(issuerUrl, pending.payload.transactionId)}`,
+        authorization.redirectUri,
+      )
+    }
+    const profileId = await readActiveMcpProfileSession(request, env)
+    if (!profileId) {
+      return continuationPage(
+        'Finish connecting',
+        `<h1>Finish connecting Rivolo</h1>
+<p>Open Settings in this browser, connect Dropbox or Google Drive, and enable Agent access. Then continue from Settings. Nothing is approved until you review it.</p>
+<div class="actions">
+  <a class="button" href="${escapeHtml(settingsContinuationUrl(issuerUrl).href)}">Open Settings</a>
+</div>
+${cancelForm(issuerUrl, pending.payload.transactionId)}`,
+        authorization.redirectUri,
+      )
+    }
+    const accountLabel = await accountLabelFor(env, profileId)
+    if (!accountLabel) {
+      return callbackRedirect(
+        issuerUrl,
+        context,
+        {
+          type: 'error',
+          error: 'access_denied',
+          description: 'Rivolo agent access is not active.',
+        },
+        [clearPendingCookieHeader(request)],
+      )
+    }
+    const cookie = await stashPending(
+      request,
+      env,
+      authorization,
+      'consent',
+      profileId,
+      pending.payload,
+    )
+    if (!cookie.ok) return pendingCookieFailure(request, issuerUrl, context, cookie.reason)
+    return consentPage(
+      authorization,
+      profileId,
+      accountLabel,
+      issuerUrl,
+      pending.payload.transactionId,
+      [cookie.header],
+    )
+  } catch (error) {
+    const cookies = [clearPendingCookieHeader(request)]
+    if (context && !(error instanceof McpOAuthTrustError)) {
+      return serviceRedirect(issuerUrl, context, error, cookies)
+    }
+    return localAuthorizationError(error, cookies)
+  }
+}
+
+const FORM_URLENCODED = 'application/x-www-form-urlencoded'
+const INVALID_FORM_ESCAPE = /%(?![0-9A-Fa-f]{2})/
+
+const requireUrlEncodedBody = async (request: Request) => {
+  const mediaType = (request.headers.get('Content-Type') ?? '')
+    .split(';', 1)[0]
+    ?.trim()
+    .toLowerCase()
+  if (mediaType !== FORM_URLENCODED) {
+    throw new McpOAuthTrustError('Content-Type must be application/x-www-form-urlencoded.')
+  }
+  const body = await request.text()
+  assertBoundedAuthorizationInput(body)
+  if (INVALID_FORM_ESCAPE.test(body)) {
+    throw new McpOAuthTrustError('The request body is not valid form data.')
+  }
+  return new URLSearchParams(body)
+}
+
+const validateConsentOrigin = (request: Request, issuerUrl: string) => {
+  const origin = request.headers.get('Origin')
+  if (origin === new URL(issuerUrl).origin) return
+  // Browsers serialize `Origin` as `null` for basic form posts coming from
+  // documents that set `Referrer-Policy: no-referrer` (Fetch: append a request
+  // Origin header), which is the policy on these pages. Accept that only when
+  // Fetch Metadata confirms our own origin as the initiator: cross-site and
+  // sandboxed posts carry `cross-site` site metadata or a foreign origin.
+  if (origin === 'null' && request.headers.get('Sec-Fetch-Site') === 'same-origin') {
+    return
+  }
+  throw new McpOAuthTrustError('Consent origin is invalid.')
+}
+
+export const submitOAuthConsent = async (request: Request, env: McpOAuthEnv) => {
+  let issuerUrl = ''
+  try {
+    issuerUrl = getMcpOAuthConfig(env).issuerUrl
+    validateConsentOrigin(request, issuerUrl)
+  } catch (error) {
+    return localAuthorizationError(error)
+  }
+
+  let context: OAuthCallbackContext | null = null
+  try {
+    const body = await requireUrlEncodedBody(request)
+    assertUniqueFields(body, [...OAUTH_AUTHORIZATION_FIELDS, ...CONSENT_FIELDS])
+    const pending = await readPendingRequest(request, env.MCP_PROFILE_SESSION_ENCRYPTION_KEY)
+    if (pending.status !== 'valid') {
+      return localAuthorizationError(
+        new McpOAuthTrustError('This connection expired. Start again from the client.'),
+        pending.status === 'invalid' ? [clearPendingCookieHeader(request)] : [],
+      )
+    }
+    const transactionId = body.get('transaction_id')
+    if (!transactionId || transactionId !== pending.payload.transactionId) {
+      return localAuthorizationError(
+        new McpOAuthTrustError('Start again from the client that sent you here.'),
+      )
+    }
+    const revalidated = await revalidatePending(env, pending.payload)
+    context = revalidated.context
+    const authorization = revalidated.validate()
+    const clear = [clearPendingCookieHeader(request)]
+    if (!submittedAuthorizationMatches(body, pending.payload.authorization)) {
+      return callbackRedirect(
+        issuerUrl,
+        context,
+        {
+          type: 'error',
+          error: 'invalid_request',
+          description: 'The authorization request did not match the reviewed connection.',
+        },
+        clear,
+      )
+    }
+    const decision = body.get('decision')
+    if (decision !== 'allow' && decision !== 'deny') {
+      return callbackRedirect(
+        issuerUrl,
+        context,
+        {
+          type: 'error',
+          error: 'invalid_request',
+          description: 'The authorization decision is invalid.',
+        },
+        clear,
+      )
+    }
+    const profileId = await readActiveMcpProfileSession(request, env)
+    if (!profileId) {
+      return callbackRedirect(
+        issuerUrl,
+        context,
+        {
+          type: 'error',
+          error: 'access_denied',
+          description: 'Rivolo agent access is not active. Start again from the client.',
+        },
+        clear,
+      )
+    }
+    if (
+      pending.payload.phase !== 'consent' ||
+      pending.payload.profileId !== profileId ||
+      body.get('profile_id') !== pending.payload.profileId
+    ) {
+      return callbackRedirect(
+        issuerUrl,
+        context,
+        {
+          type: 'error',
+          error: 'invalid_request',
+          description: 'The Rivolo notes profile changed. Review access again.',
+        },
+        clear,
+      )
+    }
+    if (decision === 'deny') {
+      return callbackRedirect(
+        issuerUrl,
+        context,
+        { type: 'error', error: 'access_denied', description: 'The request was denied.' },
+        clear,
+      )
+    }
+    const code = await repository(env).issueAuthorizationCode(profileId, authorization)
+    return callbackRedirect(issuerUrl, context, { type: 'code', code }, clear)
+  } catch (error) {
+    const cookies = context ? [clearPendingCookieHeader(request)] : []
+    if (context && !(error instanceof McpOAuthTrustError)) {
+      return serviceRedirect(issuerUrl, context, error, cookies)
+    }
+    return localAuthorizationError(error, cookies)
+  }
+}
+
+export const readOAuthPendingStatus = async (request: Request, env: McpOAuthEnv) => {
+  try {
+    const pending = await readPendingRequest(request, env.MCP_PROFILE_SESSION_ENCRYPTION_KEY)
+    if (pending.status !== 'valid') {
+      return jsonResponse(
+        { pending: false },
+        200,
+        pending.status === 'invalid'
+          ? { 'Set-Cookie': clearPendingCookieHeader(request) }
+          : {},
+      )
+    }
+    let clientLabel = 'An MCP client'
+    try {
+      const client = await repository(env).getClient(pending.payload.authorization.client_id)
+      if (client?.clientName) clientLabel = client.clientName
+    } catch (error) {
+      if (!(error instanceof McpOAuthProtocolError)) throw error
+    }
+    const ready = Boolean(await readActiveMcpProfileSession(request, env))
+    return jsonResponse({
+      pending: true,
+      clientLabel,
+      transactionId: pending.payload.transactionId,
+      expiresAt: pending.payload.expiresAt,
+      ready,
+    })
+  } catch (error) {
+    return jsonResponse(
+      {
+        error: 'server_error',
+        error_description: 'Authorization is temporarily unavailable.',
+      },
+      classifyOAuthServiceFailure(error) === 'transient' ? 503 : 500,
+    )
+  }
+}
+
+export const submitOAuthPendingCancellation = async (request: Request, env: McpOAuthEnv) => {
+  let issuerUrl = ''
+  try {
+    issuerUrl = getMcpOAuthConfig(env).issuerUrl
+    validateConsentOrigin(request, issuerUrl)
+  } catch (error) {
+    return localAuthorizationError(error)
+  }
+  let context: OAuthCallbackContext | null = null
+  try {
+    const body = await requireUrlEncodedBody(request)
+    assertUniqueFields(body, ['decision', 'transaction_id'])
+    const pending = await readPendingRequest(request, env.MCP_PROFILE_SESSION_ENCRYPTION_KEY)
+    if (pending.status !== 'valid') {
+      return localAuthorizationError(
+        new McpOAuthTrustError('This connection expired. Start again from the client.'),
+        pending.status === 'invalid' ? [clearPendingCookieHeader(request)] : [],
+      )
+    }
+    if (body.get('transaction_id') !== pending.payload.transactionId) {
+      return localAuthorizationError(
+        new McpOAuthTrustError('Start again from the client that sent you here.'),
+      )
+    }
+    const revalidated = await revalidatePending(env, pending.payload)
+    context = revalidated.context
+    revalidated.validate()
+    const clear = [clearPendingCookieHeader(request)]
+    if (body.get('decision') !== 'deny') {
+      return callbackRedirect(
+        issuerUrl,
+        context,
+        {
+          type: 'error',
+          error: 'invalid_request',
+          description: 'The authorization decision is invalid.',
+        },
+        clear,
+      )
+    }
+    return callbackRedirect(
+      issuerUrl,
+      context,
+      { type: 'error', error: 'access_denied', description: 'The request was denied.' },
+      clear,
+    )
+  } catch (error) {
+    const cookies = context ? [clearPendingCookieHeader(request)] : []
+    if (context && !(error instanceof McpOAuthTrustError)) {
+      return serviceRedirect(issuerUrl, context, error, cookies)
+    }
+    return localAuthorizationError(error, cookies)
+  }
 }
 
 const oauthErrorResponse = (error: unknown, status = 400) => {
@@ -155,22 +831,6 @@ const requireFormBody = async (request: Request) => {
   }
   return new URLSearchParams(await request.text())
 }
-
-const validateConsentOrigin = (request: Request, issuerUrl: string) => {
-  if (request.headers.get('Origin') !== new URL(issuerUrl).origin) {
-    throw new McpOAuthProtocolError('invalid_request', 'Consent origin is invalid.')
-  }
-}
-
-const redirectResponse = (url: URL) =>
-  new Response(null, {
-    status: 302,
-    headers: {
-      Location: url.href,
-      'Cache-Control': 'no-store',
-      'Referrer-Policy': 'no-referrer',
-    },
-  })
 
 export const oauthMetadataResponse = (env: McpOAuthEnv) => {
   const config = getMcpOAuthConfig(env)
@@ -234,79 +894,6 @@ export const registerOAuthClient = async (request: Request, env: McpOAuthEnv) =>
   }
 }
 
-export const showOAuthConsent = async (request: Request, env: McpOAuthEnv) => {
-  try {
-    const profileId = await readActiveMcpProfileSession(request, env)
-    if (!profileId) {
-      return errorPage(
-        'Open Rivolo Settings, connect Dropbox or Google Drive, and enable agent access before trying again.',
-        401,
-      )
-    }
-    const config = getMcpOAuthConfig(env)
-    const authorization = await new McpOAuthRepository(
-      env.MCP_DB,
-    ).parseAuthorizationRequest(new URL(request.url).searchParams, config.resourceUrl)
-    const profile = await new ProviderProfileRepository(
-      env.MCP_DB,
-      env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY,
-    ).getMetadata(profileId)
-    if (!profile || profile.revokedAt) {
-      return errorPage('Rivolo agent access is not active.', 401)
-    }
-    const accountLabel =
-      profile.providerEmail ?? profile.providerName ?? profile.providerAccountId
-    return consentPage(authorization, profileId, accountLabel, config.issuerUrl)
-  } catch (error) {
-    return errorPage(
-      error instanceof McpOAuthProtocolError
-        ? error.message
-        : 'The authorization request could not be loaded.',
-    )
-  }
-}
-
-export const submitOAuthConsent = async (request: Request, env: McpOAuthEnv) => {
-  try {
-    const config = getMcpOAuthConfig(env)
-    validateConsentOrigin(request, config.issuerUrl)
-    const body = await requireFormBody(request)
-    const authorization = await new McpOAuthRepository(
-      env.MCP_DB,
-    ).parseAuthorizationRequest(body, config.resourceUrl)
-    const profileId = await readActiveMcpProfileSession(request, env)
-    if (!profileId) return errorPage('Rivolo agent access is not active.', 401)
-    if (body.get('profile_id') !== profileId) {
-      throw new McpOAuthProtocolError(
-        'invalid_request',
-        'The Rivolo notes profile changed. Review access again.',
-      )
-    }
-
-    const target = new URL(authorization.redirectUri)
-    target.searchParams.set('iss', config.issuerUrl)
-    if (authorization.state !== null) {
-      target.searchParams.set('state', authorization.state)
-    }
-    if (body.get('decision') !== 'allow') {
-      target.searchParams.set('error', 'access_denied')
-      return redirectResponse(target)
-    }
-    const code = await new McpOAuthRepository(env.MCP_DB).issueAuthorizationCode(
-      profileId,
-      authorization,
-    )
-    target.searchParams.set('code', code)
-    return redirectResponse(target)
-  } catch (error) {
-    return errorPage(
-      error instanceof McpOAuthProtocolError
-        ? error.message
-        : 'The authorization request could not be completed.',
-    )
-  }
-}
-
 export const exchangeOAuthToken = async (request: Request, env: McpOAuthEnv) => {
   try {
     const body = await requireFormBody(request)
@@ -325,11 +912,11 @@ export const exchangeOAuthToken = async (request: Request, env: McpOAuthEnv) => 
         'resource does not match the Rivolo MCP server.',
       )
     }
-    const repository = new McpOAuthRepository(env.MCP_DB)
+    const oauthRepository = new McpOAuthRepository(env.MCP_DB)
     const grantType = body.get('grant_type')
     const token =
       grantType === 'authorization_code'
-        ? await repository.exchangeAuthorizationCode({
+        ? await oauthRepository.exchangeAuthorizationCode({
             clientId,
             code: body.get('code') ?? '',
             codeVerifier: body.get('code_verifier') ?? '',
@@ -337,7 +924,7 @@ export const exchangeOAuthToken = async (request: Request, env: McpOAuthEnv) => 
             resource,
           })
         : grantType === 'refresh_token'
-          ? await repository.exchangeRefreshToken({
+          ? await oauthRepository.exchangeRefreshToken({
               clientId,
               refreshToken: body.get('refresh_token') ?? '',
               scopes: body.get('scope') ?? undefined,
