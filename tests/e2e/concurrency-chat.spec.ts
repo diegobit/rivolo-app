@@ -135,7 +135,8 @@ test('J6: actual streamed chat preserves a reader, follows reflow, navigates gro
       await list.evaluate(element => { element.scrollTop = 100 })
     } else {
       await list.hover()
-      await page.mouse.wheel(0, -1000)
+      const currentScrollTop = await list.evaluate(element => element.scrollTop)
+      await page.mouse.wheel(0, -Math.ceil(currentScrollTop + 110))
     }
     await expect.poll(() => list.evaluate(element => element.scrollTop)).toBeLessThan(110)
     response.chunk('New streamed paragraph while the reader is above.\n\n')
