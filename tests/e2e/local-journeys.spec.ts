@@ -176,6 +176,14 @@ test('J3: import, export, malformed import, and reopen preserve actual notes', a
   // completion is outside browser automation. App export/serialization is real.
   await page.addInitScript(() => Object.defineProperty(navigator, 'canShare', { value: () => false }))
   await start(page)
+  const todayNote = 'J3 Today merge marker: Archive remains searchable'
+  const todayCard = page.locator('[data-scroll-target="today"]')
+  await expect(todayCard).toBeVisible()
+  const todayDayId = await todayCard.locator('input[type="date"]').inputValue()
+  await note(page).fill(todayNote)
+  await waitForPersistedContent(page, ({ days }) =>
+    days.some(({ day_id, content_md }) => day_id === todayDayId && content_md === todayNote),
+  )
   await settings(page)
   const input = page.locator('input[type="file"]')
   const markdown = '<!-- day:2024-01-03 -->\nJanuary 3\n---\n\nArchive café 100%\n[ ] keep me\n' +
@@ -195,6 +203,9 @@ test('J3: import, export, malformed import, and reopen preserve actual notes', a
   await expect(page.getByText(/Imported 0 day\(s\)/)).toBeVisible()
   await page.goto('/')
   await page.reload()
+  await waitForPersistedContent(page, ({ days }) =>
+    days.some(({ day_id, content_md }) => day_id === todayDayId && content_md === todayNote),
+  )
   await expect(page.getByText('Archive café 100%', { exact: false }).first()).toBeVisible()
   const returnToToday = page.getByRole('button', { name: 'Scroll to Today', exact: true })
   const checkReturnGeometry = async () => {
@@ -223,6 +234,8 @@ test('J3: import, export, malformed import, and reopen preserve actual notes', a
   })).toBe(true)
   if (mobile(page)) {
     await search(page, 'Archive')
+    await expect(page.getByText(todayNote, { exact: false }).first()).toBeVisible()
+    await expect(page.getByText('Archive café 100%', { exact: false }).first()).toBeVisible()
     await checkReturnGeometry()
   }
 })
