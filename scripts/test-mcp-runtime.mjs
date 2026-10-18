@@ -71,7 +71,7 @@ try {
   assert.equal(listed.status, 200)
   const names = (await listed.json()).result.tools.map(tool => tool.name)
   assert(names.includes('list_days') && names.includes('add_to_day') && names.includes('add_to_today'))
-  assert.equal((await fetch(`${origin}/mcp`, { headers: { Accept: 'text/event-stream' } })).status, 405)
+  assert.equal((await fetch(`${origin}/mcp`, { headers: { Accept: 'text/event-stream', Authorization: `Bearer ${token}` } })).status, 405)
 
   await sqlFile('revoke.sql', `UPDATE mcp_provider_profiles SET encrypted_refresh_token = '', revoked_at = '2026-10-11' WHERE profile_id = '${profileId}';`)
   assert.equal((await call('tools/list')).status, 401)

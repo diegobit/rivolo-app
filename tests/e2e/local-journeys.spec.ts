@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Locator } from 'playwright/test'
+import { waitForPersistedContent } from './helpers/persisted'
 
 const note = (page: Page) => page.locator('.cm-content[contenteditable="true"]').first()
 const mobile = (page: Page) => (page.viewportSize()?.width ?? 1440) < 640
@@ -54,18 +55,23 @@ test('J1: edit, flush through navigation, reopen, and search literal Unicode tex
   await search(page, '100%')
   await expect(page.getByText('Meet @Renée #café for 100% planning', { exact: false }).first()).toBeVisible()
   const lines = page.getByRole('button', { name: 'Lines', exact: true })
-  await expect(page.getByRole('button', { name: 'TODOs', exact: true })).toBeVisible()
   if (mobile(page)) {
+    const days = page.getByRole('button', { name: 'Days', exact: true })
+    await expect(days).toHaveAttribute('aria-pressed', 'true')
     await expect(lines).toBeVisible()
     await expect(lines).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByRole('button', { name: 'Filter', exact: true })).toBeVisible()
     await lines.click()
     await expect(lines).toHaveAttribute('aria-pressed', 'true')
+    await expect(days).toHaveAttribute('aria-pressed', 'false')
     await expect(page.getByText('Meet @Renée #café for 100% planning', { exact: false }).first()).toBeVisible()
-    await lines.click()
+    await days.click()
     await expect(lines).toHaveAttribute('aria-pressed', 'false')
+    await expect(days).toHaveAttribute('aria-pressed', 'true')
     await expect(note(page)).toContainText('[ ] buy tea')
   } else {
     await expect(lines).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'TODOs', exact: true })).toBeVisible()
     await expect(note(page)).toBeVisible()
   }
 })
@@ -90,11 +96,17 @@ test('J4: appearance changes persist; fonts render; controls and preview stay co
   await theme.getByRole('button', { name: 'Dark', exact: true }).click()
   await page.getByLabel('Title font', { exact: true }).selectOption('bree')
   await page.getByLabel('Body font', { exact: true }).selectOption('inconsolata')
-  const revision = await page.evaluate(() => localStorage.getItem('rivolo.db.persisted-revision'))
   await page.getByRole('button', { name: 'Rivolo Strong', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Rivolo Strong', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('rivolo.db.persisted-revision'))).not.toBe(revision)
   await expect(theme.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await waitForPersistedContent(page, ({ settings: saved }) =>
+    saved['appearance.wallpaper'] === 'thoughts-high' &&
+    saved['appearance.theme'] === 'dark' &&
+    saved['appearance.titleFont'] === 'bree' &&
+    saved['appearance.font'] === 'monospace' &&
+    saved['appearance.monospaceFont'] === 'inconsolata' &&
+    saved['setup.dismissedSync'] === 'true',
+  )
   await page.reload()
   await expect(page.getByRole('button', { name: "Dismiss AI assistant isn't set up", exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Dismiss Cloud sync is off', exact: true })).toHaveCount(0)
@@ -225,8 +237,13 @@ test('J2: search toggles the intended todo occurrence and preserves cancelled/ot
   await expect(page.getByText(/Imported 2 day/)).toBeVisible()
   await page.goto('/')
   await search(page, 'tea')
-  if (mobile(page)) await page.getByRole('button', { name: 'Lines', exact: true }).click()
-  await page.getByRole('button', { name: 'TODOs', exact: true }).click()
+  if (mobile(page)) {
+    await page.getByRole('button', { name: 'Lines', exact: true }).click()
+    await page.getByRole('button', { name: 'Filter', exact: true }).click()
+    await page.getByRole('menuitemradio', { name: 'TODOs', exact: true }).click()
+  } else {
+    await page.getByRole('button', { name: 'TODOs', exact: true }).click()
+  }
   await expect(page.getByRole('button', { name: 'Toggle todo', exact: true })).toHaveCount(2)
   await page.getByRole('button', { name: 'Toggle todo', exact: true }).nth(1).click()
   // Export reads the independent persisted owner after route navigation flushes.
