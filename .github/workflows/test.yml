@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   contracts-and-browser:
-    runs-on: sengi-standard-8-ubuntu-2404
+    runs-on: sengi-standard-4-ubuntu-2404
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
