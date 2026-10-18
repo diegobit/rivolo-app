@@ -20,6 +20,13 @@ async function search(page: Page, query: string) {
   if (mobile(page)) {
     await page.getByRole('button', { name: /^Menu(?:,|$)/ }).click()
     await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: 'Menu', exact: true })).toHaveCount(0)
+    await expect(page.locator('main')).not.toHaveAttribute('inert')
+    // Menu dismissal restores the page's scroll position on the next frame.
+    // Finish that restoration before interacting with the unlocked page.
+    await page.evaluate(() => new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
   } else {
     await page.getByRole('button', { name: 'Search', exact: true }).click()
   }
@@ -210,6 +217,9 @@ test('J3: import, export, malformed import, and reopen preserve actual notes', a
   const returnToToday = page.getByRole('button', { name: 'Scroll to Today', exact: true })
   const checkReturnGeometry = async () => {
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    await expect.poll(() => todayCard.evaluate(element =>
+      element.getBoundingClientRect().bottom < 0,
+    )).toBe(true)
     await insideViewport(page, returnToToday, mobile(page) ? 44 : 40)
     const button = await returnToToday.boundingBox()
     const icon = await returnToToday.locator('img').boundingBox()

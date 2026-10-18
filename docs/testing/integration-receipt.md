@@ -325,3 +325,48 @@ The existing local Chromium J6 resize-follow failure still blocks Batch A
 acceptance on arm64. The hosted x64 J6 pass at `8d0f3b8` is separate evidence
 and does not resolve that platform-specific failure. The corrected branch is
 being pushed for a fresh hosted run; no result for the new head is claimed yet.
+
+
+## Menu dismissal synchronization — 2026-10-18
+
+Hosted run [39143352574](https://github.com/diegobit/rivolo-app/actions/runs/39143352574)
+on `7a967ee` failed WebKit-mobile J3 after search. Both Today and the archive
+were present, but the test scrolled while the Menu was still closing. The trace
+shows scrollTop moving from 56 to 3056, then menu unlock restoring it to 56.
+The return button was consequently absent with Today back near the top. This
+is distinct from the earlier missing-Today fixture error.
+
+The shared mobile search setup now waits for the Menu dialog to disappear and
+for main content to stop being inert, then lets the scheduled scroll restoration
+finish across animation frames. J3 verifies Today is above the viewport after
+its scroll before checking the existing return button, navigation, icon size,
+tap target and placement. There is no fixed delay, automatic retry, skip, app
+storage flush helper, or production change in this correction.
+
+The changed search setup and its sibling journeys passed locally on macOS arm64:
+`npm run test:e2e:built -- tests/e2e/local-journeys.spec.ts` reported 9 passes and
+one existing inapplicable desktop skip, retries zero. ESLint and
+`git diff --check` passed. The final correction requires a fresh hosted run;
+the failed predecessor had 700 fast-test passes, lint/build passes, 27 browser
+passes, one failure and one inapplicable skip; Worker runtime did not execute.
+
+### Delivery scope and remaining product work
+
+PR #47 delivers the suite audit, real storage/transport boundaries and browser
+journeys, including the earlier narrow mobile/consent changes. This final
+correction is test-only. The user authorized merging this suite PR into dev
+once its hosted checks pass, while product repairs proceed separately:
+
+- **Persistence:** implement the ordered app-wide writer, retain newest editor
+  generations and acknowledge provider settings only after durable storage.
+  Reproduce and repair the immediate-reload note/settings cases on refreshed
+  AIT dev, protect OneDrive journals/pending drafts, then backport the reviewed
+  persistence commits to Diego through a separate dev PR. Keep exact durable
+  controls and promote the interruption regressions only after the repair passes.
+- **Chat resize:** repair the local arm64 J6 loss of bottom following during
+  reflow in a separate Diego product PR. Preserve deliberate reader scrolling,
+  unseen-message behavior and the unchanged real browser resize assertion.
+
+The four note-interruption failures and arm64 resize defect remain open.
+Hosted x64 passing results do not resolve those findings. No installed-PWA,
+physical iOS, live sync/provider or arbitrary process-kill guarantee is claimed.
