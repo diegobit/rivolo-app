@@ -66,6 +66,7 @@ vi.mock('../hooks/useKeyboardOffsetCssVar', () => ({ useKeyboardOffsetCssVar: vi
 vi.mock('../hooks/useTabSyncState', () => ({
   useTabSyncState: () => stores.tabSync,
 }))
+vi.mock('../hooks/useDatabaseLifecycle', () => ({ useDatabaseLifecycle: vi.fn() }))
 vi.mock('./app-shell/useAutoSync', () => ({ useAutoSync: vi.fn() }))
 vi.mock('./app-shell/BottomTrayRow', () => ({
   default: ({

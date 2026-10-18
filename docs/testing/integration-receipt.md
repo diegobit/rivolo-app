@@ -61,6 +61,36 @@ and mixed-content harness failures. No production security policy is relaxed.
 First failures and corrected fixture/locator diagnoses remain in the lane and
 QA receipts; retries do not conceal them.
 
+## Direct Diego persistence and chat repairs — 2026-10-18
+
+Implementation base: Diego `origin/dev` at `4fb1fc80f6c727af5873fb555e5d3e35ad91538d`, after Sengi PR #58. The user directed this work to Diego only. No AIT checkout or remote was changed, no OneDrive support was added, and neither PR is merged.
+
+### Persistence
+
+Before the repair, the maintained interruption probes failed on both Chromium desktop and WebKit mobile: latest new/saved-note edits were absent after immediate reload, provider activation reopened as Gemini, and Strong appearance reopened as Light. The base receipts are in `.playwright-mcp/implementation-baseline/` in the implementation worktree and in the earlier native-storage report. Tests read the serialized SQLite bytes at IndexedDB `keyval-store` / `keyval` / `single-note-db` and independently decode values with Python `sqlite3`.
+
+The repair gives normal saves, Settings, explicit flush and app lifecycle checkpoints one ordered database writer. Editor drafts retain generations through the SQL commit and IndexedDB durability boundary; stale queued saves cannot replace a newer draft or clear it. Hidden/pagehide checkpoints synchronously apply the latest draft with warm SQLite/IndexedDB handles and submit the native IndexedDB transaction before returning. A session-scoped recovery journal protects unresolved note text across a dropped pagehide transaction and replays only while its saved baseline still matches. Provider activation and appearance setters wait for durable settings writes; Dropbox and Google Drive dirty revisions remain atomic with note changes. The schema and key are unchanged.
+
+### Chat resize
+
+The refreshed base reproduced F8 on Chromium desktop: resizing 1440×900 to 1050×820 left 1050 px below the chat while `following=true` before reflow. The first fix observed only the scrollport and passed macOS, but the Linux arm64 Chromium run exposed that row rewrap can change message heights without a scrollport resize notification. The final hook observes message rows and newly added rows as well as the scrollport, and treats layout scrolls separately from reader input. The existing J6 `<2 px` bottom assertion is unchanged; J6 also checks resize while reading older messages and unseen feedback.
+
+### Final local verification
+
+| Command/environment | Result |
+| --- | --- |
+| `npm test` | 77 files, 711 tests passed |
+| `npm run lint` | Passed |
+| `npm run build` | Passed; generated PWA worker; existing large-chunk warning remains |
+| `npm run test:pwa-interruption` | 8/8 passed: new/saved note, provider activation and Strong appearance, on Chromium desktop and WebKit mobile |
+| `npm run test:e2e:built` | macOS arm64: 36 passed, one existing desktop-only skip; Linux arm64, official Playwright 1.63.0 Noble image: 36 passed, same skip; zero retries |
+| `npm run test:mcp-runtime` | Passed: local migrations, metadata, initialize/list, auth, GET 405 and re-enable/revocation |
+| `git diff --check` | Passed |
+
+The test-audit skill's OpenClaw-only commands were unavailable; these results are from the repository's real Vitest, built-app Playwright, native SQLite/IndexedDB and MCP runtime commands. The hosted PR checks have not yet completed. Screenshots for the chat resize are published on the retained image-only `pr-assets/fix-chat-resize-following` branch; their links and both PR URLs are recorded in the findings plan after PR creation.
+
+Physical installed Mac PWA Cmd-W, physical iOS standalone/keyboard behavior and live-provider credentials were not tested. The provider proof uses an isolated synthetic HTTP fixture. These remain acceptance limits for parent review.
+
 ## Campaign preservation review
 
 The independent reviews below cover the campaign before the focused UI

@@ -1,4 +1,5 @@
-import { getJsonSetting, setJsonSetting } from './settingsRepository'
+import { getJsonSetting, updateJsonSetting } from './settingsRepository'
+import { executeSql, queryFirstRow, type RivoloDatabase } from './sqliteRuntime'
 
 export type DropboxState = {
   connected: boolean
@@ -30,6 +31,32 @@ const DEFAULT_STATE: DropboxState = {
   accountName: null,
 }
 
+export const markDropboxLocalDirtyInDatabase = (db: RivoloDatabase) => {
+  const row = queryFirstRow<{ value: string }>(db, 'SELECT value FROM settings WHERE key = ? LIMIT 1', [
+    'dropbox.state',
+  ])
+  let stored: Record<string, unknown> = {}
+  try {
+    const parsed: unknown = row ? JSON.parse(row.value) : null
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      stored = parsed as Record<string, unknown>
+    }
+  } catch {
+    stored = {}
+  }
+  delete stored.auth
+  const state = { ...DEFAULT_STATE, ...stored } as DropboxState
+  const next = {
+    ...state,
+    localDirty: true,
+    localRevision: (Number.isSafeInteger(state.localRevision) ? state.localRevision : 0) + 1,
+  }
+  executeSql(db, 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [
+    'dropbox.state',
+    JSON.stringify(next),
+  ])
+}
+
 let writeQueue: Promise<void> = Promise.resolve()
 
 // Legacy state kept the refresh token in `auth`. That token now lives only in
@@ -48,9 +75,15 @@ const enqueueDropboxStateWrite = async <T>(
   mutator: (current: DropboxState) => { next: DropboxState; result: T },
 ) => {
   const run = async () => {
-    const current = await readDropboxState()
-    const { next, result } = mutator(current)
-    await setJsonSetting('dropbox.state', next)
+    let result!: T
+    await updateJsonSetting<unknown>('dropbox.state', (stored) => {
+      const current = { ...DEFAULT_STATE, ...(stored && typeof stored === 'object' ? stored : {}) } as DropboxState
+      const { next, result: nextResult } = mutator(current)
+      result = nextResult
+      const persisted = { ...next } as DropboxState & { auth?: unknown }
+      delete persisted.auth
+      return persisted
+    })
     return result
   }
 

@@ -161,23 +161,15 @@ describe('persisted day repository', () => {
     expect((await storage.repository.getDay('2026-07-12'))?.contentMd).toBe('base\n\nsucceeding\n\nthird')
   })
 
-  it('does not block another day behind a paused append', async () => {
+  it('keeps appends to different days independent', async () => {
     await write('2026-07-12', 'base')
     await write('2026-07-13', 'other')
-    let release!: () => void
-    let started!: () => void
-    const pause = new Promise<void>((resolve) => { release = resolve })
-    const ready = new Promise<void>((resolve) => { started = resolve })
-    const original = storage.db.run
-    vi.spyOn(storage.db, 'run').mockImplementation(async (sql, params = []) => {
-      if (sql.startsWith('UPDATE days') && params[3] === '2026-07-12') { started(); await pause }
-      return original(sql, params)
-    })
-    const first = storage.repository.appendToDay('2026-07-12', 'paused')
-    await ready
-    await storage.repository.appendToDay('2026-07-13', 'independent')
+    const [first, second] = await Promise.all([
+      storage.repository.appendToDay('2026-07-12', 'first'),
+      storage.repository.appendToDay('2026-07-13', 'independent'),
+    ])
+    expect(first?.contentMd).toBe('base\n\nfirst')
+    expect(second?.contentMd).toBe('other\n\nindependent')
     expect((await storage.repository.getDay('2026-07-13'))?.contentMd).toBe('other\n\nindependent')
-    release()
-    await first
   })
 })

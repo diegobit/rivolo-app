@@ -1,11 +1,12 @@
 import { defineConfig } from 'playwright/test'
 import config from './playwright.config'
 
-// Explicit known-issue runner. A nonzero result remains a failure, not an
-// expected-failure annotation. Promote its cases into the normal gate on repair.
+// Focused interruption subset of the ordinary browser gate. The same exact
+// persistence scenarios run in `test:e2e:built` and keep retries disabled.
 export default defineConfig({
   ...config,
-  testDir: './tests/known-issues',
+  testDir: './tests/e2e',
+  testMatch: '**/persistence-interruption.spec.ts',
   outputDir: './test-results/interruption',
   reporter: [['list'], ['html', { outputFolder: 'playwright-report/interruption', open: 'never' }]],
 })

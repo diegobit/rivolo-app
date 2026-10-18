@@ -1,6 +1,19 @@
 import { formatDayTitle, isValidDayId } from './dates'
-import { isFtsAvailable, queryAll, queryOne, run, runDatabaseTransaction, upsertFts } from './db'
-import { markSyncLocalDirty } from './syncDirty'
+import {
+  acknowledgePendingDayDraft,
+  getCommittedDayDraftGeneration,
+  getPendingDayDraft,
+  isDayDraftGenerationStale,
+  isFtsAvailable,
+  markNewDayForRecovery,
+  queryAll,
+  queryOne,
+  registerDayDraftRecoveryHandler,
+  runAtomicDatabaseMutation,
+} from './db'
+import type { PendingDayDraft } from './db'
+import { executeSql, queryFirstRow, type RivoloDatabase } from './sqliteRuntime'
+import { markSyncLocalDirtyInDatabase } from './syncDirty'
 import { searchDaysInMemory, type Day, type DaySearchResult, type SearchFilter } from './notesCore'
 import { isAscii, isAtLeastThreeCodePoints, quoteFtsPhrase } from './sqliteRuntime'
 
@@ -33,6 +46,94 @@ const assertValidDayId = (dayId: string) => {
     throw new Error(`Invalid day ID: ${dayId}`)
   }
 }
+
+const readDayFromDatabase = (db: RivoloDatabase, dayId: string) => {
+  const row = queryFirstRow<DayRow>(
+    db,
+    'SELECT day_id, human_title, content_md, created_at, updated_at FROM days WHERE day_id = ? LIMIT 1',
+    [dayId],
+  )
+  return row ? mapRow(row) : null
+}
+
+const replaceFtsEntry = (db: RivoloDatabase, dayId: string, humanTitle: string, contentMd: string) => {
+  executeSql(db, 'DELETE FROM days_fts WHERE day_id = ?', [dayId])
+  executeSql(db, 'INSERT INTO days_fts (day_id, human_title, content_md) VALUES (?, ?, ?)', [
+    dayId,
+    humanTitle,
+    contentMd,
+  ])
+}
+
+const writeDayContentInDatabase = (
+  db: RivoloDatabase,
+  dayId: string,
+  contentMd: string,
+  humanTitle?: string,
+  markDirty = true,
+) => {
+  const existing = readDayFromDatabase(db, dayId)
+  const now = Date.now()
+  const title = humanTitle ?? existing?.humanTitle ?? formatDayTitle(dayId)
+  if (existing) {
+    executeSql(db, 'UPDATE days SET human_title = ?, content_md = ?, updated_at = ? WHERE day_id = ?', [
+      title,
+      contentMd,
+      now,
+      dayId,
+    ])
+  } else {
+    executeSql(db, 'INSERT INTO days (day_id, human_title, content_md, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [
+      dayId,
+      title,
+      contentMd,
+      now,
+      now,
+    ])
+  }
+  replaceFtsEntry(db, dayId, title, contentMd)
+  if (markDirty) markSyncLocalDirtyInDatabase(db)
+  return readDayFromDatabase(db, dayId)
+}
+
+export const commitDayDraftInDatabase = (db: RivoloDatabase, draft: PendingDayDraft) => {
+  writeDayContentInDatabase(db, draft.dayId, draft.contentMd)
+}
+
+registerDayDraftRecoveryHandler((db, drafts) => {
+  let changed = false
+  const appliedDayIds: string[] = []
+  const completedDayIds: string[] = []
+  const conflictDayIds: string[] = []
+
+  for (const draft of drafts) {
+    if (!isValidDayId(draft.dayId)) {
+      conflictDayIds.push(draft.dayId)
+      continue
+    }
+
+    const existing = readDayFromDatabase(db, draft.dayId)
+    if (existing?.contentMd === draft.contentMd) {
+      completedDayIds.push(draft.dayId)
+      continue
+    }
+
+    const matchesDraftBaseline = existing
+      ? existing.contentMd === draft.baseContentMd && existing.updatedAt === draft.baseUpdatedAt
+      : draft.baseRowWasUnsaved
+    if (!matchesDraftBaseline) {
+      conflictDayIds.push(draft.dayId)
+      continue
+    }
+
+    writeDayContentInDatabase(db, draft.dayId, draft.contentMd)
+    changed = true
+    appliedDayIds.push(draft.dayId)
+    completedDayIds.push(draft.dayId)
+  }
+
+  return { changed, appliedDayIds, completedDayIds, conflictDayIds }
+})
 
 export const listDays = async (limit = 60) => {
   const rows = await queryAll<DayRow>(
@@ -100,61 +201,71 @@ export const getDay = async (dayId: string) => {
 
 export const ensureDay = async (dayId: string) => {
   assertValidDayId(dayId)
-  const existing = await getDay(dayId)
-  if (existing) {
-    return existing
-  }
-
-  const now = Date.now()
-  const humanTitle = formatDayTitle(dayId)
-  await run(
-    'INSERT OR IGNORE INTO days (day_id, human_title, content_md, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-    [dayId, humanTitle, '', now, now],
-  )
-
-  const stored = await getDay(dayId)
-  if (stored) {
-    await upsertFts(stored.dayId, stored.humanTitle, stored.contentMd)
-    await markSyncLocalDirty()
-    return stored
-  }
-
-  await upsertFts(dayId, humanTitle, '')
-  await markSyncLocalDirty()
-  return { dayId, humanTitle, contentMd: '', createdAt: now, updatedAt: now }
+  return runAtomicDatabaseMutation((db) => {
+    const existing = readDayFromDatabase(db, dayId)
+    if (existing) return { day: existing, changed: false, created: false }
+    const now = Date.now()
+    const humanTitle = formatDayTitle(dayId)
+    executeSql(db, 'INSERT OR IGNORE INTO days (day_id, human_title, content_md, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [
+      dayId,
+      humanTitle,
+      '',
+      now,
+      now,
+    ])
+    const stored = readDayFromDatabase(db, dayId) ?? {
+      dayId,
+      humanTitle,
+      contentMd: '',
+      createdAt: now,
+      updatedAt: now,
+    }
+    replaceFtsEntry(db, stored.dayId, stored.humanTitle, stored.contentMd)
+    markSyncLocalDirtyInDatabase(db)
+    return { day: stored, changed: true, created: true }
+  }, {
+    shouldMarkChanged: (result) => result.changed,
+    onCommit: (result) => {
+      if (result.created) markNewDayForRecovery(dayId)
+    },
+  }).then((result) => result.day)
 }
 
 export const saveDay = async (
   dayId: string,
   contentMd: string,
   humanTitle?: string,
-  options: { markDirty?: boolean } = {},
+  options: { markDirty?: boolean; draftGeneration?: number } = {},
 ) => {
   assertValidDayId(dayId)
-  const existing = await getDay(dayId)
-  const now = Date.now()
-  const title = humanTitle ?? existing?.humanTitle ?? formatDayTitle(dayId)
   const markDirty = options.markDirty ?? true
-
-  if (existing) {
-    await run('UPDATE days SET human_title = ?, content_md = ?, updated_at = ? WHERE day_id = ?', [
-      title,
-      contentMd,
-      now,
-      dayId,
-    ])
-  } else {
-    await run(
-      'INSERT INTO days (day_id, human_title, content_md, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-      [dayId, title, contentMd, now, now],
-    )
-  }
-
-  await upsertFts(dayId, title, contentMd)
-  if (markDirty) {
-    await markSyncLocalDirty()
-  }
-  return getDay(dayId)
+  let committedGeneration: number | null = null
+  const result = await runAtomicDatabaseMutation((db) => {
+    let contentToWrite = contentMd
+    const titleToWrite = humanTitle
+    if (options.draftGeneration !== undefined) {
+      const pending = getPendingDayDraft(dayId)
+      if (
+        isDayDraftGenerationStale(dayId, options.draftGeneration) ||
+        getCommittedDayDraftGeneration(dayId) >= options.draftGeneration
+      ) {
+        return { day: readDayFromDatabase(db, dayId), changed: false }
+      }
+      if (pending && pending.generation >= options.draftGeneration) {
+        contentToWrite = pending.contentMd
+        committedGeneration = pending.generation
+      }
+    }
+    const day = writeDayContentInDatabase(db, dayId, contentToWrite, titleToWrite, markDirty)
+    return { day, changed: true }
+  }, {
+    shouldMarkChanged: (value) => value.changed,
+    persistImmediately: options.draftGeneration !== undefined,
+    onCommit: () => {
+      if (committedGeneration !== null) acknowledgePendingDayDraft(dayId, committedGeneration)
+    },
+  })
+  return result.changed ? result.day : null
 }
 
 export const moveDay = async (fromDayId: string, toDayId: string) => {
@@ -165,32 +276,25 @@ export const moveDay = async (fromDayId: string, toDayId: string) => {
     return { day: await getDay(fromDayId), conflict: false }
   }
 
-  const existing = await getDay(fromDayId)
-  if (!existing) {
-    return { day: null, conflict: false }
-  }
-
-  const target = await getDay(toDayId)
-  if (target) {
-    return { day: null, conflict: true }
-  }
-
-  const now = Date.now()
-  const humanTitle = formatDayTitle(toDayId)
-  await run('UPDATE days SET day_id = ?, human_title = ?, updated_at = ? WHERE day_id = ?', [
-    toDayId,
-    humanTitle,
-    now,
-    fromDayId,
-  ])
-
-  if (await isFtsAvailable()) {
-    await run('DELETE FROM days_fts WHERE day_id = ?', [fromDayId])
-    await upsertFts(toDayId, humanTitle, existing.contentMd)
-  }
-
-  await markSyncLocalDirty()
-  return { day: await getDay(toDayId), conflict: false }
+  return runAtomicDatabaseMutation((db) => {
+    const existing = readDayFromDatabase(db, fromDayId)
+    if (!existing) return { result: { day: null, conflict: false }, changed: false }
+    if (readDayFromDatabase(db, toDayId)) {
+      return { result: { day: null, conflict: true }, changed: false }
+    }
+    const now = Date.now()
+    const humanTitle = formatDayTitle(toDayId)
+    executeSql(db, 'UPDATE days SET day_id = ?, human_title = ?, updated_at = ? WHERE day_id = ?', [
+      toDayId,
+      humanTitle,
+      now,
+      fromDayId,
+    ])
+    executeSql(db, 'DELETE FROM days_fts WHERE day_id = ?', [fromDayId])
+    replaceFtsEntry(db, toDayId, humanTitle, existing.contentMd)
+    markSyncLocalDirtyInDatabase(db)
+    return { result: { day: readDayFromDatabase(db, toDayId), conflict: false }, changed: true }
+  }, { shouldMarkChanged: (value) => value.changed }).then((value) => value.result)
 }
 
 const appendQueues = new Map<string, Promise<void>>()
@@ -235,18 +339,18 @@ export const appendToDay = async (dayId: string, text: string) => {
 }
 
 export const deleteDay = async (dayId: string) => {
-  await run('DELETE FROM days WHERE day_id = ?', [dayId])
-  if (await isFtsAvailable()) {
-    await run('DELETE FROM days_fts WHERE day_id = ?', [dayId])
-  }
-  await markSyncLocalDirty()
+  await runAtomicDatabaseMutation((db) => {
+    executeSql(db, 'DELETE FROM days WHERE day_id = ?', [dayId])
+    executeSql(db, 'DELETE FROM days_fts WHERE day_id = ?', [dayId])
+    markSyncLocalDirtyInDatabase(db)
+  })
 }
 
 export const clearDays = async () => {
-  await run('DELETE FROM days')
-  if (await isFtsAvailable()) {
-    await run('DELETE FROM days_fts')
-  }
+  await runAtomicDatabaseMutation((db) => {
+    executeSql(db, 'DELETE FROM days')
+    executeSql(db, 'DELETE FROM days_fts')
+  })
 }
 
 export const replaceDays = async (days: DayWrite[], options: { markDirty?: boolean } = {}) => {
@@ -257,24 +361,27 @@ export const replaceDays = async (days: DayWrite[], options: { markDirty?: boole
   const markDirty = options.markDirty ?? true
   const now = Date.now()
 
-  await runDatabaseTransaction(async () => {
-    await run('DELETE FROM days')
-    if (await isFtsAvailable()) {
-      await run('DELETE FROM days_fts')
-    }
+  await runAtomicDatabaseMutation((db) => {
+    executeSql(db, 'DELETE FROM days')
+    executeSql(db, 'DELETE FROM days_fts')
 
     for (const day of days) {
       const title = day.humanTitle || formatDayTitle(day.dayId)
-      await run(
-        'INSERT INTO days (day_id, human_title, content_md, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-        [day.dayId, title, day.contentMd, now, now],
-      )
-      await upsertFts(day.dayId, title, day.contentMd)
+      executeSql(db, 'INSERT INTO days (day_id, human_title, content_md, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [
+        day.dayId,
+        title,
+        day.contentMd,
+        now,
+        now,
+      ])
+      executeSql(db, 'INSERT INTO days_fts (day_id, human_title, content_md) VALUES (?, ?, ?)', [
+        day.dayId,
+        title,
+        day.contentMd,
+      ])
     }
 
-    if (markDirty) {
-      await markSyncLocalDirty()
-    }
+    if (markDirty) markSyncLocalDirtyInDatabase(db)
   })
 }
 
