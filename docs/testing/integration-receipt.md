@@ -264,5 +264,64 @@ visible and is not treated as an ordinary gate result.
 
 At the time this correction was prepared, no hosted run had yet started for its
 new head. The prior hosted run is failed as recorded above; the correction
-requires a new run. No hosted x64 pass is claimed. Independent parent review is
-still pending, and the J6 resize-follow failure blocks Batch A acceptance.
+requires a new run. Hosted x64 J6 passed, but the local arm64 resize-follow
+failure still blocks Batch A acceptance. Independent parent review is pending.
+
+## Persistence gate correction round 3 — 2026-10-18
+
+Status: the J3 fixture correction is committed for PR #47. The PR remains open
+against `dev` and unmerged. No production code changed. Independent parent
+review and hosted checks for the corrected head are pending.
+
+Source commit: `2fed72abc6653a49db683c105d0011228462ec8b`, on the existing
+`test/real-boundaries` branch. The source change keeps the mobile `Archive`
+search from filtering out Today: J3 writes a distinctive Today note containing
+`Archive`, reads the Today card's actual day ID, and waits for the exact
+`day_id`/`content_md` pair in the independent SQLite snapshot before navigating
+to Settings. It checks the same exact value after import and reopen. After the
+mobile search, J3 now verifies both the Today note and the imported 2024-01-03
+archive result before running the existing return-button geometry checks.
+The 150-line archive, export and malformed-import checks, 44px button target,
+20px icon, placement, timeline, and search assertions remain.
+
+### Hosted round 2 result clarified
+
+GitHub Actions run
+[`39142077906`](https://github.com/diegobit/rivolo-app/actions/runs/39142077906/job/117718376615)
+completed with failure on `8d0f3b8`. The 700-test fast suite, lint, and build
+passed. The browser suite had 27 passes, 1 failure, and 1 inapplicable desktop
+skip. Its only failure was WebKit-mobile J3: after `Archive` search, only the
+2024-01-03 archive result remained, so Today was absent and the app hid the
+return button as designed. The Worker runtime step was skipped after the browser
+failure; Cloudflare Pages passed. Hosted Chromium J6 passed on x64 at this head.
+This replaces the earlier note that the run was still in progress; local
+Chromium J6 resize-follow failure remains reproducible on arm64.
+
+The CI J3 screenshot, video, trace, and error context are retained at
+`/tmp/rivolo-parent-review-round2-artifacts/test-results/local-journeys-J3-import-e-95883-eopen-preserve-actual-notes-webkit-mobile/`.
+The failed page showed the `Archive` query, a `1 day` result, and only the
+3 Jan 2024 card. This confirms a missing fixture result, not a return-button
+visibility regression.
+
+### Round 3 local proof
+
+On macOS arm64 with Playwright 1.63.0 and Node 26.8.2:
+
+| Command | Result |
+| --- | --- |
+| `npm run test:e2e:built -- tests/e2e/local-journeys.spec.ts --grep 'J3: import, export, malformed import, and reopen preserve actual notes' --project=chromium-desktop --project=webkit-mobile` | Passed, 2/2; Chromium desktop and WebKit mobile |
+| `npm test` | Passed, 76 files / 700 tests |
+| `npm run lint` | Passed |
+| `npm run build` | Passed; existing large-chunk warning remains |
+| `npm run test:mcp-runtime` | Passed; local Worker migrations, metadata, initialize/list, auth, GET 405, and revocation |
+
+The focused browser run used the repository's zero-retry Playwright config. No
+full E2E or immediate-reload interruption run was repeated in this correction
+round. The four immediate-reload note failures remain an open product repair;
+Settings persistence repair, AIT Batch B, and the Diego backport remain
+deferred.
+
+The existing local Chromium J6 resize-follow failure still blocks Batch A
+acceptance on arm64. The hosted x64 J6 pass at `8d0f3b8` is separate evidence
+and does not resolve that platform-specific failure. The corrected branch is
+being pushed for a fresh hosted run; no result for the new head is claimed yet.
