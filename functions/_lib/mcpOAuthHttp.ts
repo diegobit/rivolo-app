@@ -599,9 +599,17 @@ const requireUrlEncodedBody = async (request: Request) => {
 }
 
 const validateConsentOrigin = (request: Request, issuerUrl: string) => {
-  if (request.headers.get('Origin') !== new URL(issuerUrl).origin) {
-    throw new McpOAuthTrustError('Consent origin is invalid.')
+  const origin = request.headers.get('Origin')
+  if (origin === new URL(issuerUrl).origin) return
+  // Browsers serialize `Origin` as `null` for basic form posts coming from
+  // documents that set `Referrer-Policy: no-referrer` (Fetch: append a request
+  // Origin header), which is the policy on these pages. Accept that only when
+  // Fetch Metadata confirms our own origin as the initiator: cross-site and
+  // sandboxed posts carry `cross-site` site metadata or a foreign origin.
+  if (origin === 'null' && request.headers.get('Sec-Fetch-Site') === 'same-origin') {
+    return
   }
+  throw new McpOAuthTrustError('Consent origin is invalid.')
 }
 
 export const submitOAuthConsent = async (request: Request, env: McpOAuthEnv) => {
