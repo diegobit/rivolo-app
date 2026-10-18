@@ -27,7 +27,7 @@ import { focusLauncher } from '../components/app-shell/desktopCards'
 import { useStickToBottom } from './timeline/useStickToBottom'
 import { keepEditedDayInResults, keepInteractedTodoInResults, type InteractedTodo } from './timeline/searchResults'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
-import { useEditorMountWindow } from './timeline/useEditorMountWindow'
+import { useEditorMountWindow, type PendingEditorFocus } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
 import { usePendingDayDelete } from './timeline/usePendingDayDelete'
 import { useTimelineChat } from './timeline/useTimelineChat'
@@ -605,7 +605,7 @@ export default function Timeline() {
   const dayRefs = useRef(new Map<string, HTMLDivElement>())
   const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
   const createdDayIdsRef = useRef(new Set<string>())
-  const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
+  const pendingFocusRef = useRef<PendingEditorFocus | null>(null)
   const addTodayRef = useRef<HTMLDivElement | null>(null)
   const heroLogoRef = useRef<HTMLImageElement | null>(null)
   const heroRevealPending = useRef(false)
@@ -1136,6 +1136,7 @@ export default function Timeline() {
       scrollBlock: ScrollLogicalPosition = 'center',
       focusScroll = true,
       scrollBehavior: ScrollBehavior = preferredScrollBehavior(),
+      canFocusEditor?: () => boolean,
     ) => {
       let attempts = 0
       const maxAttempts = 12
@@ -1145,10 +1146,12 @@ export default function Timeline() {
         if (node) {
           node.scrollIntoView({ behavior: scrollBehavior, block: scrollBlock })
         }
-        if (focusPosition && view) {
+        const canFocus = canFocusEditor?.() ?? true
+        if (focusPosition && view && canFocus) {
           focusDayEditor(dayId, focusPosition, focusScroll)
         }
-        if ((!node || (focusPosition && !view)) && attempts < maxAttempts) {
+        const waitingForEditor = focusPosition && !view && canFocus
+        if ((!node || waitingForEditor) && attempts < maxAttempts) {
           attempts += 1
           requestAnimationFrame(run)
         }
@@ -1168,9 +1171,18 @@ export default function Timeline() {
       },
     ) => {
       const { focusPosition = 'end', scrollBlock = 'center', focusScroll = true } = options ?? {}
+      const focusOwner = document.activeElement
+      const canFocusEditor = () => {
+        const activeElement = document.activeElement
+        const editor = editorRefs.current.get(dayId)
+        return activeElement === focusOwner ||
+          activeElement === document.body ||
+          activeElement === document.documentElement ||
+          Boolean(editor?.dom.contains(activeElement))
+      }
       await prepareDayForCreate(dayId)
 
-      pendingFocusRef.current = { dayId, position: focusPosition }
+      pendingFocusRef.current = { dayId, position: focusPosition, canFocus: canFocusEditor }
       pinDayForEditorMount(dayId, 'loadDay')
       const result = await loadDay(dayId)
       if (result.created) {
@@ -1179,7 +1191,7 @@ export default function Timeline() {
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => resolve())
       })
-      revealDay(dayId, focusPosition, scrollBlock, focusScroll)
+      revealDay(dayId, focusPosition, scrollBlock, focusScroll, preferredScrollBehavior(), canFocusEditor)
       if (editorRefs.current.has(dayId)) {
         pendingFocusRef.current = null
       }

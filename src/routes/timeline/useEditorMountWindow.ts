@@ -7,9 +7,10 @@ const LOG_SCOPE = 'TimelinePerf'
 
 type FocusPosition = 'start' | 'end'
 
-type PendingFocus = {
+export type PendingEditorFocus = {
   dayId: string
   position: FocusPosition
+  canFocus?: () => boolean
 }
 
 export type EditorPinReason = 'interaction' | 'citation' | 'loadDay' | 'dateMove' | 'edit'
@@ -24,7 +25,7 @@ type UseEditorMountWindowParams = {
   editorPinPruneIntervalMs: number
   editorRefs: React.MutableRefObject<Map<string, EditorView>>
   dayRefs: React.MutableRefObject<Map<string, HTMLDivElement>>
-  pendingFocusRef: React.MutableRefObject<PendingFocus | null>
+  pendingFocusRef: React.MutableRefObject<PendingEditorFocus | null>
   focusDayEditor: (dayId: string, position: FocusPosition, shouldScroll?: boolean) => boolean
 }
 
@@ -227,7 +228,9 @@ export const useEditorMountWindow = ({
 
         const pending = pendingFocusRef.current
         if (pending && pending.dayId === dayId) {
-          focusDayEditor(dayId, pending.position, false)
+          if (pending.canFocus?.() ?? true) {
+            focusDayEditor(dayId, pending.position, false)
+          }
           pendingFocusRef.current = null
         }
 
