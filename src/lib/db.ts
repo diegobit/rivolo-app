@@ -422,6 +422,7 @@ const submitSnapshot = (
   sqlite: RivoloSqlite,
   database: IDBDatabase,
 ): Promise<void> => {
+  assertDatabaseWritable()
   if (isDatabaseMutationActive()) {
     return waitForDatabaseMutation().then(() => submitSnapshot(db, sqlite, database))
   }
@@ -442,6 +443,9 @@ const submitSnapshot = (
   let transaction: IDBTransaction | null = null
 
   try {
+    // The permission check belongs beside export and transaction creation: a
+    // caller may have waited for a mutation barrier or storage handle above.
+    assertDatabaseWritable()
     const bytes = exportSerializedDatabase(sqlite, db)
     const snapshotTransaction = database.transaction(IDB_OBJECT_STORE, 'readwrite')
     transaction = snapshotTransaction
@@ -504,6 +508,7 @@ const markDatabaseChanged = (db: RivoloDatabase) => {
 
 const applyPendingDayDrafts = (db: RivoloDatabase) => {
   if (!pendingDayDrafts.size) return false
+  assertDatabaseWritable()
   if (databaseTransactionDepth > 0 || bulkMutationDepth > 0) {
     throw new Error('A local database operation is still in progress.')
   }
@@ -641,6 +646,7 @@ export const runAtomicDatabaseMutation = async <T>(
 ) => {
   assertDatabaseWritable()
   const db = await getDatabase()
+  assertDatabaseWritable()
   let result!: T
   const outermostTransaction = databaseTransactionDepth === 0
   const ownsMutationBarrier =
@@ -687,6 +693,7 @@ export const runAtomicDatabaseMutation = async <T>(
 export const run = async (sql: string, params: (string | number | null)[] = []) => {
   assertDatabaseWritable()
   const db = await getDatabase()
+  assertDatabaseWritable()
   executeSql(db, sql, params)
   markDatabaseChanged(db)
 }
@@ -695,9 +702,12 @@ export const persistDatabase = async (db: RivoloDatabase) => {
   assertDatabaseWritable()
   try {
     await waitForDatabaseMutation()
+    assertDatabaseWritable()
     const [sqlite, database] = await Promise.all([ensureSql(), ensureIdb()])
+    assertDatabaseWritable()
     return await submitSnapshot(db, sqlite, database)
   } catch (error) {
+    if (error instanceof Error && error.message === DATABASE_STALE_RELOAD_MESSAGE) throw error
     reportPersistFailure(error)
     throw error
   }
@@ -707,15 +717,19 @@ export const flushDatabaseSave = async () => {
   assertDatabaseWritable()
   try {
     await waitForDatabaseMutation()
+    assertDatabaseWritable()
     const db = await getDatabase()
 
+    assertDatabaseWritable()
     await waitForDatabaseMutation()
+    assertDatabaseWritable()
     applyPendingDayDrafts(db)
     if (saveTimer !== null) {
       window.clearTimeout(saveTimer)
       saveTimer = null
     }
     const [sqlite, database] = await Promise.all([ensureSql(), ensureIdb()])
+    assertDatabaseWritable()
     const generation = appliedGeneration
     if (generation <= durableGeneration) return
     const inFlight = findInFlightSnapshot(generation)
@@ -783,6 +797,12 @@ const recoverSessionDayDrafts = async (
 
   let result!: DayDraftRecoveryResult
   try {
+    try {
+      assertDatabaseWritable()
+    } catch (error) {
+      if (error instanceof Error && error.message === DATABASE_STALE_RELOAD_MESSAGE) return
+      throw error
+    }
     db.transaction(() => {
       result = dayDraftRecoveryHandler!(
         db,
@@ -897,6 +917,7 @@ export const runBulkDatabaseMutation = async <T>(callback: () => Promise<T>) => 
 export const runDatabaseTransaction = async <T>(callback: () => Promise<T>) => {
   assertDatabaseWritable()
   const db = await getDatabase()
+  assertDatabaseWritable()
   const outermostTransaction = databaseTransactionDepth === 0
   const ownsMutationBarrier =
     outermostTransaction && bulkMutationDepth === 0 && databaseMutationBarrier === null
@@ -956,7 +977,9 @@ export const upsertFts = async (dayId: string, humanTitle: string, content: stri
   assertDatabaseWritable()
   if (!(await isFtsAvailable())) return
 
+  assertDatabaseWritable()
   const db = await getDatabase()
+  assertDatabaseWritable()
   executeSql(db, 'DELETE FROM days_fts WHERE day_id = ?', [dayId])
   executeSql(db, 'INSERT INTO days_fts (day_id, human_title, content_md) VALUES (?, ?, ?)', [
     dayId,

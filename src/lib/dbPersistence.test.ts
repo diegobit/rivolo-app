@@ -390,6 +390,56 @@ describe('database IndexedDB commit boundary', () => {
     expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toBeNull()
   })
 
+  it('rejects a deferred flush after a foreign persisted revision invalidates its snapshot', async () => {
+    const dayId = '2026-07-14'
+    await storage.repository.saveDay(dayId, 'prior saved baseline', undefined, { markDirty: false })
+    await storage.db.flushDatabaseSave()
+
+    const events = new EventTarget()
+    const values = new Map<string, string>()
+    Object.assign(window, {
+      addEventListener: events.addEventListener.bind(events),
+      removeEventListener: events.removeEventListener.bind(events),
+      dispatchEvent: events.dispatchEvent.bind(events),
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      },
+    })
+    vi.stubGlobal('document', {})
+    vi.stubGlobal('BroadcastChannel', undefined)
+    const tabSync = await import('./tabSyncCoordinator')
+    tabSync.beginDatabaseSnapshotLoad()
+
+    let resume!: () => void
+    let started!: () => void
+    const pause = new Promise<void>((resolve) => { resume = resolve })
+    const ready = new Promise<void>((resolve) => { started = resolve })
+    const bulk = storage.db.runBulkDatabaseMutation(async () => {
+      await storage.repository.saveDay(dayId, 'stale local queued content', undefined, { markDirty: false })
+      started()
+      await pause
+    })
+    const bulkOutcome = bulk.then(() => 'fulfilled', (error) => String(error))
+    await ready
+
+    const deferredFlush = storage.db.flushDatabaseSave()
+    const announcement = new Event('storage')
+    Object.assign(announcement, {
+      key: 'rivolo.db.persisted-revision',
+      newValue: JSON.stringify({ sourceTabId: 'other-tab', revision: 10 }),
+    })
+    events.dispatchEvent(announcement)
+    expect(tabSync.getTabSyncSnapshot().databaseStale).toBe(true)
+
+    resume()
+    const deferredFlushOutcome = deferredFlush.then(() => 'fulfilled', (error) => String(error))
+    expect(await bulkOutcome).toContain('older local data')
+    expect(await deferredFlushOutcome).toContain('older local data')
+    expect(await persistedNotes()).toEqual([[dayId, 'prior saved baseline']])
+  })
+
   it('preserves a prior dirty generation when a bulk operation fails after its timer fires', async () => {
     await storage.repository.saveDay('2026-07-11', 'prior dirty generation', undefined, { markDirty: false })
 
