@@ -650,7 +650,9 @@ export default function AppShell() {
 
       <main
         inert={tabSync.databaseStale || mobileMenuOpen}
-        className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 pt-0 sm:w-[min(96%,720px)] sm:pt-20 ${
+        className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 ${
+          tabSync.databaseStale ? 'pt-4' : 'pt-0 sm:pt-20'
+        } sm:w-[min(96%,720px)] ${
           showTrayRow ? 'pb-40' : 'pb-12'
         }`}
         style={isMobileHome ? { paddingBottom: 'var(--mobile-home-bottom-clearance)' } : undefined}

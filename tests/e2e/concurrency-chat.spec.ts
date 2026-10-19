@@ -28,6 +28,15 @@ async function saveNote(page: Page, dayId: string, text: string) {
   )
 }
 
+async function expectReadOnlyContentGap(page: Page, notice: Locator) {
+  const noticeBounds = await notice.boundingBox()
+  const contentBounds = await page.locator('main > :first-child').boundingBox()
+  expect(noticeBounds).not.toBeNull()
+  expect(contentBounds).not.toBeNull()
+  const gap = contentBounds!.y - (noticeBounds!.y + noticeBounds!.height)
+  expect(Math.abs(gap - 16)).toBeLessThanOrEqual(1)
+}
+
 for (const transport of ['BroadcastChannel', 'storage fallback'] as const) {
   test(`J5: real ${transport} invalidates a second tab and reload recovers persisted notes`, async ({ page, context }) => {
     if (transport === 'storage fallback') {
@@ -63,12 +72,14 @@ for (const transport of ['BroadcastChannel', 'storage fallback'] as const) {
     await expect(readonlyNotice).toBeVisible()
     await expect(readonlyNotice).toContainText('Another tab saved newer changes. Reload to continue editing.')
     await expect(readonlyNotice.locator('xpath=ancestor::*[@inert]')).toHaveCount(0)
+    await expectReadOnlyContentGap(page, readonlyNotice)
     const reload = readonlyNotice.getByRole('button', { name: 'Reload stale tab', exact: true })
     await expect(reload).toHaveText('Reload')
     if (mobile(page)) {
       const viewport = page.viewportSize()!
       await page.setViewportSize({ width: 320, height: viewport.height })
       await expect(readonlyNotice).toBeVisible()
+      await expectReadOnlyContentGap(page, readonlyNotice)
       const noticeBounds = await readonlyNotice.boundingBox()
       const reloadBounds = await reload.boundingBox()
       expect(noticeBounds!.x).toBeGreaterThanOrEqual(0)
