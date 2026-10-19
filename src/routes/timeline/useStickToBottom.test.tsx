@@ -115,7 +115,9 @@ describe('useStickToBottom', () => {
     act(() => {
       view.rerender(<List contentKey="2" />)
     })
-    list.scrollTop = 500
+    // Move in the old wheel's direction, so direction rejection cannot hide
+    // a stale intent surviving the content change.
+    list.scrollTop = 300
     fireEvent.scroll(list)
 
     expect(list).toHaveAttribute('data-following', 'true')

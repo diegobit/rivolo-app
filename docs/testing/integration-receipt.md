@@ -494,11 +494,11 @@ review remains pending and neither PR is approved or merged.
 The [fresh PR #63 promotion run](https://github.com/diegobit/rivolo-app/actions/runs/39272179700/job/118127069139)
 failed J6 in Chromium desktop after a real wheel move left the chat list away
 from the bottom while `data-following` stayed `true`. The hosted run passed the
-WebKit J6 path and all other browser cases. The confirmed root cause is missing
-correlation between wheel input and the resulting scroll position: the old
-one-frame flag could expire before a delayed scroll event, and a boolean alone
-could not recognize movement already applied by Chromium's compositor. Exact
-sub-frame ordering in the hosted run is inferred; a separate Linux arm64
+WebKit J6 path and all other browser cases. The owner regression demonstrates
+that the old one-frame flag can expire before a delayed scroll event. The
+repair also handles movement already applied before the wheel handler runs.
+Whether either ordering caused this exact hosted failure remains inferred;
+a separate Linux arm64
 Chromium DevTools trace of the real J6 wheel input recorded wheel dispatch
 followed by the list scroll event, while the failed browser state showed the
 list at `scrollTop=0` and still following. Viewport reflow and message-growth
