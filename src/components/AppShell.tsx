@@ -10,6 +10,7 @@ import { focusLauncher, isFocusOwnedByCard } from './app-shell/desktopCards'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
+import { useDatabaseLifecycle } from '../hooks/useDatabaseLifecycle'
 import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
 import { useAutoSync } from './app-shell/useAutoSync'
 import { isProviderReady } from '../lib/llm/readiness'
@@ -60,6 +61,7 @@ export default function AppShell() {
   const desktopPanelExpanded = useUIStore((state) => state.desktopPanelExpanded)
   const timelineEmpty = useUIStore((state) => state.timelineEmpty)
   const tabSync = useTabSyncState()
+  useDatabaseLifecycle()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)

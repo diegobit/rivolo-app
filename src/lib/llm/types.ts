@@ -29,6 +29,10 @@ export type LlmProviderSettings = {
   'openai-compatible': { model: string; baseUrl: string }
 }
 
+export type LlmProviderSettingsUpdater = (
+  current: LlmProviderSettings,
+) => LlmProviderSettings
+
 export type LlmSecrets = Partial<Record<LlmProviderId, { apiKey?: string }>>
 
 export type ActiveLlmConfig =

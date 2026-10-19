@@ -69,6 +69,16 @@ describe('tab sync coordinator', () => {
     })
   })
 
+  it('releases the pagehide lease idempotently', async () => {
+    const tab = await loadTab('tab-a')
+    tab.startPrimaryTabCoordinator()
+    expect(tab.isPrimaryTab()).toBe(true)
+
+    tab.releasePrimaryTabForPageHide()
+    tab.releasePrimaryTabForPageHide()
+    expect(localStorage.getItem(PRIMARY_LEASE_KEY)).toBeNull()
+  })
+
   it('marks a loaded snapshot stale when another tab persists', async () => {
     const tabA = await loadTab('tab-a')
     tabA.beginDatabaseSnapshotLoad()

@@ -8,6 +8,8 @@ const settingsRepository = vi.hoisted(() => ({
   setSetting: vi.fn(),
   getJsonSetting: vi.fn(),
   setJsonSetting: vi.fn(),
+  setSettings: vi.fn(),
+  updateJsonSetting: vi.fn(),
 }))
 
 vi.mock('../lib/settingsRepository', () => settingsRepository)
@@ -40,9 +42,33 @@ const mockLoadSettingsValues = (
   )
 }
 
+const installRepositoryMutationMocks = () => {
+  settingsRepository.setSettings.mockImplementation(async (entries: Array<[string, string]>) => {
+    for (const [key, value] of entries) await settingsRepository.setSetting(key, value)
+  })
+  settingsRepository.updateJsonSetting.mockImplementation(async (key: string, update: (value: unknown) => unknown) => {
+    const current = await settingsRepository.getJsonSetting(key)
+    const next = update(current)
+    await settingsRepository.setJsonSetting(key, next)
+    return next
+  })
+}
+
+const migratedProviders = () => {
+  const entries = settingsRepository.setSettings.mock.calls.flatMap(([writes]) =>
+    writes as Array<[string, string]>,
+  )
+  const serialized = entries.find(([key]) => key === 'llm.providers')?.[1]
+  expect(serialized).toBeDefined()
+  return JSON.parse(serialized as string) as Record<string, unknown>
+}
+
 describe('useSettingsStore setup notice dismissal', () => {
   beforeEach(() => {
     settingsRepository.setSetting.mockReset().mockResolvedValue(undefined)
+    settingsRepository.setSettings.mockReset()
+    settingsRepository.updateJsonSetting.mockReset()
+    installRepositoryMutationMocks()
     useSettingsStore.setState({ dismissedSetupNotices: { ai: false, sync: false } })
   })
 
@@ -77,6 +103,9 @@ describe('useSettingsStore theme preference', () => {
     settingsRepository.setSetting.mockReset().mockResolvedValue(undefined)
     settingsRepository.getJsonSetting.mockReset()
     settingsRepository.setJsonSetting.mockReset().mockResolvedValue(undefined)
+    settingsRepository.setSettings.mockReset()
+    settingsRepository.updateJsonSetting.mockReset()
+    installRepositoryMutationMocks()
     useSettingsStore.setState({
       settingsView: 'basic',
       themePreference: 'system',
@@ -203,15 +232,12 @@ describe('useSettingsStore theme preference', () => {
     expect(useSettingsStore.getState().providerSettings.gemini.model).toBe(
       DEFAULT_LLM_PROVIDER_SETTINGS.gemini.model,
     )
-    expect(settingsRepository.setJsonSetting).toHaveBeenCalledWith(
-      'llm.providers',
-      expect.objectContaining({
-        gemini: expect.objectContaining({
-          model: DEFAULT_LLM_PROVIDER_SETTINGS.gemini.model,
-          modelSource: 'default',
-        }),
+    expect(migratedProviders()).toMatchObject({
+      gemini: expect.objectContaining({
+        model: DEFAULT_LLM_PROVIDER_SETTINGS.gemini.model,
+        modelSource: 'default',
       }),
-    )
+    })
   })
 
   it('preserves stored custom native model values', async () => {
@@ -227,15 +253,12 @@ describe('useSettingsStore theme preference', () => {
     await useSettingsStore.getState().loadSettings()
 
     expect(useSettingsStore.getState().providerSettings.anthropic.model).toBe('claude-custom-model')
-    expect(settingsRepository.setJsonSetting).toHaveBeenCalledWith(
-      'llm.providers',
-      expect.objectContaining({
-        anthropic: expect.objectContaining({
-          model: 'claude-custom-model',
-          modelSource: 'custom',
-        }),
+    expect(migratedProviders()).toMatchObject({
+      anthropic: expect.objectContaining({
+        model: 'claude-custom-model',
+        modelSource: 'custom',
       }),
-    )
+    })
   })
 
   it('marks explicit native model edits as custom', async () => {
@@ -247,10 +270,10 @@ describe('useSettingsStore theme preference', () => {
     })
     useSettingsStore.setState({ providerSettings: DEFAULT_LLM_PROVIDER_SETTINGS })
 
-    await useSettingsStore.getState().saveProviderSettings('gemini', {
-      ...DEFAULT_LLM_PROVIDER_SETTINGS.gemini,
-      model: 'gemini-custom-model',
-    })
+    await useSettingsStore.getState().saveProviderSettings('gemini', (current) => ({
+      ...current,
+      gemini: { ...current.gemini, model: 'gemini-custom-model' },
+    }))
 
     expect(settingsRepository.setJsonSetting).toHaveBeenCalledWith(
       'llm.providers',
@@ -262,6 +285,76 @@ describe('useSettingsStore theme preference', () => {
       }),
     )
   })
+
+  it('keeps queued provider field edits together while a durable save is pending', async () => {
+    const endpoint = 'https://local.example/v1'
+    const currentSettings = {
+      ...DEFAULT_LLM_PROVIDER_SETTINGS,
+      openai: { ...DEFAULT_LLM_PROVIDER_SETTINGS.openai, model: 'openai-custom-model' },
+    }
+    let storedProviders: Record<string, unknown> = {
+      openai: {
+        model: 'openai-custom-model',
+        modelSource: 'custom',
+        reasoning: { effort: 'medium' },
+        accountTag: 'keep-openai-metadata',
+      },
+      'openai-compatible': {
+        model: '',
+        baseUrl: '',
+        endpointTag: 'keep-compatible-metadata',
+      },
+    }
+    let beginFirstWrite!: () => void
+    let releaseFirstWrite!: () => void
+    const firstWriteStarted = new Promise<void>((resolve) => { beginFirstWrite = resolve })
+    const firstWriteGate = new Promise<void>((resolve) => { releaseFirstWrite = resolve })
+    let writeCount = 0
+    settingsRepository.updateJsonSetting.mockImplementation(async (_key, update) => {
+      const next = update(storedProviders) as Record<string, unknown>
+      writeCount += 1
+      if (writeCount === 1) {
+        beginFirstWrite()
+        await firstWriteGate
+      }
+      storedProviders = next
+      return next
+    })
+    useSettingsStore.setState({ providerSettings: currentSettings })
+
+    const firstSave = useSettingsStore.getState().saveProviderSettings(
+      'openai-compatible',
+      (current) => ({
+        ...current,
+        'openai-compatible': { ...current['openai-compatible'], baseUrl: endpoint },
+      }),
+    )
+    await firstWriteStarted
+    const secondSave = useSettingsStore.getState().saveProviderSettings(
+      'openai-compatible',
+      (current) => ({
+        ...current,
+        'openai-compatible': { ...current['openai-compatible'], model: 'qa-intermediate-model' },
+      }),
+    )
+    const thirdSave = useSettingsStore.getState().saveProviderSettings(
+      'openai-compatible',
+      (current) => ({
+        ...current,
+        'openai-compatible': { ...current['openai-compatible'], model: 'qa-model' },
+      }),
+    )
+    releaseFirstWrite()
+    await Promise.all([firstSave, secondSave, thirdSave])
+
+    expect(storedProviders['openai-compatible']).toMatchObject({ model: 'qa-model', baseUrl: endpoint })
+    expect(storedProviders.openai).toMatchObject({
+      model: 'openai-custom-model',
+      modelSource: 'custom',
+      accountTag: 'keep-openai-metadata',
+    })
+    expect(storedProviders['openai-compatible']).toMatchObject({ endpointTag: 'keep-compatible-metadata' })
+  })
 })
 
 describe('useSettingsStore legacy geminiApiKey', () => {
@@ -271,6 +364,9 @@ describe('useSettingsStore legacy geminiApiKey', () => {
     settingsRepository.setSetting.mockReset().mockResolvedValue(undefined)
     settingsRepository.getJsonSetting.mockReset()
     settingsRepository.setJsonSetting.mockReset().mockResolvedValue(undefined)
+    settingsRepository.setSettings.mockReset()
+    settingsRepository.updateJsonSetting.mockReset()
+    installRepositoryMutationMocks()
     useSettingsStore.setState({ llmSecrets: {}, providerSettings: DEFAULT_LLM_PROVIDER_SETTINGS })
   })
 

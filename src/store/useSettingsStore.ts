@@ -19,6 +19,7 @@ import {
   normalizeSecrets,
   type LlmProviderId,
   type LlmProviderSettings,
+  type LlmProviderSettingsUpdater,
   type LlmSecrets,
 } from '../lib/llm/types'
 import {
@@ -26,7 +27,7 @@ import {
   type DismissedSetupNotices,
   type SetupNoticeId,
 } from '../lib/setupAttention'
-import { getJsonSetting, getSetting, setJsonSetting, setSetting } from '../lib/settingsRepository'
+import { getJsonSetting, getSetting, setSetting, setSettings, updateJsonSetting } from '../lib/settingsRepository'
 import {
   getLocalThemePreference,
   normalizeThemePreference,
@@ -62,7 +63,7 @@ type SettingsState = {
   selectProvider: (provider: LlmProviderId) => Promise<void>
   saveProviderSettings: (
     provider: LlmProviderId,
-    settings: LlmProviderSettings[LlmProviderId],
+    update: LlmProviderSettingsUpdater,
   ) => Promise<void>
   saveProviderKey: (provider: LlmProviderId, apiKey: string) => Promise<void>
   clearProviderKey: (provider: LlmProviderId) => Promise<void>
@@ -87,6 +88,14 @@ const isSettingsView = (value: string | null): value is SettingsView =>
 
 type NativeLlmProviderId = Exclude<LlmProviderId, 'openai-compatible'>
 type ModelSource = 'default' | 'custom'
+
+let settingsOperationQueue: Promise<void> = Promise.resolve()
+
+const serializeSettingsOperation = <T>(operation: () => Promise<T>) => {
+  const queued = settingsOperationQueue.then(operation, operation)
+  settingsOperationQueue = queued.then(() => undefined, () => undefined)
+  return queued
+}
 
 const nativeLlmProviderIds: NativeLlmProviderId[] = ['gemini', 'anthropic', 'openai']
 
@@ -199,6 +208,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   titleFont: 'handlee',
 
   loadSettings: async () => {
+    return serializeSettingsOperation(async () => {
     set({ loading: true, settingsError: null })
 
     try {
@@ -304,35 +314,35 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           }
         : secretsRoot
 
-      const migrations: Promise<void>[] = [
-        setJsonSetting('llm.providers', persistedProviders),
+      const migrations: Array<[string, string]> = [
+        ['llm.providers', JSON.stringify(persistedProviders)],
+        ['llm.schemaVersion', '2'],
       ]
-      if (storedProvider !== provider) migrations.push(setSetting('llm.provider', provider))
-      if (shouldMigrateLegacyGeminiSecret) migrations.push(setJsonSetting('llm.secrets', persistedSecrets))
+      if (storedProvider !== provider) migrations.push(['llm.provider', provider])
+      if (shouldMigrateLegacyGeminiSecret) migrations.push(['llm.secrets', JSON.stringify(persistedSecrets)])
       if (storedAllowWebSearch !== 'true' && storedAllowWebSearch !== 'false') {
-        migrations.push(setSetting('llm.allowWebSearch', allowWebSearch ? 'true' : 'false'))
+        migrations.push(['llm.allowWebSearch', allowWebSearch ? 'true' : 'false'])
       }
-      if (!storedAiLanguage) migrations.push(setSetting('ai.language', aiLanguage))
+      if (!storedAiLanguage) migrations.push(['ai.language', aiLanguage])
       if (storedSettingsView !== settingsView) {
-        migrations.push(setSetting('settings.view', settingsView))
+        migrations.push(['settings.view', settingsView])
       }
-      if (storedTheme !== themePreference) migrations.push(setSetting('appearance.theme', themePreference))
-      if (storedWallpaper !== wallpaper) migrations.push(setSetting('appearance.wallpaper', wallpaper))
+      if (storedTheme !== themePreference) migrations.push(['appearance.theme', themePreference])
+      if (storedWallpaper !== wallpaper) migrations.push(['appearance.wallpaper', wallpaper])
       if (storedHighlightInputMode !== 'true' && storedHighlightInputMode !== 'false') {
-        migrations.push(setSetting('appearance.highlightInputMode', highlightInputMode ? 'true' : 'false'))
+        migrations.push(['appearance.highlightInputMode', highlightInputMode ? 'true' : 'false'])
       }
       if (storedAutocorrection !== 'true' && storedAutocorrection !== 'false') {
-        migrations.push(setSetting('appearance.autocorrection', autocorrection ? 'true' : 'false'))
+        migrations.push(['appearance.autocorrection', autocorrection ? 'true' : 'false'])
       }
-      if (!storedFontPreference) migrations.push(setSetting('appearance.font', fontPreference))
-      if (!storedBodyFont || !isBodyFont(storedBodyFont)) migrations.push(setSetting('appearance.bodyFont', bodyFont))
+      if (!storedFontPreference) migrations.push(['appearance.font', fontPreference])
+      if (!storedBodyFont || !isBodyFont(storedBodyFont)) migrations.push(['appearance.bodyFont', bodyFont])
       if (!storedMonospaceFont || !isMonospaceFont(storedMonospaceFont)) {
-        migrations.push(setSetting('appearance.monospaceFont', monospaceFont))
+        migrations.push(['appearance.monospaceFont', monospaceFont])
       }
-      if (!storedTitleFont || !isTitleFont(storedTitleFont)) migrations.push(setSetting('appearance.titleFont', titleFont))
+      if (!storedTitleFont || !isTitleFont(storedTitleFont)) migrations.push(['appearance.titleFont', titleFont])
 
-      await Promise.all(migrations)
-      await setSetting('llm.schemaVersion', '2')
+      await setSettings(migrations)
       syncThemePreference(themePreference)
 
       set({
@@ -360,171 +370,187 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         settingsError: 'AI settings could not be migrated. Existing local data was left in place.',
       })
     }
+    })
   },
 
   selectProvider: async (provider) => {
-    await setSetting('llm.provider', provider)
-    set({ provider })
+    return serializeSettingsOperation(async () => {
+      await setSetting('llm.provider', provider)
+      set({ provider })
+    })
   },
 
-  saveProviderSettings: async (provider, settings) => {
-    const currentStored = await getJsonSetting<unknown>('llm.providers')
-    const currentRoot = isRecord(currentStored) ? currentStored : {}
-    const normalizedSettings =
-      provider === 'gemini'
+  saveProviderSettings: async (provider, update) => {
+    return serializeSettingsOperation(async () => {
+      const currentSettings = get().providerSettings
+      const requestedProviderSettings = update(currentSettings)[provider]
+      const normalizedSettings = provider === 'gemini'
         ? {
-            ...(settings as LlmProviderSettings['gemini']),
+            ...(requestedProviderSettings as LlmProviderSettings['gemini']),
             allowThinking:
-              (settings as LlmProviderSettings['gemini']).reasoning.thinkingLevel !== 'minimal',
+              (requestedProviderSettings as LlmProviderSettings['gemini']).reasoning.thinkingLevel !== 'minimal',
           }
-        : settings
-    const nextSettings = {
-      ...get().providerSettings,
-      [provider]: normalizedSettings,
-    } as LlmProviderSettings
-    const persistedProviders = mergePersistedProviderSettings(currentStored, nextSettings)
+        : requestedProviderSettings
+      const currentProviderSettings = currentSettings[provider]
+      if (JSON.stringify(normalizedSettings) === JSON.stringify(currentProviderSettings)) return
+      const currentModel = currentSettings[provider].model
+      const nextModel = normalizedSettings.model
+      const mergedSettings = { ...currentSettings, [provider]: normalizedSettings } as LlmProviderSettings
 
-    if (provider !== 'openai-compatible') {
-      const providerRecord = readProviderRecord(currentRoot, provider)
-      const currentModel = get().providerSettings[provider].model
-      const nextModel = nextSettings[provider].model
-      const inferredSource = inferModelSource(provider, providerRecord, currentModel)
-      const nextSource: ModelSource =
-        nextModel !== currentModel
-          ? nextModel === DEFAULT_LLM_PROVIDER_SETTINGS[provider].model
-            ? 'default'
-            : 'custom'
-          : inferredSource
-      persistedProviders[provider] = {
-        ...readProviderRecord(persistedProviders, provider),
-        modelSource: nextSource,
+      await updateJsonSetting<unknown>('llm.providers', (currentStored) => {
+        const currentRoot = isRecord(currentStored) ? currentStored : {}
+        const persistedProviders = mergePersistedProviderSettings(currentStored, mergedSettings)
+        if (provider !== 'openai-compatible') {
+          const providerRecord = readProviderRecord(currentRoot, provider)
+          const inferredSource = inferModelSource(provider, providerRecord, currentModel)
+          const nextSource: ModelSource = nextModel !== currentModel
+            ? nextModel === DEFAULT_LLM_PROVIDER_SETTINGS[provider].model ? 'default' : 'custom'
+            : inferredSource
+          persistedProviders[provider] = {
+            ...readProviderRecord(persistedProviders, provider),
+            modelSource: nextSource,
+          }
+        }
+        return persistedProviders
+      })
+
+      if (provider === 'gemini') {
+        const geminiSettings = normalizedSettings as LlmProviderSettings['gemini']
+        await setSettings([
+          ['llm.geminiModel', geminiSettings.model],
+          ['llm.allowThinking', geminiSettings.allowThinking ? 'true' : 'false'],
+        ])
       }
-    }
-
-    await setJsonSetting('llm.providers', persistedProviders)
-
-    if (provider === 'gemini') {
-      const geminiSettings = normalizedSettings as LlmProviderSettings['gemini']
-      await Promise.all([
-        setSetting('llm.geminiModel', geminiSettings.model),
-        setSetting('llm.allowThinking', geminiSettings.allowThinking ? 'true' : 'false'),
-      ])
-    }
-
-    set({ providerSettings: nextSettings })
+      set((state) => ({
+        providerSettings: { ...state.providerSettings, [provider]: normalizedSettings } as LlmProviderSettings,
+      }))
+    })
   },
 
   saveProviderKey: async (provider, apiKey) => {
-    const normalizedKey = apiKey.trim()
-    if (!normalizedKey) return
-
-    const currentStored = await getJsonSetting<unknown>('llm.secrets')
-    const root = isRecord(currentStored) ? currentStored : {}
-    const currentProvider = isRecord(root[provider]) ? root[provider] : {}
-    const nextStored = {
-      ...root,
-      [provider]: { ...currentProvider, apiKey: normalizedKey },
-    }
-    await setJsonSetting('llm.secrets', nextStored)
-    set({ llmSecrets: { ...get().llmSecrets, [provider]: { apiKey: normalizedKey } } })
+    return serializeSettingsOperation(async () => {
+      const normalizedKey = apiKey.trim()
+      if (!normalizedKey) return
+      await updateJsonSetting<Record<string, unknown>>('llm.secrets', (currentStored) => {
+        const root = isRecord(currentStored) ? currentStored : {}
+        const currentProvider = isRecord(root[provider]) ? root[provider] : {}
+        return { ...root, [provider]: { ...currentProvider, apiKey: normalizedKey } }
+      })
+      set((state) => ({ llmSecrets: { ...state.llmSecrets, [provider]: { apiKey: normalizedKey } } }))
+    })
   },
 
   clearProviderKey: async (provider) => {
-    const currentStored = await getJsonSetting<unknown>('llm.secrets')
-    const root = isRecord(currentStored) ? currentStored : {}
-    const currentProvider = isRecord(root[provider]) ? root[provider] : {}
-    const remainingProviderFields = { ...currentProvider }
-    delete remainingProviderFields.apiKey
-    const nextStored: Record<string, unknown> = {
-      ...root,
-      [provider]: remainingProviderFields,
-    }
-    // Still clear the legacy mirror on removal (unlike the save path, which no longer
-    // writes it): normalizeSecrets falls back to root.geminiApiKey when gemini.apiKey is
-    // absent, so leaving a stale legacy value here would resurrect a "removed" key for
-    // any user whose stored data predates this cleanup.
-    if (provider === 'gemini') delete nextStored.geminiApiKey
-    await setJsonSetting('llm.secrets', nextStored)
-
-    const nextSecrets = { ...get().llmSecrets }
-    delete nextSecrets[provider]
-    set({ llmSecrets: nextSecrets })
+    return serializeSettingsOperation(async () => {
+      await updateJsonSetting<Record<string, unknown>>('llm.secrets', (currentStored) => {
+        const root = isRecord(currentStored) ? currentStored : {}
+        const currentProvider = isRecord(root[provider]) ? root[provider] : {}
+        const remainingProviderFields = { ...currentProvider }
+        delete remainingProviderFields.apiKey
+        const nextStored: Record<string, unknown> = { ...root, [provider]: remainingProviderFields }
+        // Clear the legacy Gemini mirror too; otherwise normalizeSecrets can restore it.
+        if (provider === 'gemini') delete nextStored.geminiApiKey
+        return nextStored
+      })
+      set((state) => {
+        const llmSecrets = { ...state.llmSecrets }
+        delete llmSecrets[provider]
+        return { llmSecrets }
+      })
+    })
   },
 
   updateAllowWebSearch: async (enabled) => {
-    await setSetting('llm.allowWebSearch', enabled ? 'true' : 'false')
-    set({ allowWebSearch: enabled })
+    return serializeSettingsOperation(async () => {
+      await setSetting('llm.allowWebSearch', enabled ? 'true' : 'false')
+      set({ allowWebSearch: enabled })
+    })
   },
 
   updateAiLanguage: async (language) => {
-    await setSetting('ai.language', language)
-    set({ aiLanguage: language })
+    return serializeSettingsOperation(async () => {
+      await setSetting('ai.language', language)
+      set({ aiLanguage: language })
+    })
   },
 
   updateSettingsView: async (settingsView) => {
-    await setSetting('settings.view', settingsView)
-    set({ settingsView })
+    return serializeSettingsOperation(async () => {
+      await setSetting('settings.view', settingsView)
+      set({ settingsView })
+    })
   },
 
   updateThemePreference: async (themePreference) => {
-    await setSetting('appearance.theme', themePreference)
-    syncThemePreference(themePreference)
-    set({ themePreference })
+    return serializeSettingsOperation(async () => {
+      await setSetting('appearance.theme', themePreference)
+      syncThemePreference(themePreference)
+      set({ themePreference })
+    })
   },
 
   updateWallpaper: async (wallpaper) => {
-    await setSetting('appearance.wallpaper', wallpaper)
-    set({ wallpaper })
+    return serializeSettingsOperation(async () => {
+      await setSetting('appearance.wallpaper', wallpaper)
+      set({ wallpaper })
+    })
   },
 
   updateHighlightInputMode: async (enabled) => {
-    await setSetting('appearance.highlightInputMode', enabled ? 'true' : 'false')
-    set({ highlightInputMode: enabled })
+    return serializeSettingsOperation(async () => {
+      await setSetting('appearance.highlightInputMode', enabled ? 'true' : 'false')
+      set({ highlightInputMode: enabled })
+    })
   },
 
   updateAutocorrection: async (enabled) => {
-    await setSetting('appearance.autocorrection', enabled ? 'true' : 'false')
-    set({ autocorrection: enabled })
+    return serializeSettingsOperation(async () => {
+      await setSetting('appearance.autocorrection', enabled ? 'true' : 'false')
+      set({ autocorrection: enabled })
+    })
   },
 
   updateFontPreset: async (preset) => {
-    const settings = getFontPresetSettings(preset)
-    await Promise.all([
-      setSetting('appearance.font', settings.fontPreference),
-      setSetting('appearance.bodyFont', settings.bodyFont),
-      setSetting('appearance.monospaceFont', settings.monospaceFont),
-      setSetting('appearance.titleFont', settings.titleFont),
-    ])
-    set(settings)
+    return serializeSettingsOperation(async () => {
+      const settings = getFontPresetSettings(preset)
+      await setSettings([
+        ['appearance.font', settings.fontPreference],
+        ['appearance.bodyFont', settings.bodyFont],
+        ['appearance.monospaceFont', settings.monospaceFont],
+        ['appearance.titleFont', settings.titleFont],
+      ])
+      set(settings)
+    })
   },
 
   updateTitleFont: async (titleFont) => {
-    await setSetting('appearance.titleFont', titleFont)
-    set({ titleFont })
+    return serializeSettingsOperation(async () => {
+      await setSetting('appearance.titleFont', titleFont)
+      set({ titleFont })
+    })
   },
 
   updateBodyFontChoice: async (choice) => {
-    if (choice === 'lato') {
-      await setSetting('appearance.font', 'proportional')
-      set({ fontPreference: 'proportional' })
-      return
-    }
-    await Promise.all([
-      setSetting('appearance.font', 'monospace'),
-      setSetting('appearance.monospaceFont', choice),
-    ])
-    set({ fontPreference: 'monospace', monospaceFont: choice })
+    return serializeSettingsOperation(async () => {
+      if (choice === 'lato') {
+        await setSetting('appearance.font', 'proportional')
+        set({ fontPreference: 'proportional' })
+        return
+      }
+      await setSettings([
+        ['appearance.font', 'monospace'],
+        ['appearance.monospaceFont', choice],
+      ])
+      set({ fontPreference: 'monospace', monospaceFont: choice })
+    })
   },
 
   dismissSetupNotice: async (noticeId) => {
-    const previous = get().dismissedSetupNotices
-    const next = { ...previous, [noticeId]: true }
-    set({ dismissedSetupNotices: next })
-    try {
+    return serializeSettingsOperation(async () => {
+      const previous = get().dismissedSetupNotices
+      const next = { ...previous, [noticeId]: true }
       await setSetting(`setup.dismissed${noticeId === 'ai' ? 'Ai' : 'Sync'}`, 'true')
-    } catch (error) {
-      set({ dismissedSetupNotices: previous })
-      throw error
-    }
+      set({ dismissedSetupNotices: next })
+    })
   },
 }))

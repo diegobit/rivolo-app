@@ -1,4 +1,5 @@
-import { getJsonSetting, setJsonSetting } from './settingsRepository'
+import { getJsonSetting, updateJsonSetting } from './settingsRepository'
+import { executeSql, queryFirstRow, type RivoloDatabase } from './sqliteRuntime'
 
 export const DEFAULT_GOOGLE_DRIVE_FILE_NAME = 'inbox.md'
 export const DEFAULT_GOOGLE_DRIVE_FOLDER_NAME = 'rivolo'
@@ -39,6 +40,31 @@ const DEFAULT_STATE: GoogleDriveState = {
   accountName: null,
 }
 
+export const markGoogleDriveLocalDirtyInDatabase = (db: RivoloDatabase) => {
+  const row = queryFirstRow<{ value: string }>(db, 'SELECT value FROM settings WHERE key = ? LIMIT 1', [
+    'google-drive.state',
+  ])
+  let stored: Record<string, unknown> = {}
+  try {
+    const parsed: unknown = row ? JSON.parse(row.value) : null
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      stored = parsed as Record<string, unknown>
+    }
+  } catch {
+    stored = {}
+  }
+  const state = { ...DEFAULT_STATE, ...stored } as GoogleDriveState
+  const next = {
+    ...state,
+    localDirty: true,
+    localRevision: (Number.isSafeInteger(state.localRevision) ? state.localRevision : 0) + 1,
+  }
+  executeSql(db, 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [
+    'google-drive.state',
+    JSON.stringify(next),
+  ])
+}
+
 let writeQueue: Promise<void> = Promise.resolve()
 
 const readGoogleDriveState = async () => {
@@ -50,9 +76,13 @@ const enqueueGoogleDriveStateWrite = async <T>(
   mutator: (current: GoogleDriveState) => { next: GoogleDriveState; result: T },
 ) => {
   const run = async () => {
-    const current = await readGoogleDriveState()
-    const { next, result } = mutator(current)
-    await setJsonSetting('google-drive.state', next)
+    let result!: T
+    await updateJsonSetting<unknown>('google-drive.state', (stored) => {
+      const current = { ...DEFAULT_STATE, ...(stored && typeof stored === 'object' ? stored : {}) } as GoogleDriveState
+      const next = mutator(current)
+      result = next.result
+      return next.next
+    })
     return result
   }
 

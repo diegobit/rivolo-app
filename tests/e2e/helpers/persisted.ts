@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, type Page } from 'playwright/test'
 
-type PersistedContent = {
+export type PersistedContent = {
   days: { day_id: string; content_md: string }[]
   settings: Record<string, string>
 }
@@ -18,6 +18,7 @@ uri = Path(sys.argv[1]).as_uri() + "?mode=ro"
 setting_keys = (
     "llm.provider",
     "llm.providers",
+    "settings.view",
     "appearance.theme",
     "appearance.wallpaper",
     "appearance.font",
@@ -98,6 +99,12 @@ const decodePersistedContent = (bytes: number[]): PersistedContent => {
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+}
+
+export async function readPersistedContent(page: Page) {
+  const bytes = await readNativeDatabaseBytes(page)
+  if (!bytes) throw new Error('No SQLite snapshot is stored in IndexedDB.')
+  return decodePersistedContent(bytes)
 }
 
 export async function waitForPersistedContent(

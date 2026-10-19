@@ -91,6 +91,7 @@ vi.mock('../store/useSyncStore', () => ({
 vi.mock('../hooks/useIsNarrowViewport', () => ({ useIsNarrowViewport: () => false }))
 vi.mock('../lib/dayRepository', () => ({
   appendToDay: vi.fn().mockResolvedValue(undefined),
+  commitDayDraftInDatabase: vi.fn(),
   searchDays: vi.fn().mockResolvedValue([]),
 }))
 vi.mock('../lib/db', async (importOriginal) => ({

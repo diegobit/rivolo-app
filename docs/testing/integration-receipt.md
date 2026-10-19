@@ -61,6 +61,36 @@ and mixed-content harness failures. No production security policy is relaxed.
 First failures and corrected fixture/locator diagnoses remain in the lane and
 QA receipts; retries do not conceal them.
 
+## Direct Diego persistence and chat repairs — 2026-10-18
+
+Implementation base: Diego `origin/dev` at `4fb1fc80f6c727af5873fb555e5d3e35ad91538d`, after Sengi PR #58. The user directed this work to Diego only. No AIT checkout or remote was changed, no OneDrive support was added, and neither PR is merged.
+
+### Persistence
+
+Before the repair, the maintained interruption probes failed on both Chromium desktop and WebKit mobile: latest new/saved-note edits were absent after immediate reload, provider activation reopened as Gemini, and Strong appearance reopened as Light. The base receipts are in `.playwright-mcp/implementation-baseline/` in the implementation worktree and in the earlier native-storage report. Tests read the serialized SQLite bytes at IndexedDB `keyval-store` / `keyval` / `single-note-db` and independently decode values with Python `sqlite3`.
+
+The repair gives normal saves, Settings, explicit flush and app lifecycle checkpoints one ordered database writer. Editor drafts retain generations through the SQL commit and IndexedDB durability boundary; stale queued saves cannot replace a newer draft or clear it. Hidden/pagehide checkpoints synchronously apply the latest draft with warm SQLite/IndexedDB handles and submit the native IndexedDB transaction before returning. A session-scoped recovery journal protects unresolved note text across a dropped pagehide transaction and replays only while its saved baseline still matches. Provider activation and appearance setters wait for durable settings writes; Dropbox and Google Drive dirty revisions remain atomic with note changes. The schema and key are unchanged.
+
+### Chat resize
+
+The refreshed base reproduced F8 on Chromium desktop: resizing 1440×900 to 1050×820 left 1050 px below the chat while `following=true` before reflow. The first fix observed only the scrollport and passed macOS, but the Linux arm64 Chromium run exposed that row rewrap can change message heights without a scrollport resize notification. The final hook observes message rows and newly added rows as well as the scrollport, and treats layout scrolls separately from reader input. The existing J6 `<2 px` bottom assertion is unchanged; J6 also checks resize while reading older messages and unseen feedback.
+
+### Final local verification
+
+| Command/environment | Result |
+| --- | --- |
+| `npm test` | 77 files, 711 tests passed |
+| `npm run lint` | Passed |
+| `npm run build` | Passed; generated PWA worker; existing large-chunk warning remains |
+| `npm run test:pwa-interruption` | 8/8 passed: new/saved note, provider activation and Strong appearance, on Chromium desktop and WebKit mobile |
+| `npm run test:e2e:built` | macOS arm64: 36 passed, one existing desktop-only skip; Linux arm64, official Playwright 1.63.0 Noble image: 36 passed, same skip; zero retries |
+| `npm run test:mcp-runtime` | Passed: local migrations, metadata, initialize/list, auth, GET 405 and re-enable/revocation |
+| `git diff --check` | Passed |
+
+The test-audit skill's OpenClaw-only commands were unavailable; these results are from the repository's real Vitest, built-app Playwright, native SQLite/IndexedDB and MCP runtime commands. The hosted PR checks have not yet completed. Screenshots for the chat resize are published on the retained image-only `pr-assets/fix-chat-resize-following` branch; their links and both PR URLs are recorded in the findings plan after PR creation.
+
+Physical installed Mac PWA Cmd-W, physical iOS standalone/keyboard behavior and live-provider credentials were not tested. The provider proof uses an isolated synthetic HTTP fixture. These remain acceptance limits for parent review.
+
 ## Campaign preservation review
 
 The independent reviews below cover the campaign before the focused UI
@@ -393,3 +423,34 @@ existing inapplicable desktop skip, zero retries. The focused J3 passed in
 Chromium desktop and WebKit mobile on Linux arm64 using the official Playwright
 1.63.0 Noble image: 2/2, zero retries. Lint/diff checks passed. This Linux arm64
 receipt is separate from the required final-head hosted Linux x64 result.
+
+
+## Persistence recovery correction — 2026-10-19
+
+This correction addresses two Round 2 findings on the local persistence branch.
+The stale-tab checkpoint now journals pending day drafts before the stale-write
+guard returns. It preserves the newer foreign SQLite snapshot, including an
+unrelated setting. A real same-day foreign edit still wins, while the full
+local conflict draft remains in the recovery journal. Snapshot completion now
+advances a later draft's recovery baseline only from the exact day row and
+`updated_at` captured in that draft's own committed predecessor snapshot.
+
+The review's native-Chromium reproduction failed before the change in both
+cases: a stale editor's Reload returned the old note with no journal, and an
+aborted second snapshot restored the first edit instead of the second. Both
+probes pass after the change. The browser probe also verified the saved foreign
+setting and retained a full conflict draft after a genuine same-day foreign
+edit. Owner tests inject an abort through the IndexedDB object store's `put`
+transaction and verify the recovered text is present in the next saved SQLite
+snapshot.
+
+On macOS arm64, the focused database, day repository, tab sync, lifecycle and
+day-save-queue tests passed (56 tests). The full fast suite passed 717 tests in
+77 files; lint, production build and Worker runtime checks passed. The full
+browser run had 35 passes and one inapplicable desktop skip. Mobile J6 and J7
+passed. The existing Chromium-desktop J6 resize-follow assertion still failed:
+after reflow, 1050 pixels remained below the reader instead of less than two.
+This persistence correction did not change chat behavior. Astra's earlier
+Linux-WebKit J6 Settings-link actionability stall remains inconclusive; this
+run does not resolve it. Physical iOS/PWA and live provider behavior remain
+unverified. Fresh hosted checks for the corrected PR heads are pending.

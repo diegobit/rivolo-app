@@ -10,6 +10,7 @@ import {
   type GeminiThinkingLevel,
   type LlmProviderId,
   type LlmProviderSettings,
+  type LlmProviderSettingsUpdater,
   type LlmSecrets,
   type OpenAIReasoningEffort,
 } from '../../lib/llm/types'
@@ -35,7 +36,7 @@ type LlmSectionProps = {
   onSelectProvider: (provider: LlmProviderId) => void | Promise<void>
   onSaveProviderSettings: (
     provider: LlmProviderId,
-    settings: LlmProviderSettings[LlmProviderId],
+    update: LlmProviderSettingsUpdater,
   ) => void | Promise<void>
   onSaveProviderKey: (provider: LlmProviderId, apiKey: string) => void | Promise<void>
   onClearProviderKey: (provider: LlmProviderId) => void | Promise<void>
@@ -224,7 +225,7 @@ type ProviderRowProps = {
   onSelectProvider: (provider: LlmProviderId) => void | Promise<void>
   onSaveProviderSettings: (
     provider: LlmProviderId,
-    settings: LlmProviderSettings[LlmProviderId],
+    update: LlmProviderSettingsUpdater,
   ) => void | Promise<void>
   onSaveProviderKey: (provider: LlmProviderId, apiKey: string) => void | Promise<void>
   onClearProviderKey: (provider: LlmProviderId) => void | Promise<void>
@@ -277,6 +278,7 @@ function ProviderRow({
 
   // Build the merged settings object for the provider, applying one changed field.
   const buildSettings = (
+    currentSettings: LlmProviderSettings,
     overrides: Partial<{
       model: string
       baseUrl: string
@@ -285,41 +287,57 @@ function ProviderRow({
       anthropicEffort: AnthropicEffort
       openaiEffort: OpenAIReasoningEffort
     }>,
-  ): LlmProviderSettings[LlmProviderId] => {
-    const model = overrides.model ?? settings.model
+  ): LlmProviderSettings => {
+    const model = overrides.model ?? currentSettings[id].model
     if (id === 'gemini') {
       const thinkingLevel =
-        overrides.geminiThinking ?? providerSettings.gemini.reasoning.thinkingLevel
+        overrides.geminiThinking ?? currentSettings.gemini.reasoning.thinkingLevel
       return {
-        model,
-        reasoning: { thinkingLevel },
-        allowThinking: thinkingLevel !== 'minimal',
+        ...currentSettings,
+        gemini: {
+          ...currentSettings.gemini,
+          model,
+          reasoning: { thinkingLevel },
+          allowThinking: thinkingLevel !== 'minimal',
+        },
       }
     }
     if (id === 'anthropic') {
-      const current = providerSettings.anthropic.reasoning
+      const current = currentSettings.anthropic.reasoning
       const mode = overrides.anthropicMode ?? current.mode
       if (mode === 'adaptive') {
         const effort =
           overrides.anthropicEffort ?? (current.mode === 'adaptive' ? current.effort : 'high')
-        return { model, reasoning: { mode: 'adaptive', effort } }
+        return {
+          ...currentSettings,
+          anthropic: { ...currentSettings.anthropic, model, reasoning: { mode: 'adaptive', effort } },
+        }
       }
-      return { model, reasoning: { mode: 'default' } }
+      return {
+        ...currentSettings,
+        anthropic: { ...currentSettings.anthropic, model, reasoning: { mode: 'default' } },
+      }
     }
     if (id === 'openai') {
-      const effort = overrides.openaiEffort ?? providerSettings.openai.reasoning.effort
-      return { model, reasoning: { effort } }
+      const effort = overrides.openaiEffort ?? currentSettings.openai.reasoning.effort
+      return {
+        ...currentSettings,
+        openai: { ...currentSettings.openai, model, reasoning: { effort } },
+      }
     }
-    const baseUrl = overrides.baseUrl ?? providerSettings['openai-compatible'].baseUrl
-    return { model, baseUrl }
+    const baseUrl = overrides.baseUrl ?? currentSettings['openai-compatible'].baseUrl
+    return {
+      ...currentSettings,
+      'openai-compatible': { ...currentSettings['openai-compatible'], model, baseUrl },
+    }
   }
 
   const save = async (
-    settingsToSave: LlmProviderSettings[LlmProviderId],
+    update: LlmProviderSettingsUpdater,
     successMessage?: string,
   ) => {
     try {
-      await onSaveProviderSettings(id, settingsToSave)
+      await onSaveProviderSettings(id, update)
       if (successMessage) setStatus({ kind: 'ok', message: successMessage })
     } catch (error) {
       setStatus({
@@ -337,8 +355,7 @@ function ProviderRow({
       setStatus({ kind: 'error', message: 'Model ID is required.' })
       return
     }
-    if (model === settings.model) return
-    void save(buildSettings({ model }))
+    void save((currentSettings) => buildSettings(currentSettings, { model }))
   }
 
   const commitBaseUrl = () => {
@@ -350,8 +367,7 @@ function ProviderRow({
         setStatus({ kind: 'error', message: 'Endpoint URL is required.' })
         return
       }
-      if (baseUrl === providerSettings['openai-compatible'].baseUrl) return
-      void save(buildSettings({ baseUrl }))
+      void save((currentSettings) => buildSettings(currentSettings, { baseUrl }))
     } catch (error) {
       setBaseUrlDraft(null)
       setStatus({
@@ -503,13 +519,12 @@ function ProviderRow({
             id="gemini-thinking-level"
             className={inputClass}
             value={providerSettings.gemini.reasoning.thinkingLevel}
-            onChange={(event) =>
-              void save(
-                buildSettings({
-                  geminiThinking: event.target.value as GeminiThinkingLevel,
-                }),
+            onChange={(event) => {
+              const geminiThinking = event.target.value as GeminiThinkingLevel
+              void save((currentSettings) =>
+                buildSettings(currentSettings, { geminiThinking }),
               )
-            }
+            }}
           >
             {GEMINI_THINKING_LEVELS.map((level) => (
               <option key={level} value={level}>
@@ -531,13 +546,12 @@ function ProviderRow({
               id="anthropic-reasoning-mode"
               className={inputClass}
               value={providerSettings.anthropic.reasoning.mode}
-              onChange={(event) =>
-                void save(
-                  buildSettings({
-                    anthropicMode: event.target.value as 'default' | 'adaptive',
-                  }),
+              onChange={(event) => {
+                const anthropicMode = event.target.value as 'default' | 'adaptive'
+                void save((currentSettings) =>
+                  buildSettings(currentSettings, { anthropicMode }),
                 )
-              }
+              }}
             >
               <option value="default">Model default</option>
               <option value="adaptive">Adaptive</option>
@@ -552,13 +566,12 @@ function ProviderRow({
                 id="anthropic-effort"
                 className={inputClass}
                 value={providerSettings.anthropic.reasoning.effort}
-                onChange={(event) =>
-                  void save(
-                    buildSettings({
-                      anthropicEffort: event.target.value as AnthropicEffort,
-                    }),
+                onChange={(event) => {
+                  const anthropicEffort = event.target.value as AnthropicEffort
+                  void save((currentSettings) =>
+                    buildSettings(currentSettings, { anthropicEffort }),
                   )
-                }
+                }}
               >
                 {ANTHROPIC_EFFORT_LEVELS.map((effort) => (
                   <option key={effort} value={effort}>
@@ -580,13 +593,12 @@ function ProviderRow({
             id="openai-reasoning-effort"
             className={inputClass}
             value={providerSettings.openai.reasoning.effort}
-            onChange={(event) =>
-              void save(
-                buildSettings({
-                  openaiEffort: event.target.value as OpenAIReasoningEffort,
-                }),
+            onChange={(event) => {
+              const openaiEffort = event.target.value as OpenAIReasoningEffort
+              void save((currentSettings) =>
+                buildSettings(currentSettings, { openaiEffort }),
               )
-            }
+            }}
           >
             {OPENAI_REASONING_EFFORTS.map((effort) => (
               <option key={effort} value={effort}>
