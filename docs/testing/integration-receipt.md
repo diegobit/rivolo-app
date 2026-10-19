@@ -489,6 +489,46 @@ traffic uses an isolated local HTTP fixture. Local Linux arm64 is not a hosted
 Linux x64 result; the hosted runs above provide that separate evidence. Parent
 review remains pending and neither PR is approved or merged.
 
+## Main promotion scroll-following repair — 2026-10-19
+
+The [fresh PR #63 promotion run](https://github.com/diegobit/rivolo-app/actions/runs/39272179700/job/118127069139)
+failed J6 in Chromium desktop after a real wheel move left the chat list away
+from the bottom while `data-following` stayed `true`. The hosted run passed the
+WebKit J6 path and all other browser cases. The confirmed root cause is missing
+correlation between wheel input and the resulting scroll position: the old
+one-frame flag could expire before a delayed scroll event, and a boolean alone
+could not recognize movement already applied by Chromium's compositor. Exact
+sub-frame ordering in the hosted run is inferred; a separate Linux arm64
+Chromium DevTools trace of the real J6 wheel input recorded wheel dispatch
+followed by the list scroll event, while the failed browser state showed the
+list at `scrollTop=0` and still following. Viewport reflow and message-growth
+handling were left intact.
+
+The repair tracks the last observed scroll position and matches a wheel to
+actual movement in its direction. It rejects wheel input at a boundary, drops
+opposite or layout-only movement, and retires unmoved intent when content
+changes or the reader jumps to the latest message. Keyboard, touch, and native
+scrollbar input continue to work through their existing paths.
+
+The new owner regression failed before the repair when scroll arrived after a
+frame. Boundary, already-applied movement, content-change, opposite-direction,
+layout-only, keyboard, touch, and scrollbar controls pass after it. The existing
+J6 built-app journey remains unchanged and now passes with zero retries on
+Chromium desktop and WebKit mobile. On the current Linux arm64 Playwright
+container, `npm test` passed 77 files / 725 tests, lint and build passed, both
+J6 projects passed, and the MCP Worker runtime check passed. The build retains
+its existing large-chunk warning.
+
+The before/after captures are hosted on retained image-only branch
+[`pr-assets/fix-chat-scroll-intent-ordering`](https://github.com/diegobit/rivolo-app/tree/pr-assets/fix-chat-scroll-intent-ordering):
+[before](https://raw.githubusercontent.com/diegobit/rivolo-app/pr-assets/fix-chat-scroll-intent-ordering/chat-scroll-before.png)
+and [after](https://raw.githubusercontent.com/diegobit/rivolo-app/pr-assets/fix-chat-scroll-intent-ordering/chat-scroll-after.png).
+The original promotion failure remains unmodified; PR #63 was not merged and
+main remains at `165f4411e60347b541543e080520214522060660`. Hosted repair checks
+and review are pending. Physical installed-PWA and iOS testing, live providers,
+and the prior inconclusive Linux WebKit Settings-link stall remain unverified
+by this repair.
+
 ## Persistence recovery correction — 2026-10-19
 
 This correction addresses two Round 2 findings on the local persistence branch.
