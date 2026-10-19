@@ -157,7 +157,7 @@ export const claimPrimaryTab = () => {
   return claimed
 }
 
-const releasePrimaryTab = () => {
+export const releasePrimaryTabForPageHide = () => {
   const storage = getStorage()
   if (!storage || readLease()?.ownerId !== TAB_ID) return
   try {
@@ -183,7 +183,6 @@ export const startPrimaryTabCoordinator = () => {
   heartbeat()
   window.setInterval(heartbeat, PRIMARY_HEARTBEAT_MS)
   document.addEventListener('visibilitychange', heartbeat)
-  window.addEventListener('pagehide', releasePrimaryTab)
 }
 
 export const subscribeTabSync = (listener: () => void) => {

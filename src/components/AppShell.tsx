@@ -10,6 +10,7 @@ import { focusLauncher, isFocusOwnedByCard } from './app-shell/desktopCards'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import { useTabSyncState } from '../hooks/useTabSyncState'
 import { useDatabasePersistFailure } from '../hooks/useDatabasePersistFailure'
+import { useDatabaseLifecycle } from '../hooks/useDatabaseLifecycle'
 import { useKeyboardOffsetCssVar } from '../hooks/useKeyboardOffsetCssVar'
 import { useAutoSync } from './app-shell/useAutoSync'
 import { isProviderReady } from '../lib/llm/readiness'
@@ -60,6 +61,7 @@ export default function AppShell() {
   const desktopPanelExpanded = useUIStore((state) => state.desktopPanelExpanded)
   const timelineEmpty = useUIStore((state) => state.timelineEmpty)
   const tabSync = useTabSyncState()
+  useDatabaseLifecycle()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showScrollToToday, setShowScrollToToday] = useState(false)
@@ -528,7 +530,7 @@ export default function AppShell() {
       />
       {!isMobileHome && (
         <header
-          className="app-shell-top-header app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:mt-0 sm:px-0"
+          className="app-shell-top-header app-shell-fixed-header-width app-shell-fixed-right-aware relative left-0 z-30 mx-auto mt-4 grid h-16 grid-cols-[1fr_auto_1fr] items-center px-2 sm:fixed sm:top-0 sm:mt-0 sm:px-0"
         >
           <div className="relative z-10 flex items-center gap-2">
             {showBackButton && (
@@ -551,16 +553,6 @@ export default function AppShell() {
           </div>
           {logoLink}
           <div className="relative z-10 flex items-center justify-end gap-1 sm:gap-2">
-            {tabSync.databaseStale ? (
-              <button
-                className="flex h-11 items-center rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-100 sm:h-9"
-                type="button"
-                aria-label="Reload stale tab"
-                onClick={() => window.location.reload()}
-              >
-                Reload
-              </button>
-            ) : null}
             {showAttention && (
               <AttentionPopover
                 items={attentionItems}
@@ -616,9 +608,51 @@ export default function AppShell() {
         </header>
       )}
 
+      {tabSync.databaseStale && (
+        <div
+          className="app-shell-readonly-notice sticky top-[env(safe-area-inset-top)] z-40 mx-auto w-full px-3 sm:mt-20 sm:w-[min(96%,720px)] sm:px-0 sm:top-[calc(env(safe-area-inset-top)+5rem)]"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex flex-col gap-3 rounded-2xl border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] p-4 text-[var(--theme-warning-text)] shadow-[var(--theme-card-shadow-soft)] sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <svg
+                className="mt-0.5 h-4 w-4 shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="4" y="10" width="16" height="11" rx="2" />
+                <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+              </svg>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-5">This tab is read-only</p>
+                <p className="mt-1 text-sm leading-5">
+                  Another tab saved newer changes. Reload to continue editing.
+                </p>
+              </div>
+            </div>
+            <button
+              className="inline-flex min-h-11 shrink-0 items-center justify-center self-start rounded-full border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] px-4 text-sm font-semibold text-[var(--theme-warning-text)] shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-warning-border)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--theme-warning-soft)] sm:self-center"
+              type="button"
+              aria-label="Reload stale tab"
+              onClick={() => window.location.reload()}
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      )}
+
       <main
         inert={tabSync.databaseStale || mobileMenuOpen}
-        className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 pt-0 sm:w-[min(96%,720px)] sm:pt-20 ${
+        className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 ${
+          tabSync.databaseStale ? 'pt-4' : 'pt-0 sm:pt-20'
+        } sm:w-[min(96%,720px)] ${
           showTrayRow ? 'pb-40' : 'pb-12'
         }`}
         style={isMobileHome ? { paddingBottom: 'var(--mobile-home-bottom-clearance)' } : undefined}

@@ -88,7 +88,12 @@ vi.mock('../store/useSyncStore', () => ({
 vi.mock('../hooks/useIsNarrowViewport', () => ({ useIsNarrowViewport: () => true }))
 vi.mock('../lib/dayRepository', () => ({
   appendToDay: vi.fn().mockResolvedValue(undefined),
+  commitDayDraftInDatabase: vi.fn(),
   searchDays: vi.fn().mockResolvedValue([]),
+}))
+vi.mock('../lib/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/db')>()),
+  flushDatabaseSave: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('../components/timeline/DayEditorCard', () => ({
   default: () => <div data-testid="day-editor-card" />,

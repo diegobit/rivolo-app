@@ -2,8 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   initSqlite: vi.fn(),
-  get: vi.fn(),
-  set: vi.fn(),
   assertDatabaseWritable: vi.fn(),
   ensureDatabaseSchema: vi.fn(),
   executeSql: vi.fn(),
@@ -15,7 +13,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@sqlite.org/sqlite-wasm', () => ({ default: mocks.initSqlite }))
 vi.mock('@sqlite.org/sqlite-wasm/sqlite3.wasm?url', () => ({ default: 'test-wasm-url' }))
-vi.mock('idb-keyval', () => ({ get: mocks.get, set: mocks.set }))
 vi.mock('./sqliteRuntime', () => ({
   ensureDatabaseSchema: mocks.ensureDatabaseSchema,
   executeSql: mocks.executeSql,
@@ -36,8 +33,6 @@ describe('getDatabase', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()
-    mocks.get.mockResolvedValue(null)
-    mocks.set.mockResolvedValue(undefined)
     mocks.initSqlite.mockResolvedValue({})
     mocks.ensureDatabaseSchema.mockReturnValue({ ftsAvailable: true, ftsRebuilt: false })
     mocks.openSerializedDatabase.mockReturnValue(new FakeDatabase())
@@ -74,54 +69,5 @@ describe('getDatabase', () => {
     const db = await getDatabase()
     expect(db).toBeInstanceOf(FakeDatabase)
     expect(mocks.initSqlite).toHaveBeenCalledTimes(2)
-  })
-})
-
-describe('persistDatabase', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.resetModules()
-    mocks.set.mockResolvedValue(undefined)
-    mocks.initSqlite.mockResolvedValue({})
-    mocks.exportSerializedDatabase.mockReturnValue(new Uint8Array())
-  })
-
-  it('records a persist-failure message when the underlying storage write rejects', async () => {
-    mocks.set.mockRejectedValueOnce(new Error('quota exceeded'))
-
-    const { persistDatabase, getDatabasePersistFailureSnapshot } = await import('./db')
-
-    await expect(persistDatabase(new FakeDatabase() as never)).rejects.toThrow()
-
-    expect(getDatabasePersistFailureSnapshot()).toBe(
-      'Your notes could not be saved on this device. Check available storage and try again.',
-    )
-  })
-
-  it('clears a previous persist-failure message once a later save succeeds', async () => {
-    mocks.set.mockRejectedValueOnce(new Error('quota exceeded'))
-
-    const { persistDatabase, getDatabasePersistFailureSnapshot } = await import('./db')
-
-    await expect(persistDatabase(new FakeDatabase() as never)).rejects.toThrow()
-    expect(getDatabasePersistFailureSnapshot()).not.toBeNull()
-
-    mocks.set.mockResolvedValueOnce(undefined)
-    await persistDatabase(new FakeDatabase() as never)
-
-    expect(getDatabasePersistFailureSnapshot()).toBeNull()
-  })
-
-  it('notifies subscribers when the persist-failure state changes', async () => {
-    mocks.set.mockRejectedValueOnce(new Error('quota exceeded'))
-
-    const { persistDatabase, subscribeDatabasePersistFailure } = await import('./db')
-    const listener = vi.fn()
-    const unsubscribe = subscribeDatabasePersistFailure(listener)
-
-    await expect(persistDatabase(new FakeDatabase() as never)).rejects.toThrow()
-
-    expect(listener).toHaveBeenCalledTimes(1)
-    unsubscribe()
   })
 })

@@ -77,7 +77,7 @@ describe('Google OAuth backend boundary', () => {
     ).toBeNull()
   })
 
-  it('requires same-origin mutation requests and the CSRF header', () => {
+  it('requires same-origin mutation requests and the CSRF header', async () => {
     const valid = new Request('https://rivolo.app/api/google-drive/token', {
       method: 'POST',
       headers: { Origin: 'https://rivolo.app', 'X-Requested-With': 'XmlHttpRequest' },
@@ -89,6 +89,15 @@ describe('Google OAuth backend boundary', () => {
 
     expect(validateMutationRequest(valid, googleAllowedOrigins(env))).toBeNull()
     expect(validateMutationRequest(crossOrigin, googleAllowedOrigins(env))).toBe('Origin is not allowed.')
+    const providerFetch = vi.fn()
+    vi.stubGlobal('fetch', providerFetch)
+    const response = await refreshAccessToken({
+      request: new Request(valid.url, { method: 'POST', headers: { Origin: 'https://rivolo.app' } }),
+      env,
+    } as never) as Response
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ message: 'Missing CSRF request header.' })
+    expect(providerFetch).not.toHaveBeenCalled()
   })
 
   it('preserves Google cookie attributes while both provider configs use the shared helper', async () => {

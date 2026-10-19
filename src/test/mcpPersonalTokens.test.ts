@@ -1,5 +1,6 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
+import { SqliteD1, closeTestDatabases } from './helpers/d1'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   authenticateMcpBearer,
   McpBearerAuthenticationError,
@@ -17,216 +18,7 @@ import {
   onRequestPost as createToken,
 } from '../../functions/api/mcp/tokens/index'
 
-type ProviderRow = {
-  profile_id: string
-  provider: 'dropbox' | 'google-drive'
-  provider_account_id: string
-  provider_email: string | null
-  provider_name: string | null
-  dropbox_path: string | null
-  google_file_id: string | null
-  google_folder_id: string | null
-  google_file_name: string | null
-  time_zone: string
-  encrypted_refresh_token: string
-  created_at: string
-  updated_at: string
-  revoked_at: string | null
-}
-
-type TokenRow = {
-  token_id: string
-  profile_id: string
-  name: string
-  token_hash: string
-  token_prefix: string
-  scopes: string
-  created_at: string
-  last_used_at: string | null
-  revoked_at: string | null
-}
-
-class FakeD1 {
-  readonly profiles = new Map<string, ProviderRow>()
-  readonly tokens = new Map<string, TokenRow>()
-
-  prepare(sql: string) {
-    return {
-      bind: (...values: unknown[]) => ({
-        first: async <T>() => this.first(sql, values) as T | null,
-        all: async <T>() => ({ results: this.all(sql, values) as T[] }),
-        run: async () => this.run(sql, values),
-      }),
-    }
-  }
-
-  private first(sql: string, values: unknown[]) {
-    if (sql.includes('INSERT INTO mcp_provider_profiles')) {
-      const [
-        profileId,
-        provider,
-        providerAccountId,
-        providerEmail,
-        providerName,
-        dropboxPath,
-        googleFileId,
-        googleFolderId,
-        googleFileName,
-        timeZone,
-        encryptedRefreshToken,
-        createdAt,
-        updatedAt,
-      ] = values as [
-        string,
-        ProviderRow['provider'],
-        string,
-        string | null,
-        string | null,
-        string | null,
-        string | null,
-        string | null,
-        string | null,
-        string,
-        string,
-        string,
-        string,
-      ]
-      const existing = [...this.profiles.values()].find(
-        (row) =>
-          row.provider === provider && row.provider_account_id === providerAccountId,
-      )
-      const row: ProviderRow = existing
-        ? {
-            ...existing,
-            provider_email: providerEmail,
-            provider_name: providerName,
-            dropbox_path: dropboxPath,
-            google_file_id: googleFileId,
-            google_folder_id: googleFolderId,
-            google_file_name: googleFileName,
-            time_zone: timeZone,
-            encrypted_refresh_token: encryptedRefreshToken,
-            updated_at: updatedAt,
-            revoked_at: null,
-          }
-        : {
-            profile_id: profileId,
-            provider,
-            provider_account_id: providerAccountId,
-            provider_email: providerEmail,
-            provider_name: providerName,
-            dropbox_path: dropboxPath,
-            google_file_id: googleFileId,
-            google_folder_id: googleFolderId,
-            google_file_name: googleFileName,
-            time_zone: timeZone,
-            encrypted_refresh_token: encryptedRefreshToken,
-            created_at: createdAt,
-            updated_at: updatedAt,
-            revoked_at: null,
-          }
-      this.profiles.set(row.profile_id, row)
-      return row
-    }
-
-    if (sql.includes('INSERT INTO mcp_personal_tokens')) {
-      const [tokenId, name, tokenHash, prefix, scopes, createdAt, profileId] =
-        values as [string, string, string, string, string, string, string]
-      const profile = this.profiles.get(profileId)
-      if (!profile || profile.revoked_at || !profile.encrypted_refresh_token) {
-        return null
-      }
-      const row: TokenRow = {
-        token_id: tokenId,
-        profile_id: profileId,
-        name,
-        token_hash: tokenHash,
-        token_prefix: prefix,
-        scopes,
-        created_at: createdAt,
-        last_used_at: null,
-        revoked_at: null,
-      }
-      this.tokens.set(tokenId, row)
-      return row
-    }
-
-    if (sql.includes('FROM mcp_personal_tokens AS token')) {
-      const row = [...this.tokens.values()].find(
-        (token) => token.token_hash === values[0],
-      )
-      if (!row || row.revoked_at) return null
-      const profile = this.profiles.get(row.profile_id)
-      if (!profile || profile.revoked_at || !profile.encrypted_refresh_token) {
-        return null
-      }
-      return row
-    }
-
-    const profile = this.profiles.get(String(values[0]))
-    if (!profile) return null
-    if (sql.includes('SELECT encrypted_refresh_token')) {
-      return profile.revoked_at
-        ? null
-        : { encrypted_refresh_token: profile.encrypted_refresh_token }
-    }
-    return profile
-  }
-
-  private all(sql: string, values: unknown[]) {
-    if (!sql.includes('FROM mcp_personal_tokens')) {
-      throw new Error(`Unexpected query: ${sql}`)
-    }
-    return [...this.tokens.values()]
-      .filter((row) => row.profile_id === values[0])
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
-  }
-
-  private async run(sql: string, values: unknown[]) {
-    if (sql.includes('UPDATE mcp_provider_profiles')) {
-      const [updatedAt, revokedAt, profileId] = values as [string, string, string]
-      const row = this.profiles.get(profileId)
-      if (!row || row.revoked_at) return { meta: { changes: 0 } }
-      this.profiles.set(profileId, {
-        ...row,
-        encrypted_refresh_token: '',
-        updated_at: updatedAt,
-        revoked_at: revokedAt,
-      })
-      this.tokens.forEach((token, tokenId) => {
-        if (token.profile_id === profileId && !token.revoked_at) {
-          this.tokens.set(tokenId, { ...token, revoked_at: revokedAt })
-        }
-      })
-      return { meta: { changes: 1 } }
-    }
-
-    if (sql.includes('SET revoked_at = ?')) {
-      const [revokedAt, tokenId, profileId] = values as [string, string, string]
-      const row = this.tokens.get(tokenId)
-      if (!row || row.profile_id !== profileId || row.revoked_at) {
-        return { meta: { changes: 0 } }
-      }
-      this.tokens.set(tokenId, { ...row, revoked_at: revokedAt })
-      return { meta: { changes: 1 } }
-    }
-
-    if (sql.includes('SET last_used_at = ?')) {
-      const [lastUsedAt, tokenId, staleBefore] = values as [string, string, string]
-      const row = this.tokens.get(tokenId)
-      if (!row || row.revoked_at) return { meta: { changes: 0 } }
-      if (row.last_used_at !== null && row.last_used_at > staleBefore) {
-        return { meta: { changes: 0 } }
-      }
-      this.tokens.set(tokenId, { ...row, last_used_at: lastUsedAt })
-      return { meta: { changes: 1 } }
-    }
-
-    throw new Error(`Unexpected query: ${sql}`)
-  }
-}
-
-const createEnv = (db: FakeD1): McpAgentAccessEnv => ({
+const createEnv = (db: SqliteD1): McpAgentAccessEnv => ({
   MCP_DB: db as unknown as D1Database,
   MCP_PROVIDER_TOKEN_ENCRYPTION_KEY: 'profile-token-secret',
   MCP_PROFILE_SESSION_ENCRYPTION_KEY: 'profile-session-secret',
@@ -294,7 +86,7 @@ const createSession = async (
 
 describe('MCP personal access tokens', () => {
   it('creates, lists, authenticates, and revokes a named token without storing it', async () => {
-    const db = new FakeD1()
+    const db = new SqliteD1()
     const env = createEnv(db)
     const profile = await createProfile(env)
     const session = await createSession(env, profile.profileId)
@@ -325,7 +117,7 @@ describe('MCP personal access tokens', () => {
       createdPayload.token.token.slice(0, 12),
     )
 
-    const stored = db.tokens.get(createdPayload.token.tokenId)
+    const stored = db.get('SELECT * FROM mcp_personal_tokens WHERE token_id = ?', createdPayload.token.tokenId)
     expect(stored?.token_hash).toMatch(/^[0-9a-f]{64}$/)
     expect(JSON.stringify(stored)).not.toContain(createdPayload.token.token)
 
@@ -361,7 +153,7 @@ describe('MCP personal access tokens', () => {
       profile: { profileId: profile.profileId, provider: 'dropbox' },
       token: { tokenId: createdPayload.token.tokenId, name: 'Codex Mac' },
     })
-    expect(db.tokens.get(createdPayload.token.tokenId)?.last_used_at).not.toBeNull()
+    expect(db.get('SELECT * FROM mcp_personal_tokens WHERE token_id = ?', createdPayload.token.tokenId)?.last_used_at).not.toBeNull()
 
     const revokedResponse = await invoke(
       revokeToken,
@@ -385,7 +177,7 @@ describe('MCP personal access tokens', () => {
   })
 
   it('records last_used_at at most once per hour per token', async () => {
-    const db = new FakeD1()
+    const db = new SqliteD1()
     const env = createEnv(db)
     const profile = await createProfile(env)
     let now = new Date('2026-07-16T12:00:00.000Z')
@@ -398,25 +190,25 @@ describe('MCP personal access tokens', () => {
     const created = await repository.create(profile.profileId, 'Throttled token')
 
     await repository.touchLastUsed(created.tokenId)
-    expect(db.tokens.get(created.tokenId)?.last_used_at).toBe(
+    expect(db.get('SELECT * FROM mcp_personal_tokens WHERE token_id = ?', created.tokenId)?.last_used_at).toBe(
       '2026-07-16T12:00:00.000Z',
     )
 
     now = new Date('2026-07-16T12:30:00.000Z')
     await repository.touchLastUsed(created.tokenId)
-    expect(db.tokens.get(created.tokenId)?.last_used_at).toBe(
+    expect(db.get('SELECT * FROM mcp_personal_tokens WHERE token_id = ?', created.tokenId)?.last_used_at).toBe(
       '2026-07-16T12:00:00.000Z',
     )
 
     now = new Date('2026-07-16T13:00:01.000Z')
     await repository.touchLastUsed(created.tokenId)
-    expect(db.tokens.get(created.tokenId)?.last_used_at).toBe(
+    expect(db.get('SELECT * FROM mcp_personal_tokens WHERE token_id = ?', created.tokenId)?.last_used_at).toBe(
       '2026-07-16T13:00:01.000Z',
     )
   })
 
   it('rejects wrong tokens and tokens whose provider profile is revoked', async () => {
-    const db = new FakeD1()
+    const db = new SqliteD1()
     const env = createEnv(db)
     const profile = await createProfile(env)
     const repository = new McpPersonalTokenRepository(
@@ -477,7 +269,7 @@ describe('MCP personal access tokens', () => {
       'name is invalid.',
     )
 
-    const env = createEnv(new FakeD1())
+    const env = createEnv(new SqliteD1())
     const response = await invoke(
       createToken,
       mutationRequest('/api/mcp/tokens', 'POST', 'missing=session', {
@@ -494,7 +286,7 @@ describe('MCP personal access tokens', () => {
 
   it('sanitizes storage failures without reflecting bearer secrets', async () => {
     const secret = `rvl_${'S'.repeat(43)}`
-    const env = createEnv(new FakeD1())
+    const env = createEnv(new SqliteD1())
     env.MCP_DB = {
       prepare: () => {
         throw new Error(`query failed for ${secret}`)
@@ -514,7 +306,7 @@ describe('MCP personal access tokens', () => {
   })
 
   it('does not allow one profile session to revoke another profile token', async () => {
-    const db = new FakeD1()
+    const db = new SqliteD1()
     const env = createEnv(db)
     const owner = await createProfile(env, 'dbid:owner')
     const other = await createProfile(env, 'dbid:other')
@@ -535,6 +327,8 @@ describe('MCP personal access tokens', () => {
       { id: token.tokenId },
     )
     expect(response.status).toBe(404)
-    expect(db.tokens.get(token.tokenId)?.revoked_at).toBeNull()
+    expect(db.get('SELECT * FROM mcp_personal_tokens WHERE token_id = ?', token.tokenId)?.revoked_at).toBeNull()
   })
 })
+
+afterEach(closeTestDatabases)

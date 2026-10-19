@@ -27,13 +27,12 @@ import { focusLauncher } from '../components/app-shell/desktopCards'
 import { useStickToBottom } from './timeline/useStickToBottom'
 import { keepEditedDayInResults, keepInteractedTodoInResults, type InteractedTodo } from './timeline/searchResults'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
-import { useEditorMountWindow } from './timeline/useEditorMountWindow'
+import { useEditorMountWindow, type PendingEditorFocus } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
 import { usePendingDayDelete } from './timeline/usePendingDayDelete'
 import { useTimelineChat } from './timeline/useTimelineChat'
 import { useMobileChatScroll } from './timeline/useMobileChatScroll'
-import type { TodoAction } from '../lib/editor/todoMarker'
-import { toggleTodoLineMarker } from './timeline/todoToggle'
+import { toggleTodoLineMarker, type TodoAction } from '../lib/editor/todoMarker'
 import { getMatchedBlockLineIndexes } from './timeline/syntaxHighlight'
 import { HEADING_LINE_REGEX, getHeadingPreviewFromDay, getHeadingPreviewFromSectionBlock } from './timeline/headingPreview'
 import SearchModePills from './timeline/SearchModePills'
@@ -98,7 +97,7 @@ const LEADING_ACTION_CHIP_TEXT: Record<TrayLeadingAction['kind'], string> = {
 }
 
 const phoneComposerChipClassName =
-  'flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-active)] pl-2.5 pr-3.5 text-sm font-medium text-[var(--theme-text-soft)] transition active:opacity-75'
+  'flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-[var(--theme-active)] pl-2.5 pr-3.5 text-sm font-medium text-[var(--theme-text-soft)] transition active:opacity-75'
 const maskIconClassName =
   'h-5 w-5 shrink-0 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]'
 
@@ -444,7 +443,7 @@ const TrayInput = memo(({
         {mode === 'chat' && (
           <button
             className={`flex shrink-0 items-center justify-center rounded-full shadow-sm transition ${
-              isPhoneChat ? 'tray-phone-send h-10 w-10' : 'h-11 w-11 sm:h-10 sm:w-10'
+              isPhoneChat ? 'tray-phone-send h-11 w-11' : 'h-11 w-11 sm:h-10 sm:w-10'
             } ${
               draftText.trim() && !sending ? 'bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)]' : 'bg-slate-300'
             }`}
@@ -464,13 +463,13 @@ const TrayInput = memo(({
         {mode === 'search' && (
           <div
             className={`flex shrink-0 items-center justify-center ${
-              phoneLayout ? 'tray-phone-clear h-10 w-10' : 'h-11 w-11 sm:h-10 sm:w-10'
+              phoneLayout ? 'tray-phone-clear h-11 w-11' : 'h-11 w-11 sm:h-10 sm:w-10'
             }`}
           >
             {hasSearchText ? (
               <button
                 className={`tray-input-clear group flex items-center justify-center rounded-full hover:bg-slate-500 ${
-                  phoneLayout ? 'h-10 w-10' : 'h-11 w-11 sm:h-8 sm:w-8'
+                  phoneLayout ? 'h-11 w-11' : 'h-11 w-11 sm:h-8 sm:w-8'
                 }`}
                 type="button"
                 aria-label="Clear search"
@@ -606,7 +605,7 @@ export default function Timeline() {
   const dayRefs = useRef(new Map<string, HTMLDivElement>())
   const olderDaysSentinelRef = useRef<HTMLDivElement | null>(null)
   const createdDayIdsRef = useRef(new Set<string>())
-  const pendingFocusRef = useRef<{ dayId: string; position: 'start' | 'end' } | null>(null)
+  const pendingFocusRef = useRef<PendingEditorFocus | null>(null)
   const addTodayRef = useRef<HTMLDivElement | null>(null)
   const heroLogoRef = useRef<HTMLImageElement | null>(null)
   const heroRevealPending = useRef(false)
@@ -1137,6 +1136,7 @@ export default function Timeline() {
       scrollBlock: ScrollLogicalPosition = 'center',
       focusScroll = true,
       scrollBehavior: ScrollBehavior = preferredScrollBehavior(),
+      canFocusEditor?: () => boolean,
     ) => {
       let attempts = 0
       const maxAttempts = 12
@@ -1146,10 +1146,12 @@ export default function Timeline() {
         if (node) {
           node.scrollIntoView({ behavior: scrollBehavior, block: scrollBlock })
         }
-        if (focusPosition && view) {
+        const canFocus = canFocusEditor?.() ?? true
+        if (focusPosition && view && canFocus) {
           focusDayEditor(dayId, focusPosition, focusScroll)
         }
-        if ((!node || (focusPosition && !view)) && attempts < maxAttempts) {
+        const waitingForEditor = focusPosition && !view && canFocus
+        if ((!node || waitingForEditor) && attempts < maxAttempts) {
           attempts += 1
           requestAnimationFrame(run)
         }
@@ -1169,9 +1171,18 @@ export default function Timeline() {
       },
     ) => {
       const { focusPosition = 'end', scrollBlock = 'center', focusScroll = true } = options ?? {}
+      const focusOwner = document.activeElement
+      const canFocusEditor = () => {
+        const activeElement = document.activeElement
+        const editor = editorRefs.current.get(dayId)
+        return activeElement === focusOwner ||
+          activeElement === document.body ||
+          activeElement === document.documentElement ||
+          Boolean(editor?.dom.contains(activeElement))
+      }
       await prepareDayForCreate(dayId)
 
-      pendingFocusRef.current = { dayId, position: focusPosition }
+      pendingFocusRef.current = { dayId, position: focusPosition, canFocus: canFocusEditor }
       pinDayForEditorMount(dayId, 'loadDay')
       const result = await loadDay(dayId)
       if (result.created) {
@@ -1180,7 +1191,7 @@ export default function Timeline() {
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => resolve())
       })
-      revealDay(dayId, focusPosition, scrollBlock, focusScroll)
+      revealDay(dayId, focusPosition, scrollBlock, focusScroll, preferredScrollBehavior(), canFocusEditor)
       if (editorRefs.current.has(dayId)) {
         pendingFocusRef.current = null
       }
@@ -1954,8 +1965,9 @@ export default function Timeline() {
       // The keyboard goes down first so the sheet opens over the whole screen;
       // the draft stays.
       onActivate: () => {
-        document.getElementById(mode === 'chat' ? 'chat-input' : 'search-input')?.blur()
-        window.dispatchEvent(new CustomEvent(MOBILE_MENU_OPEN_EVENT))
+        const composer = document.getElementById(mode === 'chat' ? 'chat-input' : 'search-input')
+        composer?.blur()
+        window.dispatchEvent(new CustomEvent(MOBILE_MENU_OPEN_EVENT, { detail: { returnFocusTo: composer } }))
       },
     }
   }, [isNarrowViewportMode, menuAttentionCount, mode])

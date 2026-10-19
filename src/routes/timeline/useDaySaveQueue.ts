@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { flushDatabaseSave } from '../../lib/db'
+import {
+  flushDatabaseSave,
+  getCommittedDayDraftGeneration,
+  getPendingDayDraft,
+  invalidatePendingDayDraft,
+  registerPendingDayDraft,
+} from '../../lib/db'
+import { commitDayDraftInDatabase } from '../../lib/dayRepository'
 import { flushAutoPushToSync } from '../../store/syncActions'
 
 type UseDaySaveQueueOptions = {
   canSync: boolean
-  updateDayContent: (dayId: string, content: string) => Promise<void>
+  updateDayContent: (dayId: string, content: string, generation?: number) => Promise<boolean | void>
   onAutoPush: () => Promise<void> | void
   // Called once a day's content is written to the database.
   onDaySaved?: (dayId: string) => void
@@ -16,7 +23,7 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
     onDaySavedRef.current = onDaySaved
   }, [onDaySaved])
   const saveTimeouts = useRef(new Map<string, number>())
-  const pendingSaveContentRef = useRef(new Map<string, string>())
+  const pendingSaveContentRef = useRef(new Map<string, { content: string; generation: number }>())
   const daySaveQueueRef = useRef(new Map<string, Promise<void>>())
   const daySaveTokensRef = useRef(new Map<string, number>())
 
@@ -33,6 +40,7 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
   const markDaySavesStale = useCallback(
     (dayId: string) => {
       daySaveTokensRef.current.set(dayId, getDaySaveToken(dayId) + 1)
+      invalidatePendingDayDraft(dayId)
     },
     [getDaySaveToken],
   )
@@ -42,15 +50,17 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
   }, [])
 
   const setPendingSaveContent = useCallback((dayId: string, content: string) => {
-    pendingSaveContentRef.current.set(dayId, content)
+    const generation = registerPendingDayDraft(dayId, content, commitDayDraftInDatabase)
+    pendingSaveContentRef.current.set(dayId, { content, generation })
   }, [])
 
   const discardPendingDaySave = useCallback((dayId: string) => {
     pendingSaveContentRef.current.delete(dayId)
+    invalidatePendingDayDraft(dayId)
   }, [])
 
   const enqueueDaySave = useCallback(
-    (dayId: string, content: string) => {
+    (dayId: string, content: string, generation: number) => {
       const queue = daySaveQueueRef.current
       const saveToken = getDaySaveToken(dayId)
       const previous = queue.get(dayId) ?? Promise.resolve()
@@ -62,9 +72,16 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
             return
           }
 
-          await updateDayContent(dayId, content)
+          const saved = await updateDayContent(dayId, content, generation)
+          if (saved === false) return
           if (getDaySaveToken(dayId) !== saveToken) {
             return
+          }
+
+          const committedGeneration = getCommittedDayDraftGeneration(dayId)
+          const pending = pendingSaveContentRef.current.get(dayId)
+          if (pending && pending.generation <= committedGeneration) {
+            pendingSaveContentRef.current.delete(dayId)
           }
 
           onDaySavedRef.current?.(dayId)
@@ -72,6 +89,7 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
         })
         .catch((error: unknown) => {
           console.error('[Timeline] saveDay:failed', { dayId, error })
+          throw error
         })
 
       const trackedRun = queuedRun.finally(() => {
@@ -88,16 +106,16 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
 
   const scheduleSave = useCallback(
     (dayId: string, content: string) => {
-      pendingSaveContentRef.current.set(dayId, content)
+      const generation = registerPendingDayDraft(dayId, content, commitDayDraftInDatabase)
+      pendingSaveContentRef.current.set(dayId, { content, generation })
       const existing = saveTimeouts.current.get(dayId)
       if (existing) {
         window.clearTimeout(existing)
       }
       const handle = window.setTimeout(() => {
         saveTimeouts.current.delete(dayId)
-        const pendingContent = pendingSaveContentRef.current.get(dayId) ?? content
-        pendingSaveContentRef.current.delete(dayId)
-        void enqueueDaySave(dayId, pendingContent)
+        const pendingDraft = pendingSaveContentRef.current.get(dayId) ?? { content, generation }
+        void enqueueDaySave(dayId, pendingDraft.content, pendingDraft.generation).catch(() => undefined)
       }, 1000)
       saveTimeouts.current.set(dayId, handle)
     },
@@ -106,14 +124,14 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
 
   const flushPendingDaySave = useCallback(
     (dayId: string) => {
-      const pendingContent = pendingSaveContentRef.current.get(dayId)
-      if (pendingContent === undefined) {
+      const pendingDraft = pendingSaveContentRef.current.get(dayId)
+      if (!pendingDraft) {
+        if (getPendingDayDraft(dayId)) return flushDatabaseSave()
         return daySaveQueueRef.current.get(dayId) ?? Promise.resolve()
       }
 
       clearPendingSaveTimeout(dayId)
-      pendingSaveContentRef.current.delete(dayId)
-      return enqueueDaySave(dayId, pendingContent)
+      return enqueueDaySave(dayId, pendingDraft.content, pendingDraft.generation)
     },
     [clearPendingSaveTimeout, enqueueDaySave],
   )
@@ -127,8 +145,9 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
   const saveDayImmediately = useCallback(
     (dayId: string, content: string) => {
       clearPendingSaveTimeout(dayId)
-      pendingSaveContentRef.current.delete(dayId)
-      return enqueueDaySave(dayId, content)
+      const generation = registerPendingDayDraft(dayId, content, commitDayDraftInDatabase)
+      pendingSaveContentRef.current.set(dayId, { content, generation })
+      return enqueueDaySave(dayId, content, generation)
     },
     [clearPendingSaveTimeout, enqueueDaySave],
   )
@@ -151,27 +170,13 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
         })
     }
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        flushTimelineSaves()
-      }
-    }
-
-    const handlePageHide = () => {
-      flushTimelineSaves()
-    }
-
     const handleWindowBlur = () => {
       flushTimelineSaves()
     }
 
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('pagehide', handlePageHide)
     window.addEventListener('blur', handleWindowBlur)
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('pagehide', handlePageHide)
       window.removeEventListener('blur', handleWindowBlur)
       flushTimelineSaves()
 

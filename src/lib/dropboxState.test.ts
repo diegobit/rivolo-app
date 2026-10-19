@@ -7,6 +7,11 @@ vi.mock('./settingsRepository', () => ({
   setJsonSetting: vi.fn(async (key: string, value: unknown) => {
     settings.set(key, structuredClone(value))
   }),
+  updateJsonSetting: vi.fn(async (key: string, update: (value: unknown) => unknown) => {
+    const next = update(settings.get(key) ?? null)
+    settings.set(key, structuredClone(next))
+    return next
+  }),
 }))
 
 describe('Dropbox revision tracking', () => {

@@ -48,3 +48,5 @@ tests/agentic-qa-tests/runs/
 
 # Browser automation screenshots
 screenshots/
+playwright-report/
+test-results/

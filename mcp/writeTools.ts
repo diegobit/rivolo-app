@@ -83,8 +83,6 @@ export type AddToDayWriter<Result extends AddToDayWriterOutput = AddToDayWriterR
   input: AddToDayInput,
 ) => MaybePromise<Result>
 
-export type ProfileTimeZone = string | (() => MaybePromise<string>)
-
 export type ResolvedZonedDay = {
   day_id: string
   time_zone: string
@@ -117,10 +115,7 @@ const runTool = async (handler: () => MaybePromise<CallToolResult>) => {
   }
 }
 
-export const resolveDayIdInTimeZone = (
-  timeZone: string,
-  date = new Date(),
-): ResolvedZonedDay => {
+const resolveDayIdInTimeZone = (timeZone: string): ResolvedZonedDay => {
   const requestedTimeZone = timeZone.trim()
   if (!requestedTimeZone) {
     throw new Error('A valid IANA time zone is required.')
@@ -142,7 +137,7 @@ export const resolveDayIdInTimeZone = (
 
   const parts = new Map(
     formatter
-      .formatToParts(date)
+      .formatToParts(new Date())
       .filter((part) => part.type === 'year' || part.type === 'month' || part.type === 'day')
       .map((part) => [part.type, part.value]),
   )
@@ -159,11 +154,6 @@ export const resolveDayIdInTimeZone = (
     time_zone: formatter.resolvedOptions().timeZone,
   }
 }
-
-const resolveProfileTimeZone = async (profileTimeZone: ProfileTimeZone) =>
-  typeof profileTimeZone === 'function'
-    ? profileTimeZone()
-    : profileTimeZone
 
 export const compactWriteResult = <Result extends AddToDayWriterOutput>(
   result: Result,
@@ -182,7 +172,7 @@ export const compactWriteResult = <Result extends AddToDayWriterOutput>(
 export const registerWriteTools = <Result extends AddToDayWriterOutput>(
   server: McpServer,
   addToDay: AddToDayWriter<Result>,
-  profileTimeZone: ProfileTimeZone,
+  profileTimeZone: string,
 ) => {
   server.registerTool(
     'add_to_day',
@@ -224,7 +214,7 @@ export const registerWriteTools = <Result extends AddToDayWriterOutput>(
     async (args) =>
       runTool(async () => {
         const resolvedDay = resolveDayIdInTimeZone(
-          await resolveProfileTimeZone(profileTimeZone),
+          profileTimeZone,
         )
         const result = await addToDay({
           day_id: resolvedDay.day_id,

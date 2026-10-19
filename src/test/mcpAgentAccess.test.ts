@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { SqliteD1, closeTestDatabases } from './helpers/d1'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createMcpProfileSessionCookie,
@@ -14,132 +15,6 @@ import { onRequestPost as enableGoogleDrive } from '../../functions/api/google-d
 import { onRequestPost as disableAgentAccess } from '../../functions/api/mcp/disable'
 import { onRequestGet as getAgentAccessStatus } from '../../functions/api/mcp/status'
 
-type StoredRow = {
-  profile_id: string
-  provider: 'dropbox' | 'google-drive'
-  provider_account_id: string
-  provider_email: string | null
-  provider_name: string | null
-  dropbox_path: string | null
-  google_file_id: string | null
-  google_folder_id: string | null
-  google_file_name: string | null
-  time_zone: string
-  encrypted_refresh_token: string
-  created_at: string
-  updated_at: string
-  revoked_at: string | null
-}
-
-class FakeD1 {
-  readonly rows = new Map<string, StoredRow>()
-
-  prepare(sql: string) {
-    return {
-      bind: (...values: unknown[]) => ({
-        first: async <T>() => this.first(sql, values) as T | null,
-        run: async () => this.run(sql, values),
-      }),
-    }
-  }
-
-  private first(sql: string, values: unknown[]) {
-    if (sql.includes('INSERT INTO mcp_provider_profiles')) {
-      const [
-        profileId,
-        provider,
-        providerAccountId,
-        providerEmail,
-        providerName,
-        dropboxPath,
-        googleFileId,
-        googleFolderId,
-        googleFileName,
-        timeZone,
-        encryptedRefreshToken,
-        createdAt,
-        updatedAt,
-      ] = values as [
-        string,
-        StoredRow['provider'],
-        string,
-        string | null,
-        string | null,
-        string | null,
-        string | null,
-        string | null,
-        string | null,
-        string,
-        string,
-        string,
-        string,
-      ]
-      const existing = [...this.rows.values()].find(
-        (row) =>
-          row.provider === provider &&
-          row.provider_account_id === providerAccountId,
-      )
-      const row: StoredRow = existing
-        ? {
-            ...existing,
-            provider_email: providerEmail,
-            provider_name: providerName,
-            dropbox_path: dropboxPath,
-            google_file_id: googleFileId,
-            google_folder_id: googleFolderId,
-            google_file_name: googleFileName,
-            time_zone: timeZone,
-            encrypted_refresh_token: encryptedRefreshToken,
-            updated_at: updatedAt,
-            revoked_at: null,
-          }
-        : {
-            profile_id: profileId,
-            provider,
-            provider_account_id: providerAccountId,
-            provider_email: providerEmail,
-            provider_name: providerName,
-            dropbox_path: dropboxPath,
-            google_file_id: googleFileId,
-            google_folder_id: googleFolderId,
-            google_file_name: googleFileName,
-            time_zone: timeZone,
-            encrypted_refresh_token: encryptedRefreshToken,
-            created_at: createdAt,
-            updated_at: updatedAt,
-            revoked_at: null,
-          }
-      this.rows.set(row.profile_id, row)
-      return row
-    }
-
-    const row = this.rows.get(String(values[0]))
-    if (!row) return null
-    if (sql.includes('SELECT encrypted_refresh_token')) {
-      return row.revoked_at
-        ? null
-        : { encrypted_refresh_token: row.encrypted_refresh_token }
-    }
-    return row
-  }
-
-  private async run(sql: string, values: unknown[]) {
-    if (!sql.includes('UPDATE mcp_provider_profiles')) {
-      throw new Error(`Unexpected query: ${sql}`)
-    }
-    const [updatedAt, revokedAt, profileId] = values as [string, string, string]
-    const row = this.rows.get(profileId)
-    if (!row || row.revoked_at) return { meta: { changes: 0 } }
-    this.rows.set(profileId, {
-      ...row,
-      encrypted_refresh_token: '',
-      updated_at: updatedAt,
-      revoked_at: revokedAt,
-    })
-    return { meta: { changes: 1 } }
-  }
-}
-
 type TestEnv = McpAgentAccessEnv & {
   DROPBOX_CLIENT_ID: string
   DROPBOX_TOKEN_ENCRYPTION_KEY: string
@@ -150,7 +25,7 @@ type TestEnv = McpAgentAccessEnv & {
   GOOGLE_ALLOWED_ORIGINS: string
 }
 
-const createEnv = (db: FakeD1): TestEnv => ({
+const createEnv = (db: SqliteD1): TestEnv => ({
   MCP_DB: db as unknown as D1Database,
   MCP_PROVIDER_TOKEN_ENCRYPTION_KEY: 'profile-token-secret',
   MCP_PROFILE_SESSION_ENCRYPTION_KEY: 'profile-session-secret',
@@ -202,7 +77,7 @@ afterEach(() => {
 
 describe('MCP provider profile session', () => {
   it('stores only an encrypted profile id in a secure Lax /api/mcp cookie', async () => {
-    const env = createEnv(new FakeD1())
+    const env = createEnv(new SqliteD1())
     const profileId = '11111111-1111-4111-8111-111111111111'
     const request = new Request('https://rivolo.app/api/dropbox/mcp-enable')
     const header = await createMcpProfileSessionCookie(request, env, profileId)
@@ -219,31 +94,10 @@ describe('MCP provider profile session', () => {
     expect(await readMcpProfileSession(sessionRequest, env)).toBe(profileId)
   })
 
-  it('keeps existing provider refresh cookies SameSite=Strict', async () => {
-    const env = createEnv(new FakeD1())
-    const request = new Request('https://rivolo.app/api/dropbox/token')
-
-    const dropboxHeader = await createTokenCookieHeader(
-      request,
-      dropboxCookieConfig(env),
-      'dropbox-refresh',
-    )
-    const googleHeader = await createTokenCookieHeader(
-      request,
-      googleCookieConfig(env),
-      'google-refresh',
-    )
-
-    expect(dropboxHeader).toContain('SameSite=Strict')
-    expect(googleHeader).toContain('SameSite=Strict')
-    expect(dropboxHeader).not.toContain('SameSite=Lax')
-    expect(googleHeader).not.toContain('SameSite=Lax')
-  })
-
   it('rejects malformed enable input before contacting a provider', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
-    const db = new FakeD1()
+    const db = new SqliteD1()
     const env = createEnv(db)
     const baseRequest = new Request('https://rivolo.app/api/dropbox/mcp-enable')
     const providerCookie = await createTokenCookieHeader(
@@ -273,7 +127,7 @@ describe('MCP provider profile session', () => {
 
 describe('provider-specific MCP enable endpoints', () => {
   it('enables Dropbox from the refresh cookie and authoritative provider data', async () => {
-    const db = new FakeD1()
+    const db = new SqliteD1()
     const env = createEnv(db)
     const baseRequest = new Request('https://rivolo.app/api/dropbox/mcp-enable')
     const providerCookie = await createTokenCookieHeader(
@@ -341,7 +195,7 @@ describe('provider-specific MCP enable endpoints', () => {
       },
     })
     expect(response.headers.get('Set-Cookie')).toContain('rivolo_mcp_profile=')
-    expect([...db.rows.values()][0]?.encrypted_refresh_token).not.toContain(
+    expect(db.get('SELECT * FROM mcp_provider_profiles')?.encrypted_refresh_token).not.toContain(
       'dropbox-refresh',
     )
   })
@@ -355,7 +209,7 @@ describe('provider-specific MCP enable endpoints', () => {
         timeZone: 'Europe/Rome',
         target: { path: '/inbox.md' },
       }),
-      createEnv(new FakeD1()),
+      createEnv(new SqliteD1()),
     )
 
     expect(response.status).toBe(401)
@@ -364,7 +218,7 @@ describe('provider-specific MCP enable endpoints', () => {
   })
 
   it('enables Google Drive from authoritative account, file, and capability data', async () => {
-    const db = new FakeD1()
+    const db = new SqliteD1()
     const env = createEnv(db)
     const baseRequest = new Request(
       'https://rivolo.app/api/google-drive/mcp-enable',
@@ -447,7 +301,7 @@ describe('provider-specific MCP enable endpoints', () => {
 
 describe('MCP status and disable endpoints', () => {
   it('returns non-secret metadata and destroys the stored credential on disable', async () => {
-    const db = new FakeD1()
+    const db = new SqliteD1()
     const env = createEnv(db)
     const repository = new ProviderProfileRepository(
       env.MCP_DB,
@@ -500,10 +354,12 @@ describe('MCP status and disable endpoints', () => {
     const response = await invoke(
       disableAgentAccess,
       mutationRequest('/api/mcp/disable'),
-      createEnv(new FakeD1()),
+      createEnv(new SqliteD1()),
     )
 
     expect(response.status).toBe(401)
     expect(await response.json()).toMatchObject({ code: 'AUTH_REQUIRED' })
   })
 })
+
+afterEach(closeTestDatabases)

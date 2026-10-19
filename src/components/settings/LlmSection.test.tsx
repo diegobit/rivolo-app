@@ -5,6 +5,7 @@ import LlmSection from './LlmSection'
 import {
   DEFAULT_LLM_PROVIDER_SETTINGS,
   type LlmProviderSettings,
+  type LlmProviderSettingsUpdater,
   type LlmSecrets,
 } from '../../lib/llm/types'
 
@@ -96,7 +97,9 @@ describe('LlmSection', () => {
 
     await openLlmRow('gemini')
     await userEvent.selectOptions(screen.getByLabelText('Thinking level'), 'high')
-    expect(onSaveProviderSettings).toHaveBeenCalledExactlyOnceWith('gemini', {
+    expect(onSaveProviderSettings).toHaveBeenCalledTimes(1)
+    const update = onSaveProviderSettings.mock.calls[0][1] as LlmProviderSettingsUpdater
+    expect(update(baseProviderSettings).gemini).toEqual({
       model: 'gemini-3-flash-preview',
       reasoning: { thinkingLevel: 'high' },
       allowThinking: true,
@@ -113,7 +116,9 @@ describe('LlmSection', () => {
     await userEvent.type(input, 'gemini-3-pro-preview')
     await userEvent.tab()
 
-    expect(onSaveProviderSettings).toHaveBeenCalledExactlyOnceWith('gemini', {
+    expect(onSaveProviderSettings).toHaveBeenCalledTimes(1)
+    const update = onSaveProviderSettings.mock.calls[0][1] as LlmProviderSettingsUpdater
+    expect(update(baseProviderSettings).gemini).toEqual({
       model: 'gemini-3-pro-preview',
       reasoning: { thinkingLevel: 'minimal' },
       allowThinking: false,

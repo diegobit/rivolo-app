@@ -1,144 +1,20 @@
 // @vitest-environment node
-import { DatabaseSync } from 'node:sqlite'
+import { SqliteD1, closeTestDatabases } from './helpers/d1'
 import type { D1Database, ExecutionContext, ScheduledController } from '@cloudflare/workers-types'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runMcpD1Cleanup } from '../../functions/_lib/mcpCleanup'
 import worker, { type RemoteMcpEnv } from '../../mcp/worker'
 
-class SqliteD1Statement {
-  constructor(
-    private readonly db: DatabaseSync,
-    private readonly sql: string,
-    private readonly params: unknown[] = [],
-  ) {}
-
-  bind(...params: unknown[]) {
-    return new SqliteD1Statement(this.db, this.sql, params)
-  }
-
-  async run() {
-    const statement = this.db.prepare(this.sql)
-    const result = statement.run(...(this.params as (string | number | bigint | null)[]))
-    return {
-      success: true,
-      meta: {
-        changes: Number(result.changes),
-        last_row_id: Number(result.lastInsertRowid),
-      },
-    }
-  }
-
-  async all<T>() {
-    const statement = this.db.prepare(this.sql)
-    const results = statement.all(...(this.params as (string | number | bigint | null)[])) as T[]
-    return {
-      success: true,
-      results,
-    }
-  }
-
-  async first<T>() {
-    const statement = this.db.prepare(this.sql)
-    const result = statement.get(...(this.params as (string | number | bigint | null)[])) as T | undefined
-    return result ?? null
-  }
-}
-
-class SqliteD1 {
-  readonly database = new DatabaseSync(':memory:')
-
-  constructor() {
-    this.database.exec('PRAGMA foreign_keys = ON;')
-  }
-
-  prepare(sql: string) {
-    return new SqliteD1Statement(this.database, sql)
-  }
-}
-
 const createFixtures = (db: SqliteD1) => {
   db.database.exec(`
-    CREATE TABLE mcp_provider_profiles (
-      profile_id TEXT PRIMARY KEY NOT NULL,
-      provider TEXT NOT NULL,
-      account_id TEXT NOT NULL,
-      account_email TEXT,
-      account_display_name TEXT,
-      dropbox_path TEXT,
-      google_file_id TEXT,
-      google_file_name TEXT,
-      encrypted_refresh_token TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      revoked_at TEXT
-    );
-
-    CREATE TABLE mcp_oauth_clients (
-      client_id TEXT PRIMARY KEY NOT NULL,
-      registration_hash TEXT NOT NULL UNIQUE,
-      redirect_uris TEXT NOT NULL,
-      client_name TEXT,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE mcp_oauth_authorization_codes (
-      code_hash TEXT PRIMARY KEY NOT NULL,
-      profile_id TEXT NOT NULL,
-      client_id TEXT NOT NULL,
-      redirect_uri TEXT NOT NULL,
-      code_challenge TEXT NOT NULL,
-      scopes TEXT NOT NULL,
-      resource TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      expires_at TEXT NOT NULL,
-      used_at TEXT,
-      FOREIGN KEY (profile_id) REFERENCES mcp_provider_profiles(profile_id) ON DELETE CASCADE,
-      FOREIGN KEY (client_id) REFERENCES mcp_oauth_clients(client_id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE mcp_oauth_token_families (
-      family_id TEXT PRIMARY KEY NOT NULL,
-      profile_id TEXT NOT NULL,
-      client_id TEXT NOT NULL,
-      resource TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      revoked_at TEXT,
-      FOREIGN KEY (profile_id) REFERENCES mcp_provider_profiles(profile_id) ON DELETE CASCADE,
-      FOREIGN KEY (client_id) REFERENCES mcp_oauth_clients(client_id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE mcp_oauth_token_grants (
-      grant_id TEXT PRIMARY KEY NOT NULL,
-      family_id TEXT NOT NULL,
-      access_token_hash TEXT NOT NULL UNIQUE,
-      refresh_token_hash TEXT NOT NULL UNIQUE,
-      scopes TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      access_expires_at TEXT NOT NULL,
-      refresh_expires_at TEXT NOT NULL,
-      access_revoked_at TEXT,
-      refresh_used_at TEXT,
-      FOREIGN KEY (family_id) REFERENCES mcp_oauth_token_families(family_id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE mcp_write_operations (
-      profile_id TEXT NOT NULL,
-      operation_id TEXT NOT NULL,
-      input_hash TEXT NOT NULL,
-      state TEXT NOT NULL CHECK (state IN ('pending', 'completed')),
-      result_json TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (profile_id, operation_id)
-    );
-
     -- Insert mock profile and client
     INSERT INTO mcp_provider_profiles (
-      profile_id, provider, account_id, account_email, account_display_name,
-      dropbox_path, encrypted_refresh_token, created_at, revoked_at
+      profile_id, provider, provider_account_id, provider_email, provider_name,
+      dropbox_path, time_zone, encrypted_refresh_token, created_at, updated_at, revoked_at
     ) VALUES (
       '11111111-1111-4111-8111-111111111111', 'dropbox', 'dbid:123',
-      'user@example.com', 'Test User', '/Notes', 'encrypted-secret',
-      '2026-01-01T00:00:00.000Z', NULL
+      'user@example.com', 'Test User', '/Notes', 'UTC', 'encrypted-secret',
+      '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL
     );
 
     INSERT INTO mcp_oauth_clients (
@@ -203,7 +79,7 @@ describe('runMcpD1Cleanup', () => {
     ])
   })
 
-  it('purges revoked and fully expired token families and cascades to grants', async () => {
+  it('purges revoked and fully expired token families with their grants', async () => {
     const db = new SqliteD1()
     createFixtures(db)
     const now = new Date('2026-06-01T12:00:00.000Z')
@@ -364,6 +240,19 @@ describe('runMcpD1Cleanup', () => {
     expect(remainingFamilies).toEqual([])
   })
 
+  it('purges empty expired families across multiple batches without deleting recent families', async () => {
+    const db = new SqliteD1()
+    createFixtures(db)
+    const insert = db.database.prepare(`INSERT INTO mcp_oauth_token_families
+      (family_id, profile_id, client_id, resource, created_at, revoked_at)
+      VALUES (?, '11111111-1111-4111-8111-111111111111', 'client-1', 'https://mcp.rivolo.app/mcp', ?, NULL)`)
+    for (let index = 0; index < 101; index++) insert.run(`old-${index}`, '2026-01-01T00:00:00.000Z')
+    insert.run('recent-empty', '2026-06-01T00:00:00.000Z')
+    const result = await runMcpD1Cleanup(db as unknown as D1Database, { now: new Date('2026-06-01T12:00:00.000Z') })
+    expect(result.deletedTokenFamilies).toBe(101)
+    expect(db.all('SELECT family_id FROM mcp_oauth_token_families')).toEqual([{ family_id: 'recent-empty' }])
+  })
+
   it('purges old completed and stale pending write operations', async () => {
     const db = new SqliteD1()
     createFixtures(db)
@@ -412,9 +301,18 @@ describe('runMcpD1Cleanup', () => {
     expect(remaining).toEqual(['op-recent-completed', 'op-recent-pending'])
   })
 
-  it('runs cleanly via Worker scheduled handler with execution context', async () => {
+  it('purges obsolete records via scheduled work while preserving live records', async () => {
     const db = new SqliteD1()
     createFixtures(db)
+
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-06-01T12:00:00.000Z'))
+    db.database.exec(`
+      INSERT INTO mcp_write_operations (profile_id, operation_id, input_hash, state, result_json, created_at, updated_at)
+      VALUES
+        ('11111111-1111-4111-8111-111111111111', 'obsolete-write', '${'a'.repeat(64)}', 'completed', '{}', '2026-01-01', '2026-01-01'),
+        ('11111111-1111-4111-8111-111111111111', 'live-write', '${'b'.repeat(64)}', 'completed', '{}', '2026-06-01', '2026-06-01');
+    `)
 
     const waitUntilPromises: Promise<unknown>[] = []
     const ctx = {
@@ -442,6 +340,8 @@ describe('runMcpD1Cleanup', () => {
 
     expect(ctx.waitUntil).toHaveBeenCalledTimes(1)
     await Promise.all(waitUntilPromises)
+    expect(db.all('SELECT operation_id FROM mcp_write_operations')).toEqual([{ operation_id: 'live-write' }])
+
   })
 it("logs errors when runMcpD1Cleanup rejects in Worker scheduled handler", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
@@ -487,3 +387,8 @@ it("logs errors when runMcpD1Cleanup rejects in Worker scheduled handler", async
     errorSpy.mockRestore()
   })
 });
+
+afterEach(() => {
+  vi.useRealTimers()
+  closeTestDatabases()
+})

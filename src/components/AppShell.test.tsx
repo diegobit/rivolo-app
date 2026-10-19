@@ -68,6 +68,7 @@ vi.mock('../hooks/useKeyboardOffsetCssVar', () => ({ useKeyboardOffsetCssVar: vi
 vi.mock('../hooks/useTabSyncState', () => ({
   useTabSyncState: () => stores.tabSync,
 }))
+vi.mock('../hooks/useDatabaseLifecycle', () => ({ useDatabaseLifecycle: vi.fn() }))
 vi.mock('./app-shell/useAutoSync', () => ({ useAutoSync: vi.fn() }))
 vi.mock('./app-shell/ShortcutsPopover', () => ({
   default: ({ shortcutsRef }: { shortcutsRef: { current: HTMLDivElement | null } }) => (
@@ -164,7 +165,7 @@ describe('AppShell attention and stale tab states', () => {
     expect(homeLink).not.toHaveClass('logo-current-fast')
   })
 
-  it('makes the main surface inert and keeps reload available', () => {
+  it('keeps the read-only notice actionable outside the inert main surface', () => {
     stores.tabSync = { isPrimary: false, databaseStale: true }
     stores.sync.syncAttention = null
     const { container } = render(
@@ -177,8 +178,16 @@ describe('AppShell attention and stale tab states', () => {
       </MemoryRouter>,
     )
 
-    expect(container.querySelector('main')).toHaveAttribute('inert')
-    expect(screen.getByRole('button', { name: 'Reload stale tab' })).toBeVisible()
+    const main = container.querySelector('main')
+    const notice = screen.getByRole('status')
+    expect(main).toHaveAttribute('inert')
+    expect(notice).toHaveTextContent('This tab is read-only')
+    expect(notice).toHaveTextContent('Another tab saved newer changes. Reload to continue editing.')
+    expect(notice.closest('main')).toBeNull()
+    expect(notice.closest('[inert]')).toBeNull()
+    const reload = within(notice).getByRole('button', { name: 'Reload stale tab' })
+    expect(reload).toBeVisible()
+    expect(reload).toHaveTextContent(/^Reload$/)
   })
 
   it('puts a sync issue in the unified attention popover', async () => {

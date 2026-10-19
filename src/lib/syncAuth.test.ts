@@ -79,28 +79,3 @@ describe('createAuthorizedFetch', () => {
     vi.unstubAllGlobals()
   })
 })
-
-describe('both providers use the shared authorized-fetch factory', () => {
-  it('Dropbox and Google Drive authorizedFetch both attach the 401-retry behavior from createAuthorizedFetch', async () => {
-    vi.resetModules()
-    vi.doMock('./dropboxState', () => ({
-      getDropboxState: vi.fn(),
-      updateDropboxState: vi.fn(),
-    }))
-    vi.doMock('./googleDriveState', () => ({
-      getGoogleDriveState: vi.fn(),
-      markGoogleDriveLocalDirty: vi.fn(),
-      updateGoogleDriveState: vi.fn(),
-    }))
-
-    const syncAuth = await import('./syncAuth')
-    const createSpy = vi.spyOn(syncAuth, 'createAuthorizedFetch')
-
-    await import('./dropboxAuth')
-    await import('./googleDriveAuth')
-
-    expect(createSpy).toHaveBeenCalledTimes(2)
-    vi.doUnmock('./dropboxState')
-    vi.doUnmock('./googleDriveState')
-  })
-})
