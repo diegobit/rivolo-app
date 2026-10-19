@@ -37,6 +37,16 @@ export type PendingDayDraft = {
 
 type PendingDayDraftCommitter = (db: RivoloDatabase, draft: PendingDayDraft) => void
 export type RecoverableDayDraft = Omit<PendingDayDraft, 'generation'>
+type TrackedDayDraft = PendingDayDraft & {
+  commit: PendingDayDraftCommitter
+  baseDraftGeneration: number | null
+  appliedUpdatedAt: number | null
+}
+type SnapshotDayDraft = {
+  generation: number
+  contentMd: string
+  updatedAt: number
+}
 export type DayDraftRecoveryResult = {
   changed: boolean
   appliedDayIds: string[]
@@ -55,6 +65,7 @@ type SessionDraftJournal = {
 
 type PendingSnapshot = {
   generation: number
+  dayDrafts: Map<string, SnapshotDayDraft>
   promise: Promise<void>
   resolve: () => void
   reject: (error: unknown) => void
@@ -84,11 +95,8 @@ let ftsAvailable: boolean | null = null
 let appliedGeneration = 0
 let durableGeneration = 0
 const pendingSnapshots = new Set<PendingSnapshot>()
-const pendingDayDrafts = new Map<string, PendingDayDraft & { commit: PendingDayDraftCommitter }>()
-const unpersistedDayDrafts = new Map<
-  string,
-  PendingDayDraft & { commit: PendingDayDraftCommitter; requiredAppliedGeneration: number }
->()
+const pendingDayDrafts = new Map<string, TrackedDayDraft>()
+const unpersistedDayDrafts = new Map<string, TrackedDayDraft & { requiredAppliedGeneration: number }>()
 const latestDayDraftGeneration = new Map<string, number>()
 const committedDayDraftGeneration = new Map<string, number>()
 const unsavedDayCreationGeneration = new Map<string, number>()
@@ -387,6 +395,55 @@ const findInFlightSnapshot = (generation: number) =>
     .filter((snapshot) => !snapshot.settled && snapshot.generation >= generation)
     .sort((left, right) => left.generation - right.generation)[0]
 
+const readDraftSnapshotRow = (db: RivoloDatabase, dayId: string, contentMd: string) => {
+  const row = queryFirstRow<{ content_md: string; updated_at: number }>(
+    db,
+    'SELECT content_md, updated_at FROM days WHERE day_id = ? LIMIT 1',
+    [dayId],
+  )
+  return row?.content_md === contentMd ? row : null
+}
+
+const captureSnapshotDayDrafts = (db: RivoloDatabase, generation: number) => {
+  const dayDrafts = new Map<string, SnapshotDayDraft>()
+  for (const [dayId, draft] of unpersistedDayDrafts) {
+    if (
+      draft.requiredAppliedGeneration > generation ||
+      draft.appliedUpdatedAt === null
+    ) {
+      continue
+    }
+    const row = readDraftSnapshotRow(db, dayId, draft.contentMd)
+    if (!row || row.updated_at !== draft.appliedUpdatedAt) continue
+    dayDrafts.set(dayId, {
+      generation: draft.generation,
+      contentMd: row.content_md,
+      updatedAt: row.updated_at,
+    })
+  }
+  return dayDrafts
+}
+
+const advanceDraftRecoveryBaselines = (snapshot: PendingSnapshot) => {
+  let changed = false
+  const drafts = [...unpersistedDayDrafts.values(), ...pendingDayDrafts.values()]
+  for (const draft of drafts) {
+    const predecessorGeneration = draft.baseDraftGeneration
+    if (predecessorGeneration === null) continue
+    const storedPredecessor = snapshot.dayDrafts.get(draft.dayId)
+    if (!storedPredecessor || storedPredecessor.generation > predecessorGeneration) continue
+
+    draft.baseContentMd = storedPredecessor.contentMd
+    draft.baseUpdatedAt = storedPredecessor.updatedAt
+    draft.baseRowWasUnsaved = false
+    if (storedPredecessor.generation === predecessorGeneration) {
+      draft.baseDraftGeneration = null
+    }
+    changed = true
+  }
+  return changed
+}
+
 const settleSnapshot = (
   snapshot: PendingSnapshot,
   outcome: { error?: unknown },
@@ -401,11 +458,16 @@ const settleSnapshot = (
   }
 
   durableGeneration = Math.max(durableGeneration, snapshot.generation)
+  const recoveryBaselineChanged = advanceDraftRecoveryBaselines(snapshot)
   for (const [dayId, draft] of unpersistedDayDrafts) {
     if (draft.requiredAppliedGeneration <= durableGeneration) unpersistedDayDrafts.delete(dayId)
   }
   for (const [dayId, generation] of unsavedDayCreationGeneration) {
     if (generation <= durableGeneration) unsavedDayCreationGeneration.delete(dayId)
+  }
+  if (recoveryBaselineChanged) {
+    const drafts = draftsForSessionJournal()
+    if (drafts.length) writeSessionDraftJournal(mergeSessionDraftJournal(drafts))
   }
   clearSessionDraftJournalThrough(durableGeneration)
   broadcastDatabasePersisted()
@@ -438,7 +500,14 @@ const submitSnapshot = (
     resolve = resolvePromise
     reject = rejectPromise
   })
-  const snapshot: PendingSnapshot = { generation, promise, resolve, reject, settled: false }
+  const snapshot: PendingSnapshot = {
+    generation,
+    dayDrafts: new Map(),
+    promise,
+    resolve,
+    reject,
+    settled: false,
+  }
   pendingSnapshots.add(snapshot)
   let transaction: IDBTransaction | null = null
 
@@ -446,6 +515,7 @@ const submitSnapshot = (
     // The permission check belongs beside export and transaction creation: a
     // caller may have waited for a mutation barrier or storage handle above.
     assertDatabaseWritable()
+    snapshot.dayDrafts = captureSnapshotDayDrafts(db, generation)
     const bytes = exportSerializedDatabase(sqlite, db)
     const snapshotTransaction = database.transaction(IDB_OBJECT_STORE, 'readwrite')
     transaction = snapshotTransaction
@@ -537,6 +607,7 @@ const applyPendingDayDrafts = (db: RivoloDatabase) => {
     unpersistedDayDrafts.set(draft.dayId, {
       ...current,
       requiredAppliedGeneration: appliedGeneration,
+      appliedUpdatedAt: readDraftSnapshotRow(db, draft.dayId, current.contentMd)?.updated_at ?? null,
     })
     markJournalDraftApplied(current, appliedGeneration)
   }
@@ -550,7 +621,10 @@ export const registerPendingDayDraft = (
 ) => {
   const generation = (latestDayDraftGeneration.get(dayId) ?? 0) + 1
   latestDayDraftGeneration.set(dayId, generation)
-  const priorDraft = pendingDayDrafts.get(dayId) ?? unpersistedDayDrafts.get(dayId)
+  const priorPendingDraft = pendingDayDrafts.get(dayId)
+  const priorUnpersistedDraft = unpersistedDayDrafts.get(dayId)
+  const priorDraft = priorPendingDraft ?? priorUnpersistedDraft
+  const baseDraftGeneration = priorUnpersistedDraft?.generation ?? priorPendingDraft?.baseDraftGeneration ?? null
   let baseline = priorDraft
     ? {
         baseContentMd: priorDraft.baseContentMd,
@@ -581,7 +655,15 @@ export const registerPendingDayDraft = (
     }
   }
   unpersistedDayDrafts.delete(dayId)
-  pendingDayDrafts.set(dayId, { dayId, contentMd, generation, commit, ...baseline })
+  pendingDayDrafts.set(dayId, {
+    dayId,
+    contentMd,
+    generation,
+    commit,
+    baseDraftGeneration,
+    appliedUpdatedAt: null,
+    ...baseline,
+  })
   return generation
 }
 
@@ -613,6 +695,9 @@ export const acknowledgePendingDayDraft = (dayId: string, generation: number) =>
     unpersistedDayDrafts.set(dayId, {
       ...current,
       requiredAppliedGeneration: appliedGeneration,
+      appliedUpdatedAt: dbHandle
+        ? readDraftSnapshotRow(dbHandle, dayId, current.contentMd)?.updated_at ?? null
+        : null,
     })
     markJournalDraftApplied(current, appliedGeneration)
   }
@@ -743,7 +828,6 @@ export const flushDatabaseSave = async () => {
 }
 
 export const checkpointDatabaseSynchronously = () => {
-  assertDatabaseWritable()
   if (isDatabaseMutationActive()) {
     const drafts = draftsForSessionJournal()
     if (drafts.length) writeSessionDraftJournal(mergeSessionDraftJournal(drafts))
@@ -755,6 +839,15 @@ export const checkpointDatabaseSynchronously = () => {
   if (!hasWork) return true
   const draftsBeforeApply = draftsForSessionJournal()
   if (draftsBeforeApply.length) writeSessionDraftJournal(mergeSessionDraftJournal(draftsBeforeApply))
+
+  try {
+    assertDatabaseWritable()
+  } catch (error) {
+    if (error instanceof Error && error.message === DATABASE_STALE_RELOAD_MESSAGE) return false
+    reportPersistFailure(error)
+    return false
+  }
+
   const db = dbHandle
   const sqlite = sqliteHandle
   const database = idbHandle
@@ -776,6 +869,7 @@ export const checkpointDatabaseSynchronously = () => {
     void submitSnapshot(db, sqlite, database).catch(() => undefined)
     return true
   } catch (error) {
+    if (error instanceof Error && error.message === DATABASE_STALE_RELOAD_MESSAGE) return false
     reportPersistFailure(error)
     return false
   }
