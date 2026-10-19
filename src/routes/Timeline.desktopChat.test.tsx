@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Timeline from './Timeline'
@@ -295,6 +296,7 @@ describe('Timeline desktop search card', () => {
     stores.settings.providerSettings = DEFAULT_LLM_PROVIDER_SETTINGS
     stores.days.days = [todayDay, olderDay]
     stores.days.loading = false
+    stores.days.updateDayContent.mockReset()
     useChatStore.setState({ messages: [] })
     useUIStore.setState({ mode: 'timeline', chatPanelOpen: false, chatMessageCount: 0, desktopPanelExpanded: false })
     vi.mocked(searchDays).mockReset().mockResolvedValue([])
@@ -595,22 +597,29 @@ describe('Timeline desktop search card', () => {
 
   it('toggling a todo in a text-search result does not navigate or close the card', async () => {
     const todoDay = makeDay(todayId, '- [ ] Buy milk and cookies')
-    vi.mocked(searchDays).mockResolvedValue([
-      { day: todoDay, matchedBlocks: ['- [ ] Buy milk and cookies'], blockKind: 'line' },
-    ])
+    let savedTodoDay = todoDay
+    vi.mocked(searchDays).mockImplementation(async (query, options) => {
+      if (query !== 'Buy milk' || options?.filter) return []
+      return [{ day: savedTodoDay, matchedBlocks: [savedTodoDay.contentMd], blockKind: 'line' }]
+    })
+    stores.days.updateDayContent.mockImplementation(async (dayId, content) => {
+      if (dayId === todoDay.dayId) savedTodoDay = { ...savedTodoDay, contentMd: content }
+      return true
+    })
+    const user = userEvent.setup()
     renderTimeline()
     openSearchCard()
 
-    typeQuery('Buy milk')
+    await user.type(getSearchInput(), 'Buy milk')
     await waitForResults(1)
 
     const todoButton = screen.getByRole('button', { name: 'Toggle todo' })
     expect(todoButton).toHaveTextContent('[ ]')
-    fireEvent.click(todoButton)
+    await user.click(todoButton)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Toggle todo' })).toHaveTextContent('[x]'))
 
     expect(useUIStore.getState().mode).toBe('search')
     expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Toggle todo' })).toHaveTextContent('[x]')
   })
 
   it('toggling a todo in search results does not navigate or close the card', async () => {
