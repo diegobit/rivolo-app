@@ -2,10 +2,17 @@
 import initSqlite from '@sqlite.org/sqlite-wasm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeStorage, createStorage, loadStorage, reopenStorage, type Storage } from '../test/helpers/storage'
-import { openSerializedDatabase, queryRows } from './sqliteRuntime'
+import { executeSql, exportSerializedDatabase, openSerializedDatabase, queryRows } from './sqliteRuntime'
 
 let storage: Storage
-beforeEach(async () => { storage = await createStorage(); await storage.db.flushDatabaseSave() })
+let databaseEvents: EventTarget | null = null
+let databaseStorageValues = new Map<string, string>()
+beforeEach(async () => {
+  databaseEvents = null
+  databaseStorageValues = new Map()
+  storage = await createStorage()
+  await storage.db.flushDatabaseSave()
+})
 afterEach(() => { closeStorage(storage) })
 
 const readSnapshotBytes = async () => {
@@ -49,6 +56,69 @@ const replaceSnapshotBytes = async (bytes: Uint8Array) => {
   }
 }
 
+const createForeignSnapshot = async (
+  bytes: Uint8Array,
+  mutate: (db: ReturnType<typeof openSerializedDatabase>) => void,
+) => {
+  const sqlite = await initSqlite()
+  const database = openSerializedDatabase(sqlite, bytes)
+  try {
+    mutate(database)
+    return exportSerializedDatabase(sqlite, database)
+  } finally {
+    database.close()
+  }
+}
+
+const announceForeignRevision = async (revision: number) => {
+  databaseEvents ??= new EventTarget()
+  const events = databaseEvents
+  Object.assign(window, {
+    addEventListener: events.addEventListener.bind(events),
+    removeEventListener: events.removeEventListener.bind(events),
+    dispatchEvent: events.dispatchEvent.bind(events),
+    localStorage: {
+      getItem: (key: string) => databaseStorageValues.get(key) ?? null,
+      setItem: (key: string, value: string) => databaseStorageValues.set(key, value),
+      removeItem: (key: string) => databaseStorageValues.delete(key),
+    },
+  })
+  vi.stubGlobal('document', {})
+  vi.stubGlobal('BroadcastChannel', undefined)
+  const tabSync = await import('./tabSyncCoordinator')
+  tabSync.beginDatabaseSnapshotLoad()
+
+  const announcement = new Event('storage')
+  Object.assign(announcement, {
+    key: 'rivolo.db.persisted-revision',
+    newValue: JSON.stringify({ sourceTabId: 'other-tab', revision }),
+  })
+  events.dispatchEvent(announcement)
+  return tabSync
+}
+
+const reloadStorageWithoutFlushing = async () => {
+  storage.database.close()
+  vi.clearAllTimers()
+  if (databaseEvents) {
+    const events = databaseEvents
+    Object.assign(window, {
+      addEventListener: events.addEventListener.bind(events),
+      removeEventListener: events.removeEventListener.bind(events),
+      dispatchEvent: events.dispatchEvent.bind(events),
+      localStorage: {
+        getItem: (key: string) => databaseStorageValues.get(key) ?? null,
+        setItem: (key: string, value: string) => databaseStorageValues.set(key, value),
+        removeItem: (key: string) => databaseStorageValues.delete(key),
+      },
+    })
+    vi.stubGlobal('document', {})
+    vi.stubGlobal('BroadcastChannel', undefined)
+  }
+  vi.resetModules()
+  storage = await loadStorage()
+}
+
 const persistedNotes = async () => {
   const bytes = await readSnapshotBytes()
   if (!bytes) return []
@@ -57,6 +127,56 @@ const persistedNotes = async () => {
     return queryRows<{ day_id: string; content_md: string }>(db, 'SELECT day_id, content_md FROM days ORDER BY day_id DESC')
       .map((day) => [day.day_id, day.content_md])
   } finally { db.close() }
+}
+
+const persistedDayRows = async () => {
+  const bytes = await readSnapshotBytes()
+  if (!bytes) return []
+  const db = openSerializedDatabase(await initSqlite(), bytes)
+  try {
+    return queryRows<{ day_id: string; content_md: string; updated_at: number }>(
+      db,
+      'SELECT day_id, content_md, updated_at FROM days ORDER BY day_id DESC',
+    )
+  } finally {
+    db.close()
+  }
+}
+
+const abortNextSnapshotPut = async () => {
+  const openRequest = indexedDB.open('keyval-store')
+  const database = await new Promise<IDBDatabase>((resolve, reject) => {
+    openRequest.onsuccess = () => resolve(openRequest.result)
+    openRequest.onerror = () => reject(openRequest.error)
+  })
+  const prototype = Object.getPrototypeOf(
+    database.transaction('keyval', 'readonly').objectStore('keyval'),
+  ) as IDBObjectStore
+  database.close()
+
+  const originalPut = prototype.put
+  let aborted = false
+  let resolveAbort!: () => void
+  const transactionAborted = new Promise<void>((resolve) => { resolveAbort = resolve })
+  prototype.put = function (
+    this: IDBObjectStore,
+    value: Parameters<IDBObjectStore['put']>[0],
+    key?: IDBValidKey,
+  ) {
+    const request = originalPut.call(this, value, key)
+    if (!aborted && key === 'single-note-db') {
+      aborted = true
+      this.transaction.addEventListener('abort', resolveAbort, { once: true })
+      this.transaction.abort()
+    }
+    return request
+  }
+
+  return {
+    transactionAborted,
+    restore: () => { prototype.put = originalPut },
+    wasTriggered: () => aborted,
+  }
 }
 
 const persistedSnapshot = async () => {
@@ -109,6 +229,101 @@ describe('database IndexedDB commit boundary', () => {
     expect(saved?.contentMd).toBe(latest)
   })
 
+  it('recovers a later draft from the exact row of its own committed predecessor', async () => {
+    const dayId = '2026-07-14'
+    await storage.repository.saveDay(dayId, 'durable baseline', undefined, { markDirty: false })
+    await storage.db.flushDatabaseSave()
+
+    storage.db.registerPendingDayDraft(dayId, 'first edit café', storage.repository.commitDayDraftInDatabase)
+    expect(storage.db.checkpointDatabaseSynchronously()).toBe(true)
+    // Register the second generation before the first native transaction can
+    // report completion, matching an editor change during snapshot flight.
+    storage.db.registerPendingDayDraft(dayId, 'second edit café 🙂', storage.repository.commitDayDraftInDatabase)
+    await storage.db.persistDatabase(storage.database)
+
+    const firstStoredRow = (await persistedDayRows())[0]
+    expect(firstStoredRow).toMatchObject({ day_id: dayId, content_md: 'first edit café' })
+
+    const fault = await abortNextSnapshotPut()
+    try {
+      expect(storage.db.checkpointDatabaseSynchronously()).toBe(true)
+      await fault.transactionAborted
+    } finally {
+      fault.restore()
+    }
+    expect(fault.wasTriggered()).toBe(true)
+    expect(await persistedDayRows()).toEqual([firstStoredRow])
+    const journal = JSON.parse(
+      window.sessionStorage.getItem('rivolo.pending-day-recovery.v1') ?? '{}',
+    )
+    expect(journal.drafts).toContainEqual(
+      expect.objectContaining({
+        dayId,
+        contentMd: 'second edit café 🙂',
+        baseContentMd: 'first edit café',
+        baseUpdatedAt: firstStoredRow.updated_at,
+      }),
+    )
+
+    await reloadStorageWithoutFlushing()
+    expect((await storage.repository.getDay(dayId))?.contentMd).toBe('second edit café 🙂')
+    expect(await persistedNotes()).toEqual([[dayId, 'second edit café 🙂']])
+    expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toBeNull()
+  })
+
+  it('keeps a failed predecessor out of recovery baselines and advances after a later durable draft', async () => {
+    const dayId = '2026-07-14'
+    await storage.repository.saveDay(dayId, 'durable baseline', undefined, { markDirty: false })
+    await storage.db.flushDatabaseSave()
+
+    storage.db.registerPendingDayDraft(dayId, 'failed predecessor', storage.repository.commitDayDraftInDatabase)
+    const firstFault = await abortNextSnapshotPut()
+    try {
+      expect(storage.db.checkpointDatabaseSynchronously()).toBe(true)
+      await firstFault.transactionAborted
+    } finally {
+      firstFault.restore()
+    }
+    expect(firstFault.wasTriggered()).toBe(true)
+    expect(await persistedNotes()).toEqual([[dayId, 'durable baseline']])
+
+    storage.db.registerPendingDayDraft(dayId, 'later edit café', storage.repository.commitDayDraftInDatabase)
+    expect(storage.db.checkpointDatabaseSynchronously()).toBe(true)
+    // A still newer editor value arrives before this successful snapshot's
+    // completion callback; its baseline must advance to the exact stored row.
+    storage.db.registerPendingDayDraft(dayId, 'latest edit café 🙂', storage.repository.commitDayDraftInDatabase)
+    await storage.db.persistDatabase(storage.database)
+
+    const laterStoredRow = (await persistedDayRows())[0]
+    expect(laterStoredRow).toMatchObject({ day_id: dayId, content_md: 'later edit café' })
+    const secondFault = await abortNextSnapshotPut()
+    try {
+      expect(storage.db.checkpointDatabaseSynchronously()).toBe(true)
+      await secondFault.transactionAborted
+    } finally {
+      secondFault.restore()
+    }
+    expect(secondFault.wasTriggered()).toBe(true)
+    expect(await persistedDayRows()).toEqual([laterStoredRow])
+
+    const journal = JSON.parse(
+      window.sessionStorage.getItem('rivolo.pending-day-recovery.v1') ?? '{}',
+    )
+    expect(journal.drafts).toContainEqual(
+      expect.objectContaining({
+        dayId,
+        contentMd: 'latest edit café 🙂',
+        baseContentMd: 'later edit café',
+        baseUpdatedAt: laterStoredRow.updated_at,
+      }),
+    )
+
+    await reloadStorageWithoutFlushing()
+    expect((await storage.repository.getDay(dayId))?.contentMd).toBe('latest edit café 🙂')
+    expect(await persistedNotes()).toEqual([[dayId, 'latest edit café 🙂']])
+    expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toBeNull()
+  })
+
   it('recovers the lifecycle draft journal when the interrupted snapshot is absent on reload', async () => {
     const dayId = '2026-07-14'
     const latest = 'Recovered café 🙂\nwith punctuation — intact'
@@ -136,6 +351,110 @@ describe('database IndexedDB commit boundary', () => {
     expect((await storage.repository.getDay(dayId))?.contentMd).toBe(latest)
     expect(await persistedNotes()).toEqual([[dayId, latest]])
     expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toBeNull()
+  })
+
+  it('journals stale-tab drafts before rejecting writes and keeps foreign state or conflicts intact', async () => {
+    const dayId = '2026-07-14'
+    const latest = 'Latest stale-tab edit café 🙂'
+    await storage.repository.saveDay(dayId, 'saved baseline', undefined, { markDirty: false })
+    await storage.db.flushDatabaseSave()
+    const baselineBytes = await readSnapshotBytes()
+    expect(baselineBytes).not.toBeNull()
+
+    const foreignBytes = await createForeignSnapshot(baselineBytes!, (database) => {
+      executeSql(database, 'INSERT INTO settings (key, value) VALUES (?, ?)', [
+        'appearance.theme',
+        JSON.stringify('dark'),
+      ])
+    })
+    await replaceSnapshotBytes(foreignBytes)
+
+    storage.db.registerPendingDayDraft(dayId, latest, storage.repository.commitDayDraftInDatabase)
+    const firstTabSync = await announceForeignRevision(10)
+    expect(firstTabSync.getTabSyncSnapshot().databaseStale).toBe(true)
+    expect(storage.db.checkpointDatabaseSynchronously()).toBe(false)
+    await expect(storage.db.flushDatabaseSave()).rejects.toThrow('older local data')
+
+    const firstJournal = JSON.parse(
+      window.sessionStorage.getItem('rivolo.pending-day-recovery.v1') ?? '{}',
+    )
+    expect(firstJournal.drafts).toContainEqual(
+      expect.objectContaining({
+        dayId,
+        contentMd: latest,
+        baseContentMd: 'saved baseline',
+        requiredAppliedGeneration: null,
+      }),
+    )
+    expect(await persistedSnapshot()).toMatchObject({
+      days: [{ day_id: dayId, content_md: 'saved baseline' }],
+      settings: { 'appearance.theme': 'dark' },
+    })
+
+    await reloadStorageWithoutFlushing()
+    expect((await storage.repository.getDay(dayId))?.contentMd).toBe(latest)
+    expect(await persistedSnapshot()).toMatchObject({
+      days: [{ day_id: dayId, content_md: latest }],
+      settings: { 'appearance.theme': 'dark' },
+    })
+    expect(window.sessionStorage.getItem('rivolo.pending-day-recovery.v1')).toBeNull()
+
+    const conflictDraft = 'Conflicting stale-tab text stays available café 🙂'
+    const currentRow = queryRows<{ content_md: string; updated_at: number }>(
+      storage.database,
+      'SELECT content_md, updated_at FROM days WHERE day_id = ? LIMIT 1',
+      [dayId],
+    )[0]
+    const currentBytes = await readSnapshotBytes()
+    expect(currentBytes).not.toBeNull()
+    const foreignConflictBytes = await createForeignSnapshot(currentBytes!, (database) => {
+      executeSql(database, 'UPDATE days SET content_md = ?, updated_at = ? WHERE day_id = ?', [
+        'foreign note change',
+        Math.max(Date.now(), currentRow.updated_at + 1),
+        dayId,
+      ])
+      executeSql(database, 'DELETE FROM days_fts WHERE day_id = ?', [dayId])
+      executeSql(
+        database,
+        'INSERT INTO days_fts (day_id, human_title, content_md) SELECT day_id, human_title, content_md FROM days WHERE day_id = ?',
+        [dayId],
+      )
+    })
+    await replaceSnapshotBytes(foreignConflictBytes)
+
+    storage.db.registerPendingDayDraft(
+      dayId,
+      conflictDraft,
+      storage.repository.commitDayDraftInDatabase,
+    )
+    const secondTabSync = await announceForeignRevision(11)
+    expect(secondTabSync.getTabSyncSnapshot().databaseStale).toBe(true)
+    expect(storage.db.checkpointDatabaseSynchronously()).toBe(false)
+    await expect(storage.db.flushDatabaseSave()).rejects.toThrow('older local data')
+    expect(await persistedSnapshot()).toMatchObject({
+      days: [{ day_id: dayId, content_md: 'foreign note change' }],
+      settings: { 'appearance.theme': 'dark' },
+    })
+
+    await reloadStorageWithoutFlushing()
+    expect((await storage.repository.getDay(dayId))?.contentMd).toBe('foreign note change')
+    const conflictJournal = JSON.parse(
+      window.sessionStorage.getItem('rivolo.pending-day-recovery.v1') ?? '{}',
+    )
+    expect(conflictJournal.drafts).toContainEqual(
+      expect.objectContaining({
+        dayId,
+        contentMd: conflictDraft,
+        baseContentMd: latest,
+        requiredAppliedGeneration: null,
+        recoveryConflict: true,
+      }),
+    )
+    expect(storage.db.getDatabasePersistFailureSnapshot()).toContain('could not be saved')
+    expect(await persistedSnapshot()).toMatchObject({
+      days: [{ day_id: dayId, content_md: 'foreign note change' }],
+      settings: { 'appearance.theme': 'dark' },
+    })
   })
 
   it('retains a conflicting recovery draft across unrelated commits until a same-day edit resolves it', async () => {

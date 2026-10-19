@@ -488,3 +488,33 @@ behavior, and live provider credentials remain unverified. Automated provider
 traffic uses an isolated local HTTP fixture. Local Linux arm64 is not a hosted
 Linux x64 result; the hosted runs above provide that separate evidence. Parent
 review remains pending and neither PR is approved or merged.
+
+## Persistence recovery correction — 2026-10-19
+
+This correction addresses two Round 2 findings on the local persistence branch.
+The stale-tab checkpoint now journals pending day drafts before the stale-write
+guard returns. It preserves the newer foreign SQLite snapshot, including an
+unrelated setting. A real same-day foreign edit still wins, while the full
+local conflict draft remains in the recovery journal. Snapshot completion now
+advances a later draft's recovery baseline only from the exact day row and
+`updated_at` captured in that draft's own committed predecessor snapshot.
+
+The review's native-Chromium reproduction failed before the change in both
+cases: a stale editor's Reload returned the old note with no journal, and an
+aborted second snapshot restored the first edit instead of the second. Both
+probes pass after the change. The browser probe also verified the saved foreign
+setting and retained a full conflict draft after a genuine same-day foreign
+edit. Owner tests inject an abort through the IndexedDB object store's `put`
+transaction and verify the recovered text is present in the next saved SQLite
+snapshot.
+
+On macOS arm64, the focused database, day repository, tab sync, lifecycle and
+day-save-queue tests passed (56 tests). The full fast suite passed 717 tests in
+77 files; lint, production build and Worker runtime checks passed. The full
+browser run had 35 passes and one inapplicable desktop skip. Mobile J6 and J7
+passed. The existing Chromium-desktop J6 resize-follow assertion still failed:
+after reflow, 1050 pixels remained below the reader instead of less than two.
+This persistence correction did not change chat behavior. Astra's earlier
+Linux-WebKit J6 Settings-link actionability stall remains inconclusive; this
+run does not resolve it. Physical iOS/PWA and live provider behavior remain
+unverified. Fresh hosted checks for the corrected PR heads are pending.
