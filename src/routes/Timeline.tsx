@@ -1782,13 +1782,28 @@ export default function Timeline() {
   const showMoreCardResultsRef = useRef<HTMLButtonElement | null>(null)
   // Set by ArrowDown past the last loaded result; focused once the page renders.
   const focusCardResultAfterLoadRef = useRef<number | null>(null)
+  // A new query or filter belongs to a different result list, so a move that
+  // was still waiting for its page must not land on the new list.
+  useEffect(() => {
+    focusCardResultAfterLoadRef.current = null
+  }, [cardResultsKey])
   useEffect(() => {
     const pendingIndex = focusCardResultAfterLoadRef.current
     if (pendingIndex === null) return
+    // The flush of an earlier render can arrive after ArrowDown ran but before
+    // the next page is in the DOM. Keep the request until its button exists,
+    // otherwise the keypress is silently dropped; drop it only once no page is
+    // left to bring that button in.
+    const target = document.querySelectorAll<HTMLButtonElement>(
+      '#desktop-search-card .result-open-button',
+    )[pendingIndex]
+    if (!target) {
+      if (hiddenCardResultCount === 0) focusCardResultAfterLoadRef.current = null
+      return
+    }
     focusCardResultAfterLoadRef.current = null
-    const openButtons = document.querySelectorAll<HTMLButtonElement>('#desktop-search-card .result-open-button')
-    openButtons[pendingIndex]?.focus()
-  }, [visibleCardResultItems.length])
+    target.focus()
+  }, [hiddenCardResultCount, visibleCardResultItems.length])
   useEffect(() => {
     const button = showMoreCardResultsRef.current
     if (!isDesktopSearchCardOpen || !button || typeof IntersectionObserver === 'undefined') return
