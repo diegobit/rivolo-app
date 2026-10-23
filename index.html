@@ -34,6 +34,15 @@
 
         const themeColor = resolvedTheme === 'dark' ? '#05070b' : '#ffffff'
         document.querySelector("meta[name='theme-color']")?.setAttribute('content', themeColor)
+
+        // Animations turned off in Settings stay off from the first paint (see src/lib/animations.ts).
+        try {
+          if (window.localStorage.getItem('rivolo.appearance.animations') === 'false') {
+            document.documentElement.dataset.animations = 'off'
+          }
+        } catch {
+          // Settings apply it once loaded.
+        }
       })()
     </script>
     <title>Rivolo</title>

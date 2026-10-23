@@ -34,6 +34,7 @@ import {
   syncThemePreference,
   type ThemePreference,
 } from '../lib/theme'
+import { syncAnimationsPreference } from '../lib/animations'
 
 type Wallpaper = 'none' | 'thoughts-light' | 'thoughts-high'
 
@@ -55,6 +56,7 @@ type SettingsState = {
   wallpaper: Wallpaper
   highlightInputMode: boolean
   autocorrection: boolean
+  animations: boolean
   fontPreference: FontPreference
   bodyFont: BodyFont
   monospaceFont: MonospaceFont
@@ -73,6 +75,7 @@ type SettingsState = {
   updateThemePreference: (themePreference: ThemePreference) => Promise<void>
   updateWallpaper: (wallpaper: Wallpaper) => Promise<void>
   updateHighlightInputMode: (enabled: boolean) => Promise<void>
+  updateAnimations: (enabled: boolean) => Promise<void>
   updateAutocorrection: (enabled: boolean) => Promise<void>
   updateFontPreset: (preset: FontPreset) => Promise<void>
   updateTitleFont: (titleFont: TitleFont) => Promise<void>
@@ -202,6 +205,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   wallpaper: 'thoughts-light',
   highlightInputMode: false,
   autocorrection: true,
+  animations: true,
   fontPreference: 'monospace',
   bodyFont: 'system',
   monospaceFont: 'iawriter',
@@ -226,6 +230,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         storedWallpaper,
         storedHighlightInputMode,
         storedAutocorrection,
+        storedAnimations,
         storedFontPreference,
         storedBodyFont,
         storedMonospaceFont,
@@ -246,6 +251,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         getSetting('appearance.wallpaper'),
         getSetting('appearance.highlightInputMode'),
         getSetting('appearance.autocorrection'),
+        getSetting('appearance.animations'),
         getSetting('appearance.font'),
         getSetting('appearance.bodyFont'),
         getSetting('appearance.monospaceFont'),
@@ -289,6 +295,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             : defaultWallpaper
       const highlightInputMode = storedHighlightInputMode === 'true'
       const autocorrection = storedAutocorrection !== 'false'
+      const animations = storedAnimations !== 'false'
       const fontPreference = (storedFontPreference as FontPreference | null) ?? 'monospace'
       const bodyFont = isBodyFont(storedBodyFont) ? storedBodyFont : 'system'
       const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
@@ -335,6 +342,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (storedAutocorrection !== 'true' && storedAutocorrection !== 'false') {
         migrations.push(['appearance.autocorrection', autocorrection ? 'true' : 'false'])
       }
+      if (storedAnimations !== 'true' && storedAnimations !== 'false') {
+        migrations.push(['appearance.animations', animations ? 'true' : 'false'])
+      }
       if (!storedFontPreference) migrations.push(['appearance.font', fontPreference])
       if (!storedBodyFont || !isBodyFont(storedBodyFont)) migrations.push(['appearance.bodyFont', bodyFont])
       if (!storedMonospaceFont || !isMonospaceFont(storedMonospaceFont)) {
@@ -344,6 +354,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
       await setSettings(migrations)
       syncThemePreference(themePreference)
+      syncAnimationsPreference(animations)
 
       set({
         provider,
@@ -356,6 +367,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         wallpaper,
         highlightInputMode,
         autocorrection,
+        animations,
         fontPreference,
         bodyFont,
         monospaceFont,
@@ -500,6 +512,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     return serializeSettingsOperation(async () => {
       await setSetting('appearance.highlightInputMode', enabled ? 'true' : 'false')
       set({ highlightInputMode: enabled })
+    })
+  },
+
+  updateAnimations: async (enabled) => {
+    return serializeSettingsOperation(async () => {
+      await setSetting('appearance.animations', enabled ? 'true' : 'false')
+      syncAnimationsPreference(enabled)
+      set({ animations: enabled })
     })
   },
 

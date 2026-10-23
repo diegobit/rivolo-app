@@ -515,9 +515,8 @@ export default function AppShell() {
   return (
     <div
       className="app-shell-root min-h-full text-[var(--theme-text)]"
-      data-desktop-chat-sidebar-open={isDesktopChatMode ? 'true' : 'false'}
+      data-desktop-card-open={isDesktopChatMode || isDesktopSearchCardOpen ? 'true' : 'false'}
       data-desktop-panel-expanded={desktopPanelExpanded ? 'true' : 'false'}
-      data-desktop-search-sidebar-open={isDesktopSearchCardOpen ? 'true' : 'false'}
       data-mobile-home={isMobileHome ? 'true' : 'false'}
       data-mode={mode}
     >
