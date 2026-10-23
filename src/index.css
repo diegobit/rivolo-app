@@ -1143,12 +1143,12 @@
     }
 
     /* The card title reads like a day title ("Today 23, Friday"): the mode in
-       bold Rivolo blue, then a muted detail, in the title font. Below 520px the detail
-       steps aside in both cards, so the chat title keeps clear of its three
-       buttons and switching never changes the title's style. */
-    /* Handlee has no bold of its own, and the browser's synthetic bold thins
-       out at smaller sizes. A hairline outline brings the strokes back to the
-       weight of the larger day titles. */
+       bold, then a muted detail, in the title font and colours. Below 520px the
+       detail steps aside in both cards, so the chat title keeps clear of its
+       three buttons and switching never changes the title's style. Handlee has
+       no bold of its own, and the browser's synthetic bold thins out at smaller
+       sizes, so a hairline outline brings the strokes back to the weight of the
+       larger day titles. */
     .timeline-chat-sidebar-title {
       min-width: 0;
       font-size: 1.35rem;
@@ -1160,7 +1160,7 @@
 
     .timeline-chat-sidebar-title-mode {
       font-weight: 700;
-      color: var(--theme-accent-text);
+      color: var(--theme-title);
     }
 
     .timeline-chat-sidebar-title-detail {
