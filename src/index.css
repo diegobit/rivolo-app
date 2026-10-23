@@ -1779,16 +1779,19 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
     bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1.5rem);
   }
 
-  /* The launchers form one capsule pinned to the viewport centre, outside the
-     tray row, so opening or closing a card never shifts them. A raised thumb
-     slides behind whichever half's card is open. The descendant selectors
-     outrank the buttons' Tailwind utilities. The AI glow matches the mobile
-     menu's .mode-capsule: the soft-blue token, fixed under Chat, here the right
-     half, centred at 75%. */
+  /* The launchers form one capsule at the bottom of the sidebar's rail,
+     outside the tray row: at rest it lines up with the closed card's right
+     edge, and while a card is open it rides that card's left edge, one sidebar
+     inset clear of it (40px on wide windows, 12px below 1080px). The shift
+     is the same length the card travels, so the capsule follows the card out
+     and back on the card's own curve. A raised thumb slides behind whichever
+     half's card is open. The descendant selectors outrank the buttons'
+     Tailwind utilities. The AI glow matches the mobile menu's .mode-capsule:
+     the soft-blue token, fixed under Chat, here the right half, centred at
+     75%. */
   .bottom-tray-launchers {
     position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
+    right: calc(var(--desktop-chat-shift, 0px) + var(--desktop-chat-sidebar-inset, 20px));
     bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + 1.5rem);
     display: flex;
     align-items: center;
@@ -1803,11 +1806,7 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
       0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
       0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
     z-index: 30;
-    transition: left var(--desktop-card-duration, 440ms) var(--desktop-card-ease, ease-out);
-  }
-
-  .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] .bottom-tray-launchers {
-    left: calc(100% - var(--desktop-chat-shift) - var(--desktop-expanded-timeline-width) / 2);
+    transition: right var(--desktop-card-duration, 440ms) var(--desktop-card-ease, ease-out);
   }
 
   .bottom-tray-launchers::before {

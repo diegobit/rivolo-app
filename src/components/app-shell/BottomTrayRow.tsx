@@ -78,8 +78,9 @@ export default function BottomTrayRow({
 
       <div className={`app-shell-fixed-right-aware app-shell-fixed-tray-width bottom-tray-row hero-ui-fade-down fixed left-0 z-30 mx-auto flex ${trayRowAlignmentClass} ${trayRowJustifyClass} gap-2 px-2 sm:gap-3 sm:px-0`}>
         {showLauncherButtons ? (
-          // On desktop CSS lifts this pair out of the row and pins it to the
-          // viewport centre, so a card opening never shifts the buttons.
+          // On desktop CSS lifts this pair out of the row and anchors it to the
+          // sidebar's rail: it rests at the window's right edge and rides the
+          // card's left edge while a card is open.
           <div
             className={`flex items-center ${launcherSpread ? 'bottom-tray-launchers' : 'gap-2 sm:gap-3'}`}
             // Tells the capsule which half the sliding thumb sits behind.
