@@ -1143,7 +1143,7 @@
     }
 
     /* The card title reads like a day title ("Today 23, Friday"): the mode in
-       bold, then a muted detail, in the title font. Below 520px the detail
+       bold Rivolo blue, then a muted detail, in the title font. Below 520px the detail
        steps aside in both cards, so the chat title keeps clear of its three
        buttons and switching never changes the title's style. */
     .timeline-chat-sidebar-title {
@@ -1156,7 +1156,7 @@
 
     .timeline-chat-sidebar-title-mode {
       font-weight: 700;
-      color: var(--theme-title);
+      color: var(--theme-accent-text);
     }
 
     .timeline-chat-sidebar-title-detail {
