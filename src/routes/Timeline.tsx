@@ -2283,13 +2283,13 @@ export default function Timeline() {
                 <button
                   type="button"
                   className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
-                  aria-label="Clear chat"
-                  title="Clear chat"
+                  aria-label="New chat"
+                  title="New chat"
                   onClick={handleNewChat}
                   disabled={sending}
                 >
-                  <img src="/eraser.svg" alt="" className="h-4 w-4 opacity-80" />
-                  <span className="timeline-chat-sidebar-button-label">Clear chat</span>
+                  <img src="/note-pencil.svg" alt="" className="h-4 w-4 opacity-80" />
+                  <span className="timeline-chat-sidebar-button-label">New</span>
                 </button>
                 {panelSizeButton}
                 <button

@@ -1146,12 +1146,16 @@
        bold Rivolo blue, then a muted detail, in the title font. Below 520px the detail
        steps aside in both cards, so the chat title keeps clear of its three
        buttons and switching never changes the title's style. */
+    /* Handlee has no bold of its own, and the browser's synthetic bold thins
+       out at smaller sizes. A hairline outline brings the strokes back to the
+       weight of the larger day titles. */
     .timeline-chat-sidebar-title {
       min-width: 0;
-      font-size: 1.5rem;
+      font-size: 1.35rem;
       font-weight: 400;
       line-height: 1.1;
       white-space: nowrap;
+      -webkit-text-stroke: 0.35px currentColor;
     }
 
     .timeline-chat-sidebar-title-mode {
@@ -1192,7 +1196,7 @@
         color 160ms ease;
     }
 
-    /* An icon button that also carries its label, e.g. "Clear chat". */
+    /* An icon button that also carries its label, e.g. "New". */
     .timeline-chat-sidebar-icon-button.timeline-chat-sidebar-text-button {
       width: auto;
       gap: 0.4rem;
