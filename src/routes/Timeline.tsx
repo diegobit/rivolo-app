@@ -25,6 +25,7 @@ import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
 import { focusLauncher } from '../components/app-shell/desktopCards'
 import { useStickToBottom } from './timeline/useStickToBottom'
+import { useDesktopCardMotion } from './timeline/useDesktopCardMotion'
 import { keepEditedDayInResults, keepInteractedTodoInResults, type InteractedTodo } from './timeline/searchResults'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
 import { useEditorMountWindow, type PendingEditorFocus } from './timeline/useEditorMountWindow'
@@ -690,7 +691,7 @@ export default function Timeline() {
   const rawSearchQuery = searchText.trim()
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
-  // Desktop search renders results inside the floating left card and never
+  // Desktop search renders results inside its floating card and never
   // filters the timeline; only the narrow-viewport tray search filters it.
   const isDesktopSearchCardOpen = mode === 'search' && !isNarrowViewportMode
   const isMobileSearchMode = mode === 'search' && isNarrowViewportMode
@@ -709,6 +710,9 @@ export default function Timeline() {
   // Grows with every new message and every streamed chunk of the last one.
   const chatContentKey = `${messages.length}:${lastChatMessage?.content.length ?? 0}:${lastChatMessage?.meta?.isStreaming ? 1 : 0}`
   const chatScroll = useStickToBottom(showDesktopChatPanel, chatContentKey)
+  const desktopCardMotion = useDesktopCardMotion(
+    showDesktopChatPanel ? 'chat' : isDesktopSearchCardOpen ? 'search' : null,
+  )
   const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
   const mobileChatScroll = useMobileChatScroll(showMobileChatOverlay, mobileChatContentKey)
   const todayId = getTodayId()
@@ -1904,12 +1908,14 @@ export default function Timeline() {
 
   const canToggleMatchedResultTodos = showMatchedLineResults && searchFilter === 'open-todos'
 
-  const renderSearchPills = (layout: 'card' | 'composer') =>
-    mode === 'search' ? (
+  // The card keeps its pills until it has left the screen, so it shrinks or
+  // slides away whole after search closes.
+  const cardSearchPills =
+    desktopCardMotion.motions.search !== 'parked' ? (
       <SearchModePills
         searchFilter={searchFilter}
         resultMode={searchResultMode}
-        layout={layout}
+        layout="card"
         onSearchFilterChange={setSearchFilter}
         onResultModeChange={setSearchResultMode}
       />
@@ -2260,6 +2266,8 @@ export default function Timeline() {
         <aside
           id="desktop-chat-card"
           className={`timeline-floating-card timeline-chat-sidebar ${showDesktopChatPanel ? 'is-chat-open' : 'is-chat-closed'}`}
+          data-motion={desktopCardMotion.motions.chat}
+          onTransitionEnd={(event) => desktopCardMotion.handleTransitionEnd('chat', event)}
           aria-labelledby="desktop-chat-title"
           aria-hidden={!showDesktopChatPanel}
           inert={!showDesktopChatPanel}
@@ -2344,6 +2352,8 @@ export default function Timeline() {
         <aside
           id="desktop-search-card"
           className={`timeline-floating-card timeline-search-sidebar ${isDesktopSearchCardOpen ? 'is-search-open' : 'is-search-closed'}`}
+          data-motion={desktopCardMotion.motions.search}
+          onTransitionEnd={(event) => desktopCardMotion.handleTransitionEnd('search', event)}
           aria-labelledby="desktop-search-title"
           aria-hidden={!isDesktopSearchCardOpen}
           inert={!isDesktopSearchCardOpen}
@@ -2405,7 +2415,7 @@ export default function Timeline() {
                 </button>
               )}
             </div>
-            <div className="timeline-search-sidebar-pills">{renderSearchPills('card')}</div>
+            <div className="timeline-search-sidebar-pills">{cardSearchPills}</div>
             <div className="timeline-search-sidebar-composer">
               <div className="timeline-chat-composer-field">
                 <TrayInput

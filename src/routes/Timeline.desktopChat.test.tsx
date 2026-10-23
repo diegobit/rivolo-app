@@ -325,7 +325,7 @@ describe('Timeline desktop search card', () => {
     })
   }
 
-  it('opens the left search card with the search field and pills, without the chat card', () => {
+  it('opens the search card with the search field and pills, without the chat card', () => {
     renderTimeline()
 
     expect(getSearchInput().closest('aside')).toHaveAttribute('inert')

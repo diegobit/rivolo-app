@@ -885,7 +885,15 @@
       --desktop-chat-sidebar-width: clamp(260px, 36vw, 440px);
       --desktop-chat-sidebar-inset: 20px;
       --desktop-chat-shift: 0px;
-      --desktop-search-shift: 0px;
+      /* A card arrives on a long ease-out, like Reeder's article pane, and the
+         timeline makes room on the same curve. It leaves quicker, at full speed
+         from the start, and the timeline eases back more gently, so it never
+         catches up with the card and slides beneath it. */
+      --desktop-card-enter-duration: 340ms;
+      --desktop-card-enter-ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --desktop-card-exit-duration: 220ms;
+      --desktop-card-exit-ease: cubic-bezier(0.2, 0.6, 0.6, 1);
+      --desktop-timeline-return-ease: cubic-bezier(0.33, 1, 0.68, 1);
     }
 
     /* Below 1080px the card and the timeline narrow together so neither is
@@ -901,67 +909,41 @@
     }
 
     .app-shell-fixed-header-width {
-      width: min(calc((100vw - var(--desktop-chat-shift, 0px) - var(--desktop-search-shift, 0px)) * 0.96), 720px);
+      width: min(calc((100vw - var(--desktop-chat-shift, 0px)) * 0.96), 720px);
     }
 
     .app-shell-fixed-tray-width {
-      width: min(calc((100vw - var(--desktop-chat-shift, 0px) - var(--desktop-search-shift, 0px)) * 0.96), 620px);
+      width: min(calc((100vw - var(--desktop-chat-shift, 0px)) * 0.96), 620px);
     }
 
     .app-shell-root {
       padding-right: var(--desktop-chat-shift);
-      padding-left: var(--desktop-search-shift);
-      transition:
-        padding-right 260ms cubic-bezier(0.22, 1, 0.36, 1),
-        padding-left 260ms cubic-bezier(0.22, 1, 0.36, 1);
+      transition: padding-right var(--desktop-card-enter-duration) var(--desktop-timeline-return-ease);
     }
 
-    .app-shell-root[data-desktop-chat-sidebar-open='true'] {
+    /* Search and chat share the right edge, so switching between them leaves
+       the timeline where it is. */
+    .app-shell-root[data-desktop-card-open='true'] {
       --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
-    }
-
-    .app-shell-root[data-desktop-search-sidebar-open='true'] {
-      --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
+      transition: padding-right var(--desktop-card-enter-duration) var(--desktop-card-enter-ease);
     }
 
     /* Expanded panels use a fixed gutter instead of adding the timeline's
-       proportional margins to the panel inset. Mirror the layout for search. */
-    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] {
+       proportional margins to the panel inset. */
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] {
       --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset) + 24px);
+      --desktop-expanded-timeline-width: min(720px, calc(100% - var(--desktop-chat-shift) - var(--desktop-chat-sidebar-inset)));
     }
 
-    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] {
-      --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset) + 24px);
-    }
-
-    .app-shell-root[data-desktop-panel-expanded='true']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) {
-      --desktop-expanded-timeline-width: min(720px, calc(100% - var(--desktop-chat-shift) - var(--desktop-search-shift) - var(--desktop-chat-sidebar-inset)));
-    }
-
-    .app-shell-root[data-desktop-panel-expanded='true']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-main {
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] .app-main {
       width: min(720px, calc(100% - var(--desktop-chat-sidebar-inset)));
-    }
-
-    .app-shell-root[data-desktop-panel-expanded='true']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-shell-fixed-header-width {
-      width: var(--desktop-expanded-timeline-width);
-    }
-
-    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] .app-main {
       margin-right: 0;
     }
 
-    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] .app-main {
-      margin-left: 0;
-    }
-
-    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] .app-shell-fixed-header-width {
+    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] .app-shell-fixed-header-width {
+      width: var(--desktop-expanded-timeline-width);
       left: auto;
       right: var(--desktop-chat-shift);
-    }
-
-    .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] .app-shell-fixed-header-width {
-      left: var(--desktop-search-shift);
-      right: auto;
     }
 
     /* Narrow desktop windows (and iPad portrait) can't spare the roomy gutters:
@@ -972,28 +954,24 @@
        header and tray use 100% rather than 100vw so the scrollbar gutter does
        not make them wider than the timeline. */
     @media (max-width: 1079.98px) {
-      .app-shell-root:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) {
+      .app-shell-root[data-desktop-card-open='true'] {
         --desktop-chat-sidebar-inset: 12px;
       }
 
-      .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-chat-sidebar-open='true'] {
+      .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] {
         --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset));
       }
 
-      .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-search-sidebar-open='true'] {
-        --desktop-search-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset));
-      }
-
-      .app-shell-root[data-desktop-panel-expanded='false']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-main {
+      .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] .app-main {
         width: min(720px, calc(100% - 2 * var(--desktop-chat-sidebar-inset)));
       }
 
-      .app-shell-root[data-desktop-panel-expanded='false']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-shell-fixed-header-width {
-        width: min(720px, calc(100% - var(--desktop-chat-shift) - var(--desktop-search-shift) - 2 * var(--desktop-chat-sidebar-inset)));
+      .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] .app-shell-fixed-header-width {
+        width: min(720px, calc(100% - var(--desktop-chat-shift) - 2 * var(--desktop-chat-sidebar-inset)));
       }
 
-      .app-shell-root[data-desktop-panel-expanded='false']:is([data-desktop-chat-sidebar-open='true'], [data-desktop-search-sidebar-open='true']) .app-shell-fixed-tray-width {
-        width: min(620px, calc(100% - var(--desktop-chat-shift) - var(--desktop-search-shift) - 2 * var(--desktop-chat-sidebar-inset)));
+      .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] .app-shell-fixed-tray-width {
+        width: min(620px, calc(100% - var(--desktop-chat-shift) - 2 * var(--desktop-chat-sidebar-inset)));
       }
     }
 
@@ -1004,11 +982,12 @@
     }
 
     .app-shell-fixed-right-aware {
-      left: var(--desktop-search-shift);
       right: var(--desktop-chat-shift);
-      transition:
-        left 260ms cubic-bezier(0.22, 1, 0.36, 1),
-        right 260ms cubic-bezier(0.22, 1, 0.36, 1);
+      transition: right var(--desktop-card-enter-duration) var(--desktop-timeline-return-ease);
+    }
+
+    .app-shell-root[data-desktop-card-open='true'] .app-shell-fixed-right-aware {
+      transition: right var(--desktop-card-enter-duration) var(--desktop-card-enter-ease);
     }
 
     .timeline-floating-card {
@@ -1027,27 +1006,78 @@
       transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
+    /* Both cards share the right edge and wait just beyond it while closed,
+       far enough that their shadow is out of sight too. data-motion (see
+       useDesktopCardMotion) moves them: opening slides a card in, closing
+       slides it back out, and switching shrinks the old card towards its
+       centre beneath the one arriving over it. */
     .timeline-chat-sidebar,
     .timeline-search-sidebar {
-      opacity: 0;
-      transform: translateX(var(--desktop-panel-entry-offset));
+      right: var(--desktop-chat-sidebar-inset);
+      transform: translateX(calc(100% + var(--desktop-chat-sidebar-inset) + 48px)) scale(1);
+      visibility: hidden;
       pointer-events: none;
       transition:
-        opacity 220ms ease,
         width 260ms cubic-bezier(0.22, 1, 0.36, 1),
-        transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+        transform var(--desktop-card-exit-duration) var(--desktop-card-exit-ease),
+        visibility 0s linear var(--desktop-card-exit-duration);
     }
 
-    .timeline-chat-sidebar {
-      right: var(--desktop-chat-sidebar-inset);
-      --desktop-panel-entry-offset: 16px;
+    /* Dims a card while it shrinks beneath the one replacing it. */
+    .timeline-chat-sidebar::after,
+    .timeline-search-sidebar::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: rgb(var(--theme-shadow-color) / 0.08);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--desktop-card-enter-duration) var(--desktop-card-enter-ease);
     }
 
-    .timeline-chat-sidebar.is-chat-open,
-    .timeline-search-sidebar.is-search-open {
-      opacity: 1;
-      transform: translateX(0);
+    .timeline-floating-card[data-motion='open'] {
+      z-index: 26;
+      transform: translateX(0) scale(1);
+      visibility: visible;
       pointer-events: auto;
+      transition:
+        width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+        transform var(--desktop-card-enter-duration) var(--desktop-card-enter-ease),
+        box-shadow 200ms ease,
+        visibility 0s;
+    }
+
+    /* Above the open card, so undoing a switch slides it off the one growing
+       back beneath. */
+    .timeline-floating-card[data-motion='out'] {
+      z-index: 27;
+    }
+
+    .timeline-floating-card[data-motion='under'] {
+      transform: translateX(0) scale(0.92);
+      transition:
+        width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+        transform var(--desktop-card-enter-duration) var(--desktop-card-enter-ease),
+        visibility 0s linear var(--desktop-card-enter-duration);
+    }
+
+    .timeline-floating-card[data-motion='under']::after {
+      opacity: 1;
+    }
+
+    .timeline-floating-card[data-motion='parked'],
+    .timeline-floating-card[data-motion='parked']::after {
+      transition: none;
+    }
+
+    /* The arriving card casts a shadow over the one shrinking beneath it. */
+    .timeline-floating-card[data-motion='under'] ~ .timeline-floating-card[data-motion='open'],
+    .timeline-floating-card[data-motion='open']:has(~ .timeline-floating-card[data-motion='under']) {
+      box-shadow:
+        -16px 0 36px -18px rgb(var(--theme-shadow-color) / 0.32),
+        0 28px 60px -36px rgb(var(--theme-shadow-color) / 0.5),
+        0 10px 26px -20px rgb(var(--theme-shadow-color) / 0.28);
     }
 
     /* When a card is too short for its controls (a landscape phone, the
@@ -1227,12 +1257,6 @@
       box-shadow: 0 0 0 3px rgb(var(--theme-accent-soft-rgb));
     }
 
-    /* Desktop search card: mirrors the chat card's visual language anchored to the left edge. */
-    .timeline-search-sidebar {
-      left: var(--desktop-chat-sidebar-inset);
-      --desktop-panel-entry-offset: -16px;
-    }
-
     .timeline-search-sidebar-composer {
       position: sticky;
       bottom: 0;
@@ -1392,16 +1416,36 @@
     }
 
     .app-shell-root,
+    .app-shell-root[data-desktop-card-open='true'],
     .app-shell-fixed-right-aware,
-    .timeline-floating-card,
-    .timeline-chat-sidebar {
+    .app-shell-root[data-desktop-card-open='true'] .app-shell-fixed-right-aware,
+    .timeline-floating-card {
       transition: none;
     }
 
-    .timeline-search-sidebar,
     .bottom-tray-row {
       animation: none;
       transition: none;
+    }
+
+    /* Cards cross-fade in place instead of moving. */
+    .timeline-floating-card[data-motion] {
+      transform: none;
+      opacity: 0;
+      transition:
+        opacity 160ms ease,
+        visibility 0s linear 160ms;
+    }
+
+    .timeline-floating-card[data-motion='open'] {
+      opacity: 1;
+      transition:
+        opacity 160ms ease,
+        visibility 0s;
+    }
+
+    .timeline-floating-card[data-motion]::after {
+      display: none;
     }
   }
 
@@ -1720,15 +1764,11 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
       0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
       0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
     z-index: 30;
-    transition: left 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: left var(--desktop-card-enter-duration, 340ms) var(--desktop-card-enter-ease, ease-out);
   }
 
-  .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-chat-sidebar-open='true'] .bottom-tray-launchers {
+  .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] .bottom-tray-launchers {
     left: calc(100% - var(--desktop-chat-shift) - var(--desktop-expanded-timeline-width) / 2);
-  }
-
-  .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-search-sidebar-open='true'] .bottom-tray-launchers {
-    left: calc(var(--desktop-search-shift) + var(--desktop-expanded-timeline-width) / 2);
   }
 
   .bottom-tray-launchers::before {
@@ -1841,14 +1881,6 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
 .launcher-label,
 .launcher-kbd {
   display: none;
-}
-
-@media (min-width: 700px) {
-  /* Header/tray use Tailwind left-0 (utilities); this unlayered left wins so they
-     shift with --desktop-search-shift when the left card reserves space. */
-  .app-shell-fixed-right-aware {
-    left: var(--desktop-search-shift);
-  }
 }
 
 /* Spans the full width and fades out downwards, like the bottom tray's blur,
