@@ -905,9 +905,9 @@
          timeline makes room on the same curve. It leaves quicker, at full speed
          from the start, and the timeline eases back more gently, so it never
          catches up with the card and slides beneath it. */
-      --desktop-card-enter-duration: 340ms;
+      --desktop-card-enter-duration: 440ms;
       --desktop-card-enter-ease: cubic-bezier(0.16, 1, 0.3, 1);
-      --desktop-card-exit-duration: 220ms;
+      --desktop-card-exit-duration: 290ms;
       --desktop-card-exit-ease: cubic-bezier(0.2, 0.6, 0.6, 1);
       --desktop-timeline-return-ease: cubic-bezier(0.33, 1, 0.68, 1);
     }
@@ -1039,8 +1039,9 @@
         visibility 0s linear var(--desktop-card-exit-duration);
     }
 
-    /* Dims a card while it shrinks beneath the one replacing it. It sits above
-       the sticky composer, so the whole card dims evenly. */
+    /* Barely dims a card while it shrinks beneath the one replacing it; the
+       arriving card's shadow does most of the work. It sits above the sticky
+       composer, so the whole card dims evenly. */
     .timeline-chat-sidebar::after,
     .timeline-search-sidebar::after {
       content: '';
@@ -1048,7 +1049,7 @@
       inset: 0;
       z-index: 2;
       border-radius: inherit;
-      background: rgb(var(--theme-shadow-color) / 0.08);
+      background: rgb(var(--theme-shadow-color) / 0.01);
       opacity: 0;
       pointer-events: none;
       transition: opacity var(--desktop-card-enter-duration) var(--desktop-card-enter-ease);
@@ -1797,7 +1798,7 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
       0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
       0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
     z-index: 30;
-    transition: left var(--desktop-card-enter-duration, 340ms) var(--desktop-card-enter-ease, ease-out);
+    transition: left var(--desktop-card-enter-duration, 440ms) var(--desktop-card-enter-ease, ease-out);
   }
 
   .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] .bottom-tray-launchers {
