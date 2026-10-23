@@ -1899,13 +1899,22 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
     }
   }
 
-  @media (min-width: 1150px) {
+  /* The capsule grows in two steps: from 900px each half shows its label, and
+     from 1150px the shortcut hint joins it. Both steps leave the capsule clear
+     of an open card. */
+  @media (min-width: 900px) {
     .bottom-tray-launchers .bottom-tray-launcher-button {
-      width: 132px;
+      width: 96px;
     }
 
     .bottom-tray-launchers .launcher-label {
       display: inline;
+    }
+  }
+
+  @media (min-width: 1150px) {
+    .bottom-tray-launchers .bottom-tray-launcher-button {
+      width: 132px;
     }
   }
 
