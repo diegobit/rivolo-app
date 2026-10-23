@@ -7,7 +7,7 @@ import BottomTrayPortal from '../components/BottomTrayPortal'
 import DayEditorCard from '../components/timeline/DayEditorCard'
 import EmptyStateHero from '../components/timeline/EmptyStateHero'
 import ChatMessageList from '../components/timeline/ChatMessageList'
-import { isIOS, isPrimaryModifierPressed, preferredScrollBehavior } from '../lib/device'
+import { isIOS, isPrimaryModifierPressed, preferredScrollBehavior, prefersReducedMotion } from '../lib/device'
 import { lockPageScroll } from '../lib/pageScrollLock'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
@@ -25,6 +25,7 @@ import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
 import { focusLauncher } from '../components/app-shell/desktopCards'
 import { useStickToBottom } from './timeline/useStickToBottom'
+import { useDesktopCardMotion } from './timeline/useDesktopCardMotion'
 import { keepEditedDayInResults, keepInteractedTodoInResults, type InteractedTodo } from './timeline/searchResults'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
 import { useEditorMountWindow, type PendingEditorFocus } from './timeline/useEditorMountWindow'
@@ -690,7 +691,7 @@ export default function Timeline() {
   const rawSearchQuery = searchText.trim()
   const deferredSearchQuery = useDeferredValue(rawSearchQuery)
   const searchQuery = mode === 'search' ? deferredSearchQuery : ''
-  // Desktop search renders results inside the floating left card and never
+  // Desktop search renders results inside its floating card and never
   // filters the timeline; only the narrow-viewport tray search filters it.
   const isDesktopSearchCardOpen = mode === 'search' && !isNarrowViewportMode
   const isMobileSearchMode = mode === 'search' && isNarrowViewportMode
@@ -709,6 +710,9 @@ export default function Timeline() {
   // Grows with every new message and every streamed chunk of the last one.
   const chatContentKey = `${messages.length}:${lastChatMessage?.content.length ?? 0}:${lastChatMessage?.meta?.isStreaming ? 1 : 0}`
   const chatScroll = useStickToBottom(showDesktopChatPanel, chatContentKey)
+  const desktopCardMotion = useDesktopCardMotion(
+    showDesktopChatPanel ? 'chat' : isDesktopSearchCardOpen ? 'search' : null,
+  )
   const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
   const mobileChatScroll = useMobileChatScroll(showMobileChatOverlay, mobileChatContentKey)
   const todayId = getTodayId()
@@ -1020,7 +1024,7 @@ export default function Timeline() {
     const heroLogo = heroLogoRef.current
     const headerLogo = document.querySelector<HTMLImageElement>('.app-logo')
     if (!heroLogo || !headerLogo) return false
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
+    if (prefersReducedMotion()) return false
 
     const heroRect = heroLogo.getBoundingClientRect()
     const headerRect = headerLogo.getBoundingClientRect()
@@ -1318,8 +1322,7 @@ export default function Timeline() {
   }, [loadTimeline])
 
   const handleEmptyCta = useCallback(() => {
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (!prefersReducedMotion) {
+    if (!prefersReducedMotion()) {
       heroRevealPending.current = true
     }
     runLogoTransition()
@@ -1904,12 +1907,14 @@ export default function Timeline() {
 
   const canToggleMatchedResultTodos = showMatchedLineResults && searchFilter === 'open-todos'
 
-  const renderSearchPills = (layout: 'card' | 'composer') =>
-    mode === 'search' ? (
+  // The card keeps its pills until it has left the screen, so it shrinks or
+  // slides away whole after search closes.
+  const cardSearchPills =
+    desktopCardMotion.motions.search !== 'parked' ? (
       <SearchModePills
         searchFilter={searchFilter}
         resultMode={searchResultMode}
-        layout={layout}
+        layout="card"
         onSearchFilterChange={setSearchFilter}
         onResultModeChange={setSearchResultMode}
       />
@@ -2260,28 +2265,33 @@ export default function Timeline() {
         <aside
           id="desktop-chat-card"
           className={`timeline-floating-card timeline-chat-sidebar ${showDesktopChatPanel ? 'is-chat-open' : 'is-chat-closed'}`}
+          data-motion={desktopCardMotion.motions.chat}
+          onTransitionEnd={(event) => desktopCardMotion.handleTransitionEnd('chat', event)}
           aria-labelledby="desktop-chat-title"
           aria-hidden={!showDesktopChatPanel}
           inert={!showDesktopChatPanel}
         >
           <div className="timeline-chat-sidebar-inner">
             <header className="timeline-chat-sidebar-header">
-              <h2 id="desktop-chat-title" className="timeline-chat-sidebar-title">
-                Chat
+              <h2 id="desktop-chat-title" className="timeline-chat-sidebar-title" style={{ fontFamily: titleFontFamily }}>
+                <span className="timeline-chat-sidebar-title-mode">Chat</span>
+                <span className="timeline-chat-sidebar-title-detail" aria-hidden="true">with Rivolo</span>
               </h2>
+              {/* The size toggle sits beside Close, as in the search card, so it
+                  stays put when switching between them. */}
               <div className="timeline-chat-sidebar-actions">
-                {panelSizeButton}
                 <button
                   type="button"
                   className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
-                  aria-label="Clear chat"
-                  title="Clear chat"
+                  aria-label="New chat"
+                  title="New chat"
                   onClick={handleNewChat}
                   disabled={sending}
                 >
-                  <img src="/eraser.svg" alt="" className="h-4 w-4 opacity-80" />
-                  <span className="timeline-chat-sidebar-button-label">Clear chat</span>
+                  <img src="/note-pencil.svg" alt="" className="h-4 w-4 opacity-80" />
+                  <span className="timeline-chat-sidebar-button-label">New</span>
                 </button>
+                {panelSizeButton}
                 <button
                   type="button"
                   className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
@@ -2344,6 +2354,8 @@ export default function Timeline() {
         <aside
           id="desktop-search-card"
           className={`timeline-floating-card timeline-search-sidebar ${isDesktopSearchCardOpen ? 'is-search-open' : 'is-search-closed'}`}
+          data-motion={desktopCardMotion.motions.search}
+          onTransitionEnd={(event) => desktopCardMotion.handleTransitionEnd('search', event)}
           aria-labelledby="desktop-search-title"
           aria-hidden={!isDesktopSearchCardOpen}
           inert={!isDesktopSearchCardOpen}
@@ -2351,8 +2363,9 @@ export default function Timeline() {
         >
           <div className="timeline-chat-sidebar-inner">
             <header className="timeline-chat-sidebar-header">
-              <h2 id="desktop-search-title" className="timeline-chat-sidebar-title">
-                Search
+              <h2 id="desktop-search-title" className="timeline-chat-sidebar-title" style={{ fontFamily: titleFontFamily }}>
+                <span className="timeline-chat-sidebar-title-mode">Search</span>
+                <span className="timeline-chat-sidebar-title-detail" aria-hidden="true">your days</span>
               </h2>
               <div className="timeline-chat-sidebar-actions">
                 {panelSizeButton}
@@ -2405,7 +2418,7 @@ export default function Timeline() {
                 </button>
               )}
             </div>
-            <div className="timeline-search-sidebar-pills">{renderSearchPills('card')}</div>
+            <div className="timeline-search-sidebar-pills">{cardSearchPills}</div>
             <div className="timeline-search-sidebar-composer">
               <div className="timeline-chat-composer-field">
                 <TrayInput

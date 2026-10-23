@@ -871,30 +871,22 @@ describe('AppShell launcher mode buttons', () => {
     expect(stores.ui.setMode).toHaveBeenCalledExactlyOnceWith('timeline')
   })
 
-  it('marks the open desktop cards on the shell root for the tray layout', () => {
-    stores.ui.mode = 'search'
+  it('marks an open desktop card on the shell root for the layout', () => {
+    stores.ui.mode = 'timeline'
     const view = render(renderHome())
 
-    expect(document.querySelector('.app-shell-root')).toHaveAttribute(
-      'data-desktop-search-sidebar-open',
-      'true',
-    )
-    expect(document.querySelector('.app-shell-root')).toHaveAttribute(
-      'data-desktop-chat-sidebar-open',
-      'false',
-    )
+    expect(document.querySelector('.app-shell-root')).toHaveAttribute('data-desktop-card-open', 'false')
+
+    // Search and chat share the right edge, so both reserve the same space.
+    stores.ui.mode = 'search'
+    view.rerender(renderHome())
+
+    expect(document.querySelector('.app-shell-root')).toHaveAttribute('data-desktop-card-open', 'true')
 
     stores.ui.mode = 'chat'
     view.rerender(renderHome())
 
-    expect(document.querySelector('.app-shell-root')).toHaveAttribute(
-      'data-desktop-search-sidebar-open',
-      'false',
-    )
-    expect(document.querySelector('.app-shell-root')).toHaveAttribute(
-      'data-desktop-chat-sidebar-open',
-      'true',
-    )
+    expect(document.querySelector('.app-shell-root')).toHaveAttribute('data-desktop-card-open', 'true')
   })
 
   it('switches between chat and search from the mobile menu', () => {
