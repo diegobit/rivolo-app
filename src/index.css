@@ -905,15 +905,12 @@
       --desktop-card-edge: 20px;
       --desktop-card-radius: 24px;
       --desktop-chat-shift: 0px;
-      /* A card arrives on a long ease-out, like Reeder's article pane, and the
-         timeline makes room on the same curve. It leaves quicker, at full speed
-         from the start, and the timeline eases back more gently, so it never
-         catches up with the card and slides beneath it. */
-      --desktop-card-enter-duration: 440ms;
-      --desktop-card-enter-ease: cubic-bezier(0.16, 1, 0.3, 1);
-      --desktop-card-exit-duration: 290ms;
-      --desktop-card-exit-ease: cubic-bezier(0.2, 0.6, 0.6, 1);
-      --desktop-timeline-return-ease: cubic-bezier(0.33, 1, 0.68, 1);
+      /* Cards move on a long ease-out, like Reeder's article pane, and the
+         timeline moves with them on the same curve, opening and closing alike.
+         A closing card travels its own width while the timeline travels half
+         the card's, so the card always stays ahead and never slides over it. */
+      --desktop-card-duration: 440ms;
+      --desktop-card-ease: cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     /* Below 1080px the card and the timeline narrow together so neither is
@@ -938,14 +935,13 @@
 
     .app-shell-root {
       padding-right: var(--desktop-chat-shift);
-      transition: padding-right var(--desktop-card-enter-duration) var(--desktop-timeline-return-ease);
+      transition: padding-right var(--desktop-card-duration) var(--desktop-card-ease);
     }
 
     /* Search and chat share the right edge, so switching between them leaves
        the timeline where it is. */
     .app-shell-root[data-desktop-card-open='true'] {
       --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-card-edge) + var(--desktop-chat-sidebar-inset));
-      transition: padding-right var(--desktop-card-enter-duration) var(--desktop-card-enter-ease);
     }
 
     /* Expanded panels use a fixed gutter instead of adding the timeline's
@@ -1007,11 +1003,7 @@
 
     .app-shell-fixed-right-aware {
       right: var(--desktop-chat-shift);
-      transition: right var(--desktop-card-enter-duration) var(--desktop-timeline-return-ease);
-    }
-
-    .app-shell-root[data-desktop-card-open='true'] .app-shell-fixed-right-aware {
-      transition: right var(--desktop-card-enter-duration) var(--desktop-card-enter-ease);
+      transition: right var(--desktop-card-duration) var(--desktop-card-ease);
     }
 
     .timeline-floating-card {
@@ -1043,8 +1035,8 @@
       pointer-events: none;
       transition:
         width 260ms cubic-bezier(0.22, 1, 0.36, 1),
-        transform var(--desktop-card-exit-duration) var(--desktop-card-exit-ease),
-        visibility 0s linear var(--desktop-card-exit-duration);
+        transform var(--desktop-card-duration) var(--desktop-card-ease),
+        visibility 0s linear var(--desktop-card-duration);
     }
 
     /* Barely dims a card while it shrinks beneath the one replacing it; the
@@ -1060,7 +1052,7 @@
       background: rgb(var(--theme-shadow-color) / 0.01);
       opacity: 0;
       pointer-events: none;
-      transition: opacity var(--desktop-card-enter-duration) var(--desktop-card-enter-ease);
+      transition: opacity var(--desktop-card-duration) var(--desktop-card-ease);
     }
 
     .timeline-floating-card[data-motion='open'] {
@@ -1070,7 +1062,7 @@
       pointer-events: auto;
       transition:
         width 260ms cubic-bezier(0.22, 1, 0.36, 1),
-        transform var(--desktop-card-enter-duration) var(--desktop-card-enter-ease),
+        transform var(--desktop-card-duration) var(--desktop-card-ease),
         visibility 0s;
     }
 
@@ -1089,9 +1081,9 @@
         0 10px 26px -20px rgb(var(--theme-shadow-color) / 0);
       transition:
         width 260ms cubic-bezier(0.22, 1, 0.36, 1),
-        transform var(--desktop-card-enter-duration) var(--desktop-card-enter-ease),
-        box-shadow var(--desktop-card-enter-duration) var(--desktop-card-enter-ease),
-        visibility 0s linear var(--desktop-card-enter-duration);
+        transform var(--desktop-card-duration) var(--desktop-card-ease),
+        box-shadow var(--desktop-card-duration) var(--desktop-card-ease),
+        visibility 0s linear var(--desktop-card-duration);
     }
 
     .timeline-floating-card[data-motion='under']::after {
@@ -1109,7 +1101,7 @@
     @media (prefers-reduced-motion: no-preference) {
       .timeline-floating-card[data-motion='under'] ~ .timeline-floating-card[data-motion='open'],
       .timeline-floating-card[data-motion='open']:has(~ .timeline-floating-card[data-motion='under']) {
-        animation: desktop-card-cover-shadow var(--desktop-card-enter-duration) var(--desktop-card-enter-ease);
+        animation: desktop-card-cover-shadow var(--desktop-card-duration) var(--desktop-card-ease);
       }
     }
 
@@ -1465,9 +1457,7 @@
     }
 
     .app-shell-root,
-    .app-shell-root[data-desktop-card-open='true'],
     .app-shell-fixed-right-aware,
-    .app-shell-root[data-desktop-card-open='true'] .app-shell-fixed-right-aware,
     .timeline-floating-card {
       transition: none;
     }
@@ -1813,7 +1803,7 @@ html[data-theme='dark'] .mode-capsule-compact .mode-capsule-thumb {
       0 6px 18px -10px rgb(var(--theme-shadow-color) / 0.22),
       0 1px 3px rgb(var(--theme-shadow-color) / 0.08);
     z-index: 30;
-    transition: left var(--desktop-card-enter-duration, 440ms) var(--desktop-card-enter-ease, ease-out);
+    transition: left var(--desktop-card-duration, 440ms) var(--desktop-card-ease, ease-out);
   }
 
   .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] .bottom-tray-launchers {
