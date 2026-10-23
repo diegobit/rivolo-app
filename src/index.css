@@ -1142,10 +1142,32 @@
       padding: 1.1rem 1.5rem 0.85rem 1.5rem;
     }
 
+    /* The card title reads like a day title ("Today 23, Friday"): the mode in
+       bold, then a muted detail, in the title font. Below 520px the detail
+       steps aside in both cards, so the chat title keeps clear of its three
+       buttons and switching never changes the title's style. */
     .timeline-chat-sidebar-title {
-      font-size: 0.95rem;
+      min-width: 0;
+      font-size: 1.5rem;
+      font-weight: 400;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    .timeline-chat-sidebar-title-mode {
       font-weight: 700;
-      color: var(--theme-text);
+      color: var(--theme-title);
+    }
+
+    .timeline-chat-sidebar-title-detail {
+      margin-left: 0.5rem;
+      color: var(--theme-title-muted);
+    }
+
+    @container (max-width: 519px) {
+      .timeline-chat-sidebar-title-detail {
+        display: none;
+      }
     }
 
     .timeline-chat-sidebar-actions {

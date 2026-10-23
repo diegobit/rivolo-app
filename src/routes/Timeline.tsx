@@ -2273,8 +2273,9 @@ export default function Timeline() {
         >
           <div className="timeline-chat-sidebar-inner">
             <header className="timeline-chat-sidebar-header">
-              <h2 id="desktop-chat-title" className="timeline-chat-sidebar-title">
-                Chat
+              <h2 id="desktop-chat-title" className="timeline-chat-sidebar-title" style={{ fontFamily: titleFontFamily }}>
+                <span className="timeline-chat-sidebar-title-mode">Chat</span>
+                <span className="timeline-chat-sidebar-title-detail" aria-hidden="true">with Rivolo</span>
               </h2>
               {/* The size toggle sits beside Close, as in the search card, so it
                   stays put when switching between them. */}
@@ -2362,8 +2363,9 @@ export default function Timeline() {
         >
           <div className="timeline-chat-sidebar-inner">
             <header className="timeline-chat-sidebar-header">
-              <h2 id="desktop-search-title" className="timeline-chat-sidebar-title">
-                Search
+              <h2 id="desktop-search-title" className="timeline-chat-sidebar-title" style={{ fontFamily: titleFontFamily }}>
+                <span className="timeline-chat-sidebar-title-mode">Search</span>
+                <span className="timeline-chat-sidebar-title-detail" aria-hidden="true">your days</span>
               </h2>
               <div className="timeline-chat-sidebar-actions">
                 {panelSizeButton}
