@@ -900,6 +900,10 @@
     .app-shell-root {
       --desktop-chat-sidebar-width: clamp(260px, 36vw, 440px);
       --desktop-chat-sidebar-inset: 20px;
+      /* The card's distance from the window's edges; the inset above is the
+         gap between the card and the timeline. */
+      --desktop-card-edge: 20px;
+      --desktop-card-radius: 24px;
       --desktop-chat-shift: 0px;
       /* A card arrives on a long ease-out, like Reeder's article pane, and the
          timeline makes room on the same curve. It leaves quicker, at full speed
@@ -940,14 +944,14 @@
     /* Search and chat share the right edge, so switching between them leaves
        the timeline where it is. */
     .app-shell-root[data-desktop-card-open='true'] {
-      --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + 2 * var(--desktop-chat-sidebar-inset));
+      --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-card-edge) + var(--desktop-chat-sidebar-inset));
       transition: padding-right var(--desktop-card-enter-duration) var(--desktop-card-enter-ease);
     }
 
     /* Expanded panels use a fixed gutter instead of adding the timeline's
        proportional margins to the panel inset. */
     .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] {
-      --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset) + 24px);
+      --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-card-edge) + 24px);
       --desktop-expanded-timeline-width: min(720px, calc(100% - var(--desktop-chat-shift) - var(--desktop-chat-sidebar-inset)));
     }
 
@@ -964,18 +968,22 @@
 
     /* Narrow desktop windows (and iPad portrait) can't spare the roomy gutters:
        a card's 20px inset plus the timeline's 2% margins left about 30px between
-       them. Tighten everything to one 12px gutter, so the timeline's outer edge,
-       the gap to the card and the card's own edge all match. The shift counts the
-       card's outer inset only; the timeline's margin supplies the gap. The fixed
-       header and tray use 100% rather than 100vw so the scrollbar gutter does
-       not make them wider than the timeline. */
+       them. Tighten them to one 12px gutter, so the timeline's outer edge and the
+       gap to the card match, and let the card sit closer still to the window,
+       8px away, with slightly tighter corners to suit. The shift counts the
+       card's edge only; the timeline's margin supplies the gap. The fixed header
+       and tray use 100% rather than 100vw so the scrollbar gutter does not make
+       them wider than the timeline. These hold whether or not a card is open, so
+       a closing card keeps its place while it slides out. */
     @media (max-width: 1079.98px) {
-      .app-shell-root[data-desktop-card-open='true'] {
+      .app-shell-root {
         --desktop-chat-sidebar-inset: 12px;
+        --desktop-card-edge: 8px;
+        --desktop-card-radius: 20px;
       }
 
       .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] {
-        --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-chat-sidebar-inset));
+        --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-card-edge));
       }
 
       .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] .app-main {
@@ -1008,13 +1016,13 @@
 
     .timeline-floating-card {
       position: fixed;
-      top: calc(env(safe-area-inset-top) + var(--desktop-chat-sidebar-inset));
-      bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + var(--desktop-chat-sidebar-inset));
-      width: min(var(--desktop-chat-sidebar-width), calc(100vw - 2 * var(--desktop-chat-sidebar-inset)));
+      top: calc(env(safe-area-inset-top) + var(--desktop-card-edge));
+      bottom: calc(var(--keyboard-offset, 0px) + env(safe-area-inset-bottom) + var(--desktop-card-edge));
+      width: min(var(--desktop-chat-sidebar-width), calc(100vw - 2 * var(--desktop-card-edge)));
       overflow: hidden;
       background: var(--theme-surface);
       border: 1px solid var(--theme-border);
-      border-radius: 24px;
+      border-radius: var(--desktop-card-radius);
       box-shadow:
         0 28px 60px -36px rgb(var(--theme-shadow-color) / 0.5),
         0 10px 26px -20px rgb(var(--theme-shadow-color) / 0.28);
@@ -1029,8 +1037,8 @@
        centre beneath the one arriving over it. */
     .timeline-chat-sidebar,
     .timeline-search-sidebar {
-      right: var(--desktop-chat-sidebar-inset);
-      transform: translateX(calc(100% + var(--desktop-chat-sidebar-inset) + 48px)) scale(1);
+      right: var(--desktop-card-edge);
+      transform: translateX(calc(100% + var(--desktop-card-edge) + 48px)) scale(1);
       visibility: hidden;
       pointer-events: none;
       transition:

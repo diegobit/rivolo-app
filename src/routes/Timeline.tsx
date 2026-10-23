@@ -2276,8 +2276,9 @@ export default function Timeline() {
               <h2 id="desktop-chat-title" className="timeline-chat-sidebar-title">
                 Chat
               </h2>
+              {/* The size toggle sits beside Close, as in the search card, so it
+                  stays put when switching between them. */}
               <div className="timeline-chat-sidebar-actions">
-                {panelSizeButton}
                 <button
                   type="button"
                   className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
@@ -2289,6 +2290,7 @@ export default function Timeline() {
                   <img src="/eraser.svg" alt="" className="h-4 w-4 opacity-80" />
                   <span className="timeline-chat-sidebar-button-label">Clear chat</span>
                 </button>
+                {panelSizeButton}
                 <button
                   type="button"
                   className="timeline-chat-sidebar-icon-button timeline-chat-sidebar-text-button"
