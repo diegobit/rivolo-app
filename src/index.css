@@ -1023,12 +1023,14 @@
         visibility 0s linear var(--desktop-card-exit-duration);
     }
 
-    /* Dims a card while it shrinks beneath the one replacing it. */
+    /* Dims a card while it shrinks beneath the one replacing it. It sits above
+       the sticky composer, so the whole card dims evenly. */
     .timeline-chat-sidebar::after,
     .timeline-search-sidebar::after {
       content: '';
       position: absolute;
       inset: 0;
+      z-index: 2;
       border-radius: inherit;
       background: rgb(var(--theme-shadow-color) / 0.08);
       opacity: 0;
@@ -1044,7 +1046,6 @@
       transition:
         width 260ms cubic-bezier(0.22, 1, 0.36, 1),
         transform var(--desktop-card-enter-duration) var(--desktop-card-enter-ease),
-        box-shadow 200ms ease,
         visibility 0s;
     }
 
@@ -1054,11 +1055,17 @@
       z-index: 27;
     }
 
-    .timeline-floating-card[data-motion='under'] {
+    /* Its own shadow fades as it shrinks, so none is left to vanish when it is
+       hidden. The root prefix outranks the expanded panel's shadow. */
+    .app-shell-root .timeline-floating-card[data-motion='under'] {
       transform: translateX(0) scale(0.92);
+      box-shadow:
+        0 28px 60px -36px rgb(var(--theme-shadow-color) / 0),
+        0 10px 26px -20px rgb(var(--theme-shadow-color) / 0);
       transition:
         width 260ms cubic-bezier(0.22, 1, 0.36, 1),
         transform var(--desktop-card-enter-duration) var(--desktop-card-enter-ease),
+        box-shadow var(--desktop-card-enter-duration) var(--desktop-card-enter-ease),
         visibility 0s linear var(--desktop-card-enter-duration);
     }
 
@@ -1071,13 +1078,23 @@
       transition: none;
     }
 
-    /* The arriving card casts a shadow over the one shrinking beneath it. */
-    .timeline-floating-card[data-motion='under'] ~ .timeline-floating-card[data-motion='open'],
-    .timeline-floating-card[data-motion='open']:has(~ .timeline-floating-card[data-motion='under']) {
-      box-shadow:
-        -16px 0 36px -18px rgb(var(--theme-shadow-color) / 0.32),
-        0 28px 60px -36px rgb(var(--theme-shadow-color) / 0.5),
-        0 10px 26px -20px rgb(var(--theme-shadow-color) / 0.28);
+    /* The arriving card casts a shadow over the one shrinking beneath it. The
+       shadow fades on the slide's own curve and ends at the card's usual one,
+       so nothing changes when the card beneath is parked. */
+    @media (prefers-reduced-motion: no-preference) {
+      .timeline-floating-card[data-motion='under'] ~ .timeline-floating-card[data-motion='open'],
+      .timeline-floating-card[data-motion='open']:has(~ .timeline-floating-card[data-motion='under']) {
+        animation: desktop-card-cover-shadow var(--desktop-card-enter-duration) var(--desktop-card-enter-ease);
+      }
+    }
+
+    @keyframes desktop-card-cover-shadow {
+      from {
+        box-shadow:
+          0 28px 60px -36px rgb(var(--theme-shadow-color) / 0.5),
+          0 10px 26px -20px rgb(var(--theme-shadow-color) / 0.28),
+          -16px 0 36px -18px rgb(var(--theme-shadow-color) / 0.32);
+      }
     }
 
     /* When a card is too short for its controls (a landscape phone, the
@@ -1429,7 +1446,7 @@
     }
 
     /* Cards cross-fade in place instead of moving. */
-    .timeline-floating-card[data-motion] {
+    .app-shell-root .timeline-floating-card[data-motion] {
       transform: none;
       opacity: 0;
       transition:
@@ -1437,7 +1454,7 @@
         visibility 0s linear 160ms;
     }
 
-    .timeline-floating-card[data-motion='open'] {
+    .app-shell-root .timeline-floating-card[data-motion='open'] {
       opacity: 1;
       transition:
         opacity 160ms ease,
