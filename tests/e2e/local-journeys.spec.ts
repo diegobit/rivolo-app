@@ -234,9 +234,23 @@ test('J3: import, export, malformed import, and reopen preserve actual notes', a
       const tray = await page.locator('#bottom-tray').boundingBox()
       expect(button!.y + button!.height).toBeLessThanOrEqual(tray!.y)
     } else {
-      const capsule = await page.locator('.bottom-tray-launchers').boundingBox()
-      expect(button!.x + button!.width / 2).toBeCloseTo(capsule!.x + capsule!.width / 2, 0)
-      expect(button!.y + button!.height).toBeLessThanOrEqual(capsule!.y - 9)
+      // The capsule rides the card it opened, so the two boxes must be sampled
+      // in one frame: the button is a child of the capsule and stays centred
+      // over it while the pair moves.
+      const { button: buttonBox, capsule: capsuleBox } = await page.evaluate(() => {
+        const box = (element: Element | null) => {
+          if (!element) throw new Error('launcher geometry is not rendered')
+          const { x, y, width, height } = element.getBoundingClientRect()
+          return { x, y, width, height }
+        }
+        const capsule = document.querySelector('.bottom-tray-launchers')
+        return {
+          button: box(capsule?.querySelector('button[aria-label="Scroll to Today"]') ?? null),
+          capsule: box(capsule),
+        }
+      })
+      expect(buttonBox.x + buttonBox.width / 2).toBeCloseTo(capsuleBox.x + capsuleBox.width / 2, 0)
+      expect(buttonBox.y + buttonBox.height).toBeLessThanOrEqual(capsuleBox.y - 9)
     }
   }
   if (!mobile(page)) await page.getByRole('button', { name: 'Chat', exact: true }).click()
