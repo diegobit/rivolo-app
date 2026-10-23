@@ -122,6 +122,22 @@
   font-display: swap;
 }
 
+/* Settings › Appearance › Animations turned off (see src/lib/animations.ts):
+   every transition and animation finishes at once, landing on its end state. */
+:root[data-animations='off'] {
+  scroll-behavior: auto !important;
+}
+
+:root[data-animations='off'] *,
+:root[data-animations='off'] *::before,
+:root[data-animations='off'] *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
 @layer base {
   :root {
     color-scheme: light;

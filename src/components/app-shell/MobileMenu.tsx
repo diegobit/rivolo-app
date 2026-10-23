@@ -8,6 +8,7 @@ import { SYNC_PROVIDER_LABELS } from '../../lib/syncState'
 import { getNextThemePreference } from '../../lib/theme'
 import { MOBILE_MENU_OPEN_EVENT, TIMELINE_NEW_CHAT_EVENT } from '../../lib/timelineEvents'
 import { lockPageScroll } from '../../lib/pageScrollLock'
+import { prefersReducedMotion } from '../../lib/device'
 import {
   pullFromSyncAndRefresh,
   pushToSyncAndRefresh,
@@ -152,7 +153,7 @@ export default function MobileMenu({
 
   useEffect(() => {
     if (isMenuOpen || !menuPresent) return
-    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180
+    const delay = prefersReducedMotion() ? 0 : 180
     const timer = window.setTimeout(() => setMenuPresent(false), delay)
     return () => window.clearTimeout(timer)
   }, [isMenuOpen, menuPresent])

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSettingsStore } from './useSettingsStore'
 import { DEFAULT_LLM_PROVIDER_SETTINGS } from '../lib/llm/types'
 import { THEME_STORAGE_KEY } from '../lib/theme'
+import { ANIMATIONS_STORAGE_KEY } from '../lib/animations'
 
 const settingsRepository = vi.hoisted(() => ({
   getSetting: vi.fn(),
@@ -98,6 +99,7 @@ describe('useSettingsStore theme preference', () => {
     window.localStorage.clear()
     document.documentElement.removeAttribute('data-theme')
     document.documentElement.removeAttribute('data-theme-preference')
+    document.documentElement.removeAttribute('data-animations')
     document.head.innerHTML = '<meta name="theme-color" content="#ffffff" />'
     settingsRepository.getSetting.mockReset()
     settingsRepository.setSetting.mockReset().mockResolvedValue(undefined)
@@ -170,6 +172,41 @@ describe('useSettingsStore theme preference', () => {
     expect(useSettingsStore.getState().themePreference).toBe('dark')
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
     expect(document.querySelector("meta[name='theme-color']")).toHaveAttribute('content', '#05070b')
+  })
+
+  it('keeps animations on by default and persists the preference', async () => {
+    mockLoadSettingsValues()
+
+    await useSettingsStore.getState().loadSettings()
+
+    expect(useSettingsStore.getState().animations).toBe(true)
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.animations', 'true')
+    expect(document.documentElement).not.toHaveAttribute('data-animations')
+  })
+
+  it('restores animations turned off, so the page stops moving after a reload', async () => {
+    mockLoadSettingsValues({ 'appearance.animations': 'false' })
+
+    await useSettingsStore.getState().loadSettings()
+
+    expect(useSettingsStore.getState().animations).toBe(false)
+    expect(document.documentElement).toHaveAttribute('data-animations', 'off')
+    // The mirror lets index.html turn them off before the first paint.
+    expect(window.localStorage.getItem(ANIMATIONS_STORAGE_KEY)).toBe('false')
+  })
+
+  it('persists turning animations off and on again', async () => {
+    await useSettingsStore.getState().updateAnimations(false)
+
+    expect(settingsRepository.setSetting).toHaveBeenCalledExactlyOnceWith('appearance.animations', 'false')
+    expect(document.documentElement).toHaveAttribute('data-animations', 'off')
+    expect(window.localStorage.getItem(ANIMATIONS_STORAGE_KEY)).toBe('false')
+
+    await useSettingsStore.getState().updateAnimations(true)
+
+    expect(useSettingsStore.getState().animations).toBe(true)
+    expect(document.documentElement).not.toHaveAttribute('data-animations')
+    expect(window.localStorage.getItem(ANIMATIONS_STORAGE_KEY)).toBe('true')
   })
 
   it('migrates the legacy white wallpaper value to none', async () => {

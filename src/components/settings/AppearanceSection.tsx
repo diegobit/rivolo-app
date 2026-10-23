@@ -19,6 +19,7 @@ type AppearanceSectionProps = {
   wallpaper: 'none' | 'thoughts-light' | 'thoughts-high'
   highlightInputMode: boolean
   autocorrection: boolean
+  animations: boolean
   fontPreset: FontPreset | 'custom'
   titleFont: TitleFont
   bodyFontChoice: BodyFontChoice
@@ -27,6 +28,7 @@ type AppearanceSectionProps = {
   onWallpaperChange: (value: 'none' | 'thoughts-light' | 'thoughts-high') => void
   onHighlightInputModeChange: (enabled: boolean) => void
   onAutocorrectionChange: (enabled: boolean) => void
+  onAnimationsChange: (enabled: boolean) => void
   onFontPresetChange: (preset: FontPreset) => void
   onTitleFontChange: (titleFont: TitleFont) => void
   onBodyFontChoiceChange: (choice: BodyFontChoice) => void
@@ -40,6 +42,7 @@ export default function AppearanceSection({
   wallpaper,
   highlightInputMode,
   autocorrection,
+  animations,
   fontPreset,
   titleFont,
   bodyFontChoice,
@@ -48,6 +51,7 @@ export default function AppearanceSection({
   onWallpaperChange,
   onHighlightInputModeChange,
   onAutocorrectionChange,
+  onAnimationsChange,
   onFontPresetChange,
   onTitleFontChange,
   onBodyFontChoiceChange,
@@ -213,6 +217,7 @@ export default function AppearanceSection({
                 label="Highlight input mode (mobile only)"
                 onChange={onHighlightInputModeChange}
               />
+              <SettingsToggle checked={animations} label="Animations" onChange={onAnimationsChange} />
             </div>
           </div>
         )}

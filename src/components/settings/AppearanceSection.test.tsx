@@ -11,6 +11,7 @@ const renderSection = (overrides: Overrides = {}) => {
     wallpaper: 'thoughts-light',
     highlightInputMode: false,
     autocorrection: true,
+    animations: true,
     fontPreset: 'monospace',
     titleFont: 'handlee',
     bodyFontChoice: 'iawriter',
@@ -18,6 +19,7 @@ const renderSection = (overrides: Overrides = {}) => {
     onWallpaperChange: vi.fn(),
     onHighlightInputModeChange: vi.fn(),
     onAutocorrectionChange: vi.fn(),
+    onAnimationsChange: vi.fn(),
     onFontPresetChange: vi.fn(),
     onTitleFontChange: vi.fn(),
     onBodyFontChoiceChange: vi.fn(),
@@ -53,6 +55,7 @@ describe('AppearanceSection', () => {
     expect(screen.getByRole('switch', { name: 'Autocorrection' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'No background' })).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: 'Highlight input mode (mobile only)' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Animations' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Bree Serif' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Inconsolata' })).not.toBeInTheDocument()
 
@@ -78,6 +81,17 @@ describe('AppearanceSection', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Rivolo Light' }))
     expect(onWallpaperChange).toHaveBeenCalledExactlyOnceWith('thoughts-light')
+  })
+
+  it('turns animations off from the advanced section', async () => {
+    const onAnimationsChange = vi.fn()
+    renderSection({ advanced: true, onAnimationsChange })
+
+    const toggle = screen.getByRole('switch', { name: 'Animations' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+
+    await userEvent.click(toggle)
+    expect(onAnimationsChange).toHaveBeenCalledExactlyOnceWith(false)
   })
 
 })

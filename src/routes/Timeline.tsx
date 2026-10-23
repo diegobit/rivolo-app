@@ -7,7 +7,7 @@ import BottomTrayPortal from '../components/BottomTrayPortal'
 import DayEditorCard from '../components/timeline/DayEditorCard'
 import EmptyStateHero from '../components/timeline/EmptyStateHero'
 import ChatMessageList from '../components/timeline/ChatMessageList'
-import { isIOS, isPrimaryModifierPressed, preferredScrollBehavior } from '../lib/device'
+import { isIOS, isPrimaryModifierPressed, preferredScrollBehavior, prefersReducedMotion } from '../lib/device'
 import { lockPageScroll } from '../lib/pageScrollLock'
 import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
@@ -1024,7 +1024,7 @@ export default function Timeline() {
     const heroLogo = heroLogoRef.current
     const headerLogo = document.querySelector<HTMLImageElement>('.app-logo')
     if (!heroLogo || !headerLogo) return false
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
+    if (prefersReducedMotion()) return false
 
     const heroRect = heroLogo.getBoundingClientRect()
     const headerRect = headerLogo.getBoundingClientRect()
@@ -1322,8 +1322,7 @@ export default function Timeline() {
   }, [loadTimeline])
 
   const handleEmptyCta = useCallback(() => {
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (!prefersReducedMotion) {
+    if (!prefersReducedMotion()) {
       heroRevealPending.current = true
     }
     runLogoTransition()

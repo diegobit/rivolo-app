@@ -56,6 +56,7 @@ export default function Settings() {
   const updateWallpaper = useSettingsStore((state) => state.updateWallpaper)
   const updateHighlightInputMode = useSettingsStore((state) => state.updateHighlightInputMode)
   const updateAutocorrection = useSettingsStore((state) => state.updateAutocorrection)
+  const updateAnimations = useSettingsStore((state) => state.updateAnimations)
   const updateFontPreset = useSettingsStore((state) => state.updateFontPreset)
   const updateTitleFont = useSettingsStore((state) => state.updateTitleFont)
   const updateBodyFontChoice = useSettingsStore((state) => state.updateBodyFontChoice)
@@ -70,6 +71,7 @@ export default function Settings() {
   const wallpaper = useSettingsStore((state) => state.wallpaper)
   const highlightInputMode = useSettingsStore((state) => state.highlightInputMode)
   const autocorrection = useSettingsStore((state) => state.autocorrection)
+  const animations = useSettingsStore((state) => state.animations)
   const fontPreference = useSettingsStore((state) => state.fontPreference)
   const bodyFont = useSettingsStore((state) => state.bodyFont)
   const monospaceFont = useSettingsStore((state) => state.monospaceFont)
@@ -561,6 +563,7 @@ export default function Settings() {
           wallpaper={wallpaper}
           highlightInputMode={highlightInputMode}
           autocorrection={autocorrection}
+          animations={animations}
           fontPreset={fontPreset}
           titleFont={titleFont}
           bodyFontChoice={bodyFontChoice}
@@ -575,6 +578,9 @@ export default function Settings() {
           }}
           onAutocorrectionChange={(enabled) => {
             void updateAutocorrection(enabled)
+          }}
+          onAnimationsChange={(enabled) => {
+            void updateAnimations(enabled)
           }}
           onFontPresetChange={(value) => {
             void updateFontPreset(value)
