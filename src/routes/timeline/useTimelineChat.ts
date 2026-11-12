@@ -29,6 +29,17 @@ const normalizeCitationText = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim()
 
+// What earlier turns look like to the model. A reply that only added a note,
+// or one that failed, has no text, and providers such as Anthropic reject a
+// request holding an empty message. Citation markers are display-only.
+export const toLlmHistory = (messages: ChatUiMessage[]): LlmMessage[] =>
+  messages
+    .map((message) => ({
+      role: message.role,
+      content: message.role === 'assistant' ? message.content.replace(CITATION_MARKER_REGEX, '') : message.content,
+    }))
+    .filter((message) => message.content.trim().length > 0)
+
 export const useTimelineChat = ({
   messages,
   setMessages,
@@ -84,10 +95,7 @@ export const useTimelineChat = ({
       setMessages((state) => [...state, userMessage, assistantMessage])
       setSending(true)
 
-      const currentMessages = [...messagesRef.current, userMessage].map((message) => ({
-        role: message.role,
-        content: message.content,
-      })) as LlmMessage[]
+      const currentMessages = toLlmHistory([...messagesRef.current, userMessage])
       const streamedCitations: Citation[] = []
       const streamedCitationIndexes = new Map<string, number>()
       const streamedInserts: AssistantPayload['inserts'] = []
