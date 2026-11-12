@@ -32,7 +32,7 @@ import { useCitationNavigation } from './timeline/useCitationNavigation'
 import { focusLauncher } from '../components/app-shell/desktopCards'
 import { useStickToBottom } from './timeline/useStickToBottom'
 import { useDesktopCardMotion } from './timeline/useDesktopCardMotion'
-import { keepEditedDayInResults, keepInteractedTodoInResults, type InteractedTodo } from './timeline/searchResults'
+import { keepEditedDayInResults, keepInteractedTodoInResults, patchResultDayContent, type InteractedTodo } from './timeline/searchResults'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
 import { useEditorMountWindow, type PendingEditorFocus } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
@@ -705,10 +705,6 @@ export default function Timeline() {
   // already implies mode === 'search', so this is simply !hasSearchIntent.
   const isTimelineVisible = !hasSearchIntent
   const hasChatMessages = messages.length > 0
-  const mobileChatContentKey = useMemo(
-    () => messages.map((message) => `${message.id}:${message.content}:${message.meta?.isStreaming ?? false}`).join('\u0000'),
-    [messages],
-  )
   const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode
   const showDesktopChatPanel = showDesktopChatMode
   const lastChatMessage = messages[messages.length - 1]
@@ -719,7 +715,7 @@ export default function Timeline() {
     showDesktopChatPanel ? 'chat' : isDesktopSearchCardOpen ? 'search' : null,
   )
   const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
-  const mobileChatScroll = useMobileChatScroll(showMobileChatOverlay, mobileChatContentKey)
+  const mobileChatScroll = useMobileChatScroll(showMobileChatOverlay, chatContentKey)
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
@@ -1308,19 +1304,7 @@ export default function Timeline() {
 
       pinDayForEditorMount(dayId, 'edit', false)
 
-      setSearchResults((state) =>
-        state.map((result) =>
-          result.day.dayId === dayId
-            ? {
-                ...result,
-                day: {
-                  ...result.day,
-                  contentMd: value,
-                },
-              }
-            : result,
-        ),
-      )
+      setSearchResults((state) => patchResultDayContent(state, dayId, value))
       scheduleSave(dayId, value)
     },
     [highlightedQuote, pinDayForEditorMount, scheduleSave, setSearchResults],

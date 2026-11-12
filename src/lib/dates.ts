@@ -2,6 +2,18 @@ const pad = (value: number) => value.toString().padStart(2, '0')
 
 const DAY_ID_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
 
+// Building an Intl.DateTimeFormat costs far more than using one, and the
+// timeline formats a date for every day card on every render.
+const dayTitleFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: '2-digit',
+  year: 'numeric',
+})
+const weekdayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'long' })
+const dayOfMonthFormatter = new Intl.DateTimeFormat('en-US', { day: 'numeric' })
+const shortMonthFormatter = new Intl.DateTimeFormat('en-US', { month: 'short' })
+const shortDateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
+
 export const isValidDayId = (value: string) => {
   const match = value.match(DAY_ID_PATTERN)
   if (!match) {
@@ -33,11 +45,7 @@ export const parseDayId = (dayId: string) => {
 
 export const formatDayTitle = (dayId: string) => {
   const date = parseDayId(dayId)
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-  }).format(date)
+  return dayTitleFormatter.format(date)
 }
 
 export const formatHumanDate = (
@@ -47,9 +55,9 @@ export const formatHumanDate = (
 ) => {
   const date = parseDayId(dayId)
   const reference = parseDayId(referenceDayId)
-  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(date)
-  const day = new Intl.DateTimeFormat('en-US', { day: 'numeric' }).format(date)
-  const month = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
+  const weekday = weekdayFormatter.format(date)
+  const day = dayOfMonthFormatter.format(date)
+  const month = shortMonthFormatter.format(date)
   const year = date.getFullYear()
   const includeRelativeLabel = options.includeRelativeLabel ?? true
   const includeWeekday = options.includeWeekday ?? true
@@ -89,5 +97,5 @@ export const formatTimeAgo = (timestamp: number, now = Date.now()) => {
   if (hours < 24) return `${hours}h ago`
   const days = Math.floor(hours / 24)
   if (days < 7) return `${days}d ago`
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(timestamp))
+  return shortDateFormatter.format(new Date(timestamp))
 }
