@@ -37,6 +37,22 @@
 }
 
 @font-face {
+  font-family: 'Maple Mono';
+  src: url('/fonts/MapleMono-Variable.woff2') format('woff2');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Buena Mono';
+  src: url('/fonts/BuenaMono-Variable.woff2') format('woff2');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: 'Inter';
   src: url('/fonts/InterVariable.woff2') format('woff2');
   font-weight: 100 900;
