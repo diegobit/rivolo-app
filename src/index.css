@@ -26,6 +26,16 @@
   font-display: swap;
 }
 
+/* Sono's MONO axis defaults to 1, so the variable font renders monospaced
+   without extra font-variation-settings. */
+@font-face {
+  font-family: 'Sono';
+  src: url('/fonts/Sono-Variable.ttf') format('truetype');
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 @font-face {
   font-family: 'Inter';
   src: url('/fonts/InterVariable.woff2') format('woff2');

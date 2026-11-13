@@ -1,6 +1,7 @@
 export type MonospaceFont =
   | 'iawriter'
   | 'inconsolata'
+  | 'sono'
 
 export type BodyFont = 'system'
 
@@ -18,6 +19,7 @@ export type BodyFontChoice = MonospaceFont | 'lato'
 export const monospaceFontFamilies: Record<MonospaceFont, string> = {
   iawriter: "'iA Writer Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
   inconsolata: "'Inconsolata', ui-monospace, SFMono-Regular, Menlo, monospace",
+  sono: "'Sono', ui-monospace, SFMono-Regular, Menlo, monospace",
 }
 
 export const bodyFontFamilies: Record<BodyFont, string> = {
@@ -73,12 +75,14 @@ export const titleFontOptions: Array<{ id: TitleFont; label: string }> = [
 export const bodyFontChoiceOptions: Array<{ id: BodyFontChoice; label: string }> = [
   { id: 'iawriter', label: 'iA Writer Mono' },
   { id: 'inconsolata', label: 'Inconsolata' },
+  { id: 'sono', label: 'Sono' },
   { id: 'lato', label: 'Lato' },
 ]
 
 export const bodyFontChoiceFamilies: Record<BodyFontChoice, string> = {
   iawriter: monospaceFontFamilies.iawriter,
   inconsolata: monospaceFontFamilies.inconsolata,
+  sono: monospaceFontFamilies.sono,
   lato: bodyFontFamilies.system,
 }
 
@@ -114,12 +118,14 @@ export const getFontPreset = (
 
 export const getMonospaceFontSize = (font: MonospaceFont) => {
   if (font === 'iawriter') return '0.95em'
+  if (font === 'sono') return '1rem'
   return '1.05rem'
 }
 
 export const isMonospaceFont = (value: string | null): value is MonospaceFont =>
   value === 'iawriter' ||
-  value === 'inconsolata'
+  value === 'inconsolata' ||
+  value === 'sono'
 
 export const isBodyFont = (value: string | null): value is BodyFont =>
   value === 'system'
