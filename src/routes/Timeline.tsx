@@ -9,7 +9,13 @@ import EmptyStateHero from '../components/timeline/EmptyStateHero'
 import ChatMessageList from '../components/timeline/ChatMessageList'
 import { isIOS, isPrimaryModifierPressed, preferredScrollBehavior, prefersReducedMotion } from '../lib/device'
 import { lockPageScroll } from '../lib/pageScrollLock'
-import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
+import {
+  getBodyFontFamily,
+  getMonospaceFontFamily,
+  getMonospaceFontLetterSpacing,
+  getMonospaceFontSize,
+  getTitleFontFamily,
+} from '../lib/fonts'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import {
   MOBILE_MENU_OPEN_EVENT,
@@ -746,6 +752,10 @@ export default function Timeline() {
             fontPreference === 'monospace'
               ? getMonospaceFontFamily(monospaceFont)
               : getBodyFontFamily(bodyFont),
+          letterSpacing:
+            fontPreference === 'monospace'
+              ? getMonospaceFontLetterSpacing(monospaceFont)
+              : 'normal',
           fontSynthesis: 'weight style',
           color: 'var(--theme-editor-text)',
         },
@@ -803,6 +813,8 @@ export default function Timeline() {
         fontPreference === 'monospace'
           ? getMonospaceFontFamily(monospaceFont)
           : getBodyFontFamily(bodyFont),
+      letterSpacing:
+        fontPreference === 'monospace' ? getMonospaceFontLetterSpacing(monospaceFont) : 'normal',
       fontSynthesis: 'weight style',
       color: 'var(--theme-editor-text)',
     }),

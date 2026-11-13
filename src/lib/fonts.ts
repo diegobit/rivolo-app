@@ -116,9 +116,20 @@ export const getFontPreset = (
   return match?.id ?? 'custom'
 }
 
+const monospaceFontLetterSpacings: Record<MonospaceFont, string> = {
+  iawriter: 'normal',
+  inconsolata: 'normal',
+  // Sono's glyphs are wider than iA Writer Mono's; a little negative tracking
+  // keeps lines close to the same length at the same font size.
+  sono: '-0.015em',
+}
+
+export const getMonospaceFontLetterSpacing = (font: MonospaceFont) =>
+  monospaceFontLetterSpacings[font]
+
 export const getMonospaceFontSize = (font: MonospaceFont) => {
   if (font === 'iawriter') return '0.95em'
-  if (font === 'sono') return '1rem'
+  if (font === 'sono') return '0.95rem'
   return '1.05rem'
 }
 

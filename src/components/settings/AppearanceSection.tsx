@@ -5,6 +5,7 @@ import {
   bodyFontChoiceFamilies,
   bodyFontChoiceOptions,
   fontPresetOptions,
+  getMonospaceFontLetterSpacing,
   getMonospaceFontSize,
   titleFontFamilies,
   titleFontOptions,
@@ -67,6 +68,8 @@ export default function AppearanceSection({
         style={{
           fontFamily: bodyFontChoiceFamilies[bodyFontChoice],
           fontSize: bodyFontChoice === 'lato' ? '0.98rem' : getMonospaceFontSize(bodyFontChoice),
+          letterSpacing:
+            bodyFontChoice === 'lato' ? undefined : getMonospaceFontLetterSpacing(bodyFontChoice),
         }}
       >
         <p>@bob send message for breakfast at 8:30</p>
