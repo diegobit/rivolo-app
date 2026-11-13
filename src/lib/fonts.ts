@@ -130,8 +130,8 @@ const monospaceFontLetterSpacings: Record<MonospaceFont, string> = {
   // Sono's glyphs are wider than iA Writer Mono's; a little negative tracking
   // keeps lines close to the same length at the same font size.
   sono: '-0.015em',
-  // Maple and Buena already match iA's line length after sizing below, and
-  // non-zero tracking would switch off their coding ligatures.
+  // Maple and Buena already match iA's line length at the sizes below, so they
+  // need no tracking compensation.
   maple: 'normal',
   buena: 'normal',
 }

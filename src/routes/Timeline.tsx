@@ -743,7 +743,7 @@ export default function Timeline() {
         '.cm-scroller': {
           fontSize:
             fontPreference === 'monospace'
-              ? isIosDevice && monospaceFont === 'iawriter'
+              ? isIosDevice
                 ? '1rem'
                 : getMonospaceFontSize(monospaceFont)
               : '1rem',
@@ -756,13 +756,22 @@ export default function Timeline() {
             fontPreference === 'monospace'
               ? getMonospaceFontLetterSpacing(monospaceFont)
               : 'normal',
+          // CodeMirror clips Maple/Buena's contextual ligature glyphs, which
+          // hides typed characters (--> loses a hyphen, != loses its !).
+          fontFeatureSettings: "'liga' 0, 'calt' 0",
           fontSynthesis: 'weight style',
           color: 'var(--theme-editor-text)',
         },
         // iOS zooms into focused fields under 16px. Only .cm-content takes
-        // focus, so it keeps 16px while iA Writer's lines inside it use 15px.
-        ...(isIosDevice && fontPreference === 'monospace' && monospaceFont === 'iawriter'
-          ? { '.cm-line': { fontSize: '0.9375rem' } }
+        // focus, so it keeps 16px while the lines inside it use the font's
+        // tuned size.
+        ...(isIosDevice && fontPreference === 'monospace'
+          ? {
+              '.cm-line': {
+                fontSize:
+                  monospaceFont === 'iawriter' ? '0.9375rem' : getMonospaceFontSize(monospaceFont),
+              },
+            }
           : {}),
         '.cm-content': {
           minHeight: '30px',
@@ -815,6 +824,7 @@ export default function Timeline() {
           : getBodyFontFamily(bodyFont),
       letterSpacing:
         fontPreference === 'monospace' ? getMonospaceFontLetterSpacing(monospaceFont) : 'normal',
+      fontFeatureSettings: "'liga' 0, 'calt' 0",
       fontSynthesis: 'weight style',
       color: 'var(--theme-editor-text)',
     }),

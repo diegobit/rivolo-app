@@ -70,6 +70,7 @@ export default function AppearanceSection({
           fontSize: bodyFontChoice === 'lato' ? '0.98rem' : getMonospaceFontSize(bodyFontChoice),
           letterSpacing:
             bodyFontChoice === 'lato' ? undefined : getMonospaceFontLetterSpacing(bodyFontChoice),
+          fontFeatureSettings: "'liga' 0, 'calt' 0",
         }}
       >
         <p>@bob send message for breakfast at 8:30</p>
