@@ -1,5 +1,6 @@
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { markdown } from '@codemirror/lang-markdown'
 import { afterEach, describe, expect, it } from 'vitest'
 import { editorHighlights } from './editorHighlights'
 
@@ -10,7 +11,7 @@ describe('editorHighlights', () => {
   const renderEditor = (doc: string) => {
     view = new EditorView({
       parent: document.body,
-      state: EditorState.create({ doc, extensions: editorHighlights }),
+      state: EditorState.create({ doc, extensions: [markdown(), editorHighlights] }),
     })
     return view.contentDOM
   }
@@ -39,5 +40,16 @@ describe('editorHighlights', () => {
     expect(content.querySelector('.cm-hashtag')).toBeNull()
     expect(content.querySelector('.cm-mention')).toHaveTextContent('@東京')
     expect(content.textContent).toBe('città @東京')
+  })
+
+  it('marks Markdown fences and code without treating ordinary punctuation as formatting', () => {
+    const doc = 'plain * punctuation; **bold** _italic_ `code`\n\n```text\ncode here\n```'
+    const content = renderEditor(doc)
+    expect(Array.from(content.querySelectorAll('.cm-markdown-fence'), (el) => el.textContent))
+      .toEqual(['**', '**', '_', '_', '`', '`', '```', '```'])
+    expect(content.querySelector('.cm-inline-code')).toHaveTextContent('`code`')
+    expect(Array.from(content.querySelectorAll('.cm-code-line'), (el) => el.textContent))
+      .toEqual(['```text', 'code here', '```'])
+    expect(content.textContent).toContain('plain * punctuation')
   })
 })
