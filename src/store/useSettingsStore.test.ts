@@ -234,16 +234,16 @@ describe('useSettingsStore theme preference', () => {
   })
 
   it('maps body font choices onto font preference and monospace font', async () => {
-    await useSettingsStore.getState().updateBodyFontChoice('inconsolata')
+    await useSettingsStore.getState().updateBodyFontChoice('google-sans-code')
 
     expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.font', 'monospace')
     expect(settingsRepository.setSetting).toHaveBeenCalledWith(
       'appearance.monospaceFont',
-      'inconsolata',
+      'google-sans-code',
     )
     expect(useSettingsStore.getState()).toMatchObject({
       fontPreference: 'monospace',
-      monospaceFont: 'inconsolata',
+      monospaceFont: 'google-sans-code',
     })
 
     await useSettingsStore.getState().updateBodyFontChoice('lato')
