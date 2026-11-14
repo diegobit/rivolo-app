@@ -27,17 +27,16 @@ test('immediate reload preserves a new note edit', async ({ page }, testInfo) =>
   await editor(page).fill(latest)
   await page.reload()
 
-  await expect(page.getByRole('button', { name: 'Start Today' }).or(editor(page))).toBeVisible()
+  await expect(editor(page).locator('.cm-line')).toHaveText([
+    'Latest interrupted edit café 🙂',
+    'second line, punctuation — kept',
+  ])
   const saved = await readPersistedContent(page)
   await testInfo.attach('reopened-note-snapshot', {
     body: JSON.stringify(saved.days),
     contentType: 'application/json',
   })
   expect(saved.days).toContainEqual(expect.objectContaining({ content_md: latest }))
-  await expect(editor(page).locator('.cm-line')).toHaveText([
-    'Latest interrupted edit café 🙂',
-    'second line, punctuation — kept',
-  ])
 })
 
 test('immediate reload preserves a saved note’s latest edit', async ({ page }, testInfo) => {
