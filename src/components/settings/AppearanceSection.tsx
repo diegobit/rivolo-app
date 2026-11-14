@@ -70,8 +70,10 @@ export default function AppearanceSection({
           fontFeatureSettings: "'liga' 0, 'calt' 0",
         }}
       >
-        <p>@bob send message for breakfast at 8:30</p>
+        <p>☐ @bob send message for breakfast at 8:30</p>
         <p>Budget: 1,024 € + 15% ≈ 1,178 € --{'>'} due 31/12 (v1.0)</p>
+        <p>A little <em>something italic</em></p>
+        <p style={{ fontWeight: 900 }}># A bold header</p>
       </div>
     </>
   )
@@ -145,7 +147,6 @@ export default function AppearanceSection({
                 value={bodyFontChoice}
                 onChange={(event) => onBodyFontChoiceChange(event.target.value as BodyFontChoice)}
               >
-                {bodyFontChoice === 'maple' && <option value="maple" disabled>Maple Mono (previous selection)</option>}
                 {bodyFontChoiceOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}

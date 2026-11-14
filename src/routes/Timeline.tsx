@@ -746,7 +746,6 @@ export default function Timeline() {
                 ? '1rem'
                 : getMonospaceFontSize(monospaceFont)
               : '1rem',
-          lineHeight: fontPreference === 'monospace' && monospaceFont === 'sono' ? '1.33rem' : 1.4,
           fontWeight: '400',
           fontFamily:
             fontPreference === 'monospace'
@@ -816,7 +815,7 @@ export default function Timeline() {
             ? '1rem'
             : getMonospaceFontSize(monospaceFont)
           : '0.98rem',
-      lineHeight: fontPreference === 'monospace' && monospaceFont === 'sono' ? '1.33rem' : 1.4,
+      lineHeight: 1.4,
       fontWeight: '400',
       fontFamily:
         fontPreference === 'monospace'

@@ -1,10 +1,6 @@
 export type MonospaceFont =
   | 'iawriter'
   | 'inconsolata'
-  | 'sono'
-  | 'maple'
-  | 'maple-v8'
-  | 'buena'
   | 'google-sans-code'
 
 export type BodyFont = 'system'
@@ -23,10 +19,6 @@ export type BodyFontChoice = MonospaceFont | 'lato'
 export const monospaceFontFamilies: Record<MonospaceFont, string> = {
   iawriter: "'iA Writer Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
   inconsolata: "'Inconsolata', ui-monospace, SFMono-Regular, Menlo, monospace",
-  sono: "'Sono', ui-monospace, SFMono-Regular, Menlo, monospace",
-  maple: "'Maple Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
-  'maple-v8': "'Maple Mono V8', ui-monospace, SFMono-Regular, Menlo, monospace",
-  buena: "'Buena Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
   'google-sans-code': "'Google Sans Code', ui-monospace, SFMono-Regular, Menlo, monospace",
 }
 
@@ -83,9 +75,6 @@ export const titleFontOptions: Array<{ id: TitleFont; label: string }> = [
 export const bodyFontChoiceOptions: Array<{ id: BodyFontChoice; label: string }> = [
   { id: 'iawriter', label: 'iA Writer Mono' },
   { id: 'inconsolata', label: 'Inconsolata' },
-  { id: 'sono', label: 'Sono' },
-  { id: 'maple-v8', label: 'Maple Mono v8' },
-  { id: 'buena', label: 'Buena Mono' },
   { id: 'google-sans-code', label: 'Google Sans Code' },
   { id: 'lato', label: 'Lato' },
 ]
@@ -93,10 +82,6 @@ export const bodyFontChoiceOptions: Array<{ id: BodyFontChoice; label: string }>
 export const bodyFontChoiceFamilies: Record<BodyFontChoice, string> = {
   iawriter: monospaceFontFamilies.iawriter,
   inconsolata: monospaceFontFamilies.inconsolata,
-  sono: monospaceFontFamilies.sono,
-  maple: monospaceFontFamilies.maple,
-  'maple-v8': monospaceFontFamilies['maple-v8'],
-  buena: monospaceFontFamilies.buena,
   'google-sans-code': monospaceFontFamilies['google-sans-code'],
   lato: bodyFontFamilies.system,
 }
@@ -134,12 +119,6 @@ export const getFontPreset = (
 const monospaceFontLetterSpacings: Record<MonospaceFont, string> = {
   iawriter: 'normal',
   inconsolata: 'normal',
-  // Sono, Maple and Buena match iA's line length at the sizes below, so they
-  // need no tracking compensation.
-  sono: 'normal',
-  maple: 'normal',
-  'maple-v8': 'normal',
-  buena: 'normal',
   'google-sans-code': 'normal',
 }
 
@@ -148,15 +127,6 @@ export const getMonospaceFontLetterSpacing = (font: MonospaceFont) =>
 
 export const getMonospaceFontSize = (font: MonospaceFont) => {
   if (font === 'iawriter') return '0.95em'
-  // The bundled Sono is narrowed to 90% width, so it can run larger: at
-  // 1.03rem its x-height and line length both land on iA's.
-  if (font === 'sono') return '1.03rem'
-  // Maple has a taller x-height than iA at the same line width, so a small
-  // trim keeps its apparent size closer without changing its spacing. v8 keeps
-  // the same metrics as v7.
-  if (font === 'maple' || font === 'maple-v8') return '0.94rem'
-  // Buena's 0.618em advance lands beside iA's 0.6em line at 0.93rem.
-  if (font === 'buena') return '0.93rem'
   // Google Sans Code shares iA's 0.6em advance, and its x-height is within 2%
   // of iA's, so it takes iA's size unchanged.
   if (font === 'google-sans-code') return '0.95rem'
@@ -166,10 +136,6 @@ export const getMonospaceFontSize = (font: MonospaceFont) => {
 export const isMonospaceFont = (value: string | null): value is MonospaceFont =>
   value === 'iawriter' ||
   value === 'inconsolata' ||
-  value === 'sono' ||
-  value === 'maple' ||
-  value === 'maple-v8' ||
-  value === 'buena' ||
   value === 'google-sans-code'
 
 export const isBodyFont = (value: string | null): value is BodyFont =>
