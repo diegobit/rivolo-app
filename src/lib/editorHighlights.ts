@@ -52,7 +52,18 @@ const findTagHighlightRanges = (text: string) => {
 const listLineDecoration = Decoration.line({ class: 'cm-list-line' })
 const todoLineDecoration = Decoration.line({ class: 'cm-list-line cm-todo-line' })
 
-const buildTagDecorations = (text: string) => {
+const inCodeBlock = (state: EditorState, pos: number) => {
+  let node = syntaxTree(state).resolveInner(pos, 1)
+  while (node) {
+    if (node.name === 'FencedCode' || node.name === 'CodeBlock') return true
+    if (!node.parent) break
+    node = node.parent
+  }
+  return false
+}
+
+const buildTagDecorations = (state: EditorState) => {
+  const text = state.doc.toString()
   const ranges = findTagHighlightRanges(text)
   const lineStarts = new Set<number>()
   const todoLineStarts = new Set<number>()
@@ -64,6 +75,10 @@ const buildTagDecorations = (text: string) => {
     const prefixLength = match[1].length
     const token = match[2]
     const start = match.index + prefixLength
+    if (inCodeBlock(state, start + token.length - 1)) {
+      match = todoRegex.exec(text)
+      continue
+    }
     todoLineStarts.add(start)
     const bracketMatch = token.match(/\[[ xX-]\]/)
     if (bracketMatch) {
@@ -85,6 +100,10 @@ const buildTagDecorations = (text: string) => {
     const token = match[2]
     const start = match.index + prefixLength
     const end = start + token.length
+    if (inCodeBlock(state, end - 1)) {
+      match = listRegex.exec(text)
+      continue
+    }
     ranges.push({ from: start, to: end, className: 'cm-list-marker' })
     lineStarts.add(text.lastIndexOf('\n', end - 1) + 1)
     match = listRegex.exec(text)
@@ -118,12 +137,12 @@ const tagHighlightPlugin = ViewPlugin.fromClass(
     decorations: DecorationSet
 
     constructor(view: EditorView) {
-      this.decorations = buildTagDecorations(view.state.doc.toString())
+      this.decorations = buildTagDecorations(view.state)
     }
 
     update(update: ViewUpdate) {
-      if (update.docChanged) {
-        this.decorations = buildTagDecorations(update.state.doc.toString())
+      if (update.docChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+        this.decorations = buildTagDecorations(update.state)
       }
     }
   },
@@ -254,6 +273,7 @@ const buildTodoDashDecorations = (view: EditorView) => {
   const builder = new RangeSetBuilder<Decoration>()
   const edited = editedLineNumbers(view)
   forEachVisibleLine(view, (line) => {
+    if (inCodeBlock(view.state, Math.min(line.from + 1, line.to))) return
     const match = isTodoDashHidden(edited, line.number, line.text) && todoDashRegex.exec(line.text)
     if (match) {
       const from = line.from + match[1].length
@@ -272,7 +292,7 @@ const todoDashPlugin = ViewPlugin.fromClass(
     }
 
     update(update: ViewUpdate) {
-      if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged) {
+      if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
         this.decorations = buildTodoDashDecorations(update.view)
       }
     }
@@ -306,10 +326,11 @@ const listIndentPlugin = ViewPlugin.fromClass(
     update(update: ViewUpdate) {
       const refreshed = update.transactions.some((tr) => tr.effects.some((effect) => effect.is(refreshListIndent)))
       const todoDashToggled = update.selectionSet || update.focusChanged
-      if (update.docChanged || update.viewportChanged || todoDashToggled || refreshed) {
+      const treeChanged = syntaxTree(update.startState) !== syntaxTree(update.state)
+      if (update.docChanged || update.viewportChanged || todoDashToggled || refreshed || treeChanged) {
         this.decorations = this.build()
       }
-      if (update.docChanged || update.viewportChanged || todoDashToggled || update.geometryChanged) {
+      if (update.docChanged || update.viewportChanged || todoDashToggled || update.geometryChanged || treeChanged) {
         this.measure()
       }
     }
@@ -325,7 +346,7 @@ const listIndentPlugin = ViewPlugin.fromClass(
       const edited = editedLineNumbers(this.view)
       forEachVisibleLine(this.view, (line) => {
         const prefix = listPrefixRegex.exec(line.text)?.[0]
-        if (!prefix) return
+        if (!prefix || inCodeBlock(this.view.state, line.from + prefix.length - 1)) return
         const hidden = isTodoDashHidden(edited, line.number, line.text)
         rows.push({ from: line.from, prefix, key: hidden ? `hidden:${prefix}` : prefix })
       })

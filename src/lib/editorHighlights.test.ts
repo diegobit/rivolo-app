@@ -67,4 +67,16 @@ describe('editorHighlights', () => {
       .toEqual(['```', 'ciao', '```'])
     expect(content.querySelector('.cm-heading-line')).toHaveTextContent('# Heading')
   })
+
+  it('keeps list and todo text literal inside code blocks while formatting lists outside', () => {
+    const content = renderEditor('```text\n- item\n  - nested\n- [ ] task\n```\n\n- outside')
+    const codeLines = Array.from(content.querySelectorAll('.cm-code-line'))
+    expect(codeLines.map((line) => line.textContent)).toEqual(['```text', '- item', '  - nested', '- [ ] task', '```'])
+    for (const line of codeLines) {
+      expect(line).not.toHaveClass('cm-list-line')
+      expect(line.querySelector('.cm-list-marker, .cm-todo-marker')).toBeNull()
+    }
+    expect(content.querySelector('.cm-list-marker')).toHaveTextContent('-')
+    expect(content.querySelector('.cm-list-line')).toHaveTextContent('- outside')
+  })
 })
