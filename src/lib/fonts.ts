@@ -1,6 +1,7 @@
 export type MonospaceFont =
   | 'iawriter'
   | 'inconsolata'
+  | 'google-sans-code'
 
 export type BodyFont = 'system'
 
@@ -18,6 +19,7 @@ export type BodyFontChoice = MonospaceFont | 'lato'
 export const monospaceFontFamilies: Record<MonospaceFont, string> = {
   iawriter: "'iA Writer Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
   inconsolata: "'Inconsolata', ui-monospace, SFMono-Regular, Menlo, monospace",
+  'google-sans-code': "'Google Sans Code', ui-monospace, SFMono-Regular, Menlo, monospace",
 }
 
 export const bodyFontFamilies: Record<BodyFont, string> = {
@@ -73,12 +75,14 @@ export const titleFontOptions: Array<{ id: TitleFont; label: string }> = [
 export const bodyFontChoiceOptions: Array<{ id: BodyFontChoice; label: string }> = [
   { id: 'iawriter', label: 'iA Writer Mono' },
   { id: 'inconsolata', label: 'Inconsolata' },
+  { id: 'google-sans-code', label: 'Google Sans Code' },
   { id: 'lato', label: 'Lato' },
 ]
 
 export const bodyFontChoiceFamilies: Record<BodyFontChoice, string> = {
   iawriter: monospaceFontFamilies.iawriter,
   inconsolata: monospaceFontFamilies.inconsolata,
+  'google-sans-code': monospaceFontFamilies['google-sans-code'],
   lato: bodyFontFamilies.system,
 }
 
@@ -100,26 +104,39 @@ export const getFontPreset = (
   fontPreference: FontPreference,
   bodyFont: BodyFont,
   monospaceFont: MonospaceFont,
-  titleFont: TitleFont,
+  _titleFont: TitleFont,
 ): FontPreset | 'custom' => {
+  void _titleFont
   const match = fontPresetOptions.find(
     ({ settings }) =>
       settings.fontPreference === fontPreference &&
       settings.bodyFont === bodyFont &&
-      settings.monospaceFont === monospaceFont &&
-      settings.titleFont === titleFont,
+      settings.monospaceFont === monospaceFont,
   )
   return match?.id ?? 'custom'
 }
 
+const monospaceFontLetterSpacings: Record<MonospaceFont, string> = {
+  iawriter: 'normal',
+  inconsolata: 'normal',
+  'google-sans-code': 'normal',
+}
+
+export const getMonospaceFontLetterSpacing = (font: MonospaceFont) =>
+  monospaceFontLetterSpacings[font]
+
 export const getMonospaceFontSize = (font: MonospaceFont) => {
   if (font === 'iawriter') return '0.95em'
+  // Google Sans Code shares iA's 0.6em advance, and its x-height is within 2%
+  // of iA's, so it takes iA's size unchanged.
+  if (font === 'google-sans-code') return '0.95rem'
   return '1.05rem'
 }
 
 export const isMonospaceFont = (value: string | null): value is MonospaceFont =>
   value === 'iawriter' ||
-  value === 'inconsolata'
+  value === 'inconsolata' ||
+  value === 'google-sans-code'
 
 export const isBodyFont = (value: string | null): value is BodyFont =>
   value === 'system'

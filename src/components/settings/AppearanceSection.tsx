@@ -1,3 +1,8 @@
+import { useMemo } from 'react'
+import CodeMirror from '@uiw/react-codemirror'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { EditorView } from '@codemirror/view'
+import { editorHighlights } from '../../lib/editorHighlights'
 import {
   type BodyFontChoice,
   type FontPreset,
@@ -5,9 +10,9 @@ import {
   bodyFontChoiceFamilies,
   bodyFontChoiceOptions,
   fontPresetOptions,
+  getMonospaceFontLetterSpacing,
   getMonospaceFontSize,
   titleFontFamilies,
-  titleFontOptions,
 } from '../../lib/fonts'
 import SegmentedControl from '../SegmentedControl'
 import SettingRow from './SettingRow'
@@ -44,7 +49,6 @@ export default function AppearanceSection({
   autocorrection,
   animations,
   fontPreset,
-  titleFont,
   bodyFontChoice,
   advanced = false,
   onThemePreferenceChange,
@@ -53,24 +57,42 @@ export default function AppearanceSection({
   onAutocorrectionChange,
   onAnimationsChange,
   onFontPresetChange,
-  onTitleFontChange,
   onBodyFontChoiceChange,
 }: AppearanceSectionProps) {
+  const previewExtensions = useMemo(() => [
+    markdown({ base: markdownLanguage }),
+    EditorView.lineWrapping,
+    ...editorHighlights,
+    EditorView.theme({
+      '&.cm-editor, & .cm-scroller': { backgroundColor: 'transparent' },
+      '.cm-scroller': {
+        fontFamily: bodyFontChoiceFamilies[bodyFontChoice],
+        fontSize: bodyFontChoice === 'lato' ? '1rem' : getMonospaceFontSize(bodyFontChoice),
+        letterSpacing: bodyFontChoice === 'lato' ? 'normal' : getMonospaceFontLetterSpacing(bodyFontChoice),
+        fontWeight: '400',
+        fontFeatureSettings: "'liga' 0, 'calt' 0",
+        fontSynthesis: 'weight style',
+        color: 'var(--theme-editor-text)',
+      },
+      '.cm-content': { padding: '0' },
+      '.cm-line': { paddingLeft: '0', paddingRight: '0' },
+    }),
+  ], [bodyFontChoice])
+
   const renderFontPreviewContent = () => (
     <>
-      <p className="text-xl" style={{ fontFamily: titleFontFamilies[titleFont] }}>
+      <p className="text-xl" style={{ fontFamily: titleFontFamilies.handlee }}>
         <span className="font-bold text-slate-700">Today</span>
         <span className="ml-2 font-normal text-slate-400">July 16</span>
       </p>
-      <div
-        className="mt-1 text-slate-700"
-        style={{
-          fontFamily: bodyFontChoiceFamilies[bodyFontChoice],
-          fontSize: bodyFontChoice === 'lato' ? '0.98rem' : getMonospaceFontSize(bodyFontChoice),
-        }}
-      >
-        <p>@bob send message for breakfast at 8:30</p>
-        <p>Budget: 1,024 € + 15% ≈ 1,178 € --{'>'} due 31/12 (v1.0)</p>
+      <div className="mt-1">
+        <CodeMirror
+          value={"- [ ] @bob send message for breakfast at 8:30\nBudget: 1,024 € + 15% ≈ 1,178 € --> due 31/12 (v1.0)\nA little *something italic*\n# A bold header"}
+          extensions={previewExtensions}
+          basicSetup={false}
+          editable={false}
+          readOnly
+        />
       </div>
     </>
   )
@@ -137,20 +159,6 @@ export default function AppearanceSection({
           <div>
             {/* Font names are too long for a segmented control on phones, so
                 these use native selects (the system picker on iOS). */}
-            <SettingRow label="Title font" htmlFor="appearance-title-font">
-              <select
-                id="appearance-title-font"
-                className={selectClass}
-                value={titleFont}
-                onChange={(event) => onTitleFontChange(event.target.value as TitleFont)}
-              >
-                {titleFontOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </SettingRow>
             <SettingRow label="Body font" htmlFor="appearance-body-font">
               <select
                 id="appearance-body-font"
