@@ -1,6 +1,5 @@
 export type MonospaceFont =
   | 'iawriter'
-  | 'inconsolata'
   | 'google-sans-code'
 
 export type BodyFont = 'system'
@@ -18,7 +17,6 @@ export type BodyFontChoice = MonospaceFont | 'lato'
 
 export const monospaceFontFamilies: Record<MonospaceFont, string> = {
   iawriter: "'iA Writer Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
-  inconsolata: "'Inconsolata', ui-monospace, SFMono-Regular, Menlo, monospace",
   'google-sans-code': "'Google Sans Code', ui-monospace, SFMono-Regular, Menlo, monospace",
 }
 
@@ -74,14 +72,12 @@ export const titleFontOptions: Array<{ id: TitleFont; label: string }> = [
 
 export const bodyFontChoiceOptions: Array<{ id: BodyFontChoice; label: string }> = [
   { id: 'iawriter', label: 'iA Writer Mono' },
-  { id: 'inconsolata', label: 'Inconsolata' },
   { id: 'google-sans-code', label: 'Google Sans Code' },
   { id: 'lato', label: 'Lato' },
 ]
 
 export const bodyFontChoiceFamilies: Record<BodyFontChoice, string> = {
   iawriter: monospaceFontFamilies.iawriter,
-  inconsolata: monospaceFontFamilies.inconsolata,
   'google-sans-code': monospaceFontFamilies['google-sans-code'],
   lato: bodyFontFamilies.system,
 }
@@ -118,7 +114,6 @@ export const getFontPreset = (
 
 const monospaceFontLetterSpacings: Record<MonospaceFont, string> = {
   iawriter: 'normal',
-  inconsolata: 'normal',
   'google-sans-code': 'normal',
 }
 
@@ -135,7 +130,6 @@ export const getMonospaceFontSize = (font: MonospaceFont) => {
 
 export const isMonospaceFont = (value: string | null): value is MonospaceFont =>
   value === 'iawriter' ||
-  value === 'inconsolata' ||
   value === 'google-sans-code'
 
 export const isBodyFont = (value: string | null): value is BodyFont =>
