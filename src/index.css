@@ -30,7 +30,7 @@
    without extra font-variation-settings. */
 @font-face {
   font-family: 'Sono';
-  src: url('/fonts/Sono-Variable.ttf') format('truetype');
+  src: url('/fonts/Sono-Variable.woff2') format('woff2');
   font-weight: 200 800;
   font-style: normal;
   font-display: swap;
@@ -44,6 +44,14 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Maple Mono';
+  src: url('/fonts/MapleMono-Italic-Variable.woff2') format('woff2');
+  font-weight: 100 800;
+  font-style: italic;
+  font-display: swap;
+}
+
 /* Development build from the upstream variable branch (v8.003-beta.3). */
 @font-face {
   font-family: 'Maple Mono V8';
@@ -54,11 +62,33 @@
 }
 
 @font-face {
+  font-family: 'Maple Mono V8';
+  src: url('/fonts/MapleMonoV8-Italic-Variable.woff2') format('woff2');
+  font-weight: 100 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Buena has no italic file: its slnt axis (0 to -10) draws the italics, and
+   the oblique range lets the browser use it instead of faking a slant. */
+@font-face {
   font-family: 'Buena Mono';
   src: url('/fonts/BuenaMono-Variable.woff2') format('woff2');
   font-weight: 100 800;
-  font-style: normal;
+  font-style: oblique 0deg 10deg;
   font-display: swap;
+}
+
+/* Buena draws 0-9 thinner than its letters. This digits-only cut shifts the
+   weight axis so they match; see scripts/build-buena-digits.py. It must stay
+   after the full face so it wins for this range. */
+@font-face {
+  font-family: 'Buena Mono';
+  src: url('/fonts/BuenaMono-Digits.woff2') format('woff2');
+  font-weight: 100 800;
+  font-style: oblique 0deg 10deg;
+  font-display: swap;
+  unicode-range: U+0030-0039;
 }
 
 @font-face {
