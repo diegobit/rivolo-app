@@ -10,7 +10,13 @@ import AppLogo from '../components/AppLogo'
 import ChatMessageList from '../components/timeline/ChatMessageList'
 import { isIOS, isPrimaryModifierPressed, preferredScrollBehavior, prefersReducedMotion } from '../lib/device'
 import { lockPageScroll } from '../lib/pageScrollLock'
-import { getBodyFontFamily, getMonospaceFontFamily, getMonospaceFontSize, getTitleFontFamily } from '../lib/fonts'
+import {
+  getBodyFontFamily,
+  getMonospaceFontFamily,
+  getMonospaceFontLetterSpacing,
+  getMonospaceFontSize,
+  getTitleFontFamily,
+} from '../lib/fonts'
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport'
 import {
   MOBILE_MENU_OPEN_EVENT,
@@ -528,7 +534,6 @@ export default function Timeline() {
   const fontPreference = useSettingsStore((state) => state.fontPreference)
   const bodyFont = useSettingsStore((state) => state.bodyFont)
   const monospaceFont = useSettingsStore((state) => state.monospaceFont)
-  const titleFont = useSettingsStore((state) => state.titleFont)
   const activeLlmConfig = useMemo(
     () => resolveActiveLlmConfig(llmProvider, llmProviderSettings, llmSecrets),
     [llmProvider, llmProviderSettings, llmSecrets],
@@ -740,7 +745,7 @@ export default function Timeline() {
         '.cm-scroller': {
           fontSize:
             fontPreference === 'monospace'
-              ? isIosDevice && monospaceFont === 'iawriter'
+              ? isIosDevice
                 ? '1rem'
                 : getMonospaceFontSize(monospaceFont)
               : '1rem',
@@ -749,13 +754,26 @@ export default function Timeline() {
             fontPreference === 'monospace'
               ? getMonospaceFontFamily(monospaceFont)
               : getBodyFontFamily(bodyFont),
+          letterSpacing:
+            fontPreference === 'monospace'
+              ? getMonospaceFontLetterSpacing(monospaceFont)
+              : 'normal',
+          // CodeMirror clips Maple/Buena's contextual ligature glyphs, which
+          // hides typed characters (--> loses a hyphen, != loses its !).
+          fontFeatureSettings: "'liga' 0, 'calt' 0",
           fontSynthesis: 'weight style',
           color: 'var(--theme-editor-text)',
         },
         // iOS zooms into focused fields under 16px. Only .cm-content takes
-        // focus, so it keeps 16px while iA Writer's lines inside it use 15px.
-        ...(isIosDevice && fontPreference === 'monospace' && monospaceFont === 'iawriter'
-          ? { '.cm-line': { fontSize: '0.9375rem' } }
+        // focus, so it keeps 16px while the lines inside it use the font's
+        // tuned size.
+        ...(isIosDevice && fontPreference === 'monospace'
+          ? {
+              '.cm-line': {
+                fontSize:
+                  monospaceFont === 'iawriter' ? '0.9375rem' : getMonospaceFontSize(monospaceFont),
+              },
+            }
           : {}),
         '.cm-content': {
           minHeight: '30px',
@@ -792,7 +810,7 @@ export default function Timeline() {
       }),
     [fontPreference, bodyFont, monospaceFont, isIosDevice],
   )
-  const titleFontFamily = useMemo(() => getTitleFontFamily(titleFont), [titleFont])
+  const titleFontFamily = useMemo(() => getTitleFontFamily('handlee'), [])
   const matchedResultsTextStyle = useMemo<React.CSSProperties>(
     () => ({
       fontSize:
@@ -807,6 +825,9 @@ export default function Timeline() {
         fontPreference === 'monospace'
           ? getMonospaceFontFamily(monospaceFont)
           : getBodyFontFamily(bodyFont),
+      letterSpacing:
+        fontPreference === 'monospace' ? getMonospaceFontLetterSpacing(monospaceFont) : 'normal',
+      fontFeatureSettings: "'liga' 0, 'calt' 0",
       fontSynthesis: 'weight style',
       color: 'var(--theme-editor-text)',
     }),
