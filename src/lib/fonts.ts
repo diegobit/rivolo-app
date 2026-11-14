@@ -3,6 +3,7 @@ export type MonospaceFont =
   | 'inconsolata'
   | 'sono'
   | 'maple'
+  | 'maple-v8'
   | 'buena'
 
 export type BodyFont = 'system'
@@ -23,6 +24,7 @@ export const monospaceFontFamilies: Record<MonospaceFont, string> = {
   inconsolata: "'Inconsolata', ui-monospace, SFMono-Regular, Menlo, monospace",
   sono: "'Sono', ui-monospace, SFMono-Regular, Menlo, monospace",
   maple: "'Maple Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+  'maple-v8': "'Maple Mono V8', ui-monospace, SFMono-Regular, Menlo, monospace",
   buena: "'Buena Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
 }
 
@@ -81,6 +83,7 @@ export const bodyFontChoiceOptions: Array<{ id: BodyFontChoice; label: string }>
   { id: 'inconsolata', label: 'Inconsolata' },
   { id: 'sono', label: 'Sono' },
   { id: 'maple', label: 'Maple Mono' },
+  { id: 'maple-v8', label: 'Maple Mono v8' },
   { id: 'buena', label: 'Buena Mono' },
   { id: 'lato', label: 'Lato' },
 ]
@@ -90,6 +93,7 @@ export const bodyFontChoiceFamilies: Record<BodyFontChoice, string> = {
   inconsolata: monospaceFontFamilies.inconsolata,
   sono: monospaceFontFamilies.sono,
   maple: monospaceFontFamilies.maple,
+  'maple-v8': monospaceFontFamilies['maple-v8'],
   buena: monospaceFontFamilies.buena,
   lato: bodyFontFamilies.system,
 }
@@ -133,6 +137,7 @@ const monospaceFontLetterSpacings: Record<MonospaceFont, string> = {
   // Maple and Buena already match iA's line length at the sizes below, so they
   // need no tracking compensation.
   maple: 'normal',
+  'maple-v8': 'normal',
   buena: 'normal',
 }
 
@@ -143,8 +148,9 @@ export const getMonospaceFontSize = (font: MonospaceFont) => {
   if (font === 'iawriter') return '0.95em'
   if (font === 'sono') return '0.95rem'
   // Maple has a taller x-height than iA at the same line width, so a small
-  // trim keeps its apparent size closer without changing its spacing.
-  if (font === 'maple') return '0.94rem'
+  // trim keeps its apparent size closer without changing its spacing. v8 keeps
+  // the same metrics as v7.
+  if (font === 'maple' || font === 'maple-v8') return '0.94rem'
   // Buena's 0.618em advance lands beside iA's 0.6em line at 0.93rem.
   if (font === 'buena') return '0.93rem'
   return '1.05rem'
@@ -155,6 +161,7 @@ export const isMonospaceFont = (value: string | null): value is MonospaceFont =>
   value === 'inconsolata' ||
   value === 'sono' ||
   value === 'maple' ||
+  value === 'maple-v8' ||
   value === 'buena'
 
 export const isBodyFont = (value: string | null): value is BodyFont =>
