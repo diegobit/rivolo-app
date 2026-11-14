@@ -97,35 +97,30 @@ test('J4: appearance changes persist; fonts render; controls and preview stay co
   await insideViewport(page, page.getByRole('heading', { name: 'Cloud sync', exact: true }))
   await page.getByRole('button', { name: 'Dismiss Cloud sync is off', exact: true }).click()
   await page.getByRole('button', { name: 'Advanced', exact: true }).click()
-  await expect(page.getByLabel('Title font', { exact: true })).toHaveValue('handlee')
   await expect(page.getByLabel('Body font', { exact: true })).toHaveValue('iawriter')
   const theme = page.getByRole('group', { name: 'Theme', exact: true })
   await theme.getByRole('button', { name: 'Dark', exact: true }).click()
-  await page.getByLabel('Title font', { exact: true }).selectOption('bree')
-  await page.getByLabel('Body font', { exact: true }).selectOption('inconsolata')
+  await page.getByLabel('Body font', { exact: true }).selectOption('google-sans-code')
   await page.getByRole('button', { name: 'Rivolo Strong', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Rivolo Strong', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(theme.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await waitForPersistedContent(page, ({ settings: saved }) =>
     saved['appearance.wallpaper'] === 'thoughts-high' &&
     saved['appearance.theme'] === 'dark' &&
-    saved['appearance.titleFont'] === 'bree' &&
     saved['appearance.font'] === 'monospace' &&
-    saved['appearance.monospaceFont'] === 'inconsolata' &&
+    saved['appearance.monospaceFont'] === 'google-sans-code' &&
     saved['setup.dismissedSync'] === 'true',
   )
   await page.reload()
   await expect(page.getByRole('button', { name: "Dismiss AI assistant isn't set up", exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Dismiss Cloud sync is off', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Advanced', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByLabel('Title font', { exact: true })).toHaveValue('bree')
-  await expect(page.getByLabel('Body font', { exact: true })).toHaveValue('inconsolata')
+  await expect(page.getByLabel('Body font', { exact: true })).toHaveValue('google-sans-code')
   await expect(theme.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await page.evaluate(() => document.fonts.ready)
-  const sample = page.getByText('@bob send message for breakfast at 8:30', { exact: true }).first()
-  expect(await sample.evaluate(element => getComputedStyle(element).fontFamily)).toContain('Inconsolata')
-  const fontSample = sample.locator('../..')
-  expect(await fontSample.getByText('Today', { exact: true }).evaluate(element => getComputedStyle(element).fontFamily)).toContain('Bree Serif')
+  const sample = page.locator('.cm-scroller').first()
+  expect(await sample.evaluate(element => getComputedStyle(element).fontFamily)).toContain('Google Sans Code')
+  expect(await page.getByText('Today', { exact: true }).first().evaluate(element => getComputedStyle(element).fontFamily)).toContain('Handlee')
   const themeButtons = theme.getByRole('button')
   const widths = await themeButtons.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().width))
   expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(1)
@@ -139,9 +134,10 @@ test('J4: appearance changes persist; fonts render; controls and preview stay co
     await insideViewport(page, preview)
     const dimensions = await preview.boundingBox()
     expect(dimensions!.height).toBeGreaterThan(140)
-    const contentHeight = await fontSample.locator('p').evaluateAll(elements => {
-      const first = elements[0].getBoundingClientRect()
-      const last = elements[elements.length - 1].getBoundingClientRect()
+    const contentHeight = await sample.evaluate(element => {
+      const container = element.closest('.border-l-2')!
+      const first = container.firstElementChild!.getBoundingClientRect()
+      const last = container.lastElementChild!.getBoundingClientRect()
       return last.bottom - first.top
     })
     // The wallpaper sample has the same typography and wrapping as the visible
