@@ -26,11 +26,11 @@
   font-display: swap;
 }
 
-/* Sono's MONO axis defaults to 1, so the variable font renders monospaced
-   without extra font-variation-settings. */
+/* A narrowed cut of Sono with lighter bold weights, built by
+   scripts/build-sono-condensed.py from scripts/font-sources. */
 @font-face {
   font-family: 'Sono';
-  src: url('/fonts/Sono-Variable.woff2') format('woff2');
+  src: url('/fonts/Sono-Condensed.woff2') format('woff2');
   font-weight: 200 800;
   font-style: normal;
   font-display: swap;

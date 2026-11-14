@@ -131,11 +131,9 @@ export const getFontPreset = (
 const monospaceFontLetterSpacings: Record<MonospaceFont, string> = {
   iawriter: 'normal',
   inconsolata: 'normal',
-  // Sono's glyphs are wider than iA Writer Mono's; a little negative tracking
-  // keeps lines close to the same length at the same font size.
-  sono: '-0.015em',
-  // Maple and Buena already match iA's line length at the sizes below, so they
+  // Sono, Maple and Buena match iA's line length at the sizes below, so they
   // need no tracking compensation.
+  sono: 'normal',
   maple: 'normal',
   'maple-v8': 'normal',
   buena: 'normal',
@@ -146,7 +144,9 @@ export const getMonospaceFontLetterSpacing = (font: MonospaceFont) =>
 
 export const getMonospaceFontSize = (font: MonospaceFont) => {
   if (font === 'iawriter') return '0.95em'
-  if (font === 'sono') return '0.95rem'
+  // The bundled Sono is narrowed to 90% width, so it can run larger: at
+  // 1.03rem its x-height and line length both land on iA's.
+  if (font === 'sono') return '1.03rem'
   // Maple has a taller x-height than iA at the same line width, so a small
   // trim keeps its apparent size closer without changing its spacing. v8 keeps
   // the same metrics as v7.
