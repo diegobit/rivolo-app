@@ -5,6 +5,7 @@ export type MonospaceFont =
   | 'maple'
   | 'maple-v8'
   | 'buena'
+  | 'google-sans-code'
 
 export type BodyFont = 'system'
 
@@ -26,6 +27,7 @@ export const monospaceFontFamilies: Record<MonospaceFont, string> = {
   maple: "'Maple Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
   'maple-v8': "'Maple Mono V8', ui-monospace, SFMono-Regular, Menlo, monospace",
   buena: "'Buena Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+  'google-sans-code': "'Google Sans Code', ui-monospace, SFMono-Regular, Menlo, monospace",
 }
 
 export const bodyFontFamilies: Record<BodyFont, string> = {
@@ -84,6 +86,7 @@ export const bodyFontChoiceOptions: Array<{ id: BodyFontChoice; label: string }>
   { id: 'sono', label: 'Sono' },
   { id: 'maple-v8', label: 'Maple Mono v8' },
   { id: 'buena', label: 'Buena Mono' },
+  { id: 'google-sans-code', label: 'Google Sans Code' },
   { id: 'lato', label: 'Lato' },
 ]
 
@@ -94,6 +97,7 @@ export const bodyFontChoiceFamilies: Record<BodyFontChoice, string> = {
   maple: monospaceFontFamilies.maple,
   'maple-v8': monospaceFontFamilies['maple-v8'],
   buena: monospaceFontFamilies.buena,
+  'google-sans-code': monospaceFontFamilies['google-sans-code'],
   lato: bodyFontFamilies.system,
 }
 
@@ -136,6 +140,7 @@ const monospaceFontLetterSpacings: Record<MonospaceFont, string> = {
   maple: 'normal',
   'maple-v8': 'normal',
   buena: 'normal',
+  'google-sans-code': 'normal',
 }
 
 export const getMonospaceFontLetterSpacing = (font: MonospaceFont) =>
@@ -152,6 +157,9 @@ export const getMonospaceFontSize = (font: MonospaceFont) => {
   if (font === 'maple' || font === 'maple-v8') return '0.94rem'
   // Buena's 0.618em advance lands beside iA's 0.6em line at 0.93rem.
   if (font === 'buena') return '0.93rem'
+  // Google Sans Code shares iA's 0.6em advance, and its x-height is within 2%
+  // of iA's, so it takes iA's size unchanged.
+  if (font === 'google-sans-code') return '0.95rem'
   return '1.05rem'
 }
 
@@ -161,7 +169,8 @@ export const isMonospaceFont = (value: string | null): value is MonospaceFont =>
   value === 'sono' ||
   value === 'maple' ||
   value === 'maple-v8' ||
-  value === 'buena'
+  value === 'buena' ||
+  value === 'google-sans-code'
 
 export const isBodyFont = (value: string | null): value is BodyFont =>
   value === 'system'
