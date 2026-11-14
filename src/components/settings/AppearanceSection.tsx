@@ -8,7 +8,6 @@ import {
   getMonospaceFontLetterSpacing,
   getMonospaceFontSize,
   titleFontFamilies,
-  titleFontOptions,
 } from '../../lib/fonts'
 import SegmentedControl from '../SegmentedControl'
 import SettingRow from './SettingRow'
@@ -45,7 +44,6 @@ export default function AppearanceSection({
   autocorrection,
   animations,
   fontPreset,
-  titleFont,
   bodyFontChoice,
   advanced = false,
   onThemePreferenceChange,
@@ -54,12 +52,11 @@ export default function AppearanceSection({
   onAutocorrectionChange,
   onAnimationsChange,
   onFontPresetChange,
-  onTitleFontChange,
   onBodyFontChoiceChange,
 }: AppearanceSectionProps) {
   const renderFontPreviewContent = () => (
     <>
-      <p className="text-xl" style={{ fontFamily: titleFontFamilies[titleFont] }}>
+      <p className="text-xl" style={{ fontFamily: titleFontFamilies.handlee }}>
         <span className="font-bold text-slate-700">Today</span>
         <span className="ml-2 font-normal text-slate-400">July 16</span>
       </p>
@@ -141,20 +138,6 @@ export default function AppearanceSection({
           <div>
             {/* Font names are too long for a segmented control on phones, so
                 these use native selects (the system picker on iOS). */}
-            <SettingRow label="Title font" htmlFor="appearance-title-font">
-              <select
-                id="appearance-title-font"
-                className={selectClass}
-                value={titleFont}
-                onChange={(event) => onTitleFontChange(event.target.value as TitleFont)}
-              >
-                {titleFontOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </SettingRow>
             <SettingRow label="Body font" htmlFor="appearance-body-font">
               <select
                 id="appearance-body-font"
@@ -162,6 +145,7 @@ export default function AppearanceSection({
                 value={bodyFontChoice}
                 onChange={(event) => onBodyFontChoiceChange(event.target.value as BodyFontChoice)}
               >
+                {bodyFontChoice === 'maple' && <option value="maple" disabled>Maple Mono (previous selection)</option>}
                 {bodyFontChoiceOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}

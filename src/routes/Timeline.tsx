@@ -531,7 +531,6 @@ export default function Timeline() {
   const fontPreference = useSettingsStore((state) => state.fontPreference)
   const bodyFont = useSettingsStore((state) => state.bodyFont)
   const monospaceFont = useSettingsStore((state) => state.monospaceFont)
-  const titleFont = useSettingsStore((state) => state.titleFont)
   const activeLlmConfig = useMemo(
     () => resolveActiveLlmConfig(llmProvider, llmProviderSettings, llmSecrets),
     [llmProvider, llmProviderSettings, llmSecrets],
@@ -747,6 +746,7 @@ export default function Timeline() {
                 ? '1rem'
                 : getMonospaceFontSize(monospaceFont)
               : '1rem',
+          lineHeight: fontPreference === 'monospace' && monospaceFont === 'sono' ? '1.33rem' : 1.4,
           fontWeight: '400',
           fontFamily:
             fontPreference === 'monospace'
@@ -807,7 +807,7 @@ export default function Timeline() {
       }),
     [fontPreference, bodyFont, monospaceFont, isIosDevice],
   )
-  const titleFontFamily = useMemo(() => getTitleFontFamily(titleFont), [titleFont])
+  const titleFontFamily = useMemo(() => getTitleFontFamily('handlee'), [])
   const matchedResultsTextStyle = useMemo<React.CSSProperties>(
     () => ({
       fontSize:
@@ -816,7 +816,7 @@ export default function Timeline() {
             ? '1rem'
             : getMonospaceFontSize(monospaceFont)
           : '0.98rem',
-      lineHeight: 1.4,
+      lineHeight: fontPreference === 'monospace' && monospaceFont === 'sono' ? '1.33rem' : 1.4,
       fontWeight: '400',
       fontFamily:
         fontPreference === 'monospace'

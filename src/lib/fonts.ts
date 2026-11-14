@@ -82,7 +82,6 @@ export const bodyFontChoiceOptions: Array<{ id: BodyFontChoice; label: string }>
   { id: 'iawriter', label: 'iA Writer Mono' },
   { id: 'inconsolata', label: 'Inconsolata' },
   { id: 'sono', label: 'Sono' },
-  { id: 'maple', label: 'Maple Mono' },
   { id: 'maple-v8', label: 'Maple Mono v8' },
   { id: 'buena', label: 'Buena Mono' },
   { id: 'lato', label: 'Lato' },
@@ -116,14 +115,14 @@ export const getFontPreset = (
   fontPreference: FontPreference,
   bodyFont: BodyFont,
   monospaceFont: MonospaceFont,
-  titleFont: TitleFont,
+  _titleFont: TitleFont,
 ): FontPreset | 'custom' => {
+  void _titleFont
   const match = fontPresetOptions.find(
     ({ settings }) =>
       settings.fontPreference === fontPreference &&
       settings.bodyFont === bodyFont &&
-      settings.monospaceFont === monospaceFont &&
-      settings.titleFont === titleFont,
+      settings.monospaceFont === monospaceFont,
   )
   return match?.id ?? 'custom'
 }
