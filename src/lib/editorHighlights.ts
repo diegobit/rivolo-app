@@ -137,6 +137,8 @@ const headingLineDecoration = Decoration.line({ class: 'cm-heading-line' })
 const markdownFence = Decoration.mark({ class: 'cm-markdown-fence' })
 const inlineCode = Decoration.mark({ class: 'cm-inline-code' })
 const codeLine = Decoration.line({ class: 'cm-code-line' })
+const codeFirstLine = Decoration.line({ class: 'cm-code-first' })
+const codeLastLine = Decoration.line({ class: 'cm-code-last' })
 
 // Use the Markdown tree so punctuation in ordinary text stays untouched.
 const buildMarkdownDecorations = (state: EditorState) => {
@@ -147,10 +149,19 @@ const buildMarkdownDecorations = (state: EditorState) => {
         ranges.push(markdownFence.range(node.from, node.to))
       } else if (node.name === 'InlineCode') {
         ranges.push(inlineCode.range(node.from, node.to))
-      } else if (node.name === 'FencedCode' || node.name === 'CodeBlock') {
+      } else if (
+        node.name === 'CodeBlock' ||
+        // CommonMark runs an unclosed fence to the end of the document. Box it
+        // only once its closing fence exists, so typing ``` leaves the rest alone.
+        (node.name === 'FencedCode' && node.node.getChildren('CodeMark').length >= 2)
+      ) {
+        const firstLine = state.doc.lineAt(node.from).number
         const lastLine = state.doc.lineAt(node.to).number
-        for (let line = state.doc.lineAt(node.from).number; line <= lastLine; line++) {
-          ranges.push(codeLine.range(state.doc.line(line).from))
+        for (let line = firstLine; line <= lastLine; line++) {
+          const from = state.doc.line(line).from
+          ranges.push(codeLine.range(from))
+          if (line === firstLine) ranges.push(codeFirstLine.range(from))
+          if (line === lastLine) ranges.push(codeLastLine.range(from))
         }
       }
     },
@@ -372,14 +383,35 @@ const listIndentPlugin = ViewPlugin.fromClass(
 // precedes them and 4px above what follows. This lives in an editor theme
 // because CodeMirror's own .cm-line padding beats layered CSS.
 const lineSpacingTheme = EditorView.theme({
+  // Delimiters recede to the lightest text tone so the words they wrap lead.
   '.cm-markdown-fence': {
-    color: 'var(--theme-text-muted)',
-  },
-  '.cm-inline-code, .cm-line.cm-code-line': {
-    backgroundColor: 'var(--theme-code-bg)',
+    color: 'var(--theme-text-subtle)',
   },
   '.cm-inline-code': {
-    borderRadius: '3px',
+    backgroundColor: 'var(--theme-code-bg)',
+    borderRadius: '4px',
+  },
+  // A code block is a quiet rounded card drawn across its lines. Inset
+  // shadows stand in for borders so the text stays aligned with its neighbours.
+  '.cm-line.cm-code-line': {
+    '--code-edge': 'var(--theme-border)',
+    backgroundColor: 'var(--theme-code-bg)',
+    boxShadow: 'inset 1px 0 var(--code-edge), inset -1px 0 var(--code-edge)',
+  },
+  '.cm-line.cm-code-first': {
+    borderTopLeftRadius: '8px',
+    borderTopRightRadius: '8px',
+    paddingTop: '2px',
+    boxShadow: 'inset 1px 0 var(--code-edge), inset -1px 0 var(--code-edge), inset 0 1px var(--code-edge)',
+  },
+  '.cm-line.cm-code-last': {
+    borderBottomLeftRadius: '8px',
+    borderBottomRightRadius: '8px',
+    paddingBottom: '2px',
+    boxShadow: 'inset 1px 0 var(--code-edge), inset -1px 0 var(--code-edge), inset 0 -1px var(--code-edge)',
+  },
+  '.cm-line.cm-code-first.cm-code-last': {
+    boxShadow: 'inset 0 0 0 1px var(--code-edge)',
   },
   '.cm-line.cm-list-line': {
     marginLeft: 'var(--list-hang, 0px)',

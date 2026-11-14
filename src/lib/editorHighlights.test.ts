@@ -51,5 +51,20 @@ describe('editorHighlights', () => {
     expect(Array.from(content.querySelectorAll('.cm-code-line'), (el) => el.textContent))
       .toEqual(['```text', 'code here', '```'])
     expect(content.textContent).toContain('plain * punctuation')
+    expect(Array.from(content.querySelectorAll('.cm-code-first'), (el) => el.textContent)).toEqual(['```text'])
+    expect(Array.from(content.querySelectorAll('.cm-code-last'), (el) => el.textContent)).toEqual(['```'])
+  })
+
+  it('leaves the rest of the note unstyled while a fence is still open, then boxes it once closed', () => {
+    const doc = 'intro\n```\nciao\n\n# Heading\n- item'
+    const content = renderEditor(doc)
+    expect(content.querySelector('.cm-code-line')).toBeNull()
+    expect(Array.from(content.querySelectorAll('.cm-markdown-fence'), (el) => el.textContent)).toEqual(['```'])
+
+    view.dispatch({ changes: { from: 'intro\n```\nciao'.length, insert: '\n```' } })
+
+    expect(Array.from(content.querySelectorAll('.cm-code-line'), (el) => el.textContent))
+      .toEqual(['```', 'ciao', '```'])
+    expect(content.querySelector('.cm-heading-line')).toHaveTextContent('# Heading')
   })
 })
