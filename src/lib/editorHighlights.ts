@@ -134,6 +134,44 @@ const tagHighlightPlugin = ViewPlugin.fromClass(
 
 const headingLineDecoration = Decoration.line({ class: 'cm-heading-line' })
 
+const markdownFence = Decoration.mark({ class: 'cm-markdown-fence' })
+const inlineCode = Decoration.mark({ class: 'cm-inline-code' })
+const codeLine = Decoration.line({ class: 'cm-code-line' })
+
+// Use the Markdown tree so punctuation in ordinary text stays untouched.
+const buildMarkdownDecorations = (state: EditorState) => {
+  const ranges: ReturnType<typeof markdownFence.range>[] = []
+  syntaxTree(state).iterate({
+    enter: (node) => {
+      if (node.name === 'EmphasisMark' || node.name === 'CodeMark') {
+        ranges.push(markdownFence.range(node.from, node.to))
+      } else if (node.name === 'InlineCode') {
+        ranges.push(inlineCode.range(node.from, node.to))
+      } else if (node.name === 'FencedCode' || node.name === 'CodeBlock') {
+        const lastLine = state.doc.lineAt(node.to).number
+        for (let line = state.doc.lineAt(node.from).number; line <= lastLine; line++) {
+          ranges.push(codeLine.range(state.doc.line(line).from))
+        }
+      }
+    },
+  })
+  return Decoration.set(ranges, true)
+}
+
+const markdownDecorationPlugin = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = buildMarkdownDecorations(view.state)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+      this.decorations = buildMarkdownDecorations(update.state)
+    }
+  }
+}, { decorations: (value) => value.decorations })
+
 // Read headings from the markdown tree so a `#` inside a code block doesn't count.
 const buildHeadingLineDecorations = (state: EditorState) => {
   const builder = new RangeSetBuilder<Decoration>()
@@ -334,6 +372,15 @@ const listIndentPlugin = ViewPlugin.fromClass(
 // precedes them and 4px above what follows. This lives in an editor theme
 // because CodeMirror's own .cm-line padding beats layered CSS.
 const lineSpacingTheme = EditorView.theme({
+  '.cm-markdown-fence': {
+    color: 'var(--theme-text-muted)',
+  },
+  '.cm-inline-code, .cm-line.cm-code-line': {
+    backgroundColor: 'var(--theme-code-bg)',
+  },
+  '.cm-inline-code': {
+    borderRadius: '3px',
+  },
   '.cm-line.cm-list-line': {
     marginLeft: 'var(--list-hang, 0px)',
     textIndent: 'calc(-1 * var(--list-hang, 0px))',
@@ -368,4 +415,4 @@ const lineSpacingTheme = EditorView.theme({
   },
 })
 
-export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin, headingLinePlugin, todoDashPlugin, listIndentPlugin, lineSpacingTheme]
+export const editorHighlights: Extension[] = [syntaxHighlighting(highlightStyle), tagHighlightPlugin, headingLinePlugin, markdownDecorationPlugin, todoDashPlugin, listIndentPlugin, lineSpacingTheme]
