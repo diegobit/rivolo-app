@@ -4,6 +4,12 @@ Follow-up to PR #47 at `3a7f1a6`. This batch keeps production unchanged and
 consolidates overlapping UI proof. The existing CI runs Vitest, lint, the built
 app in Chromium desktop/WebKit mobile, and the MCP runtime smoke.
 
+> **2026-11-14, after the diegobit 0.8.0 sync:** the Title font picker was
+> removed (titles are always Handlee) and Inconsolata was replaced by Google
+> Sans Code. The historical rows and receipt below still name the retired
+> picker and font; read those mentions as superseded, and use J4 plus the
+> settings-store migration tests for current ownership.
+
 ## Candidates recorded before retirement
 
 | Exact declaration/location | Actual failure; production caller/history | Remaining keeper and deletion unlocked | Risk / focused command |

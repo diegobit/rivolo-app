@@ -319,7 +319,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const animations = storedAnimations !== 'false'
       const fontPreference = (storedFontPreference as FontPreference | null) ?? 'monospace'
       const bodyFont = isBodyFont(storedBodyFont) ? storedBodyFont : 'system'
-      const monospaceFont = isMonospaceFont(storedMonospaceFont) ? storedMonospaceFont : 'iawriter'
+      const monospaceFont = isMonospaceFont(storedMonospaceFont)
+        ? storedMonospaceFont
+        : storedMonospaceFont === 'inconsolata'
+          ? 'google-sans-code'
+          : 'iawriter'
       const titleFont = isTitleFont(storedTitleFont) ? storedTitleFont : 'handlee'
       const dismissedSetupNotices: DismissedSetupNotices = {
         ai: storedDismissedAiSetup === 'true',

@@ -245,6 +245,33 @@ describe('useSettingsStore theme preference', () => {
     expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.wallpaper', 'none')
   })
 
+  // Migration ownership: loadSettings. A returning writer who chose Inconsolata
+  // must land on the font that replaced it, not on iA Writer; an unknown value
+  // must still fall back to the default.
+  it('migrates a legacy Inconsolata choice to Google Sans Code', async () => {
+    mockLoadSettingsValues({ 'appearance.monospaceFont': 'inconsolata' })
+
+    await useSettingsStore.getState().loadSettings()
+
+    expect(useSettingsStore.getState().monospaceFont).toBe('google-sans-code')
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith(
+      'appearance.monospaceFont',
+      'google-sans-code',
+    )
+  })
+
+  it('falls back to iA Writer for an unknown monospace font', async () => {
+    mockLoadSettingsValues({ 'appearance.monospaceFont': 'bogus' })
+
+    await useSettingsStore.getState().loadSettings()
+
+    expect(useSettingsStore.getState().monospaceFont).toBe('iawriter')
+    expect(settingsRepository.setSetting).toHaveBeenCalledWith(
+      'appearance.monospaceFont',
+      'iawriter',
+    )
+  })
+
   it('writes a font preset through the existing font setting keys', async () => {
     await useSettingsStore.getState().updateFontPreset('proportional')
 
@@ -261,16 +288,16 @@ describe('useSettingsStore theme preference', () => {
   })
 
   it('maps body font choices onto font preference and monospace font', async () => {
-    await useSettingsStore.getState().updateBodyFontChoice('inconsolata')
+    await useSettingsStore.getState().updateBodyFontChoice('google-sans-code')
 
     expect(settingsRepository.setSetting).toHaveBeenCalledWith('appearance.font', 'monospace')
     expect(settingsRepository.setSetting).toHaveBeenCalledWith(
       'appearance.monospaceFont',
-      'inconsolata',
+      'google-sans-code',
     )
     expect(useSettingsStore.getState()).toMatchObject({
       fontPreference: 'monospace',
-      monospaceFont: 'inconsolata',
+      monospaceFont: 'google-sans-code',
     })
 
     await useSettingsStore.getState().updateBodyFontChoice('lato')
