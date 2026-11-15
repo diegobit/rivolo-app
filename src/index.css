@@ -947,8 +947,14 @@
       --desktop-chat-sidebar-width: min(66vw, calc(100vw - 360px));
     }
 
+    /* The author gutter takes 36px of every line. Cards grow by as much while
+       it is shown, so a line holds the same text with or without it. */
+    .app-shell-root[data-desktop-authors='true'] {
+      --timeline-width: 756px;
+    }
+
     .app-shell-fixed-header-width {
-      width: min(calc((100vw - var(--desktop-chat-shift, 0px)) * 0.96), 720px);
+      width: min(calc((100vw - var(--desktop-chat-shift, 0px)) * 0.96), var(--timeline-width, 720px));
     }
 
     .app-shell-fixed-tray-width {
@@ -970,11 +976,11 @@
        proportional margins to the panel inset. */
     .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] {
       --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-card-edge) + 24px);
-      --desktop-expanded-timeline-width: min(720px, calc(100% - var(--desktop-chat-shift) - var(--desktop-chat-sidebar-inset)));
+      --desktop-expanded-timeline-width: min(var(--timeline-width, 720px), calc(100% - var(--desktop-chat-shift) - var(--desktop-chat-sidebar-inset)));
     }
 
     .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] .app-main {
-      width: min(720px, calc(100% - var(--desktop-chat-sidebar-inset)));
+      width: min(var(--timeline-width, 720px), calc(100% - var(--desktop-chat-sidebar-inset)));
       margin-right: 0;
     }
 
@@ -1005,11 +1011,11 @@
       }
 
       .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] .app-main {
-        width: min(720px, calc(100% - 2 * var(--desktop-chat-sidebar-inset)));
+        width: min(var(--timeline-width, 720px), calc(100% - 2 * var(--desktop-chat-sidebar-inset)));
       }
 
       .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] .app-shell-fixed-header-width {
-        width: min(720px, calc(100% - var(--desktop-chat-shift) - 2 * var(--desktop-chat-sidebar-inset)));
+        width: min(var(--timeline-width, 720px), calc(100% - var(--desktop-chat-shift) - 2 * var(--desktop-chat-sidebar-inset)));
       }
 
       .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] .app-shell-fixed-tray-width {

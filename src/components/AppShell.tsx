@@ -48,6 +48,8 @@ export default function AppShell() {
   const themePreference = useSettingsStore((state) => state.themePreference)
   const appIdentity = useSettingsStore((state) => state.appIdentity)
   const updateThemePreference = useSettingsStore((state) => state.updateThemePreference)
+  const desktopAuthors = useSettingsStore((state) => state.desktopAuthors)
+  const updateDesktopAuthors = useSettingsStore((state) => state.updateDesktopAuthors)
   const wallpaper = useSettingsStore((state) => state.wallpaper)
   const highlightInputMode = useSettingsStore((state) => state.highlightInputMode)
   const loadSyncState = useSyncStore((state) => state.loadState)
@@ -108,6 +110,8 @@ export default function AppShell() {
   const showLauncherButtons = !isNarrowViewportMode
   const launcherSpread = !isNarrowViewportMode
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
+  // Only OneDrive records who wrote each line.
+  const showDesktopAuthorsButton = showDesktopShortcutsButton && activeProvider === 'onedrive'
   const showDesktopThemeButton = !isNarrowViewportMode && location.pathname !== '/settings'
   const syncDirection = syncOperation === 'push' ? 'up' : 'down'
   const setupNotices = attentionLoaded
@@ -520,6 +524,7 @@ export default function AppShell() {
       className="app-shell-root min-h-full text-[var(--theme-text)]"
       data-desktop-card-open={isDesktopChatMode || isDesktopSearchCardOpen ? 'true' : 'false'}
       data-desktop-panel-expanded={desktopPanelExpanded ? 'true' : 'false'}
+      data-desktop-authors={showDesktopAuthorsButton && desktopAuthors ? 'true' : 'false'}
       data-mobile-home={isMobileHome ? 'true' : 'false'}
       data-mode={mode}
     >
@@ -550,6 +555,20 @@ export default function AppShell() {
                 onToggle={() => setShowShortcuts((prev) => !prev)}
                 buttonClassName={topIconButton}
               />
+            )}
+            {showDesktopAuthorsButton && (
+              <button
+                type="button"
+                className={`${topIconButton} hero-ui-fade-up`}
+                aria-label="Authors"
+                aria-pressed={desktopAuthors}
+                title={desktopAuthors ? 'Authors: shown' : 'Authors: hidden'}
+                onClick={() => {
+                  void updateDesktopAuthors(!desktopAuthors)
+                }}
+              >
+                <img src={desktopAuthors ? '/user.svg' : '/user-slash.svg'} alt="" className="h-5 w-5" />
+              </button>
             )}
             {!isNarrowViewportMode && <div id="header-undo-slot" className="flex items-center" />}
           </div>
@@ -620,7 +639,7 @@ export default function AppShell() {
 
       {tabSync.databaseStale && (
         <div
-          className="app-shell-readonly-notice sticky top-[env(safe-area-inset-top)] z-40 mx-auto w-full px-3 sm:mt-20 sm:w-[min(96%,720px)] sm:px-0 sm:top-[calc(env(safe-area-inset-top)+5rem)]"
+          className="app-shell-readonly-notice sticky top-[env(safe-area-inset-top)] z-40 mx-auto w-full px-3 sm:mt-20 sm:w-[min(96%,var(--timeline-width,720px))] sm:px-0 sm:top-[calc(env(safe-area-inset-top)+5rem)]"
           role="status"
           aria-live="polite"
         >
@@ -662,7 +681,7 @@ export default function AppShell() {
         inert={tabSync.databaseStale || mobileMenuOpen}
         className={`app-main mx-auto flex min-h-screen w-full flex-col gap-4 ${
           tabSync.databaseStale ? 'pt-4' : 'pt-0 sm:pt-20'
-        } sm:w-[min(96%,720px)] ${
+        } sm:w-[min(96%,var(--timeline-width,720px))] ${
           showTrayRow ? 'pb-40' : 'pb-12'
         }`}
         style={isMobileHome ? { paddingBottom: 'var(--mobile-home-bottom-clearance)' } : undefined}

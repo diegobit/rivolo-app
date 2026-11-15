@@ -256,10 +256,11 @@ const DayEditorCard = memo(({
   registerDayRef,
 }: DayEditorCardProps) => {
   const activeProvider = useSyncStore((state) => state.activeProvider)
-  // Authors take 36px of line width, so phones show them only when asked.
+  // Authors take 36px of line width, so phones show them only when asked. Wide
+  // windows show them unless turned off, and widen the cards to make up for it.
   const narrowViewport = useIsNarrowViewport()
-  const mobileAuthors = useSettingsStore((state) => state.mobileAuthors)
-  const showBlame = activeProvider === 'onedrive' && (!narrowViewport || mobileAuthors)
+  const authors = useSettingsStore((state) => narrowViewport ? state.mobileAuthors : state.desktopAuthors)
+  const showBlame = activeProvider === 'onedrive' && authors
   const loadAttribution = showBlame && shouldMountEditor
   const containerRef = useRef<HTMLDivElement | null>(null)
   const detailsRef = useRef<HTMLDivElement | null>(null)
