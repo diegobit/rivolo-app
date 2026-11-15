@@ -122,14 +122,14 @@ const authorGutter = gutter({
   initialSpacer: () => new Spacer(),
   markers: (view) => view.state.field(markers),
 })
-// The rail is a ripple that runs from the badge to a drop. Each line draws its own
+// The rail is a ripple that runs from the badge to a curl. Each line draws its own
 // piece, so the wave is a function of the distance from the top of the note: that
 // keeps it unbroken from one line to the next.
 const WAVE = 14, SWING = 1.8, TAIL = 18
 const swing = (y: number) => 5 + SWING * Math.sin((2 * Math.PI * y) / WAVE)
 // One line's piece, from `top` to `bottom` as distances from the top of the note.
 // On a block's last line the wave straightens over the final TAIL pixels, or
-// fewer on a short line, and lands on the tip of the drop.
+// fewer on a short line, and turns into the curl.
 const piece = (top: number, bottom: number, end: boolean) => {
   const height = bottom - top, turn = end ? Math.max(height - TAIL, 0) : height
   const wave = []
@@ -137,9 +137,10 @@ const piece = (top: number, bottom: number, end: boolean) => {
   wave.push(`${swing(top + turn).toFixed(2)} ${turn.toFixed(2)}`)
   let path = `<path d='M${wave.join('L')}`
   if (end) {
-    const reach = height - 6 - turn, lean = SWING * ((2 * Math.PI) / WAVE) * Math.cos((2 * Math.PI * (top + turn)) / WAVE) * reach * 0.35
-    path += `C${(swing(top + turn) + lean).toFixed(2)} ${(turn + reach * 0.35).toFixed(2)} 5 ${(turn + reach * 0.6).toFixed(2)} 5 ${(height - 6).toFixed(2)}'/>` +
-      `<path fill='#000' stroke='none' transform='translate(0 ${(height - 18).toFixed(2)})' d='M5 8C5 11 2.2 12.6 2.2 15.2a2.8 2.8 0 0 0 5.6 0C7.8 12.6 5 11 5 8Z`
+    const land = height - 9.5, reach = land - turn, lean = SWING * ((2 * Math.PI) / WAVE) * Math.cos((2 * Math.PI * (top + turn)) / WAVE) * reach * 0.35
+    const y = (offset: number) => (land + offset).toFixed(2)
+    path += `C${(swing(top + turn) + lean).toFixed(2)} ${(turn + reach * 0.35).toFixed(2)} 3 ${(turn + reach * 0.6).toFixed(2)} 3 ${y(0)}` +
+      `C3 ${y(4.5)} 3.4 ${y(8)} 6 ${y(8)}C8 ${y(8)} 9 ${y(6.5)} 9 ${y(5)}C9 ${y(3.4)} 7.8 ${y(2.4)} 6.5 ${y(2.4)}C5.3 ${y(2.4)} 4.7 ${y(3.4)} 4.9 ${y(4.5)}`
   }
   return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='10' height='${height.toFixed(2)}'>` +
     `<g fill='none' stroke='#000' stroke-width='2' stroke-linecap='round'>${path}'/></g></svg>`)}")`
@@ -183,7 +184,7 @@ const badgeAlignment = ViewPlugin.fromClass(class {
     }
   }
 })
-// Badge, ripple and drop share one colour, so they read as a single shape. The
+// Badge, ripple and curl share one colour, so they read as a single shape. The
 // rail is that colour seen through its line's piece of the ripple.
 const fill = 'hsl(var(--blame-hue) var(--theme-blame-saturation) var(--theme-blame-lightness))'
 const ripple = 'var(--blame-mask, none) 0 0 / 100% 100% no-repeat'
@@ -199,7 +200,7 @@ const theme = EditorView.theme({
     color: 'hsl(var(--blame-hue) 45% var(--theme-blame-text-lightness))', font: '600 11px/18px system-ui, sans-serif', boxSizing: 'border-box', cursor: 'pointer' },
   '.cm-blame-badge::before': { content: '""', position: 'absolute', top: 'calc(var(--blame-top) - 2px)', left: '1px', width: '34px', height: '24px' },
   '.cm-blame-badge:hover, .cm-blame-badge:focus-visible': { borderColor: 'var(--theme-accent)', outline: '2px solid var(--theme-accent)', outlineOffset: '1px' },
-  // The rail starts under the badge's edge and its drop falls before the block's
+  // The rail starts under the badge's edge and it curls up before the block's
   // last line ends, so it cannot be read as joining two authors. Until a line is
   // measured it has no piece to show, so its rail stays hidden.
   '.cm-blame-rail, .cm-blame-badge::after': { display: 'block', position: 'absolute', top: '0', bottom: '0', left: '13px',
