@@ -11,6 +11,7 @@ type DailyFiles<File extends DailyRemoteFile> = {
   stat(folder: string, dayId: string): Promise<File | null>
   download(file: File, dayId: string): Promise<string>
   prepareWrite(folder: string, dayId: string, file: File | null): Promise<(content: string, beforeCommit: () => Promise<void>) => Promise<File>>
+  writeHosted?(folder: string, dayId: string, current: File | null, content: string): Promise<string>
   isConflict(error: unknown): boolean
 }
 
@@ -47,19 +48,28 @@ function createNotes<File extends DailyRemoteFile>(remote: DailyFiles<File>, pro
     for (let attempt = 0; attempt < 3; attempt++) {
       let file: File | null
       let content: string
-      let write: Awaited<ReturnType<DailyFiles<File>['prepareWrite']>>
+      let write: () => Promise<string>
       let mutation: ReturnType<typeof addToDay>
       try {
         file = await remote.stat(folder, id)
         const prior = file && await readDay(file, id)
         mutation = addToDay(prior ? [prior.day] : [], input)
         content = await annotateLocalNotebook(encodeNotebookDay(mutation.day), prior ? prior.content : '', 'Agent', mutation.day.updatedAt)
-        write = await remote.prepareWrite(folder, id, file)
+        const writeHosted = remote.writeHosted
+        if (writeHosted) write = () => writeHosted(folder, id, file, content)
+        else {
+          const commit = await remote.prepareWrite(folder, id, file)
+          write = async () => {
+            await commit(content, async () => {})
+            return content
+          }
+        }
       } catch (error) {
         throw new ProviderWriteNotAppliedError(error instanceof Error ? error.message : 'Could not prepare the day.', { cause: error })
       }
       try {
-        await write(content, async () => {})
+        const written = await write()
+        if (written !== content) mutation.day = { ...mutation.day, ...decodeNotebookDay(written, id) }
         return { ...mutation, source, conflictRetries: attempt }
       } catch (error) {
         if (!remote.isConflict(error)) throw error

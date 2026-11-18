@@ -12,6 +12,7 @@ import type { GoogleDriveState } from './googleDriveState'
 import { markSyncLocalDirty } from './syncDirty'
 import { createCloudDailyNotebook } from './cloudDailyNotebook'
 import { createGoogleDriveDailyRemote } from './googleDriveDailyRemote'
+import { getJsonSetting, setJsonSetting } from './settingsRepository'
 import { queryFirstRow } from './sqliteRuntime'
 import { hashSyncContent } from './syncHash'
 import type { SyncProvider, SyncPullOptions, SyncStatus } from './sync'
@@ -292,7 +293,14 @@ const dailyGoogleDrive = createCloudDailyNotebook({
       return content
     } }
   },
-  resolveFolder: async (context) => googleDriveDailyRemote.prepareGoogleDriveDailyFolder(await resolveFolderId(context), context.sourceKey),
+  resolveFolder: async (context) => {
+    const parent = await resolveFolderId(context)
+    const key = `google-drive.dailyFolderReservation:${JSON.stringify([context.accountId, parent, context.sourceKey])}`
+    const id = await getJsonSetting<string>(key)
+    return googleDriveDailyRemote.prepareGoogleDriveDailyFolder(parent, context.sourceKey, {
+      id: id ?? undefined, save: (reserved) => setJsonSetting(key, reserved),
+    })
+  },
   updateSummary: (localDirty) => updateGoogleDriveState({ localDirty, lastSyncAt: Date.now() }),
   remote: googleDriveDailyRemote,
   migrationComplete: googleDriveDailyRemote.migrationComplete,

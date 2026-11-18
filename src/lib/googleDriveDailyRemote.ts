@@ -22,6 +22,17 @@ type File = { ref: string; revision: string; folder: string; dayId: string; dupl
 type Revision = { id: string; modifiedTime: string }
 
 class DriveConflict extends Error {}
+class DriveDeleteUncertain extends Error {}
+class DriveWriteRace extends Error {
+  readonly uploaded: File
+  readonly previous: string
+
+  constructor(uploaded: File, previous: string) {
+    super(`Google Drive changed during upload of ${uploaded.dayId}. Sync will merge the concurrent revisions on retry.`)
+    this.uploaded = uploaded
+    this.previous = previous
+  }
+}
 
 export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init?: RequestInit) => Promise<Response>) => {
   const quote = (value: string) => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
@@ -94,7 +105,14 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
     }
   }
 
-  const prepareGoogleDriveDailyFolder = async (parent: string, fileName: string) => {
+  const allocateId = async () => {
+    const response = await authorizedFetch(`${API}/files/generateIds?count=1&space=drive`)
+    const id = response.ok ? (await response.json() as { ids?: string[] }).ids?.[0] : undefined
+    if (typeof id !== 'string' || !id) throw new Error('Google Drive could not reserve an ID. Retry sync.')
+    return id
+  }
+
+  const prepareGoogleDriveDailyFolder = async (parent: string, fileName: string, reservation: { id?: string; save: (id: string) => Promise<void> }) => {
     const key = await hashSyncContent(fileName)
     const name = `${fileName.replace(/\.md$/i, '')}.rivolo-daily`
     const find = async () => {
@@ -106,16 +124,33 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
       return folders[0]?.id
     }
     const existing = await find()
+    if (existing && !reservation.id) return existing
+    const id = reservation.id ?? await allocateId()
+    if (!reservation.id) await reservation.save(id)
+    const verify = async () => {
+      const folder = await entry(id)
+      if (!folder) return null
+      if (folder.id !== id || folder.mimeType !== FOLDER || !folder.parents?.includes(parent) ||
+          folder.appProperties?.rivoloDailySource !== key) throw new Error('The reserved Google Drive folder no longer matches this notebook.')
+      return folder.id
+    }
+    if (reservation.id && await verify()) {
+      if (existing && existing !== id) throw new Error('Google Drive found multiple daily notebook folders. Keep the intended folder and move the others aside before retrying.')
+      return id
+    }
     if (existing) return existing
-    const response = await authorizedFetch(`${API}/files?fields=id`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, mimeType: FOLDER, parents: [parent], appProperties: { rivoloDailySource: key } }),
-    })
-    if (!response.ok) throw new Error(`Google Drive could not create the daily notebook folder (${response.status}).`)
-    const created = await response.json() as { id?: string }
-    const verified = await find()
-    if (!created.id || verified !== created.id) throw new Error('Google Drive is still indexing the new daily notebook folder. Retry the upgrade shortly.')
-    return created.id
+    try {
+      const response = await authorizedFetch(`${API}/files?fields=id`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name, mimeType: FOLDER, parents: [parent], appProperties: { rivoloDailySource: key } }),
+      })
+      if (!response.ok && response.status !== 409) throw new Error(`Google Drive could not create the daily notebook folder (${response.status}).`)
+    } catch (error) {
+      if (await verify()) return id
+      throw error
+    }
+    if (await verify()) return id
+    throw new Error('Google Drive has not confirmed the reserved notebook folder. Retry the upgrade shortly.')
   }
 
   const currentFile = async (file: File) => {
@@ -171,26 +206,30 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
     const conflicts = await intervening(file, expected)
     if (!conflicts.length) return content
     const baseline = await downloadRetainedRevision(file, expected)
-    let merged = content
-    for (const revision of conflicts) {
-      const concurrent = await downloadRetainedRevision(file, revision.id)
-      merged = await mergeOneDriveNotebooksWithAuthors(baseline, merged, concurrent)
-    }
-    return merged
+    // The latest predecessor includes the effect of the preceding edits and
+    // deletions. Replaying every historical snapshot can resurrect removed text.
+    const concurrent = await downloadRetainedRevision(file, conflicts.at(-1)!.id)
+    return mergeOneDriveNotebooksWithAuthors(baseline, content, concurrent)
   }
 
-  const prepareWrite = async (folder: string, dayId: string, current: File | null) =>
-    async (content: string, guard: () => Promise<void>) => {
+  const findByRef = async (folder: string, dayId: string, ref: string) => {
+    const file = await entry(ref)
+    return file ? asFile(file, folder, dayId) : null
+  }
+
+  const prepareWrite = async (folder: string, dayId: string, current: File | null, reserved?: string) => {
+    const createRef = current ? undefined : reserved ?? await allocateId()
+    const write = async (content: string, guard: () => Promise<void>) => {
       if (current) await assertCurrent(current)
       else if (await stat(folder, dayId)) throw new DriveConflict()
       await guard()
       const params = new URLSearchParams({ fields: FIELDS, uploadType: current ? 'media' : 'multipart' })
       const boundary = `rivolo_${crypto.randomUUID()}`
       const metadata = JSON.stringify({
-        name: `${dayId}.md`, mimeType: 'text/markdown', parents: [folder],
+        id: createRef, name: `${dayId}.md`, mimeType: 'text/markdown', parents: [folder],
         appProperties: { rivoloNotebook: folder, rivoloDay: dayId },
       })
-      const response = await authorizedFetch(`${UPLOAD}${current ? entryPath(current.ref) : '/files'}?${params}`, {
+      const upload = () => authorizedFetch(`${UPLOAD}${current ? entryPath(current.ref) : '/files'}?${params}`, {
         method: current ? 'PATCH' : 'POST',
         headers: { 'Content-Type': current ? 'text/markdown; charset=UTF-8' : `multipart/related; boundary=${boundary}` },
         body: current ? content : [
@@ -198,19 +237,70 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
           `--${boundary}`, 'Content-Type: text/markdown; charset=UTF-8', '', content, `--${boundary}--`, '',
         ].join('\r\n'),
       })
-      if (!response.ok) throw new Error(`Google Drive upload failed for ${dayId} (${response.status}).`)
-      const uploaded = asFile(await response.json() as Entry, folder, dayId)
+      let uploaded: File
+      try {
+        const response = await upload()
+        if (response.status === 409 && createRef) {
+          throw new Error(`Google Drive has not confirmed the reserved file for ${dayId}. Retry sync.`)
+        }
+        if (!response.ok) throw new Error(`Google Drive upload failed for ${dayId} (${response.status}).`)
+        uploaded = asFile(await response.json() as Entry, folder, dayId)
+      } catch (error) {
+        const ref = createRef ?? current?.ref
+        const found = ref && await findByRef(folder, dayId, ref)
+        if (!found || found.revision === current?.revision || await download(found) !== content) throw error
+        uploaded = found
+      }
       if (current) {
+        if (uploaded.revision === current.revision && await download(uploaded) === content) return uploaded
         const conflicts = await intervening(uploaded, current.revision)
         if (conflicts.length) {
-          // The pending write retains the previous head. The next pass merges
-          // these retained revisions before treating this upload as settled.
-          for (const conflict of conflicts) await downloadRetainedRevision(uploaded, conflict.id)
-          throw new Error(`Google Drive changed during upload of ${dayId}. Sync will merge the concurrent revisions on retry.`)
+          await downloadRetainedRevision(uploaded, conflicts.at(-1)!.id)
+          throw new DriveWriteRace(uploaded, current.revision)
         }
-      } else if ((await stat(folder, dayId))?.ref !== uploaded.ref) throw new DriveConflict()
+      } else if (uploaded.ref !== createRef) throw new Error('Google Drive returned a different file ID than the reserved ID.')
       return uploaded
     }
+    return Object.assign(write, { createRef })
+  }
+
+  // Agent writes use the same Drive protocol but don't have the browser's
+  // durable pending row. Repair an applied write without reapplying the append.
+  const writeHosted = async (folder: string, dayId: string, current: File | null, document: string) => {
+    let file = current
+    let content = document
+    let repairing = false
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await (await prepareWrite(folder, dayId, file))(content, async () => {})
+        return content
+      } catch (error) {
+        if (error instanceof DriveWriteRace) {
+          repairing = true
+          if (attempt === 2) throw error
+          const repaired = await recoverPending(error.uploaded, error.previous, content)
+          try {
+            // Another writer may have seen the applied Agent revision. Merge
+            // only the repair into their head, without appending a second time.
+            file = await currentFile(error.uploaded)
+            if (file.revision === error.uploaded.revision) {
+              if (content === repaired) return content
+              content = repaired
+            } else {
+              const latest = await download(file)
+              content = await mergeOneDriveNotebooksWithAuthors(content, latest, repaired)
+              if (content === latest) return latest
+            }
+          } catch (cause) {
+            throw new Error(`Google Drive changed after applying the Agent write for ${dayId}. Review its version history.`, { cause })
+          }
+        } else if (repairing && error instanceof DriveConflict) {
+          throw new Error(`Google Drive changed while repairing the applied Agent write for ${dayId}. Review its version history.`)
+        } else throw error
+      }
+    }
+    throw new Error(`Google Drive could not finish the Agent write for ${dayId}.`)
+  }
 
   const migrationComplete = async (folder: string) =>
     (await entry(folder))?.appProperties?.rivoloMigrated === 'true'
@@ -234,7 +324,9 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
     inventory,
     download,
     prepareWrite,
-    recoverPending,
+    recoverPending, findByRef, writeHosted,
+    protectChangedDeletion: true,
+    isDeleteUncertain: (error: unknown) => error instanceof DriveDeleteUncertain,
     remove: async (file: File, guard: () => Promise<void>) => {
       await assertCurrent(file)
       await guard()
@@ -242,11 +334,19 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
       // after the revision check. Drive does not document an atomic trash CAS.
       const response = await authorizedFetch(`${API}${entryPath(file.ref)}?fields=headRevisionId,trashed`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }),
-      })
+      }).catch(() => null)
+      if (!response || response.status >= 500) {
+        throw new DriveDeleteUncertain(`Google Drive could not verify deletion of ${file.dayId}. Review the file or trash before retrying.`)
+      }
       if (!response.ok) throw new Error(`Google Drive could not move ${file.dayId} to the trash.`)
       const result = await response.json() as Entry
       if (!result.trashed || result.headRevisionId !== file.revision) {
-        throw new Error(`Google Drive changed ${file.dayId} during deletion. The new version can be recovered from the Drive trash.`)
+        const restore = await authorizedFetch(`${API}${entryPath(file.ref)}?fields=trashed`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: false }),
+        }).catch(() => null)
+        throw new DriveDeleteUncertain(restore?.ok
+          ? `Google Drive changed ${file.dayId} during deletion. The file was restored for review.`
+          : `Google Drive changed ${file.dayId} during deletion. The new version may be in the Drive trash.`)
       }
     },
     isConflict: (error: unknown) => error instanceof DriveConflict,

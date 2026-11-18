@@ -24,11 +24,17 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
   let tick = 0
   let race = false
   let loseReply = false
+  let rejectWrite = false
+  let hideSearch = false
+  let hideDirect = false
+  let raceDelete = false
+  let folderReplyLost = false
+  let nextReservation = 0
   let incomplete = false
   const files: RecordFile[] = []
   const updates: string[] = []
-  const create = (name: string, parent?: string, path?: string, properties?: Record<string, string>) => {
-    const file = { id: `id:${files.length}`, name, parent, path, properties, revisions: [] }
+  const create = (name: string, parent?: string, path?: string, properties?: Record<string, string>, id = `id:${files.length}`) => {
+    const file = { id, name, parent, path, properties, revisions: [] }
     files.push(file)
     return file
   }
@@ -96,7 +102,9 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
     }
 
     const [, , , , ref, revisions, revisionId] = url.pathname.replace('/upload', '').split('/')
-    const file = ref ? find(decodeURIComponent(ref)) : undefined
+    if (ref === 'generateIds') return json({ ids: [`reserved-${++nextReservation}`] })
+    const decoded = ref ? decodeURIComponent(ref) : undefined
+    const file = decoded ? files.find((item) => item.id === decoded) : undefined
     if (revisions === 'revisions' && file) {
       if (!revisionId) return json({ revisions: file.revisions })
       const revision = file.revisions.find((item) => item.id === revisionId)
@@ -106,6 +114,7 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
       }
       return new Response(revision?.text)
     }
+    if (method === 'GET' && hideDirect && decoded?.startsWith('reserved-')) return json({}, 404)
     if (method === 'GET' && file) return url.searchParams.get('alt') === 'media'
       ? new Response(file.revisions.at(-1)?.text) : json(driveMeta(file))
     if (method === 'GET' && ref) return json({}, 404)
@@ -113,6 +122,7 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
       const q = url.searchParams.get('q') ?? ''
       const parent = q.match(/'([^']+)' in parents/)?.[1]
       const dayId = q.match(/key='rivoloDay' and value='([^']+)'/)?.[1]
+      if (hideSearch && (q.includes('rivoloDailySource') || q.includes('rivoloNotebook'))) return json({ files: [] })
       if (incomplete && q.includes('rivoloNotebook')) return json({ files: [], incompleteSearch: true })
       return json({ files: files.filter((item) => !item.trashed && item.parent === parent &&
         (q.includes('rivoloDailySource') ? item.properties?.rivoloDailySource
@@ -120,6 +130,7 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
             : item.properties?.rivoloSync === 'primary')).map(driveMeta) })
     }
     if (method === 'PATCH' && file && url.searchParams.has('uploadType')) {
+      if (rejectWrite) { rejectWrite = false; throw new TypeError('Request never reached Drive') }
       if (race) {
         race = false
         revise(file, day(today, 'Other device\n\nFirst'))
@@ -132,20 +143,33 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
     if (method === 'PATCH' && file) {
       const update = JSON.parse(String(init.body))
       if (update.appProperties) file.properties = { ...file.properties, ...update.appProperties }
-      if (update.trashed) file.trashed = true
+      if (update.trashed && raceDelete) {
+        raceDelete = false
+        revise(file, day(today, 'Arrived during trash'))
+      }
+      if (typeof update.trashed === 'boolean') file.trashed = update.trashed
       return json(driveMeta(file))
     }
     if (method === 'POST' && url.searchParams.has('uploadType')) {
       const lines = String(init.body).split('\r\n')
       const meta = JSON.parse(lines[3])
-      const file = create(meta.name, meta.parents[0], undefined, meta.appProperties)
+      if (files.some((file) => file.id === meta.id)) return json({}, 409)
+      const file = create(meta.name, meta.parents[0], undefined, meta.appProperties, meta.id)
       revise(file, lines.slice(7, -2).join('\r\n'))
       updates.push(file.name)
+      if (loseReply) { loseReply = false; throw new TypeError('Lost upload reply') }
       return json(driveMeta(file))
     }
     if (method === 'POST') {
-      const { name, parents, appProperties } = JSON.parse(String(init.body))
-      return json(driveMeta(create(name, parents[0], undefined, appProperties)))
+      const { id, name, parents, appProperties } = JSON.parse(String(init.body))
+      if (files.some((file) => file.id === id)) return json({}, 409)
+      const folder = create(name, parents[0], undefined, appProperties, id)
+      if (folderReplyLost) {
+        folderReplyLost = false
+        hideDirect = true
+        throw new TypeError('Lost folder reply')
+      }
+      return json(driveMeta(folder))
     }
     throw new Error(`Unhandled Drive operation ${method} ${url}`)
   })
@@ -154,6 +178,12 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
     changeOriginal: (content: string) => revise(original, content),
     race: () => { race = true },
     loseReply: () => { loseReply = true },
+    rejectWrite: () => { rejectWrite = true },
+    lag: (search: boolean, direct = false) => { hideSearch = search; hideDirect = direct },
+    loseFolder: () => { folderReplyLost = true },
+    folders: () => files.filter((file) => file.properties?.rivoloDailySource).length,
+    raceDelete: () => { raceDelete = true },
+    reviseDay: (id: string, text: string) => revise(files.find((file) => file.name === `${id}.md`)!, text),
     incomplete: () => { incomplete = true },
     duplicate: (dayId: string, text: string) => {
       const existing = files.find((file) => file.name === `${dayId}.md`)!
@@ -200,7 +230,8 @@ describe.each(['dropbox', 'google-drive'] as const)('%s daily sync', (provider) 
 
     await storage.repository.saveDay(today, 'Other device\n\nFirst\n\nMine\n\nAfter retry', 'Notebook')
     cloud.loseReply()
-    await expect(sync.pushToSync()).rejects.toThrow('Lost upload reply')
+    if (provider === 'dropbox') await expect(sync.pushToSync()).rejects.toThrow('Lost upload reply')
+    else await sync.pushToSync()
     storage = await reopenStorage(storage)
     sync = await import('./sync')
     await sync.pushToSync()
@@ -260,4 +291,88 @@ it('preserves both Drive copies and local days when the inventory is ambiguous',
   cloud.incomplete()
   await expect(sync.pullFromSync()).rejects.toThrow('incomplete listing')
   expect((await storage.repository.getDay(yesterday))?.contentMd).toBe('History')
+})
+
+const startDrive = async (cloud: ReturnType<typeof makeCloud>) => {
+  vi.stubGlobal('fetch', cloud.fetch)
+  await storage.settings.setJsonSetting('sync.state', { activeProvider: 'google-drive' })
+  await storage.settings.setJsonSetting('google-drive.state', {
+    connected: true, accountId: 'alice', fileName: 'inbox.md', fileId: cloud.original.id, folderId: cloud.root.id,
+  })
+  return import('./sync')
+}
+
+// Routed Drive and the actual pending journal own recovery for commits whose
+// HTTP reply or search result is missing. No retry can allocate another ID.
+it('reuses folder and day IDs after lost create replies while search is stale', async () => {
+  const cloud = makeCloud('google-drive')
+  let sync = await startDrive(cloud)
+  cloud.loseFolder()
+  cloud.lag(true)
+  await expect(sync.migrateActiveNotebook()).rejects.toThrow('Lost folder reply')
+
+  storage = await reopenStorage(storage)
+  sync = await import('./sync')
+  cloud.lag(true)
+  await sync.migrateActiveNotebook()
+  expect(cloud.folders()).toBe(1)
+  expect(cloud.copies(today)).toHaveLength(1)
+
+  const next = '2026-11-19'
+  await storage.repository.saveDay(next, 'Only once', 'Notebook')
+  cloud.loseReply()
+  cloud.lag(true, true)
+  await expect(sync.pushToSync()).rejects.toThrow('Lost upload reply')
+  storage = await reopenStorage(storage)
+  sync = await import('./sync')
+  // Both lookup routes are stale. A replay of the reserved ID gets 409.
+  await expect(sync.pushToSync()).rejects.toThrow('reserved file')
+  expect(cloud.copies(next)).toHaveLength(1)
+  cloud.lag(true)
+  await sync.pushToSync()
+  expect(cloud.copies(next)).toHaveLength(1)
+  expect(cloud.current(next)).toContain('Only once')
+})
+
+// The browser owns recognition of an applied pending upload. A failed
+// request must not cause old remote revisions to be treated as conflicts.
+it('keeps a later cloud deletion of text when the pending upload never landed', async () => {
+  const cloud = makeCloud('google-drive')
+  const sync = await startDrive(cloud)
+  await sync.migrateActiveNotebook()
+  await storage.repository.saveDay(today, 'First\n\nMine', 'Notebook')
+  cloud.rejectWrite()
+  await expect(sync.pushToSync()).rejects.toThrow('never reached Drive')
+  cloud.reviseDay(today, day(today, 'First\n\nCall Bob'))
+  cloud.reviseDay(today, day(today, 'First\n\nDone'))
+  await sync.pushToSync()
+  expect(cloud.current(today)).toContain('Done')
+  expect(cloud.current(today)).toContain('Mine')
+  expect(cloud.current(today)).not.toContain('Call Bob')
+})
+
+// The hosted writer owns repairs after its own append already took effect.
+it('merges a concurrent Drive edit before acknowledging a single hosted append', async () => {
+  const cloud = makeCloud('google-drive')
+  const sync = await startDrive(cloud)
+  await sync.migrateActiveNotebook()
+  const { createHostedDailyNotes } = await import('../../mcp/hostedDailyNotes')
+  const hosted = createHostedDailyNotes('google-drive', (await sync.getActiveProviderStatus()).notebookChannel!, cloud.fetch)
+  cloud.race()
+  await hosted.add({ day_id: today, content_md: 'Agent entry', operation_id: 'hosted-race' })
+  expect(cloud.current(today)).toContain('Other device')
+  expect(cloud.current(today)?.match(/Agent entry/g)).toHaveLength(1)
+})
+
+// A Drive trash race is recoverable and remains visible across auto retry.
+it('restores a concurrently edited Drive day and keeps the deletion warning', async () => {
+  const cloud = makeCloud('google-drive')
+  const sync = await startDrive(cloud)
+  await sync.migrateActiveNotebook()
+  await storage.repository.deleteDay(today)
+  cloud.raceDelete()
+  await expect(sync.pushToSync()).rejects.toThrow('restored for review')
+  expect(cloud.current(today)).toContain('Arrived during trash')
+  await expect(sync.pushToSync()).rejects.toThrow('restored for review')
+  expect(cloud.current(today)).toContain('Arrived during trash')
 })

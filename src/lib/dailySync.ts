@@ -18,6 +18,9 @@ const emptyBase = (id: string, title?: string) => encodeNotebookDay({ dayId: id,
 export type DailySyncDriver<File extends DailyRemoteFile> = {
   provider: SyncProviderId
   durablePending?: boolean
+  protectChangedDeletion?: boolean
+  findByRef?(folder: string, dayId: string, ref: string): Promise<File | null>
+  isDeleteUncertain?(error: unknown): boolean
   assertTarget(target: NotebookTarget): Promise<void>
   assertTargetInDatabase: TargetGuard
   accountName(): Promise<string | null>
@@ -27,7 +30,7 @@ export type DailySyncDriver<File extends DailyRemoteFile> = {
   exists(ref: string): Promise<boolean>
   assertFolder(folder: string): Promise<void>
   download(file: File, dayId: string): Promise<string>
-  prepareWrite(folder: string, dayId: string, current: File | null): Promise<(content: string, beforeCommit: () => Promise<void>) => Promise<File>>
+  prepareWrite(folder: string, dayId: string, current: File | null, createRef?: string): Promise<((content: string, beforeCommit: () => Promise<void>) => Promise<File>) & { createRef?: string }>
   recoverPending?(file: File, previousRevision: string, content: string): Promise<string>
   remove(file: File, beforeCommit: () => Promise<void>): Promise<void>
   isConflict(error: unknown): boolean
@@ -72,12 +75,13 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
     return text
   }
   const checkpoint = async (target: NotebookTarget, state: DailyState, event?: DailyEvent) => {
-    await commitDailyCheckpoint(target, driver.assertTargetInDatabase, { ...state, error: null, pending: null }, event)
+    await commitDailyCheckpoint(target, driver.assertTargetInDatabase, { ...state, error: null, pending: null, deleteUncertain: undefined }, event)
   }
   const recordFailure = async (target: NotebookTarget, id: string, error: unknown) => {
     await assertTarget(target)
     const state = await getDailyState(target, id) ?? freshState(id)
-    await commitDailyCheckpoint(target, driver.assertTargetInDatabase, { ...state, error: error instanceof Error ? error.message : `${label} daily sync failed.` })
+    await commitDailyCheckpoint(target, driver.assertTargetInDatabase, { ...state, error: error instanceof Error ? error.message : `${label} daily sync failed.`,
+      ...(driver.isDeleteUncertain?.(error) ? { deleteUncertain: true } : {}) })
   }
 
   const reconcileDay = async (target: NotebookTarget, id: string, mode: 'pull' | 'push', force = false, known?: File | null, backup: PassBackup = createPassBackup()) => {
@@ -99,7 +103,16 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
     let observedMissing = false
     for (let attempt = 0; attempt < 3; attempt++) {
       await assertTarget(target)
-      const remote = attempt === 0 && known !== undefined ? known : await driver.stat(target.folder, id)
+      let remote = attempt === 0 && known !== undefined ? known : await driver.stat(target.folder, id)
+      const createRef = stored.pending?.createRef
+      if (createRef && remote?.ref !== createRef) {
+        const reserved = await driver.findByRef?.(target.folder, id, createRef)
+        if (reserved && remote) throw new Error(`${label} has more than one file for ${id}. Keep the merged copy and move the extra file out of the notebook.`)
+        remote ??= reserved ?? null
+      }
+      if (!remote && stored.item && !stored.deleted) {
+        remote = await driver.findByRef?.(target.folder, id, stored.item) ?? null
+      }
       if (!remote) observedMissing = true
       if (stored.item && remote && remote.ref !== stored.item) {
         // A replacement at the same valid path is reconciled from its content.
@@ -115,6 +128,10 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
       // downloaded below instead, like any other unknown remote day.
       const unknownRemote = Boolean(remote) && !stored.item && !stored.baseline
       if (change.deleted && dirty && !(force && mode === 'pull') && !unknownRemote) {
+        if (!force && stored.deleteUncertain) throw new Error(stored.error ?? `${label} could not verify the deletion of ${id}.`)
+        if (!force && driver.protectChangedDeletion && remote && remote.revision !== stored.eTag) {
+          throw new Error(`${label} ${id} changed after you last synced. Review the cloud copy before retrying the deletion.`)
+        }
         if (remote) {
           // Fetch and validate before deletion; a local explicit deletion wins
           // against an edit but never removes an unrelated or malformed document.
@@ -154,7 +171,7 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
       // lines it already contains are not added a second time.
       const recoveredUpload = stored.pending && observedText && stored.pending.hash === await hashSyncContent(observedText)
       let remoteText = observedText
-      if (observedText && remote && stored.pending?.remoteRevision && remote.revision !== stored.pending.remoteRevision) {
+      if (recoveredUpload && remote && stored.pending?.remoteRevision && remote.revision !== stored.pending.remoteRevision) {
         remoteText = await driver.recoverPending?.(remote, stored.pending.remoteRevision, observedText!) ?? observedText
       }
       const baseline = recoveredUpload ? stored.pending!.base : stored.baseline
@@ -174,12 +191,13 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
       else if (mode === 'pull' && remoteText) merged = remoteText
       decodeNotebookDay(merged, id)
       if (observedText !== merged && (mode === 'push' || dirty)) {
-        const write = await driver.prepareWrite(target.folder, id, remote)
+        const write = await driver.prepareWrite(target.folder, id, remote, stored.pending?.createRef)
         const hash = await hashSyncContent(merged)
         await assertTarget(target)
         const pendingState = {
           ...(await getDailyState(target, id) ?? stored),
-          pending: { hash, base: localText ?? merged, ...(driver.recoverPending && remote ? { remoteRevision: remote.revision } : {}) },
+          pending: { hash, base: localText ?? merged, ...(driver.recoverPending && remote ? { remoteRevision: remote.revision } : {}),
+            ...(write.createRef ? { createRef: write.createRef } : {}) },
         }
         if (driver.durablePending) await commitDailyCheckpoint(target, driver.assertTargetInDatabase, pendingState)
         else await writeDailyState(target, pendingState)

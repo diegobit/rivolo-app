@@ -165,8 +165,8 @@ export const startOneDriveEvents = (item: string, onChanged: (event?: DailyEvent
       if (current !== generation || !active()) return
       // Optional cloud relay. Foreground and interval sync keep working, and
       // another visibility change can reconnect after configuration is fixed.
-      const problem = error as { retryMs?: number; status?: number }
-      if (provider !== 'onedrive' && [404, 503].includes(problem.status ?? 0)) { onError(''); return }
+      const problem = error as { retryMs?: number; status?: number; optionalUnavailable?: boolean }
+      if (provider !== 'onedrive' && (problem.status === 404 || problem.optionalUnavailable)) { onError(''); return }
       scheduleReconnect(problem.retryMs)
       onError(error instanceof Error ? error.message : `${label} live updates could not connect.`)
     }
@@ -204,9 +204,9 @@ const dailyEventRequest = async (target: NotebookTarget, guard: (target: Noteboo
     body: JSON.stringify({ ...(provider !== 'onedrive' ? { provider } : {}), folder: target.folder, action: !event ? 'subscribe' : event.type === 'day-changed' ? 'publish' : 'invalidate',
       sender, ...(event?.type === 'day-changed' ? { item: event.item } : {}), revision: event?.revision }) })
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { message?: string } | null
+    const body = await response.json().catch(() => null) as { message?: string; code?: string } | null
     throw Object.assign(new Error(body?.message ?? `${SYNC_PROVIDER_LABELS[provider]} live updates are unavailable. Reconnecting automatically.`),
-      { retryMs: Math.max(0, Number(response.headers.get('Retry-After')) || 0) * 1000, status: response.status })
+      { retryMs: Math.max(0, Number(response.headers.get('Retry-After')) || 0) * 1000, status: response.status, optionalUnavailable: body?.code === 'relay_unavailable' })
   }
   return response
 }
@@ -232,9 +232,9 @@ export const flushDailyEvents = async (target: NotebookTarget, guard: (target: N
         // The relay refused this notification for good (invalid, or the file
         // left the notebook). It is only a hint to refresh, so drop it rather
         // than hold back every notification queued after it.
-        const status = (error as { status?: number }).status ?? 0
-        if (target.provider && target.provider !== 'onedrive' && [404, 503].includes(status)) return
-        if (![400, 403].includes(status)) throw error
+        const { status, optionalUnavailable } = error as { status?: number; optionalUnavailable?: boolean }
+        if (target.provider && target.provider !== 'onedrive' && (status === 404 || optionalUnavailable)) return
+        if (![400, 403].includes(status ?? 0)) throw error
         console.warn('[Sync] events:dropped', { item: row.item })
       }
       await acknowledgeDailyEvent(row.entry.context, row.item, row.value)
@@ -244,7 +244,7 @@ export const flushDailyEvents = async (target: NotebookTarget, guard: (target: N
   } catch (error) {
     try {
       await guard(target)
-      dailyRetry = setTimeout(() => { void flushDailyOneDriveEvents(target) }, Math.max((error as { retryMs?: number }).retryMs ?? 0, Math.min(60_000, 1000 * 2 ** Math.min(++dailyFailures, 6))))
+      dailyRetry = setTimeout(() => { void flushDailyEvents(target, guard) }, Math.max((error as { retryMs?: number }).retryMs ?? 0, Math.min(60_000, 1000 * 2 ** Math.min(++dailyFailures, 6))))
     } catch { /* A different account/target must never publish this outbox. */ }
   } finally { dailyPublishing = false }
 }
