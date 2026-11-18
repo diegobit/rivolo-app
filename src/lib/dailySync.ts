@@ -20,7 +20,7 @@ export type DailySyncDriver<File extends DailyRemoteFile> = {
   durablePending?: boolean
   protectChangedDeletion?: boolean
   findByRef?(folder: string, dayId: string, ref: string, reservation?: boolean): Promise<File | null>
-  isDeleteUncertain?(error: unknown): boolean
+  uncertainDeletion?(error: unknown): { ref: string; revision: string } | undefined
   verifyDeletion?(ref: string, expected: string): Promise<'done' | 'retry' | 'review'>
   recoverRace?(head: File, uploaded: string, previous: string, submitted: string, current: string): Promise<string>
   assertTarget(target: NotebookTarget): Promise<void>
@@ -82,8 +82,9 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
   const recordFailure = async (target: NotebookTarget, id: string, error: unknown) => {
     await assertTarget(target)
     const state = await getDailyState(target, id) ?? freshState(id)
+    const deleteUncertain = driver.uncertainDeletion?.(error)
     await commitDailyCheckpoint(target, driver.assertTargetInDatabase, { ...state, error: error instanceof Error ? error.message : `${label} daily sync failed.`,
-      ...(driver.isDeleteUncertain?.(error) ? { deleteUncertain: true } : {}) })
+      ...(deleteUncertain ? { deleteUncertain } : {}) })
   }
 
   const reconcileDay = async (target: NotebookTarget, id: string, mode: 'pull' | 'push', force = false, known?: File | null, backup: PassBackup = createPassBackup()) => {
@@ -128,10 +129,15 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
       // A day this device never synced may hold a collaborator's notes it has
       // not seen. Deleting the local copy must not delete that file: it is
       // downloaded below instead, like any other unknown remote day.
-      const unknownRemote = Boolean(remote) && !stored.item && !stored.baseline
+      const unknownRemote = remote && !stored.item && !stored.baseline &&
+        (remote.ref !== stored.pending?.createRef || !change.deleted || !dirty ||
+          await hashSyncContent(await readRemote(remote, id)) !== stored.pending.hash)
       if (change.deleted && dirty && !(force && mode === 'pull') && !unknownRemote) {
         if (!force && stored.deleteUncertain) {
-          const verification = stored.item && stored.eTag && await driver.verifyDeletion?.(stored.item, stored.eTag)
+          const uncertain = stored.deleteUncertain
+          const ref = uncertain === true ? stored.item : uncertain.ref
+          const revision = uncertain === true ? stored.eTag : uncertain.revision
+          const verification = ref && revision && await driver.verifyDeletion?.(ref, revision)
           if (!verification || verification === 'review' || verification === 'retry' && !remote) {
             throw new Error(stored.error ?? `${label} could not verify the deletion of ${id}.`)
           }

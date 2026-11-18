@@ -16,7 +16,7 @@ export type DailyState = {
   dayId: string; item: string | null; eTag: string | null; baseline: string | null
   uploadedHash: string | null; localRevision: number; deleted: boolean
   error?: string | null
-  deleteUncertain?: boolean
+  deleteUncertain?: true | { ref: string; revision: string }
   // Written before an upload: the hash sent and the local document it was
   // merged from. If the reply is lost, the next pass recognises its own upload.
   pending?: { hash: string; base: string; remoteRevision?: string; createRef?: string; applied?: { uploaded: string; previous: string; submitted: string } } | null

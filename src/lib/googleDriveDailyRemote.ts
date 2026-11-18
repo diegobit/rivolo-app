@@ -22,13 +22,20 @@ type File = { ref: string; revision: string; folder: string; dayId: string; dupl
 type Revision = { id: string; modifiedTime: string }
 
 class DriveConflict extends Error {}
-class DriveDeleteUncertain extends Error {}
+class DriveDeleteUncertain extends Error {
+  readonly file: File
+
+  constructor(file: File, message: string) {
+    super(message)
+    this.file = file
+  }
+}
 class DriveWriteRace extends Error {
   readonly uploaded: File
   readonly previous: string
 
   constructor(uploaded: File, previous: string) {
-    super(`Google Drive changed during upload of ${uploaded.dayId}. Sync will merge the concurrent revisions on retry.`)
+    super(`Google Drive changed during upload of ${uploaded.dayId}. Review its version history if the repair cannot finish.`)
     this.uploaded = uploaded
     this.previous = previous
   }
@@ -292,7 +299,7 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
         } catch (error) {
           if (!(error instanceof DriveWriteRace)) {
             if (repairing && error instanceof DriveConflict) {
-              throw new Error(`Google Drive changed while repairing an applied write for ${dayId}. Sync will retry the repair.`, { cause: error })
+              throw new Error(`Google Drive changed while repairing an applied write for ${dayId}. Review its version history if the repair cannot finish.`, { cause: error })
             }
             throw error
           }
@@ -357,7 +364,8 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
       return file.trashed ? 'done' as const : 'retry' as const
     },
     protectChangedDeletion: true,
-    isDeleteUncertain: (error: unknown) => error instanceof DriveDeleteUncertain,
+    uncertainDeletion: (error: unknown) => error instanceof DriveDeleteUncertain
+      ? { ref: error.file.ref, revision: error.file.revision } : undefined,
     remove: async (file: File, guard: () => Promise<void>) => {
       await assertCurrent(file)
       await guard()
@@ -367,7 +375,7 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }),
       }).catch(() => null)
       if (!response || response.status >= 500) {
-        throw new DriveDeleteUncertain(`Google Drive could not verify deletion of ${file.dayId}. Review the file or trash before retrying.`)
+        throw new DriveDeleteUncertain(file, `Google Drive could not verify deletion of ${file.dayId}. Review the file or trash before retrying.`)
       }
       if (!response.ok) throw new Error(`Google Drive could not move ${file.dayId} to the trash.`)
       const result = await response.json() as Entry
@@ -375,7 +383,7 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
         const restore = await authorizedFetch(`${API}${entryPath(file.ref)}?fields=trashed`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: false }),
         }).catch(() => null)
-        throw new DriveDeleteUncertain(restore?.ok
+        throw new DriveDeleteUncertain(file, restore?.ok
           ? `Google Drive changed ${file.dayId} during deletion. The file was restored for review.`
           : `Google Drive changed ${file.dayId} during deletion. The new version may be in the Drive trash.`)
       }

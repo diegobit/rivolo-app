@@ -24,6 +24,7 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
   let tick = 0
   let race = false
   let loseReply = false
+  let hideAfterLostReply = false
   let rejectWrite = false
   let hideSearch = false
   let hideDirect = false
@@ -152,7 +153,11 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
       }
       revise(file, String(init.body))
       updates.push(file.name)
-      if (loseReply) { loseReply = false; throw new TypeError('Lost upload reply') }
+      if (loseReply) {
+      loseReply = false
+      if (hideAfterLostReply) hideDirect = true
+      throw new TypeError('Lost upload reply')
+    }
       return json(driveMeta(file))
     }
     if (method === 'PATCH' && file) {
@@ -173,7 +178,11 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
       const file = create(meta.name, meta.parents[0], undefined, meta.appProperties, meta.id)
       revise(file, lines.slice(7, -2).join('\r\n'))
       updates.push(file.name)
-      if (loseReply) { loseReply = false; throw new TypeError('Lost upload reply') }
+      if (loseReply) {
+      loseReply = false
+      if (hideAfterLostReply) hideDirect = true
+      throw new TypeError('Lost upload reply')
+    }
       return json(driveMeta(file))
     }
     if (method === 'POST') {
@@ -193,7 +202,7 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
     fetch, root, original, updates,
     changeOriginal: (content: string) => revise(original, content),
     race: () => { race = true },
-    loseReply: () => { loseReply = true },
+    loseReply: (hideResult = false) => { loseReply = true; hideAfterLostReply = hideResult },
     rejectWrite: () => { rejectWrite = true },
     lag: (search: boolean, direct = false) => { hideSearch = search; hideDirect = direct },
     loseFolder: () => { folderReplyLost = true },
@@ -463,4 +472,21 @@ it('replays a confirmed browser race after restart without replaying unrelated r
   expect(text).toContain('Other device')
   expect(text).toContain('Follow-up')
   expect(text?.match(/Mine/g)).toHaveLength(1)
+})
+
+it.each(['existing', 'created'] as const)('confirms the exact trashed Drive revision after losing the upload reply for a day that was %s', async (kind) => {
+  const cloud = makeCloud('google-drive')
+  const sync = await startDrive(cloud)
+  await sync.migrateActiveNotebook()
+  const id = kind === 'existing' ? today : '2026-11-19'
+  await storage.repository.saveDay(id, 'Uploaded edit', 'Notebook')
+  cloud.loseReply(true)
+  await expect(sync.pushToSync()).rejects.toThrow('Lost upload reply')
+  cloud.lag(false)
+  await storage.repository.deleteDay(id)
+  cloud.loseTrash()
+  await expect(sync.pushToSync()).rejects.toThrow('could not verify deletion')
+  expect(cloud.current(id)).toBeUndefined()
+  await sync.pushToSync()
+  expect(await sync.getActiveProviderStatus()).toMatchObject({ localDirty: false })
 })
