@@ -1,5 +1,5 @@
-import { createDailySync, type DailyRemoteFile, type DailySyncDriver } from './dailySync'
-import { dayPath } from './notebookDays'
+import { createDailySync, type DailySyncDriver } from './dailySync'
+import { dayPath, type DailyRemoteFile } from './notebookDays'
 import { assertTarget, assertTargetInDatabase, type NotebookTarget } from './oneDriveDailyState'
 import {
   childAtPath, deleteItem, downloadItem, ensureDayParent, getItem, GraphConflict,

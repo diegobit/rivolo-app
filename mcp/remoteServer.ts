@@ -21,6 +21,7 @@ import {
 import {
   refreshGoogleAccessToken,
 } from '../functions/_lib/googleOAuth.js'
+import { createHostedDailyNotes } from './hostedDailyNotes.js'
 import { createGoogleDriveNotesSource } from './googleDriveNotesSource.js'
 import { ProviderWriteNotAppliedError } from './providerWriteErrors.js'
 import { createDropboxNotesAdapter } from './providers/dropboxNotes.js'
@@ -261,6 +262,15 @@ const createNotesRuntime = (
   addToDay: AddToDayWriter<RemoteCompactWriteResult>
 } => {
   const providerFetch = dependencies.fetch
+
+  if (auth.profile.dailyFolderId) {
+    const token = auth.profile.provider === 'dropbox'
+      ? createDropboxAccessToken(auth, env, dependencies)
+      : createGoogleAccessToken(auth, env, dependencies)
+    const notes = createHostedDailyNotes(auth.profile.provider, auth.profile.dailyFolderId, authorizedFetch(token, providerFetch))
+    return { loadNotes: notes.loadNotes, addToDay: async (input) => compactProviderResult(await notes.add(input)) }
+  }
+
 
   if (auth.profile.provider === 'dropbox') {
     const adapter = createDropboxNotesAdapter({

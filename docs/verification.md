@@ -111,3 +111,20 @@ Verifica del 17 novembre 2026 sulla base Rivolo 0.8.0 (`17fd7d0`). OneDrive usa 
 Le prove live richiedono account e cartelle di test. Le prove locali non esercitano i permessi e il comportamento concorrente dei servizi reali.
 
 Fonti: [Dropbox SDK](https://dropbox.github.io/dropbox-sdk-js/global.html#FilesDeleteArg), [Drive files.update](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/update), [Drive revisioni](https://developers.google.com/workspace/drive/api/guides/manage-revisions), [Drive files.list](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list), [limiti Workers](https://developers.cloudflare.com/workers/platform/limits/#subrequests).
+
+### Implementazione in PR #34
+
+L'aggiornamento parte da **Settings → Cloud sync → Upgrade to daily sync**.
+Il file precedente rimane al suo posto. Un indicatore di migrazione completata
+impedisce a un nuovo dispositivo di ricreare dal file precedente una giornata
+già eliminata. Il profilo Agent mantiene ID e credenziali.
+
+Ordine di rilascio in dev: applicare la migrazione D1 `0005`, aggiornare il
+Worker MCP e distribuire Pages. Il relay usa il Worker eventi già distribuito.
+Provare prima con notebook sacrificabili, su due dispositivi per provider.
+Per Drive, verificare che la lista delle revisioni esponga una modifica
+concorrente e che un errore lasci la giornata in sospeso. Provare anche due
+creazioni contemporanee della stessa data. I duplicati Drive restano
+recuperabili in cartella e richiedono una risoluzione esplicita. Verificare i
+limiti delle ricerche Agent su una cronologia grande e la ripresa da una PWA
+installata su iOS prima del rilascio ampio.

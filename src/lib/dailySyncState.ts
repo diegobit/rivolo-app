@@ -18,7 +18,7 @@ export type DailyState = {
   error?: string | null
   // Written before an upload: the hash sent and the local document it was
   // merged from. If the reply is lost, the next pass recognises its own upload.
-  pending?: { hash: string; base: string } | null
+  pending?: { hash: string; base: string; remoteRevision?: string } | null
 }
 export type DayChange = { dayId: string; revision: number; deleted: boolean }
 export const targetKey = (target: NotebookTarget) => JSON.stringify(

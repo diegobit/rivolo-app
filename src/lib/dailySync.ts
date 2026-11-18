@@ -1,7 +1,7 @@
 import { getDay, listAllDays } from './dayRepository'
 import { saveRollbackBackup, exportMarkdownFromDb } from './importExport'
 import { getPendingEditorDayIds } from './pendingEditorSaves'
-import { encodeNotebookDay, decodeNotebookDay } from './notebookDays'
+import { encodeNotebookDay, decodeNotebookDay, type DailyRemoteFile } from './notebookDays'
 import { annotateLocalNotebook } from './oneDriveBlame'
 import { mergeOneDriveNotebooksWithAuthors } from './oneDriveMerge'
 import { markSyncLocalDirty } from './syncDirty'
@@ -12,16 +12,12 @@ import { getDailyState, getDayChange, listDirtyDays, listDailyStateIds, listDail
 import type { SyncPullOptions, SyncPushResult } from './sync'
 
 const emptyBase = (id: string, title?: string) => encodeNotebookDay({ dayId: id, humanTitle: title ?? '', contentMd: '' })
-export type DailyRemoteFile = {
-  ref: string
-  revision: string
-}
-
 // A successful write must return the exact revision of the submitted content.
 // Providers that cannot confirm that guarantee must report a failed write;
 // the engine keeps the pending upload and does not advance the checkpoint.
 export type DailySyncDriver<File extends DailyRemoteFile> = {
   provider: SyncProviderId
+  durablePending?: boolean
   assertTarget(target: NotebookTarget): Promise<void>
   assertTargetInDatabase: TargetGuard
   accountName(): Promise<string | null>
@@ -32,6 +28,7 @@ export type DailySyncDriver<File extends DailyRemoteFile> = {
   assertFolder(folder: string): Promise<void>
   download(file: File, dayId: string): Promise<string>
   prepareWrite(folder: string, dayId: string, current: File | null): Promise<(content: string, beforeCommit: () => Promise<void>) => Promise<File>>
+  recoverPending?(file: File, previousRevision: string, content: string): Promise<string>
   remove(file: File, beforeCommit: () => Promise<void>): Promise<void>
   isConflict(error: unknown): boolean
 }
@@ -149,13 +146,18 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
         // A local edit against a confirmed remote deletion recreates only that day.
       }
       if (!local && !remote) return settled()
-      if (remote && remote.revision === stored.eTag && !dirty && stored.baseline && !(force && mode === 'pull')) return settled()
-      const remoteText = remote ? (remote.revision === stored.eTag && stored.baseline && stored.uploadedHash === await hashSyncContent(stored.baseline)
+      if (remote && remote.revision === stored.eTag && !stored.pending && !dirty && stored.baseline && !(force && mode === 'pull')) return settled()
+      const observedText = remote ? (remote.revision === stored.eTag && stored.baseline && stored.uploadedHash === await hashSyncContent(stored.baseline)
         ? stored.baseline : await readRemote(remote, id)) : null
       // The remote file is this device's own upload whose reply or checkpoint
       // was lost: merge from the local document that upload was built from, so
       // lines it already contains are not added a second time.
-      const baseline = stored.pending && remoteText && stored.pending.hash === await hashSyncContent(remoteText) ? stored.pending.base : stored.baseline
+      const recoveredUpload = stored.pending && observedText && stored.pending.hash === await hashSyncContent(observedText)
+      let remoteText = observedText
+      if (observedText && remote && stored.pending?.remoteRevision && remote.revision !== stored.pending.remoteRevision) {
+        remoteText = await driver.recoverPending?.(remote, stored.pending.remoteRevision, observedText!) ?? observedText
+      }
+      const baseline = recoveredUpload ? stored.pending!.base : stored.baseline
       if (!force && !baseline && !observedMissing && local && remoteText) {
         const cloud = decodeNotebookDay(remoteText, id)
         // On a device that already downloaded the whole notebook, a day without
@@ -171,11 +173,16 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
       else if (localText && remoteText) merged = await mergeOneDriveNotebooksWithAuthors(baseline ?? emptyBase(id), localText, remoteText)
       else if (mode === 'pull' && remoteText) merged = remoteText
       decodeNotebookDay(merged, id)
-      if (remoteText !== merged && (mode === 'push' || dirty)) {
+      if (observedText !== merged && (mode === 'push' || dirty)) {
         const write = await driver.prepareWrite(target.folder, id, remote)
         const hash = await hashSyncContent(merged)
         await assertTarget(target)
-        await writeDailyState(target, { ...(await getDailyState(target, id) ?? stored), pending: { hash, base: localText ?? merged } })
+        const pendingState = {
+          ...(await getDailyState(target, id) ?? stored),
+          pending: { hash, base: localText ?? merged, ...(driver.recoverPending && remote ? { remoteRevision: remote.revision } : {}) },
+        }
+        if (driver.durablePending) await commitDailyCheckpoint(target, driver.assertTargetInDatabase, pendingState)
+        else await writeDailyState(target, pendingState)
         let result: File
         try { result = await write(merged, () => assertTarget(target)) }
         catch (error) { if (driver.isConflict(error)) continue; throw error }

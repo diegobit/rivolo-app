@@ -10,6 +10,9 @@ import {
 } from './googleDriveState'
 import type { GoogleDriveState } from './googleDriveState'
 import { markSyncLocalDirty } from './syncDirty'
+import { createCloudDailyNotebook } from './cloudDailyNotebook'
+import { createGoogleDriveDailyRemote } from './googleDriveDailyRemote'
+import { queryFirstRow } from './sqliteRuntime'
 import { hashSyncContent } from './syncHash'
 import type { SyncProvider, SyncPullOptions, SyncStatus } from './sync'
 
@@ -267,6 +270,38 @@ const updateDriveFile = async (file: DriveFile, content: string) => {
   return parseDriveMutationResponse(response, 'Failed to upload the Google Drive file.')
 }
 
+const googleDriveDailyRemote = createGoogleDriveDailyRemote(authorizedGoogleDriveFetch)
+
+const dailyContext = (state: GoogleDriveState) => ({
+  ...state, localRevision: state.localRevision ?? 0, sourceKey: state.fileName || DEFAULT_GOOGLE_DRIVE_FILE_NAME, lastRevision: state.lastRemoteVersion,
+})
+
+const dailyGoogleDrive = createCloudDailyNotebook({
+  provider: 'google-drive',
+  readContext: async () => dailyContext(await getGoogleDriveState()),
+  readContextInDatabase: (db) => {
+    const row = queryFirstRow<{ value: string }>(db, 'SELECT value FROM settings WHERE key = ?', ['google-drive.state'])
+    return dailyContext(JSON.parse(row?.value ?? '{}') as GoogleDriveState)
+  },
+  resolveSource: async (context) => {
+    const { metadata } = await resolveDriveTarget(context)
+    if (!metadata) return null
+    return { ref: metadata.id, revision: metadata.version, download: async () => {
+      const content = await downloadDriveFile(metadata.id)
+      if ((await fetchDriveFile(metadata.id))?.version !== metadata.version) throw new Error('The original Google Drive file changed. Retry to include the latest edits.')
+      return content
+    } }
+  },
+  resolveFolder: async (context) => googleDriveDailyRemote.prepareGoogleDriveDailyFolder(await resolveFolderId(context), context.sourceKey),
+  updateSummary: (localDirty) => updateGoogleDriveState({ localDirty, lastSyncAt: Date.now() }),
+  remote: googleDriveDailyRemote,
+  migrationComplete: googleDriveDailyRemote.migrationComplete,
+  completeMigration: googleDriveDailyRemote.completeMigration,
+})
+
+export const getGoogleDriveDailyTarget = dailyGoogleDrive.getTarget
+export const startGoogleDriveDailyEvents = dailyGoogleDrive.startEvents
+
 export const disconnectGoogleDrive = async () => {
   await disconnectGoogleDriveAuth()
   await updateGoogleDriveState({
@@ -286,9 +321,10 @@ export const disconnectGoogleDrive = async () => {
 
 export const getGoogleDriveStatus = async (): Promise<SyncStatus> => {
   const state = await getGoogleDriveState()
+  const daily = await dailyGoogleDrive.readStatus(dailyContext(state))
   return {
     connected: state.connected,
-    targetName: getGoogleDrivePath(state.fileName),
+    targetName: daily ? getGoogleDrivePath(`${state.fileName.replace(/\.md$/i, '')}.rivolo-daily`) : getGoogleDrivePath(state.fileName),
     lastRemoteVersion: state.lastRemoteVersion,
     lastSyncAt: state.lastSyncAt,
     lastPullAt: state.lastPullAt,
@@ -296,11 +332,14 @@ export const getGoogleDriveStatus = async (): Promise<SyncStatus> => {
     localDirty: state.localDirty,
     accountName: state.accountName,
     accountEmail: state.accountEmail,
+    ...daily,
   }
 }
 
 export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
   const state = await getGoogleDriveState()
+  const target = await dailyGoogleDrive.getTarget(dailyContext(state))
+  if (target) return dailyGoogleDrive.pull(target, options)
   const force = options.force ?? false
   if (!state.connected) throw new Error('Google Drive not connected.')
   if (state.localDirty && !force) {
@@ -339,6 +378,8 @@ export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
 
 export const pushToGoogleDrive = async (force = false) => {
   const state = await getGoogleDriveState()
+  const target = await dailyGoogleDrive.getTarget(dailyContext(state))
+  if (target) return dailyGoogleDrive.push(target, force)
   if (!state.connected) throw new Error('Google Drive not connected.')
   if (!state.localDirty && !force && !state.lastRemoteVersion) {
     return { status: 'clean' as const }
@@ -415,6 +456,7 @@ export const pushToGoogleDrive = async (force = false) => {
 
 export const googleDriveProvider = {
   id: 'google-drive',
+  migrate: dailyGoogleDrive.migrate,
   getStatus: getGoogleDriveStatus,
   pull: pullFromGoogleDrive,
   push: pushToGoogleDrive,

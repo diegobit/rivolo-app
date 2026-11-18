@@ -1,6 +1,6 @@
 # Daily sync for Dropbox and Google Drive: parity with OneDrive
 
-Updated 17 November 2026. Reviewed against `origin/main` at `17fd7d0` (Rivolo 0.8.0). The shared reconciliation and storage extraction is in progress. Provider rollout remains gated below.
+Updated 18 November 2026. PR #34 adds the shared engine, explicit upgrades, daily attribution, Dropbox and Drive live hints and hosted Agent cutover. Both drivers are exercised with HTTP-routed provider fixtures and real SQLite. Existing clients stay on single-file sync until the user chooses **Upgrade to daily sync**. Keep that path during rollout. Live provider limitations and deployment gates are recorded in [verification.md](../verification.md).
 
 This supersedes one constraint of [the OneDrive daily plan](2026-10-01-onedrive-daily-sync.md): "Google Drive and Dropbox keep the single Markdown file". Everything else in that plan (line merge rules, no remote manifest, no continuous polling, draft protection, relay carries metadata only) stays in force and applies to all three providers.
 
@@ -32,7 +32,7 @@ Scope is cross-provider: it changes shared sync logic, both other providers, the
 Decide cross-account sharing per provider after its live account checks. The shared extraction and compatibility work can proceed independently of sharing.
 
 1. **Google Drive sharing across accounts.** The app requests `drive.file`, which only exposes files the app created for that user or files the user picked. A folder shared by another account is therefore not listable (forum reports say picking a folder does not expose its children; unverified). Recommended: ship daily sync for one account across devices on `drive.file`, and make the scope a deployment setting so the AIT Workspace deployment can opt into the restricted `drive` scope as an internal app. Phase 0 verifies both.
-2. **Migration can run automatically after the compatibility gates pass.** Keep the old file and import edits from clients still using it. Verify that both hosted MCP and the app target the same daily notebook before enabling automatic cutover.
+2. **Migration starts from Settings after the user chooses to upgrade.** Keep the old file and import edits from clients still using it. Verify that both hosted MCP and the app target the same daily notebook before broad rollout.
 3. **Hosted MCP must be ported before a provider migrates**, otherwise Agent access breaks for migrated users. Adding OneDrive to hosted MCP becomes cheap once MCP reads daily folders, but needs Microsoft token storage server-side: recommended as a follow-up, not part of this plan.
 4. **Dropbox app type.** If the registered Dropbox app is "App folder", shared folders are impossible without a new app registration and a re-consent. Phase 0 checks; if so, decide whether Dropbox gets sharing or stays single-account.
 5. **Keep the existing SQLite table names.** Preserve the OneDrive target keys and row format. Namespace new provider targets in the existing tables.
@@ -78,16 +78,16 @@ Do not build more abstraction than three drivers need: no plugin registry, no ge
 - New versioned endpoint `/api/sync/daily-events` taking `provider`. Subscribe, publish and invalidate keep today's semantics. Access and day-membership checks go through a per-provider verifier called with the caller's bearer token, as `functions/_lib/oneDriveNotebook.ts` does now.
 - Room name = hash of `provider + canonical folder identity`. Keep the existing OneDrive room derivation so old and new clients share a room during rollout; keep `/api/onedrive/daily-events` until old clients are gone.
 - Reuse the deployed Worker and Durable Object class. Add the binding and ticket key under neutral names; do not rename the deployed Worker.
-- The relay must be optional. A deployment without it (503 "not configured") falls back to the interval reconcile that Dropbox and Google Drive use today, without raising a `relay` issue. OneDrive keeps its current behavior.
+- The relay must be optional. Dropbox and Drive use their interval reconcile when the relay is unavailable. The interval also checks the retained source for writes from older clients and agents. OneDrive keeps its current behavior.
 - External edits (Dropbox desktop client, Drive web) emit no relay event, as on OneDrive: they are found on start, foreground and reconnect.
 
 ### 4.4 Migration
 
 Generalize `oneDriveMigration.ts` into: snapshot local and remote, reconcile, split by day, upload with per-day checkpoints, verify, then atomically switch target and baselines. Keep OneDrive's registry, lease and permission replication as OneDrive-only hooks: the other two files are single-account today, so their destination can be deterministic and needs no registry.
 
-- Dropbox: destination is a folder at a deterministic path derived from the source (`/inbox.md` → `/Rivolo` by default; state the rule for custom paths in the PR). Two devices migrating at once converge because creation is `add` without autorename and a conflict falls into the normal day merge.
-- Google Drive: destination is the existing app-created Rivolo folder (`appProperties.rivoloSync = 'folder'`); day files sit beside the retained single file.
-- Before enabling automatic migration, check the retained source during full reconciles. If its revision changed, merge the changed days using the last successfully imported source contents as the baseline. Record that source revision and baseline after the affected days have durable checkpoints. Verify interrupted imports, two successive old-client writes, and an old app reconnecting after MCP cutover. Apply the same check to OneDrive as a follow-up.
+- Dropbox: destination is a folder at a deterministic path derived from the source (`/inbox.md` → `/inbox.rivolo-daily` by default). Two devices migrating at once converge because creation is `add` without autorename and a conflict falls into the normal day merge.
+- Google Drive: create a dedicated daily folder under the existing app-created Rivolo folder. A source-name fingerprint distinguishes notebooks. The original remains at its existing location.
+- During the transition, check the retained source during full reconciles. If its revision changed, merge the changed days using the last successfully imported source contents as the baseline. Record that source revision and baseline after the affected days have durable checkpoints. Verify interrupted imports, two successive old-client writes, and an old app reconnecting after MCP cutover. Apply the same check to OneDrive as a follow-up.
 - The same barrier as today: no auto-sync, auto-push or subscription for a provider before its migration check.
 
 ## 5. Provider drivers
@@ -102,7 +102,7 @@ Generalize `oneDriveMigration.ts` into: snapshot local and remote, reconcile, sp
 
 ### 5.2 Google Drive
 
-- **Conditional writes are unverified.** Test stale media writes and delete-versus-edit against live Drive. If updates cannot be made conditional, verify whether overwritten revisions can be listed, retained and downloaded reliably through the app's scope. Google requires older blob revisions to be marked Keep Forever to download them. Verify retention, visibility lag, pagination and lost replies before choosing a recovery strategy. Leave a day pending and retain recoverable copies if verification is inconclusive. Gate automatic Drive migration on an end-to-end proof.
+- **Conditional writes are unverified.** Test stale media writes and delete-versus-edit against live Drive. If updates cannot be made conditional, verify whether overwritten revisions can be listed, retained and downloaded reliably through the app's scope. Google requires older blob revisions to be marked Keep Forever to download them. Verify retention, visibility lag, pagination and lost replies before choosing a recovery strategy. Leave a day pending and retain recoverable copies if verification is inconclusive. Gate broad Drive rollout on an end-to-end proof.
 - **Names are not unique.** Inventory can identify duplicates and choose a stable canonical candidate. Reconcile their content explicitly before moving or trashing anything. Retain both copies when revisions or membership cannot be verified. Drive may report `incompleteSearch` on a successful listing, so fail the inventory rather than infer deletions.
 - Inventory: tag every day file with `appProperties` (`rivoloNotebook = <folderId>`, `rivoloDay = <dayId>`) and list them with one paginated `files.list` query. Under `drive.file` the app cannot see files created outside it anyway, so this loses nothing. Still verify name, parent chain and day marker before importing.
 - `ref` = file id; `revision` = `headRevisionId` (content changes only; `version` also moves on metadata changes).
@@ -113,15 +113,15 @@ Generalize `oneDriveMigration.ts` into: snapshot local and remote, reconcile, sp
 
 `mcp/googleDriveNotesSource.ts` and `mcp/providers/dropboxNotes.ts` read and rewrite the single file, and `functions/_lib/providerProfiles.ts` stores a file target. A migrated notebook breaks them.
 
-- Add daily-folder sources for both providers behind the existing `NotesSnapshot` interface. `add_to_day` then writes one day file with the driver's conditional write and merge, and publishes a relay event so open apps update live.
-- The source must accept both formats and pick by target type, so MCP can deploy before any client migrates.
+- Add daily-folder sources for both providers behind the existing `NotesSnapshot` interface. `add_to_day` then writes one day file with the driver's conditional write and merge, and uses the same provider write checks as the client. Open apps pick up Agent writes during their periodic reconcile.
+- The source accepts both formats and picks by the saved daily folder ID, so MCP can deploy before any client migrates.
 - Add a validated same-notebook profile transition that preserves the profile ID. The existing `mcp-enable` flow rejects changing the target of an active profile. Persist cutover progress so either side can resume after a partial switch. Test a connected agent and an append racing with cutover.
 - Measure cold-cache whole-notebook search, tags, todos, and mentions against the actual Worker subrequest budget. Bounded concurrency does not reduce the number of subrequests. Options, in order of preference: download only days the tool needs and fan out with bounded concurrency; a per-isolate cache keyed by file revision; Dropbox `files/download_zip` for the folder. Do not persist note content server-side and do not reintroduce a derived single file.
 - Share the day codec and merge with the client (`src/lib/notebookDays.ts`, merge module) rather than reimplementing them in `mcp/`.
 
 ## 7. Phases
 
-Each phase is one PR to `dev`, with `npm run build`, `npm run lint`, `npm test` and the checks named below. Read [tests/AGENTS.md](../../tests/AGENTS.md) before touching tests. Do not start a phase whose gate is open.
+Each phase is one PR to `dev`, with `npm run build`, `npm run lint`, `npm test` and the checks named below. Read [tests/AGENTS.md](../../tests/AGENTS.md) before touching tests. Keep single-file sync available until the live rollout checks pass and older clients have upgraded.
 
 | # | Work | Done when |
 | --- | --- | --- |

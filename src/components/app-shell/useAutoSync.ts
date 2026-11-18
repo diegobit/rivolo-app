@@ -1,3 +1,6 @@
+import { getDropboxDailyTarget, startDropboxDailyEvents } from '../../lib/dropbox'
+import { getGoogleDriveDailyTarget, startGoogleDriveDailyEvents } from '../../lib/googleDrive'
+import type { DailyEvent } from '../../lib/dailySyncState'
 import { useCallback, useEffect, useRef } from 'react'
 import { getTabSyncBlockReason } from '../../lib/tabSyncCoordinator'
 import { getActiveProviderStatus, type SyncProviderId } from '../../lib/sync'
@@ -19,6 +22,7 @@ type AutoSyncStatus = {
   localDirty: boolean
   lastRemoteVersion?: string | null
   notebookChannel?: string | null
+  daily?: boolean
 }
 
 const AUTO_SYNC_INTERVAL_MS = 3 * 60 * 1000
@@ -68,19 +72,19 @@ export const useAutoSync = (status: AutoSyncStatus, provider: SyncProviderId | n
       if (getTabSyncBlockReason()) return
 
       const now = Date.now()
-      const isOneDrive = currentStatus.provider === 'onedrive'
-      if (isOneDrive && document.visibilityState !== 'visible') return
-      if (isOneDrive && now < retryAt.current) { scheduleRetry(retryAt.current - now); return }
+      const daily = currentStatus.provider === 'onedrive' || currentStatus.daily
+      if (daily && document.visibilityState !== 'visible') return
+      if (daily && now < retryAt.current) { scheduleRetry(retryAt.current - now); return }
       // While a draft is still unsaved, the timer only checks locally whether
-      // typing has paused. It reaches OneDrive again once the draft is saved.
-      if (isOneDrive && reason === 'draft-wait' && getPendingEditorDayIds().size) { scheduleRetry(1000, 'draft-wait'); return }
+      // typing has paused. It checks the cloud again once the draft is saved.
+      if (daily && reason === 'draft-wait' && getPendingEditorDayIds().size) { scheduleRetry(1000, 'draft-wait'); return }
       if (reason === 'interval' && now - lastAutoSyncAt.current < AUTO_SYNC_INTERVAL_MS) {
         return
       }
 
       lastAutoSyncAt.current = now
       const failed = () => {
-        if (isOneDrive) {
+        if (daily) {
           failures.current += 1
           retryAt.current = Date.now() + Math.min(60_000, 5_000 * 2 ** Math.min(failures.current, 4))
           scheduleRetry(retryAt.current - Date.now())
@@ -89,7 +93,7 @@ export const useAutoSync = (status: AutoSyncStatus, provider: SyncProviderId | n
       const succeeded = () => { failures.current = 0; retryAt.current = 0; clearTimeout(retryTimer.current) }
 
       let localDirty = currentStatus.localDirty
-      if (isOneDrive) {
+      if (daily) {
         try { localDirty = (await getActiveProviderStatus()).localDirty }
         catch (error) {
           failed()
@@ -113,7 +117,7 @@ export const useAutoSync = (status: AutoSyncStatus, provider: SyncProviderId | n
             error instanceof Error ? error.message : 'Automatic push failed.',
           )
         }
-        if (!isOneDrive || retryAt.current > Date.now()) return
+        if (!daily || retryAt.current > Date.now()) return
       }
 
       console.info('[Sync] auto-pull:trigger', { reason })
@@ -126,14 +130,14 @@ export const useAutoSync = (status: AutoSyncStatus, provider: SyncProviderId | n
         for (const id of dayIds) pendingDays.current.delete(id)
         pendingInventory.current = false
         let result
-        try { result = await pullFromSyncAndRefresh({ force: false, ...(isOneDrive && !full ? { dayIds } : {}) }) }
+        try { result = await pullFromSyncAndRefresh({ force: false, ...(daily && !full ? { dayIds } : {}) }) }
         catch (error) {
           for (const id of dayIds) pendingDays.current.add(id)
           pendingInventory.current ||= inventory
           throw error
         }
         succeeded()
-        if (isOneDrive && (result.deferredDayIds?.length || getPendingEditorDayIds().size)) {
+        if (daily && (result.deferredDayIds?.length || getPendingEditorDayIds().size)) {
           for (const id of result.deferredDayIds ?? []) pendingDays.current.add(id)
           scheduleRetry(1000, 'draft-wait')
         }
@@ -173,17 +177,25 @@ export const useAutoSync = (status: AutoSyncStatus, provider: SyncProviderId | n
   useEffect(() => { reconcileRef.current = maybeAutoSync }, [maybeAutoSync])
 
   useEffect(() => {
-    if (provider !== 'onedrive' || !status.connected || !eventItem) return
+    if (!provider || !status.connected || !eventItem) return
     let cancelled = false
     let stop: (() => void) | undefined
-    void getOneDriveState().then((state) => {
-      const target = targetFromState(state)
+    const resolveTarget = provider === 'onedrive' ? async () => targetFromState(await getOneDriveState())
+      : provider === 'dropbox' ? getDropboxDailyTarget : getGoogleDriveDailyTarget
+    const startEvents = provider === 'onedrive' ? startDailyOneDriveEvents
+      : provider === 'dropbox' ? startDropboxDailyEvents : startGoogleDriveDailyEvents
+    void resolveTarget().then((target) => {
       if (cancelled || !target || target.folder !== eventItem) return
-      stop = startDailyOneDriveEvents(target, (event) => {
+      const receive = (event?: DailyEvent) => {
         if (event?.type === 'day-changed') pendingDays.current.add(event.dayId)
         else pendingInventory.current = true
         void maybeAutoSync('remote-event')
-      }, (message) => recordSyncAttention('pull', message, { category: 'relay' }), () => clearSyncIssue('relay'))
+      }
+      stop = startEvents(target, receive, (message) => {
+            if (message) recordSyncAttention('pull', message, { category: 'relay' })
+      }, () => {
+        clearSyncIssue('relay')
+      })
     }).catch((error) => { if (!cancelled) recordSyncAttention('pull', String(error), { category: 'relay' }) })
     return () => { cancelled = true; stop?.() }
   }, [eventItem, maybeAutoSync, provider, status.connected])
@@ -222,7 +234,7 @@ export const useAutoSync = (status: AutoSyncStatus, provider: SyncProviderId | n
       backgroundedAt.current = null
       if (
         startedAt === null ||
-        (statusRef.current.provider !== 'onedrive' && Date.now() - startedAt < FOREGROUND_BACKGROUND_MIN_MS)
+        (statusRef.current.provider !== 'onedrive' && !statusRef.current.daily && Date.now() - startedAt < FOREGROUND_BACKGROUND_MIN_MS)
       ) {
         return
       }
