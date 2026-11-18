@@ -304,7 +304,14 @@ const dailyGoogleDrive = createCloudDailyNotebook({
   updateSummary: (localDirty) => updateGoogleDriveState({ localDirty, lastSyncAt: Date.now() }),
   remote: googleDriveDailyRemote,
   migrationComplete: googleDriveDailyRemote.migrationComplete,
-  completeMigration: googleDriveDailyRemote.completeMigration,
+  completeMigration: async (folder, guard) => {
+    await googleDriveDailyRemote.completeMigration(folder, guard)
+    await guard()
+    const context = dailyContext(await getGoogleDriveState())
+    if (context.folderId) {
+      await setJsonSetting(`google-drive.dailyFolderReservation:${JSON.stringify([context.accountId, context.folderId, context.sourceKey])}`, null)
+    }
+  },
 })
 
 export const getGoogleDriveDailyTarget = dailyGoogleDrive.getTarget

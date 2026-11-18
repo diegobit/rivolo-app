@@ -28,6 +28,9 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
   let hideSearch = false
   let hideDirect = false
   let raceDelete = false
+  let loseTrash = false
+  let advanceHead = false
+  let rejectRetention = false
   let folderReplyLost = false
   let nextReservation = 0
   let incomplete = false
@@ -106,9 +109,21 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
     const decoded = ref ? decodeURIComponent(ref) : undefined
     const file = decoded ? files.find((item) => item.id === decoded) : undefined
     if (revisions === 'revisions' && file) {
-      if (!revisionId) return json({ revisions: file.revisions })
+      if (!revisionId) {
+        const listed = json({ revisions: file.revisions })
+        if (advanceHead && file.revisions.length >= 3) {
+          advanceHead = false
+          const content = file.revisions.at(-1)!.text.split('<!-- rivolo:authors:')[0].trimEnd()
+          revise(file, `${content}\n\nFollow-up`)
+        }
+        return listed
+      }
       const revision = file.revisions.find((item) => item.id === revisionId)
       if (method === 'PATCH') {
+        if (rejectRetention) {
+          rejectRetention = false
+          return json({}, 503)
+        }
         expect(JSON.parse(String(init.body))).toEqual({ keepForever: true })
         return json(revision)
       }
@@ -148,6 +163,7 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
         revise(file, day(today, 'Arrived during trash'))
       }
       if (typeof update.trashed === 'boolean') file.trashed = update.trashed
+      if (update.trashed && loseTrash) { loseTrash = false; throw new TypeError('Lost trash reply') }
       return json(driveMeta(file))
     }
     if (method === 'POST' && url.searchParams.has('uploadType')) {
@@ -183,6 +199,11 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
     loseFolder: () => { folderReplyLost = true },
     folders: () => files.filter((file) => file.properties?.rivoloDailySource).length,
     raceDelete: () => { raceDelete = true },
+    loseTrash: () => { loseTrash = true },
+    advanceHead: () => { advanceHead = true },
+    rejectRetention: () => { rejectRetention = true },
+    trashDay: (id: string) => { files.find((file) => file.name === `${id}.md`)!.trashed = true },
+    trashFolders: () => { for (const file of files) if (file.properties?.rivoloDailySource) file.trashed = true },
     reviseDay: (id: string, text: string) => revise(files.find((file) => file.name === `${id}.md`)!, text),
     incomplete: () => { incomplete = true },
     duplicate: (dayId: string, text: string) => {
@@ -219,7 +240,6 @@ describe.each(['dropbox', 'google-drive'] as const)('%s daily sync', (provider) 
     await storage.repository.saveDay(today, 'First\n\nMine', 'Notebook')
     cloud.updates.length = 0
     cloud.race()
-    if (provider === 'google-drive') await expect(sync.pushToSync()).rejects.toThrow('changed during upload')
     await sync.pushToSync()
     expect(cloud.current(today)).toContain('Other device')
     expect(cloud.current(today)).toContain('Mine')
@@ -375,4 +395,72 @@ it('restores a concurrently edited Drive day and keeps the deletion warning', as
   expect(cloud.current(today)).toContain('Arrived during trash')
   await expect(sync.pushToSync()).rejects.toThrow('restored for review')
   expect(cloud.current(today)).toContain('Arrived during trash')
+})
+
+it('repairs a browser Drive upload even if the head has moved again', async () => {
+  const cloud = makeCloud('google-drive')
+  const sync = await startDrive(cloud)
+  await sync.migrateActiveNotebook()
+  await storage.repository.saveDay(today, 'First\n\nMine', 'Notebook')
+  cloud.race()
+  cloud.advanceHead()
+  await sync.pushToSync()
+  const text = cloud.current(today)
+  expect(text).toContain('Other device')
+  expect(text).toContain('Follow-up')
+  expect(text?.match(/Mine/g)).toHaveLength(1)
+  expect((await storage.repository.getDay(today))?.contentMd).toContain('Follow-up')
+})
+
+it('confirms an already completed Drive deletion after a lost reply', async () => {
+  const cloud = makeCloud('google-drive')
+  const sync = await startDrive(cloud)
+  await sync.migrateActiveNotebook()
+  await storage.repository.deleteDay(today)
+  cloud.loseTrash()
+  await expect(sync.pushToSync()).rejects.toThrow('could not verify deletion')
+  expect(cloud.current(today)).toBeUndefined()
+  await sync.pushToSync()
+  expect(await sync.getActiveProviderStatus()).toMatchObject({ localDirty: false })
+})
+
+it('retires a trashed Drive reservation for a folder or day', async () => {
+  const cloud = makeCloud('google-drive')
+  const sync = await startDrive(cloud)
+  cloud.loseFolder()
+  cloud.lag(true)
+  await expect(sync.migrateActiveNotebook()).rejects.toThrow('Lost folder reply')
+  cloud.trashFolders()
+  cloud.lag(true)
+  await sync.migrateActiveNotebook()
+
+  const next = '2026-11-19'
+  await storage.repository.saveDay(next, 'Keep this edit', 'Notebook')
+  cloud.loseReply()
+  cloud.lag(true, true)
+  await expect(sync.pushToSync()).rejects.toThrow('Lost upload reply')
+  cloud.trashDay(next)
+  cloud.lag(true)
+  await sync.pushToSync()
+  expect(cloud.copies(next)).toHaveLength(1)
+  expect(cloud.current(next)).toContain('Keep this edit')
+})
+
+it('replays a confirmed browser race after restart without replaying unrelated revisions', async () => {
+  const cloud = makeCloud('google-drive')
+  let sync = await startDrive(cloud)
+  await sync.migrateActiveNotebook()
+  await storage.repository.saveDay(today, 'First\n\nMine', 'Notebook')
+  cloud.race()
+  cloud.rejectRetention()
+  await expect(sync.pushToSync()).rejects.toThrow('could not retain')
+
+  cloud.reviseDay(today, day(today, 'First\n\nMine\n\nFollow-up'))
+  storage = await reopenStorage(storage)
+  sync = await import('./sync')
+  await sync.pushToSync()
+  const text = cloud.current(today)
+  expect(text).toContain('Other device')
+  expect(text).toContain('Follow-up')
+  expect(text?.match(/Mine/g)).toHaveLength(1)
 })

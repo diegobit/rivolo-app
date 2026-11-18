@@ -19,8 +19,10 @@ export type DailySyncDriver<File extends DailyRemoteFile> = {
   provider: SyncProviderId
   durablePending?: boolean
   protectChangedDeletion?: boolean
-  findByRef?(folder: string, dayId: string, ref: string): Promise<File | null>
+  findByRef?(folder: string, dayId: string, ref: string, reservation?: boolean): Promise<File | null>
   isDeleteUncertain?(error: unknown): boolean
+  verifyDeletion?(ref: string, expected: string): Promise<'done' | 'retry' | 'review'>
+  recoverRace?(head: File, uploaded: string, previous: string, submitted: string, current: string): Promise<string>
   assertTarget(target: NotebookTarget): Promise<void>
   assertTargetInDatabase: TargetGuard
   accountName(): Promise<string | null>
@@ -30,7 +32,7 @@ export type DailySyncDriver<File extends DailyRemoteFile> = {
   exists(ref: string): Promise<boolean>
   assertFolder(folder: string): Promise<void>
   download(file: File, dayId: string): Promise<string>
-  prepareWrite(folder: string, dayId: string, current: File | null, createRef?: string): Promise<((content: string, beforeCommit: () => Promise<void>) => Promise<File>) & { createRef?: string }>
+  prepareWrite(folder: string, dayId: string, current: File | null, createRef?: string): Promise<((content: string, beforeCommit: () => Promise<void>, rememberUpload?: (file: File, previous: string, content: string) => Promise<void>) => Promise<File & { content?: string }>) & { createRef?: string }>
   recoverPending?(file: File, previousRevision: string, content: string): Promise<string>
   remove(file: File, beforeCommit: () => Promise<void>): Promise<void>
   isConflict(error: unknown): boolean
@@ -106,7 +108,7 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
       let remote = attempt === 0 && known !== undefined ? known : await driver.stat(target.folder, id)
       const createRef = stored.pending?.createRef
       if (createRef && remote?.ref !== createRef) {
-        const reserved = await driver.findByRef?.(target.folder, id, createRef)
+        const reserved = await driver.findByRef?.(target.folder, id, createRef, true)
         if (reserved && remote) throw new Error(`${label} has more than one file for ${id}. Keep the merged copy and move the extra file out of the notebook.`)
         remote ??= reserved ?? null
       }
@@ -128,11 +130,29 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
       // downloaded below instead, like any other unknown remote day.
       const unknownRemote = Boolean(remote) && !stored.item && !stored.baseline
       if (change.deleted && dirty && !(force && mode === 'pull') && !unknownRemote) {
-        if (!force && stored.deleteUncertain) throw new Error(stored.error ?? `${label} could not verify the deletion of ${id}.`)
-        if (!force && driver.protectChangedDeletion && remote && remote.revision !== stored.eTag) {
-          throw new Error(`${label} ${id} changed after you last synced. Review the cloud copy before retrying the deletion.`)
+        if (!force && stored.deleteUncertain) {
+          const verification = stored.item && stored.eTag && await driver.verifyDeletion?.(stored.item, stored.eTag)
+          if (!verification || verification === 'review' || verification === 'retry' && !remote) {
+            throw new Error(stored.error ?? `${label} could not verify the deletion of ${id}.`)
+          }
+          uploaded = verification === 'done'
         }
-        if (remote) {
+        if (!force && driver.protectChangedDeletion && remote && remote.revision !== stored.eTag) {
+          const previous = stored.pending
+          const cloud = previous ? await readRemote(remote, id) : null
+          if (!previous || !cloud || await hashSyncContent(cloud) !== previous.hash) {
+            throw new Error(`${label} ${id} changed after you last synced. Review the cloud copy before retrying the deletion.`)
+          }
+          const applied = previous.applied
+          const verified = applied && driver.recoverRace
+            ? await driver.recoverRace(remote, applied.uploaded, applied.previous, applied.submitted, cloud)
+            : previous.remoteRevision && driver.recoverPending
+              ? await driver.recoverPending(remote, previous.remoteRevision, cloud) : cloud
+          if (await hashSyncContent(verified) !== previous.hash) {
+            throw new Error(`${label} ${id} has a concurrent edit. Review the cloud copy before retrying the deletion.`)
+          }
+        }
+        if (remote && !uploaded) {
           // Fetch and validate before deletion; a local explicit deletion wins
           // against an edit but never removes an unrelated or malformed document.
           await readRemote(remote, id)
@@ -171,7 +191,10 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
       // lines it already contains are not added a second time.
       const recoveredUpload = stored.pending && observedText && stored.pending.hash === await hashSyncContent(observedText)
       let remoteText = observedText
-      if (recoveredUpload && remote && stored.pending?.remoteRevision && remote.revision !== stored.pending.remoteRevision) {
+      if (observedText && remote && stored.pending?.applied) {
+        const { uploaded, previous, submitted } = stored.pending.applied
+        remoteText = await driver.recoverRace?.(remote, uploaded, previous, submitted, observedText) ?? observedText
+      } else if (recoveredUpload && remote && stored.pending?.remoteRevision && remote.revision !== stored.pending.remoteRevision) {
         remoteText = await driver.recoverPending?.(remote, stored.pending.remoteRevision, observedText!) ?? observedText
       }
       const baseline = recoveredUpload ? stored.pending!.base : stored.baseline
@@ -192,18 +215,30 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
       decodeNotebookDay(merged, id)
       if (observedText !== merged && (mode === 'push' || dirty)) {
         const write = await driver.prepareWrite(target.folder, id, remote, stored.pending?.createRef)
-        const hash = await hashSyncContent(merged)
+        let hash = await hashSyncContent(merged)
         await assertTarget(target)
         const pendingState = {
           ...(await getDailyState(target, id) ?? stored),
           pending: { hash, base: localText ?? merged, ...(driver.recoverPending && remote ? { remoteRevision: remote.revision } : {}),
-            ...(write.createRef ? { createRef: write.createRef } : {}) },
+            ...(write.createRef ? { createRef: write.createRef } : {}),
+            ...(stored.pending?.applied ? { applied: stored.pending.applied } : {}) },
         }
         if (driver.durablePending) await commitDailyCheckpoint(target, driver.assertTargetInDatabase, pendingState)
         else await writeDailyState(target, pendingState)
-        let result: File
-        try { result = await write(merged, () => assertTarget(target)) }
+        let result: File & { content?: string }
+        const rememberUpload = driver.recoverRace ? async (file: File, previous: string, submitted: string) => {
+          await commitDailyCheckpoint(target, driver.assertTargetInDatabase, {
+            ...pendingState,
+            pending: { ...pendingState.pending, applied: { uploaded: file.revision, previous, submitted } },
+          })
+        } : undefined
+        try { result = await write(merged, () => assertTarget(target), rememberUpload) }
         catch (error) { if (driver.isConflict(error)) continue; throw error }
+        if (result.content !== undefined && result.content !== merged) {
+          merged = result.content
+          decodeNotebookDay(merged, id)
+          hash = await hashSyncContent(merged)
+        }
         uploaded = true
         // Until additions reach the editor, the baseline remains its captured
         // local document. The uploaded hash makes the next pass fetch the remote.

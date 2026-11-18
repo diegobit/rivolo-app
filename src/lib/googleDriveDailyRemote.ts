@@ -37,12 +37,15 @@ class DriveWriteRace extends Error {
 export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init?: RequestInit) => Promise<Response>) => {
   const quote = (value: string) => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
   const entryPath = (ref: string) => `/files/${encodeURIComponent(ref)}`
-  const entry = async (ref: string) => {
+  const rawEntry = async (ref: string) => {
     const response = await authorizedFetch(`${API}${entryPath(ref)}?fields=${encodeURIComponent(FIELDS)}`)
     if (response.status === 404) return null
     if (!response.ok) throw new Error(`Google Drive could not verify file metadata (${response.status}).`)
-    const file = await response.json() as Entry
-    return file.trashed ? null : file
+    return await response.json() as Entry
+  }
+  const entry = async (ref: string) => {
+    const file = await rawEntry(ref)
+    return file?.trashed ? null : file
   }
   const readPages = async <T>(path: string, params: URLSearchParams, property: string) => {
     const seen = new Set<string>()
@@ -125,8 +128,12 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
     }
     const existing = await find()
     if (existing && !reservation.id) return existing
-    const id = reservation.id ?? await allocateId()
-    if (!reservation.id) await reservation.save(id)
+    const prior = reservation.id ? await rawEntry(reservation.id) : null
+    const usable = !prior || !prior.trashed && prior.mimeType === FOLDER && prior.parents?.includes(parent) &&
+      prior.appProperties?.rivoloDailySource === key
+    if (existing && !usable) return existing
+    const id = usable && reservation.id ? reservation.id : await allocateId()
+    if (id !== reservation.id) await reservation.save(id)
     const verify = async () => {
       const folder = await entry(id)
       if (!folder) return null
@@ -134,7 +141,7 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
           folder.appProperties?.rivoloDailySource !== key) throw new Error('The reserved Google Drive folder no longer matches this notebook.')
       return folder.id
     }
-    if (reservation.id && await verify()) {
+    if (id === reservation.id && await verify()) {
       if (existing && existing !== id) throw new Error('Google Drive found multiple daily notebook folders. Keep the intended folder and move the others aside before retrying.')
       return id
     }
@@ -212,14 +219,19 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
     return mergeOneDriveNotebooksWithAuthors(baseline, content, concurrent)
   }
 
-  const findByRef = async (folder: string, dayId: string, ref: string) => {
+  const findByRef = async (folder: string, dayId: string, ref: string, reservation = false) => {
     const file = await entry(ref)
-    return file ? asFile(file, folder, dayId) : null
+    if (!file) return null
+    if (reservation && (!file.parents?.includes(folder) || file.appProperties?.rivoloDay !== dayId ||
+        file.appProperties?.rivoloNotebook !== folder || file.name !== `${dayId}.md`)) return null
+    return asFile(file, folder, dayId)
   }
 
-  const prepareWrite = async (folder: string, dayId: string, current: File | null, reserved?: string) => {
-    const createRef = current ? undefined : reserved ?? await allocateId()
-    const write = async (content: string, guard: () => Promise<void>) => {
+  const prepareRawWrite = async (folder: string, dayId: string, current: File | null, reserved?: string) => {
+    const existingReservation = !current && reserved ? await rawEntry(reserved) : null
+    const createRef = current ? undefined : reserved && !existingReservation ? reserved : await allocateId()
+    const write = async (content: string, guard: () => Promise<void>,
+      rememberUpload?: (file: File, previous: string, content: string) => Promise<void>) => {
       if (current) await assertCurrent(current)
       else if (await stat(folder, dayId)) throw new DriveConflict()
       await guard()
@@ -253,9 +265,9 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
       }
       if (current) {
         if (uploaded.revision === current.revision && await download(uploaded) === content) return uploaded
+        await rememberUpload?.(uploaded, current.revision, content)
         const conflicts = await intervening(uploaded, current.revision)
         if (conflicts.length) {
-          await downloadRetainedRevision(uploaded, conflicts.at(-1)!.id)
           throw new DriveWriteRace(uploaded, current.revision)
         }
       } else if (uploaded.ref !== createRef) throw new Error('Google Drive returned a different file ID than the reserved ID.')
@@ -264,42 +276,56 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
     return Object.assign(write, { createRef })
   }
 
-  // Agent writes use the same Drive protocol but don't have the browser's
-  // durable pending row. Repair an applied write without reapplying the append.
-  const writeHosted = async (folder: string, dayId: string, current: File | null, document: string) => {
-    let file = current
-    let content = document
-    let repairing = false
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        await (await prepareWrite(folder, dayId, file))(content, async () => {})
-        return content
-      } catch (error) {
-        if (error instanceof DriveWriteRace) {
+  // Once the first upload has applied, further conflicts must never restart
+  // the original operation. Browser and Agent writes share this repair path.
+  const prepareWrite = async (folder: string, dayId: string, current: File | null, reserved?: string) => {
+    const initial = await prepareRawWrite(folder, dayId, current, reserved)
+    const write = async (document: string, guard: () => Promise<void>,
+      rememberUpload?: (file: File, previous: string, content: string) => Promise<void>) => {
+      let send = initial
+      let content = document
+      let repairing = false
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const file = await send(content, guard, rememberUpload)
+          return { ...file, content }
+        } catch (error) {
+          if (!(error instanceof DriveWriteRace)) {
+            if (repairing && error instanceof DriveConflict) {
+              throw new Error(`Google Drive changed while repairing an applied write for ${dayId}. Sync will retry the repair.`, { cause: error })
+            }
+            throw error
+          }
           repairing = true
           if (attempt === 2) throw error
           const repaired = await recoverPending(error.uploaded, error.previous, content)
           try {
-            // Another writer may have seen the applied Agent revision. Merge
-            // only the repair into their head, without appending a second time.
-            file = await currentFile(error.uploaded)
-            if (file.revision === error.uploaded.revision) {
-              if (content === repaired) return content
+            const latest = await currentFile(error.uploaded)
+            if (latest.revision === error.uploaded.revision) {
+              if (content === repaired) return { ...latest, content }
               content = repaired
             } else {
-              const latest = await download(file)
-              content = await mergeOneDriveNotebooksWithAuthors(content, latest, repaired)
-              if (content === latest) return latest
+              const latestContent = await download(latest)
+              content = await mergeOneDriveNotebooksWithAuthors(content, latestContent, repaired)
+              if (content === latestContent) return { ...latest, content }
             }
+            send = await prepareRawWrite(folder, dayId, latest)
           } catch (cause) {
-            throw new Error(`Google Drive changed after applying the Agent write for ${dayId}. Review its version history.`, { cause })
+            throw new Error(`Google Drive changed after applying the write for ${dayId}. Review its version history if the repair cannot finish.`, { cause })
           }
-        } else if (repairing && error instanceof DriveConflict) {
-          throw new Error(`Google Drive changed while repairing the applied Agent write for ${dayId}. Review its version history.`)
-        } else throw error
+        }
       }
+      throw new Error(`Google Drive could not finish the write for ${dayId}.`)
     }
-    throw new Error(`Google Drive could not finish the Agent write for ${dayId}.`)
+    return Object.assign(write, { createRef: initial.createRef })
+  }
+
+  const writeHosted = async (folder: string, dayId: string, current: File | null, document: string) =>
+    (await (await prepareWrite(folder, dayId, current))(document, async () => {})).content
+
+  const recoverRace = async (head: File, uploaded: string, previous: string, submitted: string, current: string) => {
+    const repaired = await recoverPending({ ...head, revision: uploaded }, previous, submitted)
+    return head.revision === uploaded ? repaired : mergeOneDriveNotebooksWithAuthors(submitted, current, repaired)
   }
 
   const migrationComplete = async (folder: string) =>
@@ -324,7 +350,12 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
     inventory,
     download,
     prepareWrite,
-    recoverPending, findByRef, writeHosted,
+    recoverPending, recoverRace, findByRef, writeHosted,
+    verifyDeletion: async (ref: string, expected: string) => {
+      const file = await rawEntry(ref)
+      if (file?.headRevisionId !== expected) return 'review' as const
+      return file.trashed ? 'done' as const : 'retry' as const
+    },
     protectChangedDeletion: true,
     isDeleteUncertain: (error: unknown) => error instanceof DriveDeleteUncertain,
     remove: async (file: File, guard: () => Promise<void>) => {
