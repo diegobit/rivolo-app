@@ -524,3 +524,30 @@ it('repairs a lost Drive upload reply after another device advances its head', a
   expect(text?.match(/Mine/g)).toHaveLength(1)
   expect(await sync.getActiveProviderStatus()).toMatchObject({ localDirty: false })
 })
+
+it.each(['dropbox', 'google-drive'] as const)('preserves post-cutover legacy edits after a daily deletion on %s', async (provider) => {
+  const cloud = makeCloud(provider)
+  const connect = async () => {
+    vi.stubGlobal('fetch', cloud.fetch)
+    await storage.settings.setJsonSetting('sync.state', { activeProvider: provider })
+    await storage.settings.setJsonSetting(`${provider}.state`, {
+      connected: true, accountId: 'alice', filePath: '/inbox.md', fileName: 'inbox.md',
+      fileId: cloud.original.id, folderId: cloud.root.id,
+    })
+    return import('./sync')
+  }
+  let sync = await connect()
+  await sync.migrateActiveNotebook()
+  await storage.repository.deleteDay(today)
+  await sync.pushToSync()
+  expect(cloud.current(today)).toBeUndefined()
+
+  cloud.changeOriginal([day(today, 'First\n\nActual legacy edit'), day(yesterday, 'History')].join('\n\n'))
+  closeStorage(storage)
+  storage = await createStorage()
+  sync = await connect()
+  await storage.repository.saveDay(today, 'First', 'Notebook')
+  await sync.migrateActiveNotebook()
+  expect((await storage.repository.getDay(today))?.contentMd).toBe('First\n\nActual legacy edit')
+  expect(cloud.current(today)).toContain('Actual legacy edit')
+})

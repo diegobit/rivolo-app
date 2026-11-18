@@ -137,12 +137,14 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
       if (remoteComplete) {
         const parsed = decodeNotebookDay(remote, id)
         const unchanged = local && parsed.contentMd === local.contentMd && parsed.humanTitle === local.humanTitle
-        if (cutoverDays?.has(id)) return unchanged ? { id, remove: true as const } : null
-        // A day absent from the cutover record may have arrived from an old client.
-        // Preserve both copies if this device also has unsynced edits.
+        const cutover = cutoverDays?.get(id)
+        if (cutover && cutover === remote) return unchanged ? { id, remove: true as const } : null
+        // A missing daily file wins over the unchanged cutover copy. An
+        // actual edit made since cutover can recreate the day.
         if (!local || unchanged) return { id, content: remote }
-        const localText = await annotateLocalNotebook(encodeNotebookDay(local), '', context.accountName, local.updatedAt)
-        return { id, content: await mergeOneDriveNotebooksWithAuthors('', localText, remote) }
+        const baseline = cutover ?? ''
+        const localText = await annotateLocalNotebook(encodeNotebookDay(local), baseline, context.accountName, local.updatedAt)
+        return { id, content: await mergeOneDriveNotebooksWithAuthors(baseline, localText, remote) }
       }
       if (!local) return { id, content: remote }
       if (remembered && context.localDirty) return null
