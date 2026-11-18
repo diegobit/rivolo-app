@@ -22,6 +22,7 @@ export type DailySyncDriver<File extends DailyRemoteFile> = {
   findByRef?(folder: string, dayId: string, ref: string, reservation?: boolean): Promise<File | null>
   uncertainDeletion?(error: unknown): { ref: string; revision: string } | undefined
   verifyDeletion?(ref: string, expected: string): Promise<'done' | 'retry' | 'review'>
+  recoverLostUpload?(head: File, previous: string, hash: string, current: string): Promise<string | null>
   recoverRace?(head: File, uploaded: string, previous: string, submitted: string, current: string): Promise<string>
   assertTarget(target: NotebookTarget): Promise<void>
   assertTargetInDatabase: TargetGuard
@@ -195,13 +196,20 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
       // The remote file is this device's own upload whose reply or checkpoint
       // was lost: merge from the local document that upload was built from, so
       // lines it already contains are not added a second time.
-      const recoveredUpload = stored.pending && observedText && stored.pending.hash === await hashSyncContent(observedText)
+      let recoveredUpload = stored.pending && observedText && stored.pending.hash === await hashSyncContent(observedText)
       let remoteText = observedText
       if (observedText && remote && stored.pending?.applied) {
         const { uploaded, previous, submitted } = stored.pending.applied
         remoteText = await driver.recoverRace?.(remote, uploaded, previous, submitted, observedText) ?? observedText
       } else if (recoveredUpload && remote && stored.pending?.remoteRevision && remote.revision !== stored.pending.remoteRevision) {
         remoteText = await driver.recoverPending?.(remote, stored.pending.remoteRevision, observedText!) ?? observedText
+      } else if (observedText && remote && stored.pending?.remoteRevision &&
+          remote.ref === (stored.pending.remoteRef ?? stored.item) && remote.revision !== stored.pending.remoteRevision) {
+        const recovered = await driver.recoverLostUpload?.(remote, stored.pending.remoteRevision, stored.pending.hash, observedText)
+        if (recovered != null) {
+          recoveredUpload = true
+          remoteText = recovered
+        }
       }
       const baseline = recoveredUpload ? stored.pending!.base : stored.baseline
       if (!force && !baseline && !observedMissing && local && remoteText) {
@@ -225,7 +233,7 @@ export const createDailySync = <File extends DailyRemoteFile>(driver: DailySyncD
         await assertTarget(target)
         const pendingState = {
           ...(await getDailyState(target, id) ?? stored),
-          pending: { hash, base: localText ?? merged, ...(driver.recoverPending && remote ? { remoteRevision: remote.revision } : {}),
+          pending: { hash, base: localText ?? merged, ...(driver.recoverPending && remote ? { remoteRevision: remote.revision, remoteRef: remote.ref } : {}),
             ...(write.createRef ? { createRef: write.createRef } : {}),
             ...(stored.pending?.applied ? { applied: stored.pending.applied } : {}) },
         }

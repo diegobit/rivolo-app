@@ -34,8 +34,8 @@ type CloudNotebook<File extends DailyRemoteFile, State extends Context> = {
   resolveSource(context: State): Promise<LegacySource | null>
   resolveFolder(context: State, source: LegacySource | null): Promise<string>
   updateSummary(dirty: boolean): Promise<unknown>
-  migrationComplete(folder: string): Promise<boolean>
-  completeMigration(folder: string, guard: () => Promise<void>): Promise<void>
+  migrationComplete(folder: string): Promise<boolean | string[]>
+  completeMigration(folder: string, cutover: string[], guard: () => Promise<void>): Promise<void>
   remote: Omit<DailySyncDriver<File>, 'provider' | 'assertTarget' | 'assertTargetInDatabase' | 'accountName' | 'updateSummary'>
 }
 
@@ -108,6 +108,7 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
     const folder = await config.resolveFolder(context, source)
     await config.remote.assertFolder(folder)
     const remoteComplete = await config.migrationComplete(folder)
+    const cutoverDays = new Set(Array.isArray(remoteComplete) ? remoteComplete : [])
     const inventory = await config.remote.inventory(folder)
     const localDays = new Map((await listAllDays()).map((day) => [day.dayId, day]))
     const target: NotebookTarget = { provider, folder, account: context.accountId, generation: (previous?.target.generation ?? 0) + 1 }
@@ -124,13 +125,18 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
         return { id, baseline: remote, revision: unchanged ? current.revision : 0 }
       }
       if (!remote) return null
+      const remembered = source?.revision === context.lastRevision
+      if (!local && remembered && (await getDayChange(id)).deleted) return null
       if (remoteComplete) {
         const parsed = decodeNotebookDay(remote, id)
         const unchanged = local && parsed.contentMd === local.contentMd && parsed.humanTitle === local.humanTitle
-        return unchanged ? { id, remove: true as const } : null
+        if (cutoverDays.has(id)) return unchanged ? { id, remove: true as const } : null
+        // A day absent from the cutover record may have arrived from an old client.
+        // Preserve both copies if this device also has unsynced edits.
+        if (!local || unchanged) return { id, content: remote }
+        const localText = await annotateLocalNotebook(encodeNotebookDay(local), '', context.accountName, local.updatedAt)
+        return { id, content: await mergeOneDriveNotebooksWithAuthors('', localText, remote) }
       }
-      const remembered = source?.revision === context.lastRevision
-      if (!local && remembered && (await getDayChange(id)).deleted) return null
       if (!local) return { id, content: remote }
       if (remembered && context.localDirty) return null
       if (!context.localDirty) return { id, content: remote }
@@ -157,7 +163,7 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
           uploadedHash: null, localRevision: change.revision ?? 0, deleted: false,
         })
       }
-      writeMigration(db, { target, sourceKey: context.sourceKey, complete: remoteComplete, legacy })
+      writeMigration(db, { target, sourceKey: context.sourceKey, complete: Boolean(remoteComplete), legacy })
     })
     if (changes.some((change) => change?.content || change?.remove)) await markSyncLocalDirty(undefined, { excludeProvider: provider })
     await flushDatabaseSave()
@@ -205,7 +211,7 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
     startEvents: (target: NotebookTarget, onChanged: Parameters<typeof startCloudDailyEvents>[2],
       onError: (message: string) => void, onReady: () => void) => startCloudDailyEvents(target, assertTarget, onChanged, onError, onReady),
     pull: async (target: NotebookTarget, options: SyncPullOptions) => {
-      const imported = !options.dayIds && !options.force && await importLegacyEdits(target)
+      const imported = !options.dayIds && !options.force && (await readMigration())?.complete && await importLegacyEdits(target)
       const result = await engine.pullDailyNotebook(target, options)
       if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') void flushDailyEvents(target, assertTarget)
       return imported ? { ...result, status: 'pulled' as const } : result
@@ -215,7 +221,8 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
       const migration = await readMigration()
       if (!migration?.complete && (await getNotebookProgress(target)).completedOnce && !(await listDirtyDays(target)).length &&
           !(result.status === 'pushed' && result.attention)) {
-        await config.completeMigration(target.folder, () => assertTarget(target))
+        const cutover = [...(await splitLegacy(migration?.legacy ?? null)).keys()]
+        await config.completeMigration(target.folder, cutover, () => assertTarget(target))
         await runAtomicDatabaseMutation((db) => {
           assertTargetInDatabase(db, target)
           writeMigration(db, { ...readMigrationInDatabase(db)!, complete: true })

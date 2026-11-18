@@ -2,7 +2,7 @@ import { exportMarkdown, parseMarkdown, type ParsedDay } from './markdown'
 import { isValidDayId } from './dates'
 import { readNotebookAttribution, writeNotebookAttribution } from './oneDriveBlame'
 
-export type DailyRemoteFile = { ref: string; revision: string }
+export type DailyRemoteFile = { ref: string; revision: string; modifiedAt?: string }
 
 export const dayPath = (dayId: string) => {
   if (!isValidDayId(dayId)) throw new Error(`Invalid day ID: ${dayId}`)

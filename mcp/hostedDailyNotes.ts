@@ -20,7 +20,9 @@ function createNotes<File extends DailyRemoteFile>(remote: DailyFiles<File>, pro
   const readDay = async (file: File, id: string) => {
     const content = await remote.download(file, id)
     const day = decodeNotebookDay(content, id)
-    return { content, day: { ...day, createdAt: 0, updatedAt: 0 } satisfies Day }
+    const modified = Date.parse(file.modifiedAt ?? '')
+    const timestamp = Number.isFinite(modified) ? modified : Date.parse(`${id}T00:00:00Z`)
+    return { content, day: { ...day, createdAt: timestamp, updatedAt: timestamp } satisfies Day }
   }
 
   const loadNotes = async (range?: DayFilterOptions) => {

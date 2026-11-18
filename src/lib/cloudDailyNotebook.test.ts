@@ -53,12 +53,12 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
   const version = (file: RecordFile) => file.revisions.at(-1)?.id
   const dropboxMeta = (file: RecordFile) => ({
     '.tag': file.revisions.length ? 'file' : 'folder', id: file.id,
-    path_display: file.path, path_lower: file.path?.toLowerCase(), rev: version(file),
+    path_display: file.path, path_lower: file.path?.toLowerCase(), rev: version(file), server_modified: file.revisions.at(-1)?.modifiedTime,
   })
   const driveMeta = (file: RecordFile) => ({
     id: file.id, name: file.name, parents: file.parent ? [file.parent] : [],
     mimeType: file.revisions.length ? 'text/markdown' : 'application/vnd.google-apps.folder',
-    version: version(file), headRevisionId: version(file), trashed: file.trashed,
+    version: version(file), headRevisionId: version(file), modifiedTime: file.revisions.at(-1)?.modifiedTime, trashed: file.trashed,
     appProperties: file.properties,
   })
   const find = (ref: string) => {
@@ -220,6 +220,7 @@ const makeCloud = (provider: 'dropbox' | 'google-drive') => {
       revise(create(existing.name, existing.parent, existing.path, existing.properties), text)
     },
     copies: (dayId: string) => files.filter((file) => !file.trashed && file.name === `${dayId}.md`).map((file) => file.revisions.at(-1)?.text),
+    modifiedAt: (id: string) => Date.parse(files.find((file) => file.name === `${id}.md`)!.revisions.at(-1)!.modifiedTime),
     current: (id: string) => files.find((file) => !file.trashed && file.name === `${id}.md`)?.revisions.at(-1)?.text,
   }
 }
@@ -278,6 +279,8 @@ describe.each(['dropbox', 'google-drive'] as const)('%s daily sync', (provider) 
     const hosted = createHostedDailyNotes(provider, folder, cloud.fetch)
     const targeted = await hosted.loadNotes({ dateFrom: yesterday, dateTo: yesterday })
     expect(targeted.days.map((note) => note.dayId)).toEqual([yesterday])
+    expect(targeted.days[0].updatedAt).toBeGreaterThan(0)
+    expect(targeted.days[0].updatedAt).toBe(cloud.modifiedAt(yesterday))
     await hosted.add({ day_id: yesterday, content_md: 'From Agent access', operation_id: 'fixture-operation' })
     expect(cloud.current(yesterday)).toContain('From Agent access')
     expect(cloud.original.revisions.at(-1)?.text).not.toContain('From Agent access')
@@ -287,6 +290,8 @@ describe.each(['dropbox', 'google-drive'] as const)('%s daily sync', (provider) 
     expect(cloud.current(today)).toBeUndefined()
     expect(cloud.current(yesterday)).toContain('History')
 
+    const lateDay = '2026-11-20'
+    cloud.changeOriginal(legacy + '\n\n' + day(lateDay, 'Synced from the old client after cutover'))
     closeStorage(storage)
     storage = await createStorage()
     await storage.settings.setJsonSetting('sync.state', { activeProvider: provider })
@@ -295,10 +300,13 @@ describe.each(['dropbox', 'google-drive'] as const)('%s daily sync', (provider) 
       filePath: '/inbox.md', fileName: 'inbox.md', fileId: cloud.original.id, folderId: cloud.root.id,
     })
     vi.stubGlobal('fetch', cloud.fetch)
+    await storage.repository.saveDay(lateDay, 'Synced from the old client after cutover', 'Notebook')
     await (await import('./sync')).migrateActiveNotebook()
     expect((await storage.repository.getDay(today))?.contentMd).toBeUndefined()
     expect((await storage.repository.getDay(yesterday))?.contentMd).toContain('From Agent access')
     expect(cloud.current(today)).toBeUndefined()
+    expect(cloud.current(lateDay)).toContain('Synced from the old client after cutover')
+    expect((await storage.repository.getDay(lateDay))?.contentMd).toContain('Synced from the old client after cutover')
   })
 })
 
@@ -488,5 +496,28 @@ it.each(['existing', 'created'] as const)('confirms the exact trashed Drive revi
   await expect(sync.pushToSync()).rejects.toThrow('could not verify deletion')
   expect(cloud.current(id)).toBeUndefined()
   await sync.pushToSync()
+  expect(await sync.getActiveProviderStatus()).toMatchObject({ localDirty: false })
+})
+
+// The Drive retry owns recognizing the submitted bytes in history when the
+// original reply and the first direct lookup could not identify the upload.
+it('repairs a lost Drive upload reply after another device advances its head', async () => {
+  const cloud = makeCloud('google-drive')
+  let sync = await startDrive(cloud)
+  await sync.migrateActiveNotebook()
+  await storage.repository.saveDay(today, 'First\n\nMine', 'Notebook')
+  cloud.race()
+  cloud.loseReply(true)
+  await expect(sync.pushToSync()).rejects.toThrow('Lost upload reply')
+  cloud.lag(false)
+  cloud.reviseDay(today, day(today, 'First\n\nMine\n\nFollow-up'))
+
+  storage = await reopenStorage(storage)
+  sync = await import('./sync')
+  await sync.pushToSync()
+  const text = cloud.current(today)
+  expect(text).toContain('Other device')
+  expect(text).toContain('Follow-up')
+  expect(text?.match(/Mine/g)).toHaveLength(1)
   expect(await sync.getActiveProviderStatus()).toMatchObject({ localDirty: false })
 })

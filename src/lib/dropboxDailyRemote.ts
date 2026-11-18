@@ -10,8 +10,9 @@ type Entry = {
   path_display: string
   path_lower: string
   rev?: string
+  server_modified?: string
 }
-type File = { ref: string; revision: string; path: string }
+type File = { ref: string; revision: string; path: string; modifiedAt?: string }
 class DropboxConflict extends Error {}
 
 export const createDropboxDailyRemote = (authorizedFetch: (url: string, init?: RequestInit) => Promise<Response>) => {
@@ -35,7 +36,7 @@ export const createDropboxDailyRemote = (authorizedFetch: (url: string, init?: R
     if (entry['.tag'] !== 'file' || !entry.id?.startsWith('id:') || !entry.rev || entry.path_lower !== path.toLowerCase()) {
       throw new Error('Dropbox returned a day with an invalid path or revision.')
     }
-    return { ref: entry.id, revision: entry.rev, path }
+    return { ref: entry.id, revision: entry.rev, path, modifiedAt: entry.server_modified }
   }
 
   const readDropboxRevision = async (path: string, revision: string) => {
@@ -81,9 +82,16 @@ export const createDropboxDailyRemote = (authorizedFetch: (url: string, init?: R
   const migrationMarker = (path: string) => `${path}/.rivolo-migrated`
   const migrationComplete = async (folder: string) => {
     const root = await requireFolder(folder)
-    return (await metadata(migrationMarker(root.path_display)))?.['.tag'] === 'file'
+    const path = migrationMarker(root.path_display)
+    const marker = await metadata(path)
+    if (marker?.['.tag'] !== 'file' || !marker.rev) return false
+    const body = await readDropboxRevision(path, marker.rev)
+    if (!body.trimStart().startsWith('[')) return true
+    const days: unknown = JSON.parse(body)
+    if (!Array.isArray(days) || !days.every(isValidDayId)) throw new Error('Dropbox returned an invalid cutover record.')
+    return days as string[]
   }
-  const completeMigration = async (folder: string, guard: () => Promise<void>) => {
+  const completeMigration = async (folder: string, cutover: string[], guard: () => Promise<void>) => {
     const root = await requireFolder(folder)
     const path = migrationMarker(root.path_display)
     if ((await metadata(path))?.['.tag'] === 'file') return
@@ -94,7 +102,7 @@ export const createDropboxDailyRemote = (authorizedFetch: (url: string, init?: R
         'Content-Type': 'application/octet-stream',
         'Dropbox-API-Arg': apiArg({ path, mode: 'add', autorename: false, strict_conflict: true }),
       },
-      body: 'Rivolo daily sync\n',
+      body: JSON.stringify(cutover),
     })
     if (!response.ok && !(response.status === 409 && (await metadata(path))?.['.tag'] === 'file')) {
       throw new Error('Dropbox could not record the daily sync upgrade. Retry sync.')

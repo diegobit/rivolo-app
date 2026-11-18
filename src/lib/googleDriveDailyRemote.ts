@@ -6,7 +6,7 @@ import { mergeOneDriveNotebooksWithAuthors } from './oneDriveMerge'
 const API = 'https://www.googleapis.com/drive/v3'
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3'
 const FOLDER = 'application/vnd.google-apps.folder'
-const FIELDS = 'id,name,mimeType,parents,trashed,headRevisionId,appProperties,capabilities(canEdit)'
+const FIELDS = 'id,name,mimeType,parents,trashed,headRevisionId,modifiedTime,appProperties,capabilities(canEdit)'
 
 type Entry = {
   id: string
@@ -15,10 +15,11 @@ type Entry = {
   parents?: string[]
   trashed?: boolean
   headRevisionId?: string
+  modifiedTime?: string
   appProperties?: Record<string, string>
   capabilities?: { canEdit?: boolean }
 }
-type File = { ref: string; revision: string; folder: string; dayId: string; duplicate?: boolean }
+type File = { ref: string; revision: string; folder: string; dayId: string; modifiedAt?: string; duplicate?: boolean }
 type Revision = { id: string; modifiedTime: string }
 
 class DriveConflict extends Error {}
@@ -77,7 +78,7 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
         file.appProperties?.rivoloDay !== dayId || file.appProperties.rivoloNotebook !== folder) {
       throw new Error(`Google Drive ${dayId}: the day file moved or has invalid metadata.`)
     }
-    return { ref: file.id, revision: file.headRevisionId, folder, dayId }
+    return { ref: file.id, revision: file.headRevisionId, folder, dayId, modifiedAt: file.modifiedTime }
   }
   const listDays = (folder: string, dayId?: string) => readPages<Entry>('/files', new URLSearchParams({
     q: [
@@ -335,14 +336,45 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
     return head.revision === uploaded ? repaired : mergeOneDriveNotebooksWithAuthors(submitted, current, repaired)
   }
 
-  const migrationComplete = async (folder: string) =>
-    (await entry(folder))?.appProperties?.rivoloMigrated === 'true'
-  const completeMigration = async (folder: string, guard: () => Promise<void>) => {
+  const recoverLostUpload = async (head: File, previous: string, hash: string, current: string) => {
+    const candidates = await intervening(head, previous)
+    if (candidates.length > 16) throw new Error(`Google Drive has too many unverified revisions for ${head.dayId}. Review its history before syncing this day.`)
+    for (const revision of candidates.reverse()) {
+      const submitted = await downloadRetainedRevision(head, revision.id)
+      if (await hashSyncContent(submitted) === hash) return recoverRace(head, revision.id, previous, submitted, current)
+    }
+    return null
+  }
+
+  const migrationComplete = async (folder: string) => {
+    const properties = (await entry(folder))?.appProperties
+    if (properties?.rivoloMigrated !== 'true') return false
+    if (!properties.rivoloCutover) return true
+    const response = await authorizedFetch(`${API}${entryPath(properties.rivoloCutover)}?alt=media`)
+    if (!response.ok) throw new Error('Google Drive could not read the daily notebook cutover record.')
+    const days: unknown = await response.json()
+    if (!Array.isArray(days) || !days.every(isValidDayId)) throw new Error('Google Drive returned an invalid cutover record.')
+    return days as string[]
+  }
+  const completeMigration = async (folder: string, cutover: string[], guard: () => Promise<void>) => {
     if (await migrationComplete(folder)) return
+    const id = await allocateId()
+    const boundary = `rivolo_${crypto.randomUUID()}`
+    const metadata = JSON.stringify({ id, name: '.rivolo-migrated', parents: [folder], mimeType: 'application/json' })
+    await guard()
+    const marker = await authorizedFetch(`${UPLOAD}/files?uploadType=multipart&fields=id`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+      body: [
+        `--${boundary}`, 'Content-Type: application/json; charset=UTF-8', '', metadata,
+        `--${boundary}`, 'Content-Type: application/json; charset=UTF-8', '', JSON.stringify(cutover), `--${boundary}--`, '',
+      ].join('\r\n'),
+    })
+    if (!marker.ok || (await marker.json() as Entry).id !== id) throw new Error('Google Drive could not save the daily notebook cutover record.')
     await guard()
     const response = await authorizedFetch(`${API}${entryPath(folder)}?fields=appProperties`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ appProperties: { rivoloMigrated: 'true' } }),
+      body: JSON.stringify({ appProperties: { rivoloMigrated: 'true', rivoloCutover: id } }),
     })
     if (!response.ok || (await response.json() as Entry).appProperties?.rivoloMigrated !== 'true') {
       throw new Error('Google Drive could not record the daily sync upgrade. Retry sync.')
@@ -357,7 +389,7 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
     inventory,
     download,
     prepareWrite,
-    recoverPending, recoverRace, findByRef, writeHosted,
+    recoverPending, recoverRace, recoverLostUpload, findByRef, writeHosted,
     verifyDeletion: async (ref: string, expected: string) => {
       const file = await rawEntry(ref)
       if (file?.headRevisionId !== expected) return 'review' as const
