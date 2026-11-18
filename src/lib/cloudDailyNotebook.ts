@@ -34,8 +34,8 @@ type CloudNotebook<File extends DailyRemoteFile, State extends Context> = {
   resolveSource(context: State): Promise<LegacySource | null>
   resolveFolder(context: State, source: LegacySource | null): Promise<string>
   updateSummary(dirty: boolean): Promise<unknown>
-  migrationComplete(folder: string): Promise<boolean | string[]>
-  completeMigration(folder: string, cutover: string[], guard: () => Promise<void>): Promise<void>
+  migrationComplete(folder: string): Promise<boolean | Map<string, string | null>>
+  completeMigration(folder: string, cutover: Record<string, string>, guard: () => Promise<void>): Promise<void>
   remote: Omit<DailySyncDriver<File>, 'provider' | 'assertTarget' | 'assertTargetInDatabase' | 'accountName' | 'updateSummary'>
 }
 
@@ -108,21 +108,28 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
     const folder = await config.resolveFolder(context, source)
     await config.remote.assertFolder(folder)
     const remoteComplete = await config.migrationComplete(folder)
-    const cutoverDays = new Set(Array.isArray(remoteComplete) ? remoteComplete : [])
+    const cutoverDays = typeof remoteComplete === 'object' ? remoteComplete : null
     const inventory = await config.remote.inventory(folder)
     const localDays = new Map((await listAllDays()).map((day) => [day.dayId, day]))
     const target: NotebookTarget = { provider, folder, account: context.accountId, generation: (previous?.target.generation ?? 0) + 1 }
     const changes = await Promise.all([...new Set([...localDays.keys(), ...remoteDays.keys()])].map(async (id) => {
       const local = localDays.get(id)
       const remote = remoteDays.get(id)
-      // Existing daily documents win over the retained source. A local edit
-      // remains dirty and the normal engine reconciles it with that document.
       if (inventory.has(id)) {
         if (!remote) return null
         const current = await getDayChange(id)
         const parsed = decodeNotebookDay(remote, id)
         const unchanged = !local || parsed.contentMd === local.contentMd && parsed.humanTitle === local.humanTitle
-        return { id, baseline: remote, revision: unchanged ? current.revision : 0 }
+        const cutover = cutoverDays?.get(id)
+        if (cutover === remote) return { id, baseline: cutover, revision: unchanged ? current.revision : 0 }
+
+        // The legacy file may have changed since another device cut over.
+        // Keep those edits dirty against the original base so the daily pull
+        // merges them with the current cloud day.
+        const baseline = cutover ?? encodeNotebookDay({ dayId: id, humanTitle: parsed.humanTitle, contentMd: '' })
+        if (!local || unchanged) return { id, baseline, content: remote }
+        const localText = await annotateLocalNotebook(encodeNotebookDay(local), baseline, context.accountName, local.updatedAt)
+        return { id, baseline, content: await mergeOneDriveNotebooksWithAuthors(baseline, localText, remote) }
       }
       if (!remote) return null
       const remembered = source?.revision === context.lastRevision
@@ -130,7 +137,7 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
       if (remoteComplete) {
         const parsed = decodeNotebookDay(remote, id)
         const unchanged = local && parsed.contentMd === local.contentMd && parsed.humanTitle === local.humanTitle
-        if (cutoverDays.has(id)) return unchanged ? { id, remove: true as const } : null
+        if (cutoverDays?.has(id)) return unchanged ? { id, remove: true as const } : null
         // A day absent from the cutover record may have arrived from an old client.
         // Preserve both copies if this device also has unsynced edits.
         if (!local || unchanged) return { id, content: remote }
@@ -221,7 +228,7 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
       const migration = await readMigration()
       if (!migration?.complete && (await getNotebookProgress(target)).completedOnce && !(await listDirtyDays(target)).length &&
           !(result.status === 'pushed' && result.attention)) {
-        const cutover = [...(await splitLegacy(migration?.legacy ?? null)).keys()]
+        const cutover = Object.fromEntries(await splitLegacy(migration?.legacy ?? null))
         await config.completeMigration(target.folder, cutover, () => assertTarget(target))
         await runAtomicDatabaseMutation((db) => {
           assertTargetInDatabase(db, target)

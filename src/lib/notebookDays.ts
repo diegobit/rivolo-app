@@ -33,3 +33,18 @@ export const splitNotebookDays = async (source: string) => {
   }
   return result
 }
+
+export const decodeCutoverRecord = (value: unknown): Map<string, string | null> => {
+  // Earlier preview builds saved just the day IDs.
+  if (Array.isArray(value) && value.every(isValidDayId)) {
+    return new Map(value.map((id) => [id, null]))
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid daily notebook cutover record.')
+  const result = new Map<string, string | null>()
+  for (const [id, document] of Object.entries(value)) {
+    if (typeof document !== 'string') throw new Error('Invalid daily notebook cutover document.')
+    decodeNotebookDay(document, id)
+    result.set(id, document)
+  }
+  return result
+}

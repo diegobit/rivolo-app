@@ -1,5 +1,5 @@
 import { isValidDayId } from './dates'
-import { decodeNotebookDay } from './notebookDays'
+import { decodeCutoverRecord, decodeNotebookDay } from './notebookDays'
 import { hashSyncContent } from './syncHash'
 import { mergeOneDriveNotebooksWithAuthors } from './oneDriveMerge'
 
@@ -352,11 +352,9 @@ export const createGoogleDriveDailyRemote = (authorizedFetch: (url: string, init
     if (!properties.rivoloCutover) return true
     const response = await authorizedFetch(`${API}${entryPath(properties.rivoloCutover)}?alt=media`)
     if (!response.ok) throw new Error('Google Drive could not read the daily notebook cutover record.')
-    const days: unknown = await response.json()
-    if (!Array.isArray(days) || !days.every(isValidDayId)) throw new Error('Google Drive returned an invalid cutover record.')
-    return days as string[]
+    return decodeCutoverRecord(await response.json())
   }
-  const completeMigration = async (folder: string, cutover: string[], guard: () => Promise<void>) => {
+  const completeMigration = async (folder: string, cutover: Record<string, string>, guard: () => Promise<void>) => {
     if (await migrationComplete(folder)) return
     const id = await allocateId()
     const boundary = `rivolo_${crypto.randomUUID()}`

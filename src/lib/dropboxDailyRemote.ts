@@ -1,5 +1,5 @@
 import { isValidDayId } from './dates'
-import { dayPath } from './notebookDays'
+import { dayPath, decodeCutoverRecord } from './notebookDays'
 
 const API = 'https://api.dropboxapi.com/2/files'
 const CONTENT = 'https://content.dropboxapi.com/2/files'
@@ -86,12 +86,10 @@ export const createDropboxDailyRemote = (authorizedFetch: (url: string, init?: R
     const marker = await metadata(path)
     if (marker?.['.tag'] !== 'file' || !marker.rev) return false
     const body = await readDropboxRevision(path, marker.rev)
-    if (!body.trimStart().startsWith('[')) return true
-    const days: unknown = JSON.parse(body)
-    if (!Array.isArray(days) || !days.every(isValidDayId)) throw new Error('Dropbox returned an invalid cutover record.')
-    return days as string[]
+    if (body.trim() === 'Rivolo daily sync') return true
+    return decodeCutoverRecord(JSON.parse(body))
   }
-  const completeMigration = async (folder: string, cutover: string[], guard: () => Promise<void>) => {
+  const completeMigration = async (folder: string, cutover: Record<string, string>, guard: () => Promise<void>) => {
     const root = await requireFolder(folder)
     const path = migrationMarker(root.path_display)
     if ((await metadata(path))?.['.tag'] === 'file') return

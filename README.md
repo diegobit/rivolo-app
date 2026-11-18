@@ -125,7 +125,7 @@ Open **Settings → Cloud sync**, select the connected provider, then choose
 **Upgrade to daily sync**. Rivolo stores one Markdown file per day in a folder
 named after the original file, such as `inbox.rivolo-daily`. Dropbox organizes
 days by year and month. Google Drive stores the days directly in the managed
-folder. The original Markdown file stays in place. Update your other devices
+folder. The original Markdown file stays in place. The daily folder also keeps a snapshot of the original days so later upgrades can merge edits from older clients. Update your other devices
 and run the upgrade there too. Later edits to the original file are checked
 during full sync, so an older device can finish uploading while you upgrade.
 
