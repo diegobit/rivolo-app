@@ -46,6 +46,7 @@ class SqliteD1 {
       'migrations/0001_mcp_provider_profiles.sql',
       'migrations/0003_mcp_personal_tokens.sql',
       'migrations/0004_mcp_oauth.sql',
+      'migrations/0005_mcp_daily_targets.sql',
     ]) {
       this.database.exec(readFileSync(migration, 'utf8'))
     }

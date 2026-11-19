@@ -545,7 +545,7 @@ export default function MobileMenu({
                 <span className={menuTileLabelClass}>Clear chat</span>
                 {chatSending && <span className={menuTileMetaClass}>Replying…</span>}
               </button>
-              {activeSyncProvider === 'onedrive' && (
+              {(activeSyncProvider === 'onedrive' || syncStatus.daily) && (
                 <button
                   type="button"
                   className={menuTileClass}
