@@ -103,4 +103,23 @@ describe('OneDrive credential keep-alive', () => {
       .toBe(NOW.toISOString())
     expect(await credential(older.profileId)).toBe('older-refresh')
   })
+
+  it('does not let a rejected grant hold its slot ahead of healthy credentials on later runs', async () => {
+    const { db, create, personalToken, credential } = await setup()
+    const dead = await create('dead', daysBefore(80))
+    const healthy = await create('healthy', daysBefore(60))
+    for (const profile of [dead, healthy]) personalToken(profile.profileId, daysBefore(10))
+    const refresh = vi.fn(async (token: string) => {
+      if (token === 'dead-refresh') throw Object.assign(new Error('expired'), { code: 'invalid_grant' })
+      return { refresh_token: `${token}-next` }
+    })
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const run = (now: Date) => refreshIdleOneDriveCredentials(db as unknown as D1Database, SECRET, refresh, { now: () => now, limit: 1 })
+
+    expect(await run(NOW)).toEqual({ due: 1, refreshed: 0, failed: 1 })
+    expect(await run(new Date(NOW.getTime() + 24 * 60 * 60 * 1000))).toEqual({ due: 1, refreshed: 1, failed: 0 })
+
+    expect(refresh.mock.calls.map(([token]) => token)).toEqual(['dead-refresh', 'healthy-refresh'])
+    expect(await credential(healthy.profileId)).toBe('healthy-refresh-next')
+  })
 })

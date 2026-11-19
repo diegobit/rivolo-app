@@ -86,10 +86,21 @@ export async function refreshIdleOneDriveCredentials(
       // A revoked consent or reset password needs the user to enable Agent
       // access again; the profile stays as it is until then.
       failed += 1
-      console.warn('[mcp-credential-keepalive] refresh failed', {
-        profileId,
-        code: (error as { code?: unknown } | null)?.code ?? null,
-      })
+      const code = (error as { code?: unknown } | null)?.code ?? null
+      console.warn('[mcp-credential-keepalive] refresh failed', { profileId, code })
+      // A grant Microsoft rejected stays rejected. Record the attempt so dead
+      // credentials do not take every slot ahead of healthy ones each day.
+      // Other errors may be transient and keep their place for tomorrow.
+      if (code === 'invalid_grant') {
+        await db
+          .prepare(
+            `UPDATE mcp_provider_profiles SET credential_refreshed_at = ?
+            WHERE profile_id = ? AND revoked_at IS NULL`,
+          )
+          .bind(now.toISOString(), profileId)
+          .run()
+          .catch(() => undefined)
+      }
     }
   }
   return { due: profileIds.length, refreshed, failed }
