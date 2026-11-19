@@ -4,6 +4,8 @@ import {
 } from './remoteServer.js'
 import { createMcpProtectedResourceMetadata } from '../src/lib/mcpOAuthMetadata.js'
 import { runMcpD1Cleanup } from '../functions/_lib/mcpCleanup.js'
+import { refreshIdleOneDriveCredentials } from '../functions/_lib/mcpCredentialKeepAlive.js'
+import { refreshOneDriveAccessToken } from '../functions/_lib/oneDriveOAuth.js'
 
 const metadataResponse = (env: RemoteMcpEnv) =>
   Response.json(
@@ -41,6 +43,24 @@ export default {
         })
         .catch((error) => {
           console.error('[mcp-d1-cleanup] failed', error)
+        }),
+    )
+    const { ONEDRIVE_CLIENT_ID, ONEDRIVE_CLIENT_SECRET } = env
+    if (!ONEDRIVE_CLIENT_ID || !ONEDRIVE_CLIENT_SECRET) {
+      console.warn('[mcp-credential-keepalive] skipped: OneDrive client is not configured')
+      return
+    }
+    ctx.waitUntil(
+      refreshIdleOneDriveCredentials(
+        env.MCP_DB,
+        env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY,
+        (refreshToken) => refreshOneDriveAccessToken(refreshToken, { ONEDRIVE_CLIENT_ID, ONEDRIVE_CLIENT_SECRET }),
+      )
+        .then((stats) => {
+          console.log('[mcp-credential-keepalive]', JSON.stringify(stats))
+        })
+        .catch((error) => {
+          console.error('[mcp-credential-keepalive] failed', error)
         }),
     )
   },

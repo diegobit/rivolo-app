@@ -66,7 +66,10 @@ export const exchangeOneDriveCode = async (
     }),
   )
 
-export const refreshOneDriveAccessToken = async (refreshToken: string, env: OneDriveOAuthEnv) =>
+export const refreshOneDriveAccessToken = async (
+  refreshToken: string,
+  env: Pick<OneDriveOAuthEnv, 'ONEDRIVE_CLIENT_ID' | 'ONEDRIVE_CLIENT_SECRET'>,
+) =>
   requestOneDriveToken(
     new URLSearchParams({
       grant_type: 'refresh_token',

@@ -33,7 +33,7 @@ Dropbox and Google Drive behavior does not change.
 Settled with the user on 19 November 2026:
 
 - Losing existing personal tokens or OAuth grants during the D1 rebuild is acceptable; agents reconnect. Still prefer a migration that keeps them, but no production dry run is required.
-- Microsoft refresh tokens expire after about 90 days unused; the user then re-enables Agent access. Accepted unless a better mechanism appears.
+- Microsoft refresh tokens expire after 90 days unused and cannot be configured longer. The MCP Worker's daily cron refreshes OneDrive credentials before that, but only for profiles with a personal token or OAuth grant created or used in the last 90 days; abandoned profiles still expire. Credential refreshes are recorded in `credential_refreshed_at`, not `updated_at`, which Settings uses to detect concurrent changes.
 - This fork owns migration `0006`. Upstream's next migration will use `0007`.
 
 Open. Ask before the phase that depends on each:
@@ -52,19 +52,28 @@ Each phase is one PR to `dev`, then `main`. Run `npm run build`, `npm run lint`,
 
 Done when: no behavior change; existing OneDrive tests pass with unchanged assertions.
 
-### 2. Profile storage and enable endpoint
+### 2. Profile storage and enable endpoint (done)
 
 - `migrations/0006`: rebuild `mcp_provider_profiles` to allow `provider = 'onedrive'` with no file columns and a required `daily_folder_id`. SQLite cannot alter a CHECK in place.
   - `DROP TABLE` on the parent runs an implicit DELETE that fires `ON DELETE CASCADE` on tokens, write operations, and OAuth rows; `PRAGMA defer_foreign_keys` does not stop it.
-  - To keep child rows: create the new table, copy rows, rename the old table away under `PRAGMA legacy_alter_table=ON` so child foreign keys keep pointing at the name, rename the new table into place, drop the old one, recreate both revoke triggers. Check child row counts on a local D1 with fixture data.
+  - Renaming the old table away does not help: with foreign keys on, SQLite repoints child references at the renamed table even under `PRAGMA legacy_alter_table=ON`.
+  - Implemented: copy the child rows to temporary tables, drop and replace the parent, restore the rows with the same keys, recreate both revoke triggers. `src/test/mcpMigrations.test.ts` proves rows and triggers survive on SQLite; the remote D1 apply is still unverified.
+  - The rebuild also adds `onedrive_folder_name` and `credential_refreshed_at`.
 - `functions/_lib/providerProfiles.ts`: OneDrive variant with target `{ folder, folderName }`. Extend the `ON CONFLICT … WHERE` guard so a different folder still requires disabling first.
 - `functions/_lib/providerAccess.ts`: `fetchOneDriveAccount` (`/me`, `id` as account ID) and `verifyOneDriveDailyTarget` (item is a folder; store its canonical `/drives/{drive}/items/{id}` address).
 - `functions/api/onedrive/mcp-enable.ts`, modeled on the Dropbox handler. It must live under `/api/onedrive` because the refresh cookie is scoped there. Save the rotated refresh token to both the cookie and D1.
 - `/api/mcp/daily-target` rejects OneDrive.
+- Until phase 3, the Worker answers a OneDrive profile with an explicit "not available yet" error.
+
+### 2b. Credential keep-alive (done)
+
+- `functions/_lib/mcpCredentialKeepAlive.ts`, run from `scheduled()` in `mcp/worker.ts` after the D1 cleanup. It refreshes up to 25 active OneDrive profiles per run whose credential is older than 30 days, stalest first, and stores the returned token. A failed refresh is logged and leaves the profile alone.
+- `ProviderProfileRepository.updateCredential` now sets `credential_refreshed_at` instead of `updated_at`, for every provider.
+- `ONEDRIVE_CLIENT_ID` is in `wrangler.mcp.toml`; `ONEDRIVE_CLIENT_SECRET` must be set as a Worker secret (prod and dev). Without it the cron logs a warning and skips the refresh.
 
 ### 3. MCP Worker
 
-- `mcp/remoteServer.ts`: `createOneDriveAccessToken`, persisting rotated refresh tokens as the Dropbox path does. Add `ONEDRIVE_CLIENT_ID` to `wrangler.mcp.toml` vars and `ONEDRIVE_CLIENT_SECRET` as a Worker secret, for prod and dev.
+- `mcp/remoteServer.ts`: `createOneDriveAccessToken`, persisting rotated refresh tokens as the Dropbox path does. The Worker config and secret already exist from phase 2b.
 - `mcp/hostedDailyNotes.ts`: OneDrive branch using the phase 1 driver. Read, write, conflict retry, merge, and attribution stay shared.
 - Relay: bind `ONEDRIVE_EVENTS` in `wrangler.mcp.toml` with `script_name` `rivolo-onedrive-events` (prod) and `rivolo-onedrive-events-dev` (dev). After a write, publish `day-changed` with `sender: ''` to `roomName('daily:' + folder)`, the derivation `/api/onedrive/daily-events` uses. A failed publish must not fail the already committed write.
 

@@ -83,10 +83,14 @@ Before deploying:
 1. Create one D1 database and replace the placeholder database id in both
    `wrangler.toml` (Rivolo Pages Settings APIs) and `wrangler.mcp.toml` (hosted
    MCP Worker). Both services must bind the same database as `MCP_DB`.
-2. Apply `migrations/0001` through `0005` to that database.
+2. Apply `migrations/0001` through `0006` to that database.
 3. Set Worker secrets:
    - `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY` — exactly the same value used by Pages.
    - `GOOGLE_CLIENT_SECRET`.
+   - `ONEDRIVE_CLIENT_SECRET` — the same Microsoft client secret used by Pages.
+     The daily cron uses it to refresh stored OneDrive credentials that an
+     agent still uses, so they do not reach Microsoft's 90-day idle expiry.
+     Without it the cron logs a warning and skips the refresh.
 4. Set the Pages secrets already required by Agent access:
    - `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY`.
    - `MCP_PROFILE_SESSION_ENCRYPTION_KEY`.
