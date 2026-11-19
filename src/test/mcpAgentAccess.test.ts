@@ -12,6 +12,9 @@ import { googleCookieConfig } from '../../functions/_lib/googleOAuth'
 import { createTokenCookieHeader } from '../../functions/_lib/tokenCookie'
 import { onRequestPost as enableDropbox } from '../../functions/api/dropbox/mcp-enable'
 import { onRequestPost as enableGoogleDrive } from '../../functions/api/google-drive/mcp-enable'
+import { onRequestPost as enableOneDrive } from '../../functions/api/onedrive/mcp-enable'
+import { oneDriveCookieConfig } from '../../functions/_lib/oneDriveOAuth'
+import { decryptToken } from '../../functions/_lib/tokenCookie'
 import { onRequestPost as disableAgentAccess } from '../../functions/api/mcp/disable'
 import { onRequestGet as getAgentAccessStatus } from '../../functions/api/mcp/status'
 
@@ -363,3 +366,98 @@ describe('MCP status and disable endpoints', () => {
 })
 
 afterEach(closeTestDatabases)
+
+describe('OneDrive MCP enable endpoint', () => {
+  const folder = '/drives/drive-1/items/notebook-1'
+  const oneDriveEnv = (db: SqliteD1) => ({
+    ...createEnv(db),
+    ONEDRIVE_CLIENT_ID: 'onedrive-client',
+    ONEDRIVE_CLIENT_SECRET: 'onedrive-client-secret',
+    ONEDRIVE_TOKEN_ENCRYPTION_KEY: 'onedrive-cookie-secret',
+    ONEDRIVE_ALLOWED_ORIGINS: 'https://rivolo.app',
+  })
+  const routeMicrosoft = (item: object) => vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url === 'https://login.microsoftonline.com/common/oauth2/v2.0/token') {
+      return Response.json({ access_token: 'graph-access', expires_in: 3600, refresh_token: 'rotated-refresh' })
+    }
+    if (url.startsWith('https://graph.microsoft.com/v1.0/me?')) {
+      return Response.json({ id: 'ms-user-1', displayName: 'Ada', mail: null, userPrincipalName: 'ada@example.com' })
+    }
+    if (url.startsWith(`https://graph.microsoft.com/v1.0${folder}?`)) return Response.json(item)
+    return new Response(null, { status: 404 })
+  })
+  const enable = async (env: ReturnType<typeof oneDriveEnv>, target: unknown) => {
+    const providerCookie = await createTokenCookieHeader(
+      new Request('https://rivolo.app/api/onedrive/mcp-enable'),
+      oneDriveCookieConfig(env),
+      'browser-refresh',
+    )
+    return invoke(
+      enableOneDrive,
+      mutationRequest(
+        '/api/onedrive/mcp-enable',
+        { timeZone: 'Europe/Rome', target },
+        cookiePair(providerCookie, 'rivolo_onedrive_refresh'),
+      ),
+      env,
+    )
+  }
+  const storedBrowserToken = async (response: Response, env: ReturnType<typeof oneDriveEnv>) => {
+    const cookie = cookiePair(response.headers.get('Set-Cookie') ?? '', 'rivolo_onedrive_refresh')
+    return decryptToken(decodeURIComponent(cookie.split('=')[1]), env.ONEDRIVE_TOKEN_ENCRYPTION_KEY)
+  }
+
+  it('binds a daily profile to the verified folder and keeps the rotated token on both sides', async () => {
+    const db = new SqliteD1()
+    const env = oneDriveEnv(db)
+    vi.stubGlobal('fetch', routeMicrosoft({
+      id: 'notebook-1', name: 'Rivolo', folder: { childCount: 2 }, parentReference: { driveId: 'drive-1' },
+    }))
+
+    const response = await enable(env, { folder })
+    const payload = await response.json() as { profile: { profileId: string } }
+
+    expect(response.status).toBe(200)
+    expect(payload).toMatchObject({
+      enabled: true,
+      profile: {
+        provider: 'onedrive',
+        providerAccountId: 'ms-user-1',
+        providerEmail: 'ada@example.com',
+        providerName: 'Ada',
+        dailyFolderId: folder,
+        target: { folder, folderName: 'Rivolo' },
+      },
+    })
+    expect(await new ProviderProfileRepository(env.MCP_DB, env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY)
+      .decryptCredential(payload.profile.profileId)).toBe('rotated-refresh')
+    expect(await storedBrowserToken(response, env)).toBe('rotated-refresh')
+    expect(response.headers.get('Set-Cookie')).toContain('rivolo_mcp_profile=')
+  })
+
+  it('refuses a folder whose Graph address is not the one the app sent, without losing the rotated token', async () => {
+    const db = new SqliteD1()
+    const env = oneDriveEnv(db)
+    // A shortcut or alias resolves to an item in another drive.
+    vi.stubGlobal('fetch', routeMicrosoft({
+      id: 'notebook-1', name: 'Rivolo', folder: {}, parentReference: { driveId: 'other-drive' },
+    }))
+
+    const response = await enable(env, { folder })
+
+    expect(response.status).toBe(409)
+    expect(db.get('SELECT COUNT(*) AS count FROM mcp_provider_profiles')?.count).toBe(0)
+    expect(await storedBrowserToken(response, env)).toBe('rotated-refresh')
+  })
+
+  it('rejects a path or link instead of a Graph item address before contacting Microsoft', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await enable(oneDriveEnv(new SqliteD1()), { folder: '/Rivolo' })
+
+    expect(response.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

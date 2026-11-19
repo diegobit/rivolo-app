@@ -61,6 +61,8 @@ export type RemoteMcpEnv = {
   GOOGLE_CLIENT_SECRET: string
   MCP_OAUTH_ISSUER_URL?: string
   MCP_RESOURCE_URL?: string
+  ONEDRIVE_CLIENT_ID?: string
+  ONEDRIVE_CLIENT_SECRET?: string
 }
 
 export type RemoteMcpPrincipal = {
@@ -262,6 +264,11 @@ const createNotesRuntime = (
   addToDay: AddToDayWriter<RemoteCompactWriteResult>
 } => {
   const providerFetch = dependencies.fetch
+
+  // The OneDrive notes runtime arrives with the Worker's OneDrive driver.
+  if (auth.profile.provider === 'onedrive') {
+    throw new Error('OneDrive Agent access is not available on this server yet.')
+  }
 
   if (auth.profile.dailyFolderId) {
     const token = auth.profile.provider === 'dropbox'
