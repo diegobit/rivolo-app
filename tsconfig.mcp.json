@@ -26,5 +26,5 @@
     "src/lib/noteWrites.ts",
     "src/lib/notesCore.ts"
   ],
-  "exclude": ["mcp/remoteServer.ts", "mcp/worker.ts"]
+  "exclude": ["mcp/remoteServer.ts", "mcp/hostedDailyNotes.ts", "mcp/worker.ts"]
 }

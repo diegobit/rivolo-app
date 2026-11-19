@@ -33,7 +33,7 @@ export type NotesSnapshot = {
   days: Day[]
 }
 
-export type LoadNotes = () => Promise<NotesSnapshot>
+export type LoadNotes = (options?: DayFilterOptions) => Promise<NotesSnapshot>
 
 const jsonResult = (value: unknown): CallToolResult => ({
   content: [
@@ -98,7 +98,7 @@ const toDaySummary = (day: Day, includeContent: boolean, maxContentChars: number
 }
 
 const loadFilteredDays = async (loadNotes: LoadNotes, options: DayFilterOptions = {}) => {
-  const notesFile = await loadNotes()
+  const notesFile = await loadNotes(options)
   return {
     ...notesFile,
     days: filterDays(notesFile.days, options),
@@ -174,7 +174,7 @@ export const registerReadTools = (server: McpServer, loadNotes: LoadNotes) => {
     },
     async (args) =>
       runTool(async () => {
-        const notesFile = await loadNotes()
+        const notesFile = await loadNotes({ dateFrom: args.day_id, dateTo: args.day_id })
         const day = notesFile.days.find((candidate) => candidate.dayId === args.day_id)
 
         if (!day) {

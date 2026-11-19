@@ -1,4 +1,4 @@
-import { getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
+import { getActiveProviderStatus, migrateActiveNotebook, pullFromSync, pushToSync } from '../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../lib/syncState'
 import { claimPrimaryTabForSync, getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import { useDaysStore } from './useDaysStore'
@@ -61,7 +61,7 @@ export const recordSyncAttention = (
     return
   }
   const attention = { operation, message, at: Date.now(), ...(blocked ? { blocked } : {}) }
-  if (state.activeProvider === 'onedrive') state.setSyncIssue(`${state.activeProvider}:${state.status.targetName}:${category}`, attention)
+  if ((state.activeProvider === 'onedrive' || state.status.daily)) state.setSyncIssue(`${state.activeProvider}:${state.status.targetName}:${category}`, attention)
   else state.setSyncAttention(attention)
 }
 
@@ -72,7 +72,7 @@ export const clearSyncIssue = (category: string) => {
 
 const clearSyncAttention = () => {
   if (useSyncStore.getState().syncAttention) {
-    if (useSyncStore.getState().activeProvider === 'onedrive') clearSyncIssue('files')
+    if (usesDailySync()) clearSyncIssue('files')
     else useSyncStore.getState().setSyncAttention(null)
   }
 }
@@ -100,7 +100,7 @@ export const pullFromSyncAndRefresh = async (options?: {
     const force = options?.force ?? false
     if (!force) {
       const status = await getActiveProviderStatus()
-      if (status.localDirty && useSyncStore.getState().activeProvider !== 'onedrive') {
+      if (status.localDirty && !status.daily && !usesDailySync()) {
         await useSyncStore.getState().loadState()
         return { status: 'noop' as const }
       }
@@ -112,14 +112,14 @@ export const pullFromSyncAndRefresh = async (options?: {
       allowUnsafeImport: options?.allowUnsafeImport,
       ...(options?.dayIds ? { dayIds: options.dayIds } : {}),
     }) } catch (error) {
-      if (useSyncStore.getState().activeProvider === 'onedrive') {
+      if (usesDailySync()) {
         await useDaysStore.getState().loadTimeline({ preserveWindow: true })
         await useSyncStore.getState().loadState()
       }
       throw error
     }
     if (result.status === 'pulled') {
-      if (useSyncStore.getState().activeProvider === 'onedrive') {
+      if (usesDailySync()) {
         await useDaysStore.getState().loadTimeline({ preserveWindow: true })
       } else {
         await useDaysStore.getState().loadTimeline()
@@ -221,3 +221,21 @@ export const flushAutoPushToSync = async () => {
   autoPushTimer = null
   await runAutoPush()
 }
+
+const usesDailySync = () => {
+  const { activeProvider, status } = useSyncStore.getState()
+  return activeProvider === 'onedrive' || Boolean(status.daily)
+}
+
+export const migrateActiveNotebookAndRefresh = () =>
+  enqueueSyncOperation('push', async () => {
+    requirePrimarySyncTab()
+    try {
+      const result = await migrateActiveNotebook()
+      if (result.status === 'pushed' && result.attention) recordSyncAttention('push', result.attention)
+      return result
+    } finally {
+      await useDaysStore.getState().loadTimeline({ preserveWindow: true })
+      await useSyncStore.getState().loadState()
+    }
+  })

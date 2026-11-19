@@ -1,6 +1,6 @@
 # Rivolo Notes MCP
 
-Local read-only MCP server for Rivolo notes. It reads a single Markdown notebook, with entries separated by `<!-- day:YYYY-MM-DD -->` markers. Use a manual export from **Settings → Data**, or a local copy of the file synced by Dropbox or Google Drive.
+The local MCP server reads a Markdown export or a local daily notebook folder. Set `RIVOLO_NOTES_FILE` to the file or folder path. Daily folders may store files directly or under year and month directories.
 
 OneDrive sync uses a folder with one file per day. This server does not read that folder directly: export the notebook from Rivolo and point `RIVOLO_NOTES_FILE` at the exported file. Export again to make later changes available to the server.
 
@@ -66,7 +66,12 @@ The server has no network listener and no write tools. Access is controlled by t
 
 ## Hosted Worker
 
-Hosted Agent access supports Dropbox and Google Drive. OneDrive daily folders are not supported by the hosted Worker; use the local server with a manual notebook export.
+Hosted Agent access supports both single-file and daily notebooks on Dropbox
+and Google Drive. Upgrading a notebook in Settings moves its Agent profile
+after the daily files sync and preserves existing OAuth grants and tokens.
+Single-day tools read only that day. On a large daily notebook, use a date range
+for searches if an unbounded scan exceeds the deployment's Worker request budget.
+For OneDrive, point the local server at the synced notebook folder or a manual export.
 
 The hosted endpoint is a separate Cloudflare Worker at `/mcp`. It uses
 Streamable HTTP and reads or additively writes the provider target saved by
@@ -78,7 +83,7 @@ Before deploying:
 1. Create one D1 database and replace the placeholder database id in both
    `wrangler.toml` (Rivolo Pages Settings APIs) and `wrangler.mcp.toml` (hosted
    MCP Worker). Both services must bind the same database as `MCP_DB`.
-2. Apply `migrations/0001` through `0004` to that database.
+2. Apply `migrations/0001` through `0005` to that database.
 3. Set Worker secrets:
    - `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY` — exactly the same value used by Pages.
    - `GOOGLE_CLIENT_SECRET`.

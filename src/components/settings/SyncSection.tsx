@@ -30,6 +30,9 @@ type SyncSectionProps = {
   syncBusy: boolean
   status: string | null
   advanced?: boolean
+  daily?: boolean
+  onMigrate?: () => Promise<void>
+  onMigrateAgent?: () => Promise<void>
   openRequest?: number
   // Progressive disclosure: each force button renders only while its
   // operation is actually blocked, next to the message explaining why.
@@ -71,6 +74,9 @@ export default function SyncSection({
   syncBusy,
   status,
   advanced = false,
+  daily = false,
+  onMigrate,
+  onMigrateAgent,
   openRequest = 0,
   showForcePull,
   showForcePush,
@@ -205,7 +211,7 @@ export default function SyncSection({
                 )}
                 {advanced && (
                   <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
-                    <div className="min-w-0 break-words">{provider === 'onedrive' ? 'Folder' : 'File'}: {summary.target || '—'}</div>
+                    <div className="min-w-0 break-words">{provider === 'onedrive' || daily ? 'Folder' : 'File'}: {summary.target || '—'}</div>
                     <div className="min-w-0 break-all">Remote version: {summary.remoteVersion}</div>
                     <div>Local changes: {summary.dirty ? 'Not synced' : 'Synced'}</div>
                     <div>Network: {online ? 'Online' : 'Offline'}</div>
@@ -237,7 +243,7 @@ export default function SyncSection({
                       )}
                       {renderArmedButton(
                         'alert-keep-local',
-                        provider === 'onedrive' ? "Keep this device’s days — replaces matching cloud days" : "Keep this device's notes — replaces the cloud copy",
+                        provider === 'onedrive' || daily ? "Keep this device’s days — replaces matching cloud days" : "Keep this device's notes — replaces the cloud copy",
                         'Confirm — replace the cloud copy',
                         () => void onPush(true),
                       )}
@@ -268,11 +274,23 @@ export default function SyncSection({
                   </button>
                 )}
 
-                {(advanced || provider === 'onedrive') && (
-                  <>
-                    <p className="break-words text-xs text-slate-500">{targetHint}</p>
+                {onMigrate && isActive && summary.connected && !daily && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-slate-600">
+                      Store one Markdown file per day for faster sync and line authors. Rivolo keeps the original file.
+                    </p>
+                    <button type="button" className={`${buttonPrimary} min-h-11`}
+                      onClick={onMigrate} disabled={providerMutationDisabled || !online || targetDirty}>
+                      Upgrade to daily sync
+                    </button>
+                  </div>
+                )}
 
-                    <div>
+                {(advanced || daily || provider === 'onedrive') && (
+                  <>
+                    <p className="break-words text-xs text-slate-500">{daily && provider !== 'onedrive' ? 'Daily sync is on. Each day has its own Markdown file.' : targetHint}</p>
+
+                    {(!daily || provider === 'onedrive') && <div>
                       <label
                         htmlFor="sync-target"
                         className="text-xs font-semibold uppercase tracking-wide text-slate-500"
@@ -300,7 +318,7 @@ export default function SyncSection({
                             : 'Save'}
                         </button>
                       </div>
-                    </div>
+                    </div>}
 
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -329,7 +347,7 @@ export default function SyncSection({
                       {showForcePush &&
                         renderArmedButton(
                           'force-push',
-                          provider === 'onedrive' ? 'Force push (overwrite matching days)' : 'Force push (overwrite remote)',
+                          provider === 'onedrive' || daily ? 'Force push (overwrite matching days)' : 'Force push (overwrite remote)',
                           'Confirm force push',
                           () => void onPush(true),
                         )}
@@ -340,6 +358,12 @@ export default function SyncSection({
                   </>
                 )}
 
+                {onMigrateAgent && (
+                  <button type="button" className={`${buttonSecondary} min-h-11`}
+                    onClick={onMigrateAgent} disabled={providerMutationDisabled || !online}>
+                    Move Agent access to daily sync
+                  </button>
+                )}
                 {agentAccess && provider !== 'onedrive' && summary.connected && isActive && (
                   <AgentAccessPanel {...agentAccess} provider={provider} advanced={advanced} />
                 )}

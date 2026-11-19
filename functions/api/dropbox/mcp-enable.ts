@@ -16,6 +16,7 @@ import {
   fetchDropboxAccount,
   fetchDropboxTarget,
   ProviderAccessError,
+  verifyDropboxDailyTarget,
 } from '../../_lib/providerAccess'
 import { ProviderProfileValidationError } from '../../_lib/providerProfiles'
 import {
@@ -77,7 +78,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const nextRefreshToken = token.refresh_token ?? refreshToken
     const [account, target] = await Promise.all([
       fetchDropboxAccount(token.access_token),
-      fetchDropboxTarget(token.access_token, input.target.path),
+      input.dailyFolderId
+        ? verifyDropboxDailyTarget(token.access_token, input.dailyFolderId, input.target.path)
+        : fetchDropboxTarget(token.access_token, input.target.path),
     ])
     const profile = await mcpProfileRepository(env).createOrUpdate({
       provider: 'dropbox',
@@ -87,6 +90,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       target,
       timeZone: input.timeZone,
       refreshToken: nextRefreshToken,
+      dailyFolderId: input.dailyFolderId,
     })
     return jsonResponse(
       { enabled: true, profile },

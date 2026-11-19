@@ -12,7 +12,7 @@ const target = { folder: '/drives/d/items/notebook', account: 'alice', generatio
 const row = (item: string, dayId: string) => ({ item, value: dayId, entry: { context: 'c', event: { type: 'day-changed', dayId, item, revision: 'v2' } } })
 
 beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); state.persist.mockClear(); state.fetch.mockReset(); state.rows = [] })
-afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.doUnmock('./oneDriveAuth') })
+afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.doUnmock('./oneDriveAuth'); vi.doUnmock('./dropboxAuth') })
 
 describe('daily event outbox', () => {
   beforeEach(() => { vi.doMock('./oneDriveAuth', () => ({ authorizedOneDriveFetch: state.fetch })) })
@@ -31,6 +31,24 @@ describe('daily event outbox', () => {
     await vi.advanceTimersByTimeAsync(10 * 60_000)
     expect(state.rows.map((entry) => entry.item)).not.toContain('/drives/d/items/today')
   })
+})
+
+// The outbox dispatcher owns keeping the same provider and account guard
+// across a scheduled retry after a transient relay outage.
+it('retries a Dropbox notice with the Dropbox provider and original guard', async () => {
+  vi.doMock('./dropboxAuth', () => ({ authorizedDropboxFetch: state.fetch }))
+  state.rows = [row('id:today', '2026-10-01')]
+  state.fetch.mockResolvedValueOnce(new Response(null, { status: 503 })).mockResolvedValueOnce(new Response(null, { status: 204 }))
+  const dropbox = { provider: 'dropbox' as const, account: 'alice', folder: 'id:notebook', generation: 1 }
+  const guard = vi.fn(async () => {})
+  await (await import('./oneDriveEvents')).flushDailyEvents(dropbox, guard)
+  expect(state.rows).toHaveLength(1)
+  await vi.advanceTimersByTimeAsync(10_000)
+  expect(state.rows).toHaveLength(0)
+  expect(state.fetch).toHaveBeenCalledTimes(2)
+  expect(state.fetch).toHaveBeenLastCalledWith('/api/sync/daily-events',
+    expect.objectContaining({ body: expect.stringContaining('"provider":"dropbox"') }))
+  expect(guard.mock.calls.length).toBeGreaterThan(1)
 })
 
 describe('access token refresh', () => {

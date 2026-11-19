@@ -96,3 +96,35 @@ Prima della messa online del fork applicare le migrazioni ai database AIT, confi
 La PR #2 è stata unita in `main` a `2934023`; il deploy Pages di produzione è riuscito dopo la pubblicazione di `rivolo-onedrive-events` e l'applicazione delle quattro migrazioni al D1 di produzione. Il dominio dell'app richiesto è `rivolo.aitlab.it`: il dashboard Pages lo mostra attivo con SSL e una richiesta HTTPS restituisce 200. Allineati origini consentite, issuer OAuth MCP, default e documentazione al sottodominio; le prove OAuth/MCP mirate passano (24 test). La callback Web OneDrive di produzione è `https://rivolo.aitlab.it/auth/onedrive/callback`.
 
 L'endpoint di configurazione OneDrive in produzione restituisce ancora `NOT_CONFIGURED` prima di questa correzione: restano da verificare il client Microsoft e i due segreti Pages Production. Il successo del deploy non attesta un login Microsoft o una sincronizzazione con account reali.
+
+## Compatibilità del sync giornaliero tra provider
+
+Verifica del 17 novembre 2026 sulla base Rivolo 0.8.0 (`17fd7d0`). OneDrive usa il motore condiviso. Il test SQLite riapre un archivio con le chiavi originali e verifica baseline, scrittura in sospeso, avanzamento e notifiche, oltre all'isolamento tra provider.
+
+| Verifica | Evidenza disponibile | Prova ancora necessaria |
+| --- | --- | --- |
+| Dropbox, creazione e aggiornamento condizionali | L'SDK documenta `add`, `update(rev)` e `delete_v2(parent_rev)` per un file. | Su una cartella di prova, due dispositivi creano lo stesso giorno. Ripetere con revisione obsoleta per modifica ed eliminazione e controllare il contenuto rimasto. Verificare tipo di app e montaggio di una cartella condivisa se previsto. |
+| Drive, concorrenza | `files.update` non documenta una precondizione per la revisione. Le revisioni precedenti dei file blob sono scaricabili se impostate come Keep Forever. | Due dispositivi scrivono dallo stesso snapshot. Verificare la precondizione sul caricamento, il recupero effettivo di entrambe le modifiche e una risposta persa. Ripetere con cestinamento concorrente e con duplicati di nome. |
+| Drive, visibilità | `files.list` può restituire `incompleteSearch` con HTTP 200. | Verificare l'inventario su più pagine, la visibilità con `drive.file` da due account e l'accesso ai figli di una cartella condivisa selezionata. |
+| Agent ospitato | Un profilo attivo vincola il target al file esistente. La concorrenza limitata lascia invariato il numero di subrequest per invocazione. | Misurare una ricerca sull'intera cronologia a cache fredda sul piano Worker effettivo. Verificare la migrazione con un agente già connesso, un append concorrente e un cutover interrotto. |
+
+Le prove live richiedono account e cartelle di test. Le prove locali non esercitano i permessi e il comportamento concorrente dei servizi reali.
+
+Fonti: [Dropbox SDK](https://dropbox.github.io/dropbox-sdk-js/global.html#FilesDeleteArg), [Drive files.update](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/update), [Drive revisioni](https://developers.google.com/workspace/drive/api/guides/manage-revisions), [Drive files.list](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list), [limiti Workers](https://developers.cloudflare.com/workers/platform/limits/#subrequests).
+
+### Implementazione in PR #34
+
+L'aggiornamento parte da **Settings → Cloud sync → Upgrade to daily sync**.
+Il file precedente rimane al suo posto. Un indicatore di migrazione completata
+impedisce a un nuovo dispositivo di ricreare dal file precedente una giornata
+già eliminata. Il profilo Agent mantiene ID e credenziali.
+
+Ordine di rilascio in dev: applicare la migrazione D1 `0005`, aggiornare il
+Worker MCP e distribuire Pages. Il relay usa il Worker eventi già distribuito.
+Provare prima con notebook sacrificabili, su due dispositivi per provider.
+Per Drive, verificare che la lista delle revisioni esponga una modifica
+concorrente e che un errore lasci la giornata in sospeso. Provare anche due
+creazioni contemporanee della stessa data. I duplicati Drive restano
+recuperabili in cartella e richiedono una risoluzione esplicita. Verificare i
+limiti delle ricerche Agent su una cronologia grande e la ripresa da una PWA
+installata su iOS prima del rilascio ampio.

@@ -2,7 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { env, exit, stderr } from 'node:process'
-import { loadNotesFile } from './notesFile.js'
+import { loadNotesPath } from './notesFile.js'
 import { registerReadTools } from './readTools.js'
 
 const SERVER_VERSION = '0.1.0'
@@ -10,7 +10,7 @@ const SERVER_VERSION = '0.1.0'
 const getNotesFilePath = () => {
   const filePath = env.RIVOLO_NOTES_FILE?.trim()
   if (!filePath) {
-    throw new Error('Missing RIVOLO_NOTES_FILE. Set it to the local Rivolo markdown export file.')
+    throw new Error('Missing RIVOLO_NOTES_FILE. Set it to a Rivolo Markdown export or a local daily notebook folder.')
   }
   return filePath
 }
@@ -23,7 +23,7 @@ const main = async () => {
     version: SERVER_VERSION,
   })
 
-  registerReadTools(server, () => loadNotesFile(getNotesFilePath()))
+  registerReadTools(server, range => loadNotesPath(getNotesFilePath(), range))
   await server.connect(new StdioServerTransport())
 }
 
