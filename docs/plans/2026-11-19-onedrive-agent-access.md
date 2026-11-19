@@ -48,7 +48,7 @@ Each phase is one PR to `dev`, then `main`. Run `npm run build`, `npm run lint`,
 
 ### 1. Graph driver usable outside the browser
 
-`oneDriveGraph.ts` calls `authorizedOneDriveFetch` and `getOneDriveState()` and keeps module-level `retryAfterAt`, `driveTypes`, and `verifiedContentConditions`. Extract `createOneDriveDailyRemote(authorizedFetch, accountKey)` in the shape of `createDropboxDailyRemote`, holding that state per instance. `oneDriveDailySync.ts` and other client callers keep using a browser-bound instance.
+`oneDriveGraph.ts` calls `authorizedOneDriveFetch` and `getOneDriveState()` and keeps module-level `retryAfterAt`, `driveTypes`, and `verifiedContentConditions`. Move the implementation to `src/lib/oneDriveGraphApi.ts` as `createOneDriveGraph({ authorizedFetch, accountKey, fetch })`, holding that state per instance. `oneDriveGraph.ts` binds one instance to the browser session and keeps its exports, so client callers are unchanged.
 
 Done when: no behavior change; existing OneDrive tests pass with unchanged assertions.
 
