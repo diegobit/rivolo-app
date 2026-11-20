@@ -36,7 +36,7 @@ GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleuse
 DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
 # Same ChatGPT origin allowance as production, against the dev worker.
 MCP_ALLOWED_ORIGINS = "https://mcp-dev.aitlab.it,https://chatgpt.com"
-MCP_OAUTH_ISSUER_URL = "https://dev.aitlab.it/api/mcp/oauth"
+MCP_OAUTH_ISSUER_URL = "https://rivolo-dev.aitlab.it/api/mcp/oauth"
 MCP_RESOURCE_URL = "https://mcp-dev.aitlab.it/mcp"
 
 [[env.dev.d1_databases]]
