@@ -95,7 +95,7 @@ This fork targets `https://rivolo.aitlab.it` in the AIT Cloudflare account. The 
 
 The providers use two kinds of values:
 
-- **Public** (client ids, allowed origins) — kept in `wrangler.toml` for `localhost`, `rivolo.aitlab.it`, and `dev.aitlab.it`. Set your own provider client IDs there.
+- **Public** (client ids, allowed origins) — kept in `wrangler.toml` for `localhost`, `rivolo.aitlab.it`, and `rivolo-dev.aitlab.it`. Set your own provider client IDs there.
 - **Secret** (client secrets, encryption keys) — never in the repo. Put them in a local `.dev.vars` file for development, and add them as encrypted secrets in the Cloudflare Pages dashboard for production. Start from `.dev.vars.example`. Any long random string works for the encryption keys.
 
 ### Google Drive
@@ -193,13 +193,21 @@ Add `rivolo.aitlab.it` as a custom domain on the `rivolo-app` Pages project. The
 
 | Resource | Production | Dev / preview |
 | --- | --- | --- |
-| App origin | `https://rivolo.aitlab.it` | `https://dev.aitlab.it` |
+| App origin | `https://rivolo.aitlab.it` | `https://rivolo-dev.aitlab.it` |
 | MCP endpoint | `https://mcp.aitlab.it/mcp` | `https://mcp-dev.aitlab.it/mcp` |
 | MCP Worker / D1 name | `rivolo-mcp` | `rivolo-mcp-dev` |
 | D1 ID | `daf4016f-71ca-41e7-b03b-641785a2f76c` | `3f72928e-d1b2-4596-87f1-ff98b96327e0` |
 | OneDrive event Worker | `rivolo-onedrive-events` | `rivolo-onedrive-events-dev` |
 
 The two empty D1 databases were created in AIT on October 6, 2026. Apply the migrations and configure secrets before deploying the MCP services. Deploy the OneDrive event Worker in each environment before deploying Pages with its corresponding binding; use `npx wrangler deploy --config workers/onedrive-events/wrangler.toml --env dev` for the preview relay. Configuring these names does not deploy Workers or attach custom domains.
+
+Add `rivolo-dev.aitlab.it` as a custom domain on the same Pages project and
+point its proxied CNAME to `dev.rivolo-app.pages.dev` so it serves the `dev`
+branch. Add `https://rivolo-dev.aitlab.it` to Google’s authorized JavaScript
+origins. Register `https://rivolo-dev.aitlab.it/auth/dropbox/callback` and
+`https://rivolo-dev.aitlab.it/auth/onedrive/callback` with their providers.
+Browser storage and login cookies belong to each origin: keep the old dev
+domain available until any local-only notes have been exported or synced.
 
 The MCP branch preview uses `https://mcp-dev.aitlab.it/mcp` and the separate
 `rivolo-mcp-dev` D1 database. Pages selects `[env.preview]`; Worker commands
@@ -217,7 +225,7 @@ needs `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY` (identical to Pages Preview) and
 `DROPBOX_TOKEN_ENCRYPTION_KEY`. Use separate encryption keys from production.
 
 The dev OAuth issuer is:
-`https://dev.aitlab.it/api/mcp/oauth`.
+`https://rivolo-dev.aitlab.it/api/mcp/oauth`.
 Complete provider login and Agent access setup on that same hostname.
 Provider OAuth settings must allow the chosen app origin and callback URLs. Branch preview origins must be explicitly added to the allowed origins and registered with the provider before using OAuth on those previews.
 
