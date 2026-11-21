@@ -798,11 +798,18 @@ describe('hosted MCP on a OneDrive notebook', () => {
     }
   })
 
-  it('does not restore a day deleted before the conditional commit', async () => {
-    const { graph, db, publish, call } = await fixture()
+  it.each([404, 412])('does not restore a day when its conditional commit returns %i after deletion', async (status) => {
+    const { graph, db, dependency, publish, call } = await fixture()
     try {
       graph.addDay(dayId, doc('This day will be deleted'))
       const itemUrl = `https://graph.microsoft.com/v1.0/drives/drive/items/file-${dayId}`
+      const providerFetch = dependency.fetch.getMockImplementation()!
+      dependency.fetch.mockImplementation(async (url, init) => {
+        const response = await providerFetch(url, init)
+        return String(url) === itemUrl && init?.method === 'PUT' && response.status === 404
+          ? new Response(null, { status })
+          : response
+      })
       graph.afterBytes(async () => {
         const deleted = await graph.fetch(itemUrl, { method: 'DELETE', headers: { 'If-Match': 'v1' } })
         expect(deleted.status).toBe(204)

@@ -55,13 +55,23 @@ function createNotes<File extends DailyRemoteFile>(
 
   const add = async (input: AddToDayInput) => {
     const id = input.day_id
+    let previouslyExisted = false
+    const preparationFailed = (error: unknown): never => {
+      throw new ProviderWriteNotAppliedError(error instanceof Error ? error.message : 'Could not prepare the day.', { cause: error })
+    }
     for (let attempt = 0; attempt < 3; attempt++) {
-      let file: File | null
+      const file = await remote.stat(folder, id).catch(preparationFailed)
+      if (provider === 'onedrive') {
+        // Keep the operation reserved so replay cannot recreate the deleted day.
+        if (!file && previouslyExisted) {
+          throw new Error('OneDrive deleted or moved this day while the agent was writing. Check the notebook before starting a new operation.')
+        }
+        previouslyExisted ||= Boolean(file)
+      }
       let content: string
       let write: () => Promise<string>
       let mutation: ReturnType<typeof addToDay>
       try {
-        file = await remote.stat(folder, id)
         const prior = file && await readDay(file, id)
         mutation = addToDay(prior ? [prior.day] : [], input)
         content = await annotateLocalNotebook(encodeNotebookDay(mutation.day), prior ? prior.content : '', author, mutation.day.updatedAt)
@@ -76,7 +86,7 @@ function createNotes<File extends DailyRemoteFile>(
           }
         }
       } catch (error) {
-        throw new ProviderWriteNotAppliedError(error instanceof Error ? error.message : 'Could not prepare the day.', { cause: error })
+        return preparationFailed(error)
       }
       try {
         const written = await write()
