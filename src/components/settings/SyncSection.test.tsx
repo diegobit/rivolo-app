@@ -450,7 +450,7 @@ describe('SyncSection', () => {
     expect(screen.getByRole('heading', { name: 'Agent access' })).toBeInTheDocument()
   })
 
-  it('keeps OneDrive target and disconnect available when hosted Agent access is unavailable', async () => {
+  it('blocks OneDrive target changes and disconnect until Agent access status is known', async () => {
     const onDisconnect = vi.fn()
     const onSaveTarget = vi.fn()
     render(
@@ -473,13 +473,14 @@ describe('SyncSection', () => {
     )
 
     await openSyncRow('onedrive')
-    expect(screen.queryByRole('heading', { name: 'Agent access' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Enable for OneDrive' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Shared folder link or OneDrive folder path')).toBeEnabled()
+    expect(screen.getByRole('heading', { name: 'Agent access' })).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Agent access', { exact: true }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Hosted MCP is unavailable.')
+    expect(screen.getByLabelText('Shared folder link or OneDrive folder path')).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(onSaveTarget).toHaveBeenCalledOnce()
+    expect(onSaveTarget).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Disconnect OneDrive' }))
-    expect(onDisconnect).toHaveBeenCalledOnce()
+    expect(onDisconnect).not.toHaveBeenCalled()
   })
 
   it('requires disabling existing Agent access when switching to OneDrive', async () => {

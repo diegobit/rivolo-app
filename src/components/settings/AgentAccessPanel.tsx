@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  agentAccessTargetLabel,
   RIVOLO_MCP_ENDPOINT,
   type AgentAccessViewState,
 } from '../../lib/agentAccess'
@@ -137,6 +138,12 @@ export default function AgentAccessPanel({
                 <div className="min-w-0">
                   <dt className="font-semibold text-slate-500">Google file ID</dt>
                   <dd className="break-all">{view.profile.target.fileId}</dd>
+                </div>
+              )}
+              {view.profile.provider === 'onedrive' && (
+                <div className="min-w-0">
+                  <dt className="font-semibold text-slate-500">OneDrive folder</dt>
+                  <dd className="break-words">{agentAccessTargetLabel(view.profile)}</dd>
                 </div>
               )}
               <div className="min-w-0">

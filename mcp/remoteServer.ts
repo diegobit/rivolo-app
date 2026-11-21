@@ -21,7 +21,10 @@ import {
 import {
   refreshGoogleAccessToken,
 } from '../functions/_lib/googleOAuth.js'
-import { createHostedDailyNotes } from './hostedDailyNotes.js'
+import { refreshOneDriveAccessToken, toPublicOneDriveError } from '../functions/_lib/oneDriveOAuth.js'
+import { roomName } from '../functions/_lib/oneDriveNotebook.js'
+import { relayFetch } from '../functions/_lib/oneDriveRelay.js'
+import { createHostedDailyNotes, createHostedOneDriveNotes } from './hostedDailyNotes.js'
 import { createGoogleDriveNotesSource } from './googleDriveNotesSource.js'
 import { ProviderWriteNotAppliedError } from './providerWriteErrors.js'
 import { createDropboxNotesAdapter } from './providers/dropboxNotes.js'
@@ -38,6 +41,7 @@ import {
   DEFAULT_MCP_RESOURCE_URL,
   type McpOAuthMetadataConfig,
 } from '../src/lib/mcpOAuthMetadata.js'
+import type { DailyRemoteFile } from '../src/lib/notebookDays.js'
 
 const SERVER_VERSION = '0.2.0'
 const JSON_HEADERS = {
@@ -61,6 +65,9 @@ export type RemoteMcpEnv = {
   GOOGLE_CLIENT_SECRET: string
   MCP_OAUTH_ISSUER_URL?: string
   MCP_RESOURCE_URL?: string
+  ONEDRIVE_CLIENT_ID?: string
+  ONEDRIVE_CLIENT_SECRET?: string
+  ONEDRIVE_EVENTS?: DurableObjectNamespace
 }
 
 export type RemoteMcpPrincipal = {
@@ -90,6 +97,7 @@ export type RemoteMcpDependencies = {
       'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'
     >,
   ) => Promise<GoogleRefreshResult>
+  refreshOneDrive: typeof refreshOneDriveAccessToken
 }
 
 type RemoteCompactWriteResult = CompactAddToDayWriterResult & {
@@ -127,6 +135,7 @@ const defaultDependencies: RemoteMcpDependencies = {
   fetch,
   refreshDropbox: refreshDropboxAccessToken,
   refreshGoogle: refreshGoogleAccessToken,
+  refreshOneDrive: refreshOneDriveAccessToken,
 }
 
 const jsonResponse = (payload: unknown, status: number, headers: HeadersInit = {}) =>
@@ -248,6 +257,53 @@ const createGoogleAccessToken = (
   }
 }
 
+const createOneDriveAccessToken = (
+  auth: RemoteMcpPrincipal,
+  env: RemoteMcpEnv,
+  dependencies: RemoteMcpDependencies,
+) => {
+  let accessToken: Promise<string> | undefined
+  return () => accessToken ??= (async () => {
+    const { ONEDRIVE_CLIENT_ID, ONEDRIVE_CLIENT_SECRET } = env
+    if (!ONEDRIVE_CLIENT_ID || !ONEDRIVE_CLIENT_SECRET) {
+      throw new Error('OneDrive Agent access is temporarily unavailable.')
+    }
+    const token = await dependencies
+      .refreshOneDrive(auth.providerRefreshToken, { ONEDRIVE_CLIENT_ID, ONEDRIVE_CLIENT_SECRET })
+      .catch((error: unknown) => {
+        if (toPublicOneDriveError(error).status === 401) {
+          throw new Error('OneDrive authorization expired. Reconnect OneDrive and enable Agent access again in Rivolo.')
+        }
+        throw new Error('OneDrive authorization is temporarily unavailable. Retry the request.')
+      })
+    await new ProviderProfileRepository(
+      env.MCP_DB,
+      env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY,
+    ).updateCredential(auth.profile.profileId, token.refresh_token ?? auth.providerRefreshToken)
+    return token.access_token
+  })()
+}
+
+const publishOneDriveDay = async (
+  relay: RemoteMcpEnv['ONEDRIVE_EVENTS'],
+  folder: string,
+  dayId: string,
+  file: DailyRemoteFile,
+) => {
+  try {
+    if (!relay) throw new Error('Missing relay binding.')
+    const room = await roomName(`daily:${folder}`)
+    const channel = relay.get(relay.idFromName(room))
+    const response = await relayFetch(channel, '/publish', {
+      method: 'POST',
+      body: JSON.stringify({ type: 'day-changed', dayId, item: file.ref, revision: file.revision, sender: '' }),
+    })
+    if (!response.ok) throw new Error('The relay rejected the update.')
+  } catch {
+    console.warn('[mcp-onedrive] Could not notify subscribers of a committed day.')
+  }
+}
+
 const compactProviderResult = (
   result: Parameters<typeof compactWriteResult>[0] & Record<string, unknown>,
 ): RemoteCompactWriteResult =>
@@ -257,11 +313,28 @@ const createNotesRuntime = (
   auth: RemoteMcpPrincipal,
   env: RemoteMcpEnv,
   dependencies: RemoteMcpDependencies,
+  ctx?: Pick<ExecutionContext, 'waitUntil'>,
 ): {
   loadNotes: LoadNotes
   addToDay: AddToDayWriter<RemoteCompactWriteResult>
 } => {
   const providerFetch = dependencies.fetch
+
+  if (auth.profile.provider === 'onedrive') {
+    const { target: { folder }, providerAccountId, providerName } = auth.profile
+    const token = createOneDriveAccessToken(auth, env, dependencies)
+    const graphFetch = authorizedFetch(token, providerFetch)
+    const notes = createHostedOneDriveNotes(folder, {
+      authorizedFetch: (url, init) => graphFetch(url, { ...init, redirect: 'manual' }),
+      accountKey: async () => providerAccountId,
+      fetch: providerFetch,
+    }, providerName ? `Agent · ${providerName}` : 'Agent', async (dayId, file) => {
+      const notification = publishOneDriveDay(env.ONEDRIVE_EVENTS, folder, dayId, file)
+      if (ctx) ctx.waitUntil(notification)
+      else await notification
+    })
+    return { loadNotes: notes.loadNotes, addToDay: async (input) => compactProviderResult(await notes.add(input)) }
+  }
 
   if (auth.profile.dailyFolderId) {
     const token = auth.profile.provider === 'dropbox'
@@ -323,6 +396,7 @@ export const handleRemoteMcpRequest = async (
   request: Request,
   env: RemoteMcpEnv,
   overrides: Partial<RemoteMcpDependencies> = {},
+  ctx?: Pick<ExecutionContext, 'waitUntil'>,
 ): Promise<Response> => {
   const dependencies = { ...defaultDependencies, ...overrides }
   if (!validateOrigin(request, env)) {
@@ -363,7 +437,7 @@ export const handleRemoteMcpRequest = async (
   }
 
   try {
-    const runtime = createNotesRuntime(principal, env, dependencies)
+    const runtime = createNotesRuntime(principal, env, dependencies, ctx)
     const server = new McpServer({
       name: 'rivolo-notes',
       version: SERVER_VERSION,

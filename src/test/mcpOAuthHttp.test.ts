@@ -40,9 +40,11 @@ class SqliteD1 {
     this.database.exec('PRAGMA foreign_keys = ON')
     for (const migration of [
       'migrations/0001_mcp_provider_profiles.sql',
+      'migrations/0002_mcp_write_operations.sql',
       'migrations/0003_mcp_personal_tokens.sql',
       'migrations/0004_mcp_oauth.sql',
       'migrations/0005_mcp_daily_targets.sql',
+      'migrations/0006_mcp_onedrive_profiles.sql',
     ]) {
       this.database.exec(readFileSync(migration, 'utf8'))
     }

@@ -147,7 +147,51 @@ describe('provider profile persistence', () => {
 
 afterEach(closeTestDatabases)
 
-it.each(['dropbox', 'google-drive'] as const)(
+it('refreshing a credential does not count as a concurrent Settings change', async () => {
+  const db = new SqliteD1()
+  const times = [new Date('2026-07-16T08:00:00.000Z'), new Date('2026-08-20T08:00:00.000Z'), new Date('2026-08-20T09:00:00.000Z')]
+  const profiles = new ProviderProfileRepository(db as unknown as D1Database, 'test-encryption-secret', () => times.shift()!)
+  const profile = await profiles.createOrUpdate({
+    provider: 'dropbox',
+    providerAccountId: 'dbid:account-1',
+    target: { path: '/inbox.md' },
+    timeZone: 'Europe/Rome',
+    refreshToken: 'first',
+  })
+
+  await profiles.updateCredential(profile.profileId, 'rotated')
+
+  // Settings moves Agent access with the updatedAt it last read.
+  expect((await profiles.getMetadata(profile.profileId))?.updatedAt).toBe(profile.updatedAt)
+  expect(await profiles.setDailyFolder(profile, 'id:daily-folder')).toBe(true)
+  expect(db.get('SELECT credential_refreshed_at FROM mcp_provider_profiles')?.credential_refreshed_at)
+    .toBe('2026-08-20T08:00:00.000Z')
+})
+
+it('stores a OneDrive notebook as a daily profile bound to its folder address', async () => {
+  const db = new SqliteD1()
+  const profiles = new ProviderProfileRepository(db as unknown as D1Database, 'test-encryption-secret')
+  const input: ProviderProfileInput = {
+    provider: 'onedrive',
+    providerAccountId: 'ms-user-1',
+    target: { folder: '/drives/drive-1/items/notebook', folderName: 'Rivolo' },
+    timeZone: 'Europe/Rome',
+    refreshToken: 'onedrive-refresh',
+  }
+
+  const profile = await profiles.createOrUpdate(input)
+
+  expect(profile).toMatchObject({
+    provider: 'onedrive',
+    dailyFolderId: '/drives/drive-1/items/notebook',
+    target: { folder: '/drives/drive-1/items/notebook', folderName: 'Rivolo' },
+  })
+  expect(await profiles.getMetadata(profile.profileId)).toEqual(profile)
+  await expect(profiles.createOrUpdate({ ...input, target: { folder: '/Rivolo', folderName: 'Rivolo' } }))
+    .rejects.toThrow('target.folder must be a OneDrive item address.')
+})
+
+it.each(['dropbox', 'google-drive', 'onedrive'] as const)(
   '%s requires disabling access before retargeting and keeps old tokens revoked',
   async (provider) => {
     const db = new SqliteD1()
@@ -161,10 +205,14 @@ it.each(['dropbox', 'google-drive'] as const)(
       }
       const input: ProviderProfileInput = provider === 'dropbox'
         ? { ...base, provider, target: { path: '/inbox.md' } }
-        : { ...base, provider, target: { fileId: 'file-1', fileName: 'inbox.md' } }
+        : provider === 'onedrive'
+          ? { ...base, provider, target: { folder: '/drives/drive-1/items/notebook', folderName: 'Rivolo' } }
+          : { ...base, provider, target: { fileId: 'file-1', fileName: 'inbox.md' } }
       const nextInput: ProviderProfileInput = provider === 'dropbox'
         ? { ...base, provider, target: { path: '/private.md' } }
-        : { ...base, provider, target: { fileName: 'inbox.md', fileId: 'private-file' } }
+        : provider === 'onedrive'
+          ? { ...base, provider, target: { folder: '/drives/drive-1/items/private', folderName: 'Private' } }
+          : { ...base, provider, target: { fileName: 'inbox.md', fileId: 'private-file' } }
       const profile = await profiles.createOrUpdate(input)
       const token = await new McpPersonalTokenRepository(db as unknown as D1Database).create(profile.profileId, 'First browser agent')
       const request = new Request('https://mcp.rivolo.app/mcp', {
