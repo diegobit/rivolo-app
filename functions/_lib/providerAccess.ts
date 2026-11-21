@@ -2,6 +2,22 @@ import { hashSyncContent } from '../../src/lib/syncHash'
 const DROPBOX_API = 'https://api.dropboxapi.com/2'
 const GOOGLE_DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const GOOGLE_FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
+const GRAPH_API = 'https://graph.microsoft.com/v1.0'
+const ONEDRIVE_ITEM_ADDRESS = /^\/drives\/[A-Za-z0-9!_%.-]+\/items\/[A-Za-z0-9!_%.-]+$/
+
+type OneDriveUser = {
+  id?: string
+  displayName?: string
+  mail?: string | null
+  userPrincipalName?: string
+}
+
+type OneDriveItem = {
+  id?: string
+  name?: string
+  folder?: object
+  parentReference?: { driveId?: string }
+}
 
 type DropboxAccount = {
   account_id?: string
@@ -54,7 +70,7 @@ export class ProviderAccessError extends Error {
 
 const providerResponse = async (
   response: Response,
-  provider: 'Dropbox' | 'Google Drive',
+  provider: 'Dropbox' | 'Google Drive' | 'OneDrive',
 ) => {
   if (response.status === 401 || response.status === 403) {
     throw new ProviderAccessError(
@@ -224,4 +240,52 @@ export const verifyGoogleDailyTarget = async (accessToken: string, folder: strin
     throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'The Google Drive daily folder is not ready for Agent access.')
   }
   return source ?? { fileId: folder, folderId: item.parents?.[0] ?? null, fileName: item.name }
+}
+
+export const fetchOneDriveAccount = async (accessToken: string) => {
+  const response = await fetch(
+    `${GRAPH_API}/me?$select=id,displayName,mail,userPrincipalName`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  await providerResponse(response, 'OneDrive')
+  const user = (await response.json()) as OneDriveUser
+  if (!user.id) {
+    throw new ProviderAccessError(
+      502,
+      'PROVIDER_IDENTITY_MISSING',
+      'Microsoft account identity could not be verified.',
+    )
+  }
+  const email = user.mail ?? user.userPrincipalName ?? null
+  return {
+    accountId: user.id,
+    // Personal accounts can report a non-address principal name.
+    email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null,
+    name: user.displayName ?? null,
+  }
+}
+
+// The app sends its notebook folder as a canonical Graph address. Agent access
+// is bound to that exact folder, so a shortcut or another address for the same
+// folder is refused rather than resolved.
+export const verifyOneDriveDailyTarget = async (accessToken: string, folder: string) => {
+  if (!ONEDRIVE_ITEM_ADDRESS.test(folder) || folder.length >= 1024) {
+    throw new ProviderAccessError(400, 'INVALID_REQUEST', 'A OneDrive notebook folder is required.')
+  }
+  const response = await fetch(
+    `${GRAPH_API}${folder}?$select=id,name,folder,parentReference`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  if (response.status === 404) {
+    throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'The OneDrive notebook folder was not found.')
+  }
+  await providerResponse(response, 'OneDrive')
+  const item = (await response.json()) as OneDriveItem
+  const canonical = item.id && item.parentReference?.driveId
+    ? `/drives/${encodeURIComponent(item.parentReference.driveId)}/items/${encodeURIComponent(item.id)}`
+    : null
+  if (!item.folder || !item.name || canonical !== folder) {
+    throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'The OneDrive notebook target is not a folder.')
+  }
+  return { folder, folderName: item.name }
 }

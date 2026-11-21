@@ -32,6 +32,13 @@ type GoogleDriveEnableBody = {
   }
 }
 
+type OneDriveEnableBody = {
+  timeZone: string
+  target: {
+    folder: string
+  }
+}
+
 const MCP_PROFILE_SESSION_COOKIE = 'rivolo_mcp_profile'
 const MCP_PROFILE_SESSION_PATH = '/api/mcp'
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 400
@@ -93,6 +100,20 @@ export const parseGoogleDriveEnableBody = (body: unknown): GoogleDriveEnableBody
     target: {
       fileId: requiredText(input?.target?.fileId, 'target.fileId', 512),
     },
+  }
+}
+
+// OneDrive notebooks are always daily: the target is the folder itself, as a
+// canonical Graph item address.
+export const parseOneDriveEnableBody = (body: unknown): OneDriveEnableBody => {
+  const input = body as { timeZone?: unknown; target?: { folder?: unknown } } | null
+  const folder = requiredText(input?.target?.folder, 'target.folder', 1023)
+  if (!/^\/drives\/[A-Za-z0-9!_%.-]+\/items\/[A-Za-z0-9!_%.-]+$/.test(folder)) {
+    throw new ProviderProfileValidationError('target.folder must be a OneDrive item address.')
+  }
+  return {
+    timeZone: validateTimeZone(input?.timeZone),
+    target: { folder },
   }
 }
 
