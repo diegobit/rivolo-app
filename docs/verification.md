@@ -45,7 +45,7 @@ Prima del rollout distribuire il Worker compatibile, poi Pages e il client. Aggi
 
 Le regressioni di parsing e applicazione delle modifiche AI sono riproducibili senza credenziali. Qualità delle risposte, CORS di endpoint personalizzati, autenticazione e ricerca web richiedono una prova con il provider selezionato e note sintetiche.
 
-Il server MCP è locale e in sola lettura: verificare i suoi strumenti su un'esportazione Markdown sintetica. Non legge direttamente la cartella giornaliera OneDrive; consultare [le istruzioni MCP](../mcp/README.md).
+Il server MCP locale legge un'esportazione Markdown o la cartella giornaliera sincronizzata. Il Worker MCP ospitato può leggere e aggiungere testo nel notebook OneDrive configurato in Agent access. Per entrambi usare dati sintetici e seguire [le istruzioni MCP](../mcp/README.md).
 
 ## Evidenze
 
@@ -128,3 +128,28 @@ creazioni contemporanee della stessa data. I duplicati Drive restano
 recuperabili in cartella e richiedono una risoluzione esplicita. Verificare i
 limiti delle ricerche Agent su una cronologia grande e la ripresa da una PWA
 installata su iOS prima del rilascio ampio.
+
+### OneDrive Agent access
+
+Le prove locali usano un account Microsoft sintetico e le migrazioni correnti.
+`src/test/remoteMcpServer.test.ts` verifica la lettura, il rinnovo delle
+credenziali, l'append dopo una modifica concorrente, l'attribuzione e il replay
+dello stesso `operation_id`. Verifica anche che un commit in conflitto con
+una cancellazione non ripristini il giorno e che un errore del relay non
+annulli una scrittura. La suite OneDrive esistente copre modifiche offline,
+riconciliazione e cancellazioni. I controlli del runtime locale esercitano
+i binding Cloudflare e il database D1.
+
+La prova browser `tests/e2e/onedrive-agent-access.spec.ts` usa le API
+dell'app, un quaderno simulato e un socket di prova. Verifica l'abilitazione
+dopo la risoluzione della cartella, i dettagli avanzati, la revoca prima di
+cambiare cartella o disconnettersi e la nota sulla Privacy in entrambe le
+identità. Eseguita con Chromium desktop a 1280 px e WebKit touch a 320 e
+375 px.
+
+Dopo il deploy coordinato del Worker dev, eseguire le prove live del
+[piano OneDrive](plans/2026-11-19-onedrive-agent-access.md#5-verification)
+su quaderni dedicati con account Microsoft Personal e Business. Restano da
+misurare il budget delle richieste Worker, l'aggiornamento di un'app aperta
+dopo un append reale e la riconciliazione dopo il ritorno online. Safari su
+iPhone e PWA installata richiedono ancora una prova su un dispositivo fisico.

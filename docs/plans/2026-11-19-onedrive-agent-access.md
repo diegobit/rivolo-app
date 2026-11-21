@@ -36,11 +36,11 @@ Settled with the user on 19 November 2026:
 - Microsoft refresh tokens expire after 90 days unused and cannot be configured longer. The MCP Worker's daily cron refreshes OneDrive credentials before that, but only for profiles with a personal token or OAuth grant created or used in the last 90 days; abandoned profiles still expire. Credential refreshes are recorded in `credential_refreshed_at`, not `updated_at`, which Settings uses to detect concurrent changes.
 - This fork owns migration `0006`. Upstream's next migration will use `0007`.
 
-Open. Ask before the phase that depends on each:
+Phases 3 and 4 use these choices:
 
-1. Author label for agent-written lines (phase 3). `main` writes `'Agent'` for all providers. Recommendation: keep `'Agent'`; changing it changes all three providers.
-2. Relay publish for Dropbox and Google Drive agent writes (phase 3). Recommendation: OneDrive only here; the others keep the 3-minute reconcile and get a follow-up.
-3. Credential breadth (phase 4). The OneDrive app scope is `Files.ReadWrite.All`, so the D1 credential can reach all the user's files, though the Worker only addresses paths under the stored folder. A narrower scope breaks folders shared from other drives. Recommendation: accept and state it on the Privacy page.
+- OneDrive writes use `Agent · <Microsoft display name>` when the agent profile has a display name, or `Agent` otherwise. Dropbox and Google Drive keep `Agent`.
+- The hosted Worker publishes immediate change notifications for OneDrive writes. Dropbox and Google Drive retain their current reconciliation.
+- The Microsoft grant keeps `Files.ReadWrite.All` for access to notebooks shared from other drives. Privacy explains the credential scope and the Worker's use of the configured notebook folder.
 
 ## Phases
 
@@ -71,16 +71,16 @@ Done when: no behavior change; existing OneDrive tests pass with unchanged asser
 - `ProviderProfileRepository.updateCredential` now sets `credential_refreshed_at` instead of `updated_at`, for every provider.
 - `ONEDRIVE_CLIENT_ID` is in `wrangler.mcp.toml`; `ONEDRIVE_CLIENT_SECRET` must be set as a Worker secret (prod and dev). Without it the cron logs a warning and skips the refresh.
 
-### 3. MCP Worker
+### 3. MCP Worker (implemented)
 
 - `mcp/remoteServer.ts`: `createOneDriveAccessToken`, persisting rotated refresh tokens as the Dropbox path does. The Worker config and secret already exist from phase 2b.
-- `mcp/hostedDailyNotes.ts`: OneDrive branch using the phase 1 driver. Read, write, conflict retry, merge, and attribution stay shared.
+- `mcp/hostedDailyNotes.ts`: OneDrive branch using the phase 1 driver. The app and Worker share the Graph daily-file adapter. The hosted providers share the read, additive write, conflict retry, and attribution logic. The durable result includes write metadata only.
 - Relay: bind `ONEDRIVE_EVENTS` in `wrangler.mcp.toml` with `script_name` `rivolo-onedrive-events` (prod) and `rivolo-onedrive-events-dev` (dev). After a write, publish `day-changed` with `sender: ''` to `roomName('daily:' + folder)`, the derivation `/api/onedrive/daily-events` uses. A failed publish must not fail the already committed write.
 
-### 4. Settings and documentation
+### 4. Settings and documentation (implemented)
 
 - `SyncSection.tsx`: remove the OneDrive exclusions from the Agent access panel and from target-mutation gating.
-- `Settings.tsx`: OneDrive branch in `handleEnableAgentAccess` using the folder address from OneDrive state; route OneDrive target changes through `runWithAgentSafety`; drop the OneDrive bypass in `handleDisconnectWithAgentSafety`; `targetReady` is false until a legacy-file migration completes.
+- `Settings.tsx`: OneDrive branch in `handleEnableAgentAccess` using the folder address from OneDrive state; route OneDrive target changes through `runWithAgentSafety`; run OneDrive disconnects and provider connections that would switch away from an enabled OneDrive profile through the same safety check; `targetReady` is false until a legacy-file migration completes.
 - `src/lib/agentAccess.ts`: OneDrive variant in the profile and enable-target types and in `agentAccessTargetLabel`. The panel's advanced details show the folder.
 - `Privacy.tsx`, `README.md`, `mcp/README.md`: server-stored Microsoft credential, Worker processing of note text, local MCP on a synced OneDrive folder. Check copy under both Rivolo and AIT identities.
 

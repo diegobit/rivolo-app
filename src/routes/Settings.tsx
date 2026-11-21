@@ -338,7 +338,12 @@ export default function Settings() {
 
     if (selectedSyncProvider === 'onedrive') {
       try {
-        await oneDrive.updateFilePath(validateOneDriveTarget(oneDriveTarget))
+        const nextTarget = validateOneDriveTarget(oneDriveTarget)
+        if (!(await runWithAgentSafety(
+          'change the sync target',
+          () => oneDrive.updateFilePath(nextTarget),
+          agentAccessBoundToSelectedProvider && nextTarget !== oneDrive.filePath,
+        ))) return
         setOneDriveTargetDraft(null)
       } catch (error) {
         setSyncStatus(error instanceof Error ? error.message : 'Invalid OneDrive target.')
@@ -442,7 +447,7 @@ export default function Settings() {
   }
 
   const handleDisconnectWithAgentSafety = async () => {
-    if (selectedSyncProvider === 'onedrive' || (activeProvider !== selectedSyncProvider && !agentAccessBoundToSelectedProvider)) {
+    if (activeProvider !== selectedSyncProvider && !agentAccessBoundToSelectedProvider) {
       await handleDisconnect()
       return
     }
@@ -457,14 +462,30 @@ export default function Settings() {
     )
   }
 
+  const handleConnectWithAgentSafety = async () => {
+    if (activeProvider !== 'onedrive' && !(selectedSyncProvider === 'onedrive' && agentAccess.enabled)) {
+      handleConnect()
+      return
+    }
+    const blockedReason = claimPrimaryTabForSync()
+    if (blockedReason) {
+      setSyncStatus(blockedReason)
+      return
+    }
+    await runWithAgentSafety(`connect ${selectedSyncProvider}`, async () => { handleConnect() })
+  }
+
   const handleEnableAgentAccess = async () => {
     const dailyFolderId = activeSyncStatus.daily ? activeSyncStatus.notebookChannel ?? undefined : undefined
     const googleFile = googleDriveFileId ?? dailyFolderId
+    const oneDriveFolder = activeProvider === 'onedrive' ? oneDrive.notebookFolder : null
     const enabled = selectedSyncProvider === 'dropbox'
       ? await agentAccess.enable({ provider: 'dropbox', path: savedDropboxPath, dailyFolderId })
       : selectedSyncProvider === 'google-drive' && googleFile
         ? await agentAccess.enable({ provider: 'google-drive', fileId: googleFile, dailyFolderId })
-        : false
+        : selectedSyncProvider === 'onedrive' && oneDriveFolder
+          ? await agentAccess.enable({ provider: 'onedrive', folder: oneDriveFolder })
+          : false
     if (enabled) await oauthPending.continueAfterEnable()
   }
 
@@ -609,7 +630,7 @@ export default function Settings() {
             setSyncProviderDraft(nextProvider)
             setSyncStatus(null)
           }}
-          onConnect={handleConnect}
+          onConnect={handleConnectWithAgentSafety}
           onDisconnect={handleDisconnectWithAgentSafety}
           onActivate={handleActivateWithAgentSafety}
           onTargetChange={(value) => {
@@ -628,7 +649,9 @@ export default function Settings() {
             targetReady:
               selectedSyncProvider === 'dropbox'
                 ? Boolean(savedDropboxPath.trim())
-                : Boolean(googleDriveFileId || activeSyncStatus.daily && activeSyncStatus.notebookChannel),
+                : selectedSyncProvider === 'onedrive'
+                  ? Boolean(oneDrive.notebookFolder)
+                  : Boolean(googleDriveFileId || activeSyncStatus.daily && activeSyncStatus.notebookChannel),
             statusKnown: agentAccess.statusKnown,
             enabled: agentAccess.enabled,
             boundToProvider: agentAccessBoundToSelectedProvider,

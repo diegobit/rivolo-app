@@ -100,6 +100,7 @@ export const createGraphFixture = () => {
       if (session.name.includes(failDay ?? 'no-failure')) return new Response(null, { status: 500 })
       const current = lookupPath(address)
       if (current && (headers.get('If-None-Match') === '*' || current.eTag !== headers.get('If-Match'))) return new Response(null, { status: 412 })
+      if (!current && headers.has('If-Match')) return new Response(null, { status: 404 })
       const dayId = session.name.slice(0, -3)
       const updated = addDay(dayId, session.text, `v${Number(current?.eTag.slice(1) ?? 0) + 1}`, current?.parentReference?.id ?? lookupPath(address.split(':/')[0])?.id)
       counters.commits.push(dayId)

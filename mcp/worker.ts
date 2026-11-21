@@ -17,7 +17,7 @@ const metadataResponse = (env: RemoteMcpEnv) =>
   )
 
 export default {
-  async fetch(request: Request, env: RemoteMcpEnv): Promise<Response> {
+  async fetch(request: Request, env: RemoteMcpEnv, ctx?: ExecutionContext): Promise<Response> {
     const { pathname } = new URL(request.url)
     if (
       request.method === 'GET' &&
@@ -28,7 +28,7 @@ export default {
     if (pathname !== '/mcp') {
       return new Response('Not found.', { status: 404 })
     }
-    return handleRemoteMcpRequest(request, env)
+    return handleRemoteMcpRequest(request, env, {}, ctx)
   },
 
   async scheduled(

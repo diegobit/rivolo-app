@@ -13,6 +13,7 @@ export type OneDriveViewState = {
   accountEmail: string | null
   accountName: string | null
   migrationMessage: string | null
+  notebookFolder: string | null
   offlineProgress: string | null
   loadState: () => Promise<void>
   updateFilePath: (path: string) => Promise<void>
@@ -32,6 +33,7 @@ const stateToView = async (state: Awaited<ReturnType<typeof getOneDriveState>>) 
   accountEmail: state.accountEmail,
   accountName: state.accountName,
   migrationMessage: state.migrationMessage,
+  notebookFolder: state.migrationStatus === 'complete' ? state.folderId : null,
   offlineProgress: progress && !progress.inventoryComplete ? `Loading notebook for offline use: ${progress.loaded} of ${progress.total} days. Keep Rivolo open to finish.` : null,
 }) }
 
@@ -45,6 +47,7 @@ export const useOneDriveStore = create<OneDriveViewState>((set) => ({
   accountEmail: null,
   accountName: null,
   migrationMessage: null,
+  notebookFolder: null,
   offlineProgress: null,
 
   loadState: async () => set(await stateToView(await getOneDriveState())),
