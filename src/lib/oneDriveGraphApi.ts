@@ -9,6 +9,7 @@ export type DriveItem = {
   id: string; name: string; eTag: string; file?: object; folder?: object
   parentReference?: { driveId: string; id?: string }
   remoteItem?: DriveItem; webUrl?: string
+  lastModifiedDateTime?: string
   '@microsoft.graph.downloadUrl'?: string
 }
 export const itemAddress = (item: DriveItem) => {
@@ -64,7 +65,9 @@ const mapLimited = async <T, R>(values: T[], task: (value: T) => Promise<R>) => 
 }
 const contentPath = (parent: string, name: string) => `${childAtPath(parent, name)}:/content?@microsoft.graph.conflictBehavior=fail`
 
-type Fetch = (input: string, init?: RequestInit) => Promise<Response>
+// Workers supports no-store, though its RequestInit declaration omits cache.
+type GraphRequestInit = Omit<RequestInit, 'cache'> & { cache?: 'no-store' }
+type Fetch = (input: string, init?: GraphRequestInit) => Promise<Response>
 export type OneDriveGraphOptions = {
   // Adds the Microsoft bearer token. Used only for Graph URLs.
   authorizedFetch: Fetch
@@ -83,7 +86,7 @@ export const createOneDriveGraph = (options: OneDriveGraphOptions) => {
   const driveTypes = new Map<string, string>()
   const verifiedContentConditions = new Set<string>()
 
-  const graphRequest = async (address: string, init: RequestInit = {}, missing = false) => {
+  const graphRequest = async (address: string, init: GraphRequestInit = {}, missing = false) => {
     if (Date.now() < retryAfterAt) throw new Error('OneDrive is busy. Sync will retry automatically shortly.')
     const url = address.startsWith(GRAPH + '/') ? address : GRAPH + address
     if (!url.startsWith(GRAPH + '/')) throw new Error('Invalid OneDrive Graph URL.')

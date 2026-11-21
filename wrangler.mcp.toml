@@ -7,6 +7,11 @@ routes = [{ pattern = "mcp.aitlab.it", custom_domain = true }]
 [triggers]
 crons = ["0 3 * * *"]
 
+[[durable_objects.bindings]]
+name = "ONEDRIVE_EVENTS"
+class_name = "OneDriveEvents"
+script_name = "rivolo-onedrive-events"
+
 [[d1_databases]]
 binding = "MCP_DB"
 database_name = "rivolo-mcp"
@@ -31,6 +36,11 @@ routes = [{ pattern = "mcp-dev.aitlab.it", custom_domain = true }]
 
 [env.dev.triggers]
 crons = ["0 3 * * *"]
+
+[[env.dev.durable_objects.bindings]]
+name = "ONEDRIVE_EVENTS"
+class_name = "OneDriveEvents"
+script_name = "rivolo-onedrive-events-dev"
 
 [env.dev.vars]
 GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"

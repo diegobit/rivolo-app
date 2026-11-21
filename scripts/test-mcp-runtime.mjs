@@ -42,7 +42,7 @@ try {
     VALUES ('22222222-2222-4222-8222-222222222222', '${profileId}', 'Runtime fixture', '${hash}', '${token.slice(0, 12)}', 'notes:read notes:write', '2026-01-01');
   `)
 
-  server = spawn(process.execPath, [wrangler, 'dev', '--local', '--config', 'wrangler.mcp.toml', '--persist-to', persistence, '--port', '0', '--var', `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY:${encryptionSecret}`, '--var', 'GOOGLE_CLIENT_SECRET:isolated-runtime-fixture'], { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+  server = spawn(process.execPath, [wrangler, 'dev', '--local', '--config', 'wrangler.mcp.toml', '--config', 'workers/onedrive-events/wrangler.toml', '--persist-to', persistence, '--port', '0', '--var', `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY:${encryptionSecret}`, '--var', 'GOOGLE_CLIENT_SECRET:isolated-runtime-fixture'], { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
   let logs = ''
   const origin = await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error(`Worker startup timed out: ${logs}`)), 30_000)

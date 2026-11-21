@@ -103,9 +103,9 @@ export default function SyncSection({
       : 'Rivolo creates this visible Markdown file in the /rivolo folder in My Drive and tracks it by file ID.'
   const syncControlsDisabled = syncBusy || syncPaused
   const providerMutationDisabled =
-    syncControlsDisabled || Boolean(agentAccess && !agentAccess.statusKnown)
-  const targetMutationDisabled =
-    syncControlsDisabled || Boolean(provider !== 'onedrive' && agentAccess && !agentAccess.statusKnown)
+    syncControlsDisabled || Boolean(agentAccess && (!agentAccess.statusKnown || agentAccess.busy))
+  const connectsThroughAgentSafety = activeProvider === 'onedrive' ||
+    (provider === 'onedrive' && Boolean(agentAccess?.enabled))
   const syncTabStatus = syncPaused ? 'Paused in this tab' : 'Primary tab'
 
   const [collapsed, setCollapsed] = useState(true)
@@ -256,7 +256,7 @@ export default function SyncSection({
                     className={`${buttonPrimary} min-h-11`}
                     type="button"
                     onClick={onConnect}
-                    disabled={syncControlsDisabled || !online}
+                    disabled={!online || (connectsThroughAgentSafety ? providerMutationDisabled : syncControlsDisabled)}
                   >
                     Connect {rowLabel}
                   </button>
@@ -304,13 +304,13 @@ export default function SyncSection({
                           placeholder={provider === 'onedrive' ? '/Rivolo (automatic)' : undefined}
                           className={inputClass}
                           value={targetDraft}
-                          disabled={targetMutationDisabled}
+                          disabled={providerMutationDisabled}
                           onChange={(event) => onTargetChange(event.target.value)}
                         />
                         <button
                           className={`${buttonPrimary} min-h-11 shrink-0`}
                           type="button"
-                          disabled={targetMutationDisabled || !targetDirty}
+                          disabled={providerMutationDisabled || !targetDirty}
                           onClick={onSaveTarget}
                         >
                           {agentAccess?.boundToProvider
@@ -364,7 +364,7 @@ export default function SyncSection({
                     Move Agent access to daily sync
                   </button>
                 )}
-                {agentAccess && provider !== 'onedrive' && summary.connected && isActive && (
+                {agentAccess && summary.connected && isActive && (
                   <AgentAccessPanel {...agentAccess} provider={provider} advanced={advanced} />
                 )}
 
@@ -373,7 +373,7 @@ export default function SyncSection({
                     className={`${buttonDangerQuiet} -ml-3 min-h-11 text-left`}
                     type="button"
                     onClick={onDisconnect}
-                    disabled={targetMutationDisabled}
+                    disabled={providerMutationDisabled}
                   >
                     {agentAccess?.boundToProvider
                       ? `Disconnect ${rowLabel} (& disable Agent Access)`
