@@ -7,6 +7,12 @@ export type SqlParam = string | number | null
 
 const FTS_TRIGRAM_SCHEMA = /tokenize\s*=\s*['"]trigram['"]/i
 
+// Each day's search entry lives at a row number taken from its date
+// (2026-07-14 -> 20260714), so replacing or deleting it is a direct lookup
+// instead of a scan of every entry: day_id is UNINDEXED in the index.
+const FTS_ROWID_SQL = "CAST(replace(day_id, '-', '') AS INTEGER)"
+export const dayFtsRowid = (dayId: string) => Number(dayId.replace(/-/g, ''))
+
 export const executeSql = (db: RivoloDatabase, sql: string, params: SqlParam[] = []) => {
   if (!params.length) {
     db.exec(sql)
@@ -63,8 +69,12 @@ export const ensureDatabaseSchema = (db: RivoloDatabase) => {
   const existingFtsSchema = db.selectValue(
     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'days_fts' LIMIT 1",
   )
+  // An index built before date row numbers, or touched by an older app
+  // version since, has entries elsewhere; rebuilding puts them back in place.
   const ftsNeedsRebuild =
-    typeof existingFtsSchema !== 'string' || !FTS_TRIGRAM_SCHEMA.test(existingFtsSchema)
+    typeof existingFtsSchema !== 'string' ||
+    !FTS_TRIGRAM_SCHEMA.test(existingFtsSchema) ||
+    db.selectValue(`SELECT 1 FROM days_fts WHERE rowid <> ${FTS_ROWID_SQL} LIMIT 1`) !== undefined
 
   if (ftsNeedsRebuild) {
     db.transaction(() => {
@@ -74,8 +84,9 @@ export const ensureDatabaseSchema = (db: RivoloDatabase) => {
         USING fts5(day_id UNINDEXED, human_title, content_md, tokenize='trigram');
       `)
       db.exec(`
-        INSERT INTO days_fts (day_id, human_title, content_md)
-        SELECT day_id, human_title, content_md FROM days;
+        INSERT INTO days_fts (rowid, day_id, human_title, content_md)
+        SELECT ${FTS_ROWID_SQL}, day_id, human_title, content_md FROM days
+        WHERE day_id GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]';
       `)
     })
   }
