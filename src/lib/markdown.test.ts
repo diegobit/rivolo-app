@@ -82,6 +82,26 @@ three`
     ])
   })
 
+  it.each([
+    ['line separator', '\u2028'],
+    ['paragraph separator', '\u2029'],
+  ])('keeps a marker after a Unicode %s as content, so it cannot split the day', (_name, separator) => {
+    // An agent writing through MCP can send any text; this would otherwise
+    // start a second 2026-07-10 block and trigger the duplicate-day rule.
+    const contentMd = `note${separator}<!-- day:2026-07-10 -->\nhijacked title\n---\n\nmore`
+    const otherDay: Day = { ...makeDay('real notes'), dayId: '2026-07-10', humanTitle: 'Friday' }
+
+    const result = parseMarkdown(exportMarkdown([makeDay(contentMd), otherDay]))
+
+    expect(result).toEqual({
+      days: [
+        { dayId: '2026-07-11', humanTitle: 'Saturday notes', contentMd },
+        { dayId: '2026-07-10', humanTitle: 'Friday', contentMd: 'real notes' },
+      ],
+      warnings: [],
+    })
+  })
+
   it('does not recognize inline marker-shaped text as structure', () => {
     expect(parseMarkdown('prefix <!-- day:2026-07-11 --> suffix')).toEqual({
       days: [],

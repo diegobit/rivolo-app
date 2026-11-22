@@ -1,7 +1,11 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AuthenticatedMcpOAuthBearer } from '../../functions/_lib/mcpOAuth'
-import type { AuthenticatedMcpBearer } from '../../functions/_lib/mcpPersonalTokens'
+import {
+  McpPersonalTokenRepository,
+  type AuthenticatedMcpBearer,
+} from '../../functions/_lib/mcpPersonalTokens'
+import { ProviderProfileRepository } from '../../functions/_lib/providerProfiles'
 import {
   authenticateRemoteMcpBearer,
   handleRemoteMcpRequest,
@@ -9,6 +13,7 @@ import {
   type RemoteMcpEnv,
 } from '../../mcp/remoteServer'
 import worker from '../../mcp/worker'
+import { SqliteD1, closeTestDatabases } from './helpers/d1'
 
 type OperationRow = {
   input_hash: string
@@ -460,7 +465,11 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
     const providerFetch = vi.fn<typeof fetch>().mockResolvedValueOnce(
       dropboxDownload(),
     )
-    const dependencies = defaultDependencies(dropboxAuth(), providerFetch)
+    // A refresh token no other test uses, so the isolate token cache misses.
+    const dependencies = defaultDependencies(
+      { ...dropboxAuth(), providerRefreshToken: 'dropbox-refresh-read-day' },
+      providerFetch,
+    )
     const response = await handleRemoteMcpRequest(
       mcpRequest('tools/call', {
         name: 'get_day',
@@ -477,7 +486,7 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
       day: { day_id: '2026-07-16', content_md: 'Cloud note' },
     })
     expect(dependencies.refreshDropbox).toHaveBeenCalledWith(
-      'dropbox-refresh-secret',
+      'dropbox-refresh-read-day',
       expect.anything(),
     )
     expect(
@@ -641,6 +650,253 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
 
     expect(response.status).toBe(503)
     expect(text).not.toContain('secret database detail')
+  })
+})
+
+type LinkedProvider = 'dropbox' | 'google-drive'
+
+// Each call opens its own D1 database, so profile ids (and cache keys) are unique.
+const linkProfile = async (
+  provider: LinkedProvider = 'dropbox',
+  refreshToken = 'provider-refresh-1',
+) => {
+  const db = new SqliteD1()
+  const env = createEnv()
+  env.MCP_DB = db as unknown as D1Database
+  const profiles = new ProviderProfileRepository(
+    env.MCP_DB,
+    env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY,
+  )
+  const profile = await profiles.createOrUpdate(
+    provider === 'dropbox'
+      ? {
+          provider,
+          providerAccountId: 'dbid:account',
+          target: { path: '/inbox.md' },
+          timeZone: 'Europe/Rome',
+          refreshToken,
+        }
+      : {
+          provider,
+          providerAccountId: 'google-account',
+          target: { fileId: 'file-1', folderId: 'folder-1', fileName: 'inbox.md' },
+          timeZone: 'Europe/Rome',
+          refreshToken,
+        },
+  )
+  const tokens = new McpPersonalTokenRepository(env.MCP_DB)
+  const createBearer = async (name = 'Agent') =>
+    (await tokens.create(profile.profileId, name)).token
+  return { env, profiles, profile, tokens, createBearer }
+}
+
+const googleMetadata = () =>
+  json({
+    id: 'file-1',
+    name: 'inbox.md',
+    mimeType: 'text/markdown',
+    size: String(markdown.length),
+    version: '7',
+    headRevisionId: 'rev-7',
+    modifiedTime: MODIFIED_AT,
+    capabilities: { canDownload: true, canEdit: true, canModifyContent: true },
+  })
+
+// Routes provider HTTP by URL and answers 401 to access tokens it no longer accepts.
+const providerRoutes = (acceptedTokens: Set<string>) => {
+  const seen: Array<{ url: string; token: string; status: number }> = []
+  const providerFetch = vi.fn<typeof fetch>(async (input, init) => {
+    const url = String(input)
+    const token =
+      new Headers(init?.headers).get('Authorization')?.replace(/^Bearer /, '') ?? ''
+    let response: Response
+    if (!acceptedTokens.has(token)) {
+      response = json({ error_summary: 'expired_access_token/' }, { status: 401 })
+    } else if (url === 'https://content.dropboxapi.com/2/files/download') {
+      response = dropboxDownload()
+    } else if (url.startsWith('https://www.googleapis.com/drive/v3/files/file-1?fields=')) {
+      response = googleMetadata()
+    } else if (url === 'https://www.googleapis.com/drive/v3/files/file-1?alt=media') {
+      response = new Response(markdown)
+    } else {
+      throw new Error(`Unexpected provider request: ${url}`)
+    }
+    seen.push({ url, token, status: response.status })
+    return response
+  })
+  return { providerFetch, seen }
+}
+
+const providerGrant = (accessToken: string, extra: Record<string, unknown> = {}) => ({
+  access_token: accessToken,
+  expires_in: 3600,
+  ...extra,
+})
+
+const getDay = (env: RemoteMcpEnv, bearer: string, dependencies: Partial<RemoteMcpDependencies>) =>
+  handleRemoteMcpRequest(
+    mcpRequest(
+      'tools/call',
+      { name: 'get_day', arguments: { day_id: '2026-07-16' } },
+      { token: bearer },
+    ),
+    env,
+    dependencies,
+  )
+
+const toolResult = async (response: Response) => {
+  const payload = await responsePayload(response)
+  expect(payload.result?.isError).not.toBe(true)
+  return JSON.parse(payload.result?.content?.[0]?.text ?? '{}') as unknown
+}
+
+const foundDay = {
+  found: true,
+  day: { day_id: '2026-07-16', content_md: 'Cloud note' },
+}
+
+describe('hosted MCP provider access token cache', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    closeTestDatabases()
+  })
+
+  it('refreshes the provider token once across consecutive agent requests', async () => {
+    const { env, createBearer } = await linkProfile()
+    const bearer = await createBearer()
+    const { providerFetch, seen } = providerRoutes(new Set(['access-1']))
+    const refreshDropbox = vi.fn().mockResolvedValue(providerGrant('access-1'))
+    const dependencies = { fetch: providerFetch, refreshDropbox }
+
+    await expect(toolResult(await getDay(env, bearer, dependencies))).resolves.toMatchObject(foundDay)
+    await expect(toolResult(await getDay(env, bearer, dependencies))).resolves.toMatchObject(foundDay)
+
+    expect(refreshDropbox).toHaveBeenCalledTimes(1)
+    expect(seen.map(({ token }) => token)).toEqual(['access-1', 'access-1'])
+  })
+
+  // In Workers, waiting on another request's refresh can hang forever if
+  // that request is cancelled, so a cache miss must never wait on one.
+  it('answers a request even while another request\'s refresh never finishes', async () => {
+    const { env, createBearer } = await linkProfile()
+    const bearer = await createBearer()
+    const { providerFetch } = providerRoutes(new Set(['access-2']))
+    const refreshDropbox = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<ReturnType<typeof providerGrant>>(() => undefined))
+      .mockResolvedValue(providerGrant('access-2'))
+    const dependencies = { fetch: providerFetch, refreshDropbox }
+
+    void getDay(env, bearer, dependencies)
+    await vi.waitFor(() => expect(refreshDropbox).toHaveBeenCalledTimes(1))
+
+    await expect(toolResult(await getDay(env, bearer, dependencies))).resolves.toMatchObject(foundDay)
+    expect(refreshDropbox).toHaveBeenCalledTimes(2)
+  })
+
+  it('misses the cache after Dropbox rotates the refresh token', async () => {
+    const { env, profiles, profile, createBearer } = await linkProfile(
+      'dropbox',
+      'provider-refresh-1',
+    )
+    const bearer = await createBearer()
+    const { providerFetch, seen } = providerRoutes(new Set(['access-1', 'access-2']))
+    const refreshDropbox = vi
+      .fn()
+      .mockResolvedValueOnce(
+        providerGrant('access-1', { refresh_token: 'provider-refresh-2' }),
+      )
+      .mockResolvedValueOnce(providerGrant('access-2'))
+    const dependencies = { fetch: providerFetch, refreshDropbox }
+
+    await expect(toolResult(await getDay(env, bearer, dependencies))).resolves.toMatchObject(foundDay)
+    await expect(profiles.decryptCredential(profile.profileId)).resolves.toBe(
+      'provider-refresh-2',
+    )
+    await expect(toolResult(await getDay(env, bearer, dependencies))).resolves.toMatchObject(foundDay)
+
+    expect(refreshDropbox.mock.calls.map(([refreshToken]) => refreshToken)).toEqual([
+      'provider-refresh-1',
+      'provider-refresh-2',
+    ])
+    expect(seen.map(({ token }) => token)).toEqual(['access-1', 'access-2'])
+  })
+
+  it('rejects a revoked token or profile even while its provider token is cached', async () => {
+    const { env, profiles, profile, tokens, createBearer } = await linkProfile()
+    const revokedBearer = await createBearer('Revoked agent')
+    const activeBearer = await createBearer('Active agent')
+    const { providerFetch } = providerRoutes(new Set(['access-1']))
+    const refreshDropbox = vi.fn().mockResolvedValue(providerGrant('access-1'))
+    const dependencies = { fetch: providerFetch, refreshDropbox }
+
+    await expect(toolResult(await getDay(env, revokedBearer, dependencies))).resolves.toMatchObject(foundDay)
+    const [revokedToken] = (await tokens.list(profile.profileId)).filter(
+      ({ name }) => name === 'Revoked agent',
+    )
+    await tokens.revoke(profile.profileId, revokedToken.tokenId)
+
+    expect((await getDay(env, revokedBearer, dependencies)).status).toBe(401)
+    // The other agent on the same profile still uses the cached provider token.
+    await expect(toolResult(await getDay(env, activeBearer, dependencies))).resolves.toMatchObject(foundDay)
+
+    await profiles.revoke(profile.profileId)
+    expect((await getDay(env, activeBearer, dependencies)).status).toBe(401)
+
+    expect(refreshDropbox).toHaveBeenCalledTimes(1)
+    expect(providerFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('refreshes and retries once when the provider rejects a cached token', async () => {
+    const { env, createBearer } = await linkProfile('google-drive')
+    const bearer = await createBearer()
+    const accepted = new Set(['access-1'])
+    const { providerFetch, seen } = providerRoutes(accepted)
+    const refreshGoogle = vi
+      .fn()
+      .mockResolvedValueOnce(providerGrant('access-1'))
+      .mockResolvedValueOnce(providerGrant('access-2'))
+    const dependencies = { fetch: providerFetch, refreshGoogle }
+
+    await expect(toolResult(await getDay(env, bearer, dependencies))).resolves.toMatchObject(foundDay)
+    // Google revokes the access token before it expires.
+    accepted.delete('access-1')
+    accepted.add('access-2')
+    await expect(toolResult(await getDay(env, bearer, dependencies))).resolves.toMatchObject(foundDay)
+
+    expect(refreshGoogle).toHaveBeenCalledTimes(2)
+    expect(seen.map(({ token, status }) => `${status} ${token}`)).toEqual([
+      '200 access-1',
+      '200 access-1',
+      '401 access-1',
+      '200 access-2',
+      '200 access-2',
+    ])
+  })
+
+  it('refreshes an entry once it is within two minutes of expiry', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const issuedAt = Date.parse('2026-07-16T12:00:00.000Z')
+    vi.setSystemTime(issuedAt)
+    const { env, createBearer } = await linkProfile()
+    const bearer = await createBearer()
+    const { providerFetch, seen } = providerRoutes(new Set(['access-1', 'access-2']))
+    const refreshDropbox = vi
+      .fn()
+      .mockResolvedValueOnce(providerGrant('access-1'))
+      .mockResolvedValueOnce(providerGrant('access-2'))
+    const dependencies = { fetch: providerFetch, refreshDropbox }
+
+    await toolResult(await getDay(env, bearer, dependencies))
+    // expires_in is 3600 s: still usable 2 min 1 s before expiry...
+    vi.setSystemTime(issuedAt + (3600 - 121) * 1000)
+    await toolResult(await getDay(env, bearer, dependencies))
+    // ...but not 1 min 59 s before it.
+    vi.setSystemTime(issuedAt + (3600 - 119) * 1000)
+    await toolResult(await getDay(env, bearer, dependencies))
+
+    expect(refreshDropbox).toHaveBeenCalledTimes(2)
+    expect(seen.map(({ token }) => token)).toEqual(['access-1', 'access-1', 'access-2'])
   })
 })
 

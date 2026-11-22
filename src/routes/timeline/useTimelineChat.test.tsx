@@ -322,3 +322,72 @@ describe('useTimelineChat send result', () => {
     expect(sent).toBe(true)
   })
 })
+
+describe('chat history sent to the model', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const sentMessages = (call: number) =>
+    (mocks.chat.mock.calls[call][0] as { messages: { role: string; content: string }[] }).messages
+
+  it('sends an earlier cited reply without its display-only citation markers', async () => {
+    mocks.buildContextDays.mockResolvedValue([{ dayId: '2026-09-05', contentMd: 'bought milk and bread' }])
+    mocks.chat.mockResolvedValueOnce({ text: 'You bought milk <ref day="2026-09-05" quote="bought milk"/> today.', raw: null })
+    mocks.chat.mockResolvedValueOnce({ text: 'About two euros.', raw: null })
+    const { result } = renderHook(() => useChatHarness(vi.fn(async () => undefined)))
+
+    await act(async () => {
+      await result.current.handleChatSend('What did I buy?')
+    })
+    expect(assistantMessage(result.current.messages)?.content).toContain('@@CITATION_0@@')
+
+    await act(async () => {
+      await result.current.handleChatSend('How much was it?')
+    })
+
+    expect(sentMessages(1).slice(1)).toEqual([
+      { role: 'user', content: 'What did I buy?' },
+      { role: 'assistant', content: 'You bought milk  today.' },
+      { role: 'user', content: 'How much was it?' },
+    ])
+  })
+
+  it('does not send an empty assistant turn after a reply that only added a note', async () => {
+    mocks.chat.mockResolvedValueOnce({ text: '<insert text="Buy milk" target_day="2026-07-02"/>', raw: null })
+    mocks.chat.mockResolvedValueOnce({ text: 'You asked me to add milk.', raw: null })
+    const { result } = renderHook(() => useChatHarness(vi.fn(async () => undefined)))
+
+    await act(async () => {
+      await result.current.handleChatSend('Add milk')
+    })
+    expect(assistantMessage(result.current.messages)?.content).toBe('')
+
+    await act(async () => {
+      await result.current.handleChatSend('What did you do?')
+    })
+
+    expect(sentMessages(1).slice(1)).toEqual([
+      { role: 'user', content: 'Add milk' },
+      { role: 'user', content: 'What did you do?' },
+    ])
+  })
+
+  it('does not send an empty assistant turn after a failed request', async () => {
+    mocks.chat.mockRejectedValueOnce(new Error('The browser could not reach the provider.'))
+    mocks.chat.mockResolvedValueOnce({ text: 'Hello again.', raw: null })
+    const { result } = renderHook(() => useChatHarness(vi.fn(async () => undefined)))
+
+    await act(async () => {
+      await result.current.handleChatSend('Hello')
+    })
+    expect(result.current.chatError).toBe('The browser could not reach the provider.')
+
+    await act(async () => {
+      await result.current.handleChatSend('Hello?')
+    })
+
+    expect(sentMessages(1).every((message) => message.content.trim().length > 0)).toBe(true)
+    expect(sentMessages(1).slice(1).map((message) => message.role)).toEqual(['user', 'user'])
+  })
+})

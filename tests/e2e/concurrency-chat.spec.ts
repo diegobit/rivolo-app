@@ -60,9 +60,10 @@ for (const transport of ['BroadcastChannel', 'storage fallback'] as const) {
     const beforeOpen = await revision(page)
     await second.goto('/')
     await expect(note(second)).toHaveText('Original shared note café')
-    // Settings bootstrap persists migrations even for an already configured
-    // database. The newest tab is therefore the writer; the old tab is stale.
-    await expect.poll(() => revision(second)).not.toBe(beforeOpen)
+    // Opening a tab only reads: loading settings that are already stored must
+    // not save, or the first tab would turn read-only before anyone edits.
+    expect(await revision(second)).toBe(beforeOpen)
+    await expect(page.getByRole('status').filter({ hasText: 'This tab is read-only' })).toHaveCount(0)
     signals.length = 0
     await saveNote(second, dayId, 'Updated shared note café — preserve me')
     await expect.poll(() => signals).toContain(transport)

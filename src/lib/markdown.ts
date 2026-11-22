@@ -12,7 +12,12 @@ export type ImportResult = {
   warnings: string[]
 }
 
-const DAY_MARKER = /^<!--[ \t]*day:(\d{4}-\d{2}-\d{2})[ \t]*-->[ \t]*\r?$/gm
+// Lines end only at \n. With the m flag, ^ and $ would also match around the
+// Unicode line and paragraph separators U+2028 and U+2029, which content can
+// hold, so a marker hidden behind one would split the day.
+// A match may include the \n before the marker; markerStart skips it.
+const DAY_MARKER = /(?:^|\n)<!--[ \t]*day:(\d{4}-\d{2}-\d{2})[ \t]*-->[ \t]*\r?(?=\n|$)/g
+const markerStart = (match: RegExpMatchArray) => (match.index ?? 0) + (match[0].startsWith('\n') ? 1 : 0)
 const DAY_MARKER_LINE = /^<!--[ \t]*day:\d{4}-\d{2}-\d{2}[ \t]*-->[ \t]*\r?$/
 
 // Exported content lines that could be mistaken for structure are prefixed with
@@ -49,7 +54,7 @@ export const parseMarkdown = (source: string): ImportResult => {
     return { days: [], warnings: ['No day markers found.'] }
   }
 
-  const firstMarkerIndex = matches[0].index ?? 0
+  const firstMarkerIndex = markerStart(matches[0])
   if (source.slice(0, firstMarkerIndex).trim()) {
     warnings.push('Content before the first day marker is ignored.')
   }
@@ -62,7 +67,7 @@ export const parseMarkdown = (source: string): ImportResult => {
     }
 
     const start = (match.index ?? 0) + match[0].length
-    const end = matches[index + 1]?.index ?? source.length
+    const end = matches[index + 1] ? markerStart(matches[index + 1]) : source.length
     const block = source.slice(start, end).replace(/^\n+/, '')
     const lines = block.split('\n')
 
