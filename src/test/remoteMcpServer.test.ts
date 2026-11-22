@@ -775,26 +775,23 @@ describe('hosted MCP provider access token cache', () => {
     expect(seen.map(({ token }) => token)).toEqual(['access-1', 'access-1'])
   })
 
-  it('shares one provider refresh between concurrent cache misses', async () => {
+  // In Workers, waiting on another request's refresh can hang forever if
+  // that request is cancelled, so a cache miss must never wait on one.
+  it('answers a request even while another request\'s refresh never finishes', async () => {
     const { env, createBearer } = await linkProfile()
     const bearer = await createBearer()
-    const { providerFetch } = providerRoutes(new Set(['access-1']))
-    let grant!: (value: ReturnType<typeof providerGrant>) => void
-    const refreshDropbox = vi.fn(
-      () => new Promise<ReturnType<typeof providerGrant>>((resolve) => { grant = resolve }),
-    )
+    const { providerFetch } = providerRoutes(new Set(['access-2']))
+    const refreshDropbox = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<ReturnType<typeof providerGrant>>(() => undefined))
+      .mockResolvedValue(providerGrant('access-2'))
     const dependencies = { fetch: providerFetch, refreshDropbox }
 
-    const first = getDay(env, bearer, dependencies)
-    const second = getDay(env, bearer, dependencies)
-    await vi.waitFor(() => expect(refreshDropbox).toHaveBeenCalled())
-    // Give the second request time to authenticate and reach the token cache.
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    grant(providerGrant('access-1'))
+    void getDay(env, bearer, dependencies)
+    await vi.waitFor(() => expect(refreshDropbox).toHaveBeenCalledTimes(1))
 
-    await expect(toolResult(await first)).resolves.toMatchObject(foundDay)
-    await expect(toolResult(await second)).resolves.toMatchObject(foundDay)
-    expect(refreshDropbox).toHaveBeenCalledTimes(1)
+    await expect(toolResult(await getDay(env, bearer, dependencies))).resolves.toMatchObject(foundDay)
+    expect(refreshDropbox).toHaveBeenCalledTimes(2)
   })
 
   it('misses the cache after Dropbox rotates the refresh token', async () => {
