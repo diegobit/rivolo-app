@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeStorage, createStorage, reopenStorage, type Storage } from '../test/helpers/storage'
 import { archive, createCloud } from '../test/helpers/cloud'
 
@@ -44,6 +44,36 @@ describe.each(['dropbox', 'google-drive'] as const)('%s persisted sync boundary'
       localDirty: false,
       ...(provider === 'dropbox' ? { lastRemoteRev: 'rev-2' } : { lastRemoteVersion: '2' }),
     })
+  })
+
+  it('keeps a note saved while the pull is finishing dirty, so it is still pushed', async () => {
+    await storage.repository.saveDay('2026-06-21', 'previous local copy')
+    const { adapter, cloud, state } = await createCloud(provider, storage)
+    cloud.version = 2
+    await state({ localDirty: false })
+    // The remote copy is hashed after it has replaced the local notes; a save
+    // landing during that step is one the pull knows nothing about.
+    const digest = crypto.subtle.digest.bind(crypto.subtle)
+    const digestSpy = vi.spyOn(crypto.subtle, 'digest').mockImplementationOnce(async (...args) => {
+      await storage.repository.saveDay('2026-06-22', 'typed while pulling')
+      return digest(...args)
+    })
+
+    try {
+      expect(await adapter.pull()).toMatchObject({ status: 'pulled' })
+    } finally {
+      digestSpy.mockRestore()
+    }
+
+    expect((await storage.repository.getDay('2026-06-21'))?.contentMd).toBe('remote text')
+    expect((await storage.repository.getDay('2026-06-22'))?.contentMd).toBe('typed while pulling')
+    expect(await storage.settings.getJsonSetting(`${provider}.state`)).toMatchObject({
+      localDirty: true,
+      ...(provider === 'dropbox' ? { lastRemoteRev: 'rev-2' } : { lastRemoteVersion: '2' }),
+    })
+    expect(await adapter.push()).toMatchObject({ status: 'pushed' })
+    expect(cloud.uploads.at(-1)).toContain('typed while pulling')
+    expect(await storage.settings.getJsonSetting(`${provider}.state`)).toMatchObject({ localDirty: false })
   })
 
   it('refuses an invalid forced remote replacement and leaves local notes and sync revision unchanged', async () => {
