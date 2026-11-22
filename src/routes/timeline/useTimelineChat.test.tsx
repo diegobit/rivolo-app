@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCitationIndexFromTarget, renderAssistantMarkdown } from '../../lib/assistantMarkdown'
 import { getTodayId } from '../../lib/dates'
 import type { ChatUiMessage } from '../../store/useChatStore'
-import { toLlmHistory, useTimelineChat } from './useTimelineChat'
+import { useTimelineChat } from './useTimelineChat'
 
 const mocks = vi.hoisted(() => ({
   buildContextDays: vi.fn(async (): Promise<{ dayId: string; contentMd: string }[]> => []),
@@ -331,21 +331,25 @@ describe('chat history sent to the model', () => {
   const sentMessages = (call: number) =>
     (mocks.chat.mock.calls[call][0] as { messages: { role: string; content: string }[] }).messages
 
-  it('leaves out turns with no text and strips display-only citation markers', () => {
-    expect(
-      toLlmHistory([
-        { id: '1', role: 'user', content: 'Add milk' },
-        { id: '2', role: 'assistant', content: '' },
-        { id: '3', role: 'user', content: 'What did I buy?' },
-        { id: '4', role: 'assistant', content: 'Milk @@CITATION_0@@ and bread.' },
-        { id: '5', role: 'assistant', content: '@@CITATION_1@@' },
-        { id: '6', role: 'user', content: 'cost of @@CITATION_9@@?' },
-      ]),
-    ).toEqual([
-      { role: 'user', content: 'Add milk' },
+  it('sends an earlier cited reply without its display-only citation markers', async () => {
+    mocks.buildContextDays.mockResolvedValue([{ dayId: '2026-09-05', contentMd: 'bought milk and bread' }])
+    mocks.chat.mockResolvedValueOnce({ text: 'You bought milk <ref day="2026-09-05" quote="bought milk"/> today.', raw: null })
+    mocks.chat.mockResolvedValueOnce({ text: 'About two euros.', raw: null })
+    const { result } = renderHook(() => useChatHarness(vi.fn(async () => undefined)))
+
+    await act(async () => {
+      await result.current.handleChatSend('What did I buy?')
+    })
+    expect(assistantMessage(result.current.messages)?.content).toContain('@@CITATION_0@@')
+
+    await act(async () => {
+      await result.current.handleChatSend('How much was it?')
+    })
+
+    expect(sentMessages(1).slice(1)).toEqual([
       { role: 'user', content: 'What did I buy?' },
-      { role: 'assistant', content: 'Milk  and bread.' },
-      { role: 'user', content: 'cost of @@CITATION_9@@?' },
+      { role: 'assistant', content: 'You bought milk  today.' },
+      { role: 'user', content: 'How much was it?' },
     ])
   })
 

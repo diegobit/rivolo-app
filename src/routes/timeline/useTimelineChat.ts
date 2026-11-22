@@ -32,7 +32,7 @@ const normalizeCitationText = (value: string) =>
 // What earlier turns look like to the model. A reply that only added a note,
 // or one that failed, has no text, and providers such as Anthropic reject a
 // request holding an empty message. Citation markers are display-only.
-export const toLlmHistory = (messages: ChatUiMessage[]): LlmMessage[] =>
+const toLlmHistory = (messages: ChatUiMessage[]): LlmMessage[] =>
   messages
     .map((message) => ({
       role: message.role,

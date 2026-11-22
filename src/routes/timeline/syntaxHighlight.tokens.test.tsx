@@ -2,13 +2,12 @@ import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { renderSyntaxLine } from './syntaxHighlight'
 
-const TOKEN_SELECTOR = 'span.font-bold, span.font-semibold'
-
 const highlightedTokens = (line: string, query = '') => {
   const { container } = render(<p>{renderSyntaxLine(line, query, 'line')}</p>)
+  // On a plain line, only tags and mentions get their own element.
   return {
     container,
-    tokens: [...container.querySelectorAll(TOKEN_SELECTOR)].map((node) => node.textContent),
+    tokens: [...container.querySelectorAll('p > span')].map((node) => node.textContent),
   }
 }
 

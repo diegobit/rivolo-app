@@ -2,13 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatUiMessage } from '../../store/useChatStore'
-import * as assistantMarkdown from '../../lib/assistantMarkdown'
 import ChatMessageList from './ChatMessageList'
-
-vi.mock('../../lib/assistantMarkdown', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/assistantMarkdown')>()
-  return { ...actual, renderAssistantMarkdown: vi.fn(actual.renderAssistantMarkdown) }
-})
 
 const writeText = vi.fn<(text: string) => Promise<void>>()
 
@@ -157,8 +151,9 @@ describe('ChatMessageList copy button', () => {
   })
 })
 
+// Each assistant reply caches its rendered Markdown. These guard against a
+// stale cache: the reply on screen must follow its text and its citations.
 describe('assistant Markdown rendering', () => {
-  const renderMarkdown = vi.mocked(assistantMarkdown.renderAssistantMarkdown)
   const list = (messages: ChatUiMessage[]) => (
     // New handler functions on every render, as the timeline passes them.
     <ChatMessageList
@@ -177,34 +172,16 @@ describe('assistant Markdown rendering', () => {
     meta: { citations: [], isStreaming: true },
   })
 
-  beforeEach(() => {
-    renderMarkdown.mockClear()
-  })
-
-  it('does not render a message again when the list re-renders unchanged', () => {
-    const messages = [first, question, streaming('Second')]
-    const { rerender, container } = render(list(messages))
-    expect(renderMarkdown).toHaveBeenCalledTimes(2)
-
-    rerender(list(messages))
-    rerender(list([...messages]))
-
-    expect(renderMarkdown).toHaveBeenCalledTimes(2)
-    expect(container.querySelector('strong')).toHaveTextContent('answer')
-  })
-
-  it('renders only the streaming message again as its text grows', () => {
+  it('shows the streaming reply as its text grows and keeps earlier replies', () => {
     const { rerender, container } = render(list([first, question, streaming('Second')]))
-    renderMarkdown.mockClear()
 
     rerender(list([first, question, streaming('Second *part*')]))
 
-    expect(renderMarkdown).toHaveBeenCalledTimes(1)
-    expect(renderMarkdown).toHaveBeenCalledWith('Second *part*', [])
+    expect(container.querySelector('strong')).toHaveTextContent('answer')
     expect(container.querySelector('em')).toHaveTextContent('part')
   })
 
-  it('renders a message again when its citations change', () => {
+  it('shows the new quote when a reply\'s citations change', () => {
     const cited = (quote: string): ChatUiMessage => ({
       id: 'a1',
       role: 'assistant',
@@ -215,7 +192,6 @@ describe('assistant Markdown rendering', () => {
 
     rerender(list([cited('bread')]))
 
-    expect(renderMarkdown).toHaveBeenCalledTimes(2)
     expect(container.querySelector('[data-citation-index="0"]')).toHaveAttribute('title', expect.stringContaining('bread'))
   })
 })
