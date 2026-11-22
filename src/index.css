@@ -141,14 +141,6 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'Bree Serif';
-  src: url('/fonts/BreeSerif-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 /* Settings › Appearance › Animations turned off (see src/lib/animations.ts):
    every transition and animation finishes at once, landing on its end state. */
 :root[data-animations='off'] {
