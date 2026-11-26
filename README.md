@@ -8,9 +8,9 @@ Rivolo (REE-voh-loh) is the Italian word for "small stream". Every day, you writ
 
 Try it here: [rivolo.aitlab.it](https://rivolo.aitlab.it)
 
-Rivolo is a local-first PWA deployed on Cloudflare Pages. Notes, settings, AI requests, and cloud file transfers normally run in the browser. Same-origin Pages Functions exchange and refresh Google Drive, Dropbox, and OneDrive OAuth credentials. For OneDrive, an authenticated Cloudflare WebSocket relay distributes day-change events and a migration registry stores source/destination identifiers; these services never receive note contents. AI prompts and relevant notes are sent only when you ask, directly to the provider you select: Gemini, Anthropic, OpenAI, or your own OpenAI-compatible endpoint. Dropbox, Google Drive, or OneDrive receives notes only if you enable that sync provider. Custom endpoints must be reachable from the device and allow Rivolo's browser origin, headers, and HTTPS connection; on a phone, `localhost` refers to the phone itself.
+Rivolo is a local-first PWA deployed on Cloudflare Pages. Notes, settings, AI requests, and cloud file transfers normally run in the browser. Same-origin Pages Functions exchange and refresh Google Drive, Dropbox, and OneDrive OAuth credentials. An authenticated Cloudflare WebSocket relay distributes day-change events for all three providers. The OneDrive migration registry also stores source and destination identifiers. Both services handle metadata only. AI prompts and relevant notes are sent only when you ask, directly to the provider you select: Gemini, Anthropic, OpenAI, or your own OpenAI-compatible endpoint. Dropbox, Google Drive, or OneDrive receives notes only if you enable that sync provider. Custom endpoints must be reachable from the device and allow Rivolo's browser origin, headers, and HTTPS connection; on a phone, `localhost` refers to the phone itself.
 
-Hosted MCP Agent access is optional and changes that boundary: when a user enables it in Settings, Rivolo stores an encrypted provider credential and target metadata in Cloudflare D1. The authenticated MCP Worker then downloads and, for additive tools, uploads that user's configured cloud Markdown file. D1 stores credentials, profiles, tokens, and operation metadata—not the notes themselves.
+Hosted MCP Agent access is optional and changes that boundary: when a user enables it in Settings, Rivolo stores an encrypted provider credential and target metadata in Cloudflare D1. The authenticated MCP Worker then downloads and, for additive tools, uploads Markdown for the selected cloud notebook. D1 stores credentials, profiles, tokens, and operation metadata. The Worker processes note contents during a request.
 
 > [!NOTE]
 > The app was completely developed with coding agents. I use it daily. I wrote about this [here](https://diegobit.com/post/rivolo).
@@ -19,12 +19,12 @@ Hosted MCP Agent access is optional and changes that boundary: when a user enabl
 
 Rivolo supports two MCP modes:
 
-- **Local:** a read-only stdio server that queries a local Rivolo Markdown file. Build it with `npm run mcp:build`, then point your MCP client at `dist-mcp/mcp/index.js` with `RIVOLO_NOTES_FILE` set to the file.
-- **Hosted:** a multi-user Streamable HTTP server at `https://mcp.aitlab.it/mcp`. Each user enables Agent access for their active Dropbox or Google Drive profile in Rivolo Settings. Clients authenticate with Rivolo OAuth or a personal access token created in Settings. Hosted writes are additive: append by default, with optional prepend; they never replace or delete a day.
+- **Local:** a read-only stdio server that queries a local Rivolo Markdown file or synced daily notebook folder. Build it with `npm run mcp:build`, then point your MCP client at `dist-mcp/mcp/index.js` with `RIVOLO_NOTES_FILE` set to the file or folder.
+- **Hosted:** a multi-user Streamable HTTP server at `https://mcp.aitlab.it/mcp`. Each user enables Agent access for their active Dropbox, Google Drive, or OneDrive profile in Rivolo Settings. Clients authenticate with Rivolo OAuth or a personal access token created in Settings. Hosted writes are additive: append by default, with optional prepend; they never replace or delete a day.
 
 The hosted server reads only the last cloud-synced state. It exposes the local read tools plus `add_to_day` and `add_to_today`, and uses durable `operation_id` replay protection for writes. See [the MCP guide](mcp/README.md) for tools and local client configuration, and [the OAuth notes](docs/mcp-oauth.md) for the hosted authorization design.
 
-The local MCP server reads a single-file export, not OneDrive's daily folder. Hosted Agent access currently supports Dropbox and Google Drive only. See [MCP setup and tools](mcp/README.md).
+Hosted Agent access supports both formats on Dropbox and Google Drive. Enable it for OneDrive after the daily notebook folder is ready. Agent writes notify open OneDrive apps, and new lines show “Agent · <Microsoft display name>” in the Authors view when the profile has a display name. See [MCP setup and tools](mcp/README.md).
 
 ## Run
 
@@ -95,12 +95,12 @@ This fork targets `https://rivolo.aitlab.it` in the AIT Cloudflare account. The 
 
 The providers use two kinds of values:
 
-- **Public** (client ids, allowed origins) — kept in `wrangler.toml` for `localhost`, `rivolo.aitlab.it`, and `dev.aitlab.it`. Set your own provider client IDs there.
+- **Public** (client ids, allowed origins) — kept in `wrangler.toml` for `localhost`, `rivolo.aitlab.it`, and `rivolo-dev.aitlab.it`. Set your own provider client IDs there.
 - **Secret** (client secrets, encryption keys) — never in the repo. Put them in a local `.dev.vars` file for development, and add them as encrypted secrets in the Cloudflare Pages dashboard for production. Start from `.dev.vars.example`. Any long random string works for the encryption keys.
 
 ### Google Drive
 
-Create a Google Cloud OAuth web client, enable the Google Drive API, and list your app's origins (`localhost` and your domain) as authorized JavaScript origins. Rivolo asks only for the `drive.file` scope and manages a single `/rivolo/inbox.md` file.
+Create a Google Cloud OAuth web client, enable the Google Drive API, and list your app's origins (`localhost` and your domain) as authorized JavaScript origins. Rivolo asks for the `drive.file` scope. Daily sync supports devices on the same Google account.
 
 Secrets you'll need:
 
@@ -113,11 +113,37 @@ One gotcha: if the Google consent screen stays in Testing mode, sign-ins expire 
 
 ### Dropbox
 
-Create a Dropbox app with `files.content.read` and `files.content.write` access, and add your callback URLs (`https://rivolo.aitlab.it/auth/dropbox/callback` and the `localhost` equivalent). Dropbox needs no client secret — just one encryption key:
+Create a Dropbox app with `files.metadata.read`, `files.content.read`, and `files.content.write` access, and add your callback URLs (`https://rivolo.aitlab.it/auth/dropbox/callback` and the `localhost` equivalent). Dropbox needs no client secret — just one encryption key:
 
 ```bash
 DROPBOX_TOKEN_ENCRYPTION_KEY=...
 ```
+
+### Upgrade Dropbox or Google Drive to daily sync
+
+Open **Settings → Cloud sync**, select the connected provider, then choose
+**Upgrade to daily sync**. Rivolo stores one Markdown file per day in a folder
+named after the original file, such as `inbox.rivolo-daily`. Dropbox organizes
+days by year and month. Google Drive stores the days directly in the managed
+folder. The original Markdown file stays in place. The daily folder also keeps a snapshot of the original days so later upgrades can merge edits from older clients. Update your other devices
+and run the upgrade there too. Later edits to the original file are checked
+during full sync, so an older device can finish uploading while you upgrade.
+
+Daily sync transfers only changed days, merges concurrent line edits, and
+shows author attribution in the editor. On a phone, turn on **Authors** from
+the menu. The app uses live updates when the relay is available. It also checks
+the provider periodically while the app is open and when you return.
+
+Dropbox uses revision-checked writes. Google Drive checks revision history
+after it writes and keeps the day pending when it cannot verify the result.
+If two devices create the same Drive day at once, Rivolo keeps both files
+and reports the duplicate. Merge the copies and move the extra file out of
+the notebook before retrying.
+
+If you already use hosted Agent access, Rivolo moves the existing profile
+after the daily notebook syncs. If that step is interrupted, choose
+**Move Agent access to daily sync** in Settings. A manual export still produces
+one portable Markdown notebook.
 
 ### OneDrive — shared notes across Microsoft accounts
 
@@ -130,7 +156,7 @@ OneDrive requires your own Microsoft app registration and deployment configurati
 5. Deploy the event Worker first with `npm run deploy:events`, then deploy the app and Pages Functions through your usual Pages deployment. `wrangler.toml` binds `ONEDRIVE_EVENTS` to the external `rivolo-onedrive-events` Worker (including production). Keep both in the same Cloudflare account. The relay reuses `ONEDRIVE_TOKEN_ENCRYPTION_KEY` with a separate ticket key derivation; no additional secret is needed.
 6. Locally, run `npm run dev:cloud`. It builds the app and starts Pages and the relay Worker in one Wrangler process using both configuration files. Restart an already-running Pages server after updating this command. Starting Pages alone leaves the external Durable Object unavailable: ticket connections and migration requests return 503. Plain Vite does not serve OAuth or WebSocket endpoints. `npm run dev:events` remains available for isolated Worker development.
 
-OneDrive stores a notebook in a folder, with one Markdown file per day: `/Rivolo/2026/10/2026-10-01.md`. Google Drive and Dropbox keep their existing single-file format. Manual export still produces one portable Markdown notebook.
+OneDrive stores a notebook in a folder, with one Markdown file per day: `/Rivolo/2026/10/2026-10-01.md`. Dropbox and Google Drive can upgrade from their single-file format using the steps above.
 
 To share the notes:
 
@@ -167,13 +193,21 @@ Add `rivolo.aitlab.it` as a custom domain on the `rivolo-app` Pages project. The
 
 | Resource | Production | Dev / preview |
 | --- | --- | --- |
-| App origin | `https://rivolo.aitlab.it` | `https://dev.aitlab.it` |
+| App origin | `https://rivolo.aitlab.it` | `https://rivolo-dev.aitlab.it` |
 | MCP endpoint | `https://mcp.aitlab.it/mcp` | `https://mcp-dev.aitlab.it/mcp` |
 | MCP Worker / D1 name | `rivolo-mcp` | `rivolo-mcp-dev` |
 | D1 ID | `daf4016f-71ca-41e7-b03b-641785a2f76c` | `3f72928e-d1b2-4596-87f1-ff98b96327e0` |
 | OneDrive event Worker | `rivolo-onedrive-events` | `rivolo-onedrive-events-dev` |
 
-The two empty D1 databases were created in AIT on October 6, 2026. Apply the migrations and configure secrets before deploying the MCP services. Deploy the OneDrive event Worker in each environment before deploying Pages with its corresponding binding; use `npx wrangler deploy --config workers/onedrive-events/wrangler.toml --env dev` for the preview relay. Configuring these names does not deploy Workers or attach custom domains.
+The two empty D1 databases were created in AIT on October 6, 2026. Apply the migrations and configure secrets before deploying the MCP services. Deploy the OneDrive event Worker in each environment before deploying Pages and the MCP Worker with their corresponding bindings; use `npx wrangler deploy --config workers/onedrive-events/wrangler.toml --env dev` for the preview relay. Configuring these names does not deploy Workers or attach custom domains.
+
+Add `rivolo-dev.aitlab.it` as a custom domain on the same Pages project and
+point its proxied CNAME to `dev.rivolo-app.pages.dev` so it serves the `dev`
+branch. Add `https://rivolo-dev.aitlab.it` to Google’s authorized JavaScript
+origins. Register `https://rivolo-dev.aitlab.it/auth/dropbox/callback` and
+`https://rivolo-dev.aitlab.it/auth/onedrive/callback` with their providers.
+Browser storage and login cookies belong to each origin: keep the old dev
+domain available until any local-only notes have been exported or synced.
 
 The MCP branch preview uses `https://mcp-dev.aitlab.it/mcp` and the separate
 `rivolo-mcp-dev` D1 database. Pages selects `[env.preview]`; Worker commands
@@ -186,12 +220,12 @@ npx wrangler deploy --config wrangler.mcp.toml --env dev
 
 Set preview secrets in the Pages project's Preview environment. The Worker
 needs `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY` (identical to Pages Preview) and
-`GOOGLE_CLIENT_SECRET`. Pages Preview also needs
-`MCP_PROFILE_SESSION_ENCRYPTION_KEY`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, and
-`DROPBOX_TOKEN_ENCRYPTION_KEY`. Use separate encryption keys from production.
+`GOOGLE_CLIENT_SECRET` and `ONEDRIVE_CLIENT_SECRET`. Pages Preview also needs
+`MCP_PROFILE_SESSION_ENCRYPTION_KEY` and the cookie encryption keys for each
+configured provider. Use separate encryption keys from production.
 
 The dev OAuth issuer is:
-`https://dev.aitlab.it/api/mcp/oauth`.
+`https://rivolo-dev.aitlab.it/api/mcp/oauth`.
 Complete provider login and Agent access setup on that same hostname.
 Provider OAuth settings must allow the chosen app origin and callback URLs. Branch preview origins must be explicitly added to the allowed origins and registered with the provider before using OAuth on those previews.
 
@@ -269,9 +303,10 @@ Deploy the Worker once, without attaching its public custom domain yet, and then
 npx wrangler deploy --config wrangler.mcp.toml
 npx wrangler secret put MCP_PROVIDER_TOKEN_ENCRYPTION_KEY --config wrangler.mcp.toml
 npx wrangler secret put GOOGLE_CLIENT_SECRET --config wrangler.mcp.toml
+npx wrangler secret put ONEDRIVE_CLIENT_SECRET --config wrangler.mcp.toml
 ```
 
-Paste the same first generated value when the Worker prompts for `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY`. The last command prompts for the existing Google OAuth client secret. Cloudflare does not reveal existing secret values, so keep the source value in a password manager or local untracked `.dev.vars` file. Dropbox does not require a client secret.
+Paste the same first generated value when the Worker prompts for `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY`. Use the same Google and Microsoft OAuth client secrets as on Pages. Cloudflare does not reveal existing secret values, so keep the source value in a password manager or local untracked `.dev.vars` file. Dropbox does not require a client secret.
 
 ### 5. Protect the OAuth endpoints
 
@@ -312,7 +347,7 @@ Then enable Agent access in Rivolo Settings and test both authentication paths:
 2. connect an OAuth-capable client and complete the Rivolo consent screen;
 3. run a representative read, append, prepend, and repeated `operation_id` call;
 4. verify the app sees the cloud edit when it returns to the foreground;
-5. repeat with disposable Dropbox and Google Drive accounts before broad rollout.
+5. repeat with disposable Dropbox, Google Drive, and OneDrive notebooks before broad rollout.
 
 Do not log bearer tokens, OAuth codes, provider refresh tokens, or note contents. Revoking Agent access destroys the stored provider credential and revokes its personal tokens and OAuth grants.
 

@@ -235,7 +235,7 @@ export const migrateOneDriveFile = async (state: OneDriveState, sourceItem: Driv
   if (!completedElsewhere) await registryRequest(source, 'complete', destination, journal.generation!, journal.lease!)
   const link = await folderSharingLink(destination)
   await assertSnapshot()
-  const target: NotebookTarget = { folder: destination, account: state.accountId, generation: state.targetGeneration + 1 }
+  const target: NotebookTarget = { provider: 'onedrive', folder: destination, account: state.accountId, generation: state.targetGeneration + 1 }
   const prepared = await Promise.all([...final].map(async ([id, result]) => ({ id, ...result, hash: await hashSyncContent(result.content) })))
   const currentDays = await listAllDays()
   await runOneDriveStateExclusive(() => runAtomicDatabaseMutation((db) => {
@@ -261,7 +261,7 @@ export const migrateOneDriveFile = async (state: OneDriveState, sourceItem: Driv
       migrationStatus: 'complete', migrationMessage: null, migrationSource: source, lastRemoteRev: null, lastPushedHash: null,
       mergeBaseContent: null, lastSyncAt: Date.now(), localDirty: false })
   }))
-  await markSyncLocalDirty(undefined, { excludeOneDrive: true })
+  await markSyncLocalDirty(undefined, { excludeProvider: 'onedrive' })
   await persistDailyCheckpoint()
   return target
 }
@@ -269,7 +269,7 @@ export const migrateOneDriveFile = async (state: OneDriveState, sourceItem: Driv
 let preparing: Promise<NotebookTarget> | null = null
 export const prepareOneDriveNotebook = (choice?: 'local' | 'cloud') => {
   if (preparing) return preparing
-  preparing = (async () => {
+  preparing = (async (): Promise<NotebookTarget> => {
     let state = await getOneDriveState()
     if (!state.connected) throw new Error('Connect OneDrive before syncing.')
     if (!state.accountId) {
@@ -280,7 +280,7 @@ export const prepareOneDriveNotebook = (choice?: 'local' | 'cloud') => {
       await updateOneDriveState({ accountId: account.id, accountName: account.displayName ?? null, accountEmail: account.mail ?? account.userPrincipalName ?? null })
       state = await getOneDriveState()
     }
-    if (state.folderId && state.migrationStatus === 'complete') return { folder: state.folderId, account: state.accountId, generation: state.targetGeneration }
+    if (state.folderId && state.migrationStatus === 'complete') return { provider: 'onedrive', folder: state.folderId, account: state.accountId, generation: state.targetGeneration }
     if (getPendingEditorDayIds().size) throw new Error('OneDrive is waiting for your drafts to be saved before preparing the notebook.')
     try {
       const target = state.filePath || DEFAULT_ONEDRIVE_PATH
@@ -306,7 +306,7 @@ export const prepareOneDriveNotebook = (choice?: 'local' | 'cloud') => {
       const folder = itemAddress(item)
       await assertContext(state)
       await updateOneDriveState({ folderId: folder, migrationStatus: 'complete', migrationMessage: null, lastRemoteRev: null })
-      return { folder, account: state.accountId, generation: state.targetGeneration }
+      return { provider: 'onedrive', folder, account: state.accountId, generation: state.targetGeneration }
     } catch (error) {
       await assertContext(state)
       await updateOneDriveState({ migrationStatus: 'blocked', migrationMessage: error instanceof Error ? error.message : 'OneDrive migration is waiting. Local notes remain available.' })

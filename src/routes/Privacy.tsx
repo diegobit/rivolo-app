@@ -53,15 +53,26 @@ export default function Privacy() {
             <span className="font-semibold text-slate-700">D) Optional cloud sync</span>
             <br />
             If you connect Dropbox, Google Drive, or OneDrive, the selected provider processes the notes data you choose to
-            sync. OneDrive daily files also contain line editor names and recorded edit dates, visible to people who
+            sync. Daily files also contain line editor names and recorded edit dates, visible to people who
             can read the notebook folder. For these providers, a Cloudflare Pages Function exchanges and refreshes OAuth credentials using an
             encrypted HttpOnly cookie; note contents are transferred directly between your browser and the selected
-            provider and do not pass through those functions. For OneDrive live updates, a Cloudflare function uses
-            your access token to verify notebook folder access with Microsoft Graph, then issues a short-lived encrypted
+            provider and do not pass through those functions. For live updates, a Cloudflare function uses
+            your access token to verify access with the selected sync provider and issue a short-lived encrypted
             WebSocket ticket. The relay distributes day/file identifiers and revisions, never note text or author names.
             It stores the latest revision per file in a room identified by a hash of the folder identifier.
-            A migration registry also retains source/destination identifiers, migration status and coordination
+            The OneDrive migration registry retains source/destination identifiers, migration status and coordination
             leases so devices use the same daily notebook folder. It does not store note contents.
+          </p>
+          <p>
+            <span className="font-semibold text-slate-700">E) Optional Agent access</span>
+            <br />
+            If you enable Agent access in Settings, Rivolo stores an encrypted copy of your cloud provider's refresh
+            credential in Cloudflare D1 along with the selected notebook and access records. When a connected agent requests
+            a read or write, Rivolo's hosted Worker processes the note text and returns the requested data to the agent.
+            D1 keeps access and write-operation records. The notebook files stay with your sync provider.
+            Microsoft's Files.ReadWrite.All permission can reach files beyond the notebook, including files shared with you.
+            The hosted Worker uses it to read and write days in the OneDrive folder saved in your Agent access profile.
+            Agent-written lines can show your Microsoft display name to people with access to that notebook.
           </p>
         </div>
 
@@ -70,7 +81,8 @@ export default function Privacy() {
         </h2>
         <p className="mt-2">
           Rivolo does not use analytics, advertising, or profiling cookies. It uses one first-party technical cookie
-          per provider, only when you explicitly connect Google Drive, Dropbox, or OneDrive:
+          per provider, only when you explicitly connect Google Drive, Dropbox, or OneDrive. Agent access uses a separate
+          technical cookie.
         </p>
         <div className="mt-2 space-y-2">
           <p>
@@ -87,10 +99,17 @@ export default function Privacy() {
             SameSite=Strict. They are not available to browser JavaScript and are not used for tracking or profiling.
           </p>
           <p>
+            <span className="font-semibold text-slate-700">Agent access cookie</span>
+            <br />
+            The encrypted, first-party <code className="break-all text-xs">rivolo_mcp_profile</code> cookie identifies
+            your Agent access profile in Settings and during agent authorization. It is HttpOnly and scoped to
+            <code className="ml-1 break-all text-xs">/api/mcp</code>.
+          </p>
+          <p>
             <span className="font-semibold text-slate-700">Other technical browser storage</span>
             <br />
             IndexedDB stores the local notes database, chat history, settings, optional AI API keys, and sync
-            metadata, per-day OneDrive baselines, migration recovery snapshots and pending event identifiers. Session storage temporarily holds Dropbox and OneDrive OAuth validation data and the timeline scroll
+            metadata, daily sync baselines, migration recovery snapshots and pending event identifiers. Session storage temporarily holds Dropbox and OneDrive OAuth validation data and the timeline scroll
             position. Older versions also queued OneDrive event identifiers in local storage. Local storage holds the optional debug-logging preference and technical tab-coordination
             entries (a random per-tab identifier and a data-revision counter, with no notes content or personal
             data) that let multiple open Rivolo tabs agree which one runs sync. The PWA service
@@ -113,12 +132,13 @@ export default function Privacy() {
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">6) Recipients</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Cloudflare (hosting/CDN/security and Google Drive/Dropbox/OneDrive OAuth credential exchange, and OneDrive update events and migration coordination)</li>
+          <li>Cloudflare (hosting/CDN/security and Google Drive/Dropbox/OneDrive OAuth credential exchange, and daily update events and OneDrive migration coordination)</li>
           <li>Google (Gemini API), Anthropic, or OpenAI, only when selected for an AI request</li>
           <li>The operator of an OpenAI-compatible endpoint you choose, only when that endpoint is selected</li>
           <li>Dropbox (sync provider)</li>
           <li>Google Drive (sync provider)</li>
           <li>Microsoft OneDrive (sync provider)</li>
+          <li>Cloudflare and the agents you authorize (optional hosted Agent access)</li>
         </ul>
 
         <h2 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">7) International transfers</h2>
@@ -136,6 +156,10 @@ export default function Privacy() {
             in notes export.
           </li>
           <li>Cloudflare technical/security data: retained per operational/security configuration.</li>
+          <li>
+            Disabling Agent access removes the server's stored refresh credential and revokes the profile's personal tokens
+            and agent authorizations. Data already returned to an agent is subject to that agent's retention practices.
+          </li>
           <li>
             AI provider, custom endpoint, Dropbox, Google Drive, and OneDrive data: subject to the selected operator's retention
             practices and your account settings. Disconnecting Google Drive, Dropbox, or OneDrive clears that provider's refresh

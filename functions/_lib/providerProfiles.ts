@@ -1,6 +1,6 @@
 import { decryptToken, encryptToken } from './tokenCookie'
 
-export type Provider = 'dropbox' | 'google-drive'
+export type Provider = 'dropbox' | 'google-drive' | 'onedrive'
 
 export type DropboxTarget = {
   path: string
@@ -12,12 +12,20 @@ export type GoogleDriveTarget = {
   fileName: string
 }
 
+// OneDrive notebooks are always daily. The folder is its canonical Graph
+// address, /drives/{drive}/items/{item}, and is also the profile's daily folder.
+export type OneDriveTarget = {
+  folder: string
+  folderName: string
+}
+
 type ProviderProfileInputBase = {
   providerAccountId: string
   providerEmail?: string | null
   providerName?: string | null
   timeZone: string
   refreshToken: string
+  dailyFolderId?: string | null
 }
 
 export type ProviderProfileInput = ProviderProfileInputBase &
@@ -27,6 +35,7 @@ export type ProviderProfileInput = ProviderProfileInputBase &
         provider: 'google-drive'
         target: Omit<GoogleDriveTarget, 'folderId'> & { folderId?: string | null }
       }
+    | { provider: 'onedrive'; target: OneDriveTarget }
   )
 
 type ProviderProfileMetadataBase = {
@@ -38,18 +47,21 @@ type ProviderProfileMetadataBase = {
   createdAt: string
   updatedAt: string
   revokedAt: string | null
+  dailyFolderId?: string
 }
 
 export type ProviderProfileMetadata = ProviderProfileMetadataBase &
   (
     | { provider: 'dropbox'; target: DropboxTarget }
     | { provider: 'google-drive'; target: GoogleDriveTarget }
+    | { provider: 'onedrive'; target: OneDriveTarget }
   )
 
 type ValidatedProviderProfileInput = ProviderProfileInputBase &
   (
     | { provider: 'dropbox'; target: DropboxTarget }
     | { provider: 'google-drive'; target: GoogleDriveTarget }
+    | { provider: 'onedrive'; target: OneDriveTarget }
   ) & {
     providerEmail: string | null
     providerName: string | null
@@ -69,6 +81,8 @@ type ProviderProfileRow = {
   created_at: string
   updated_at: string
   revoked_at: string | null
+  daily_folder_id: string | null
+  onedrive_folder_name: string | null
 }
 
 type ProviderCredentialRow = {
@@ -88,7 +102,9 @@ const PROFILE_METADATA_COLUMNS = `
   time_zone,
   created_at,
   updated_at,
-  revoked_at
+  revoked_at,
+  daily_folder_id,
+  onedrive_folder_name
 `
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -157,6 +173,16 @@ const validateDropboxPath = (value: unknown) => {
   return path
 }
 
+const ONEDRIVE_ITEM_ADDRESS = /^\/drives\/[A-Za-z0-9!_%.-]+\/items\/[A-Za-z0-9!_%.-]+$/
+
+const validateOneDriveFolder = (value: unknown) => {
+  const folder = requiredText(value, 'target.folder', 1023)
+  if (!ONEDRIVE_ITEM_ADDRESS.test(folder)) {
+    throw new ProviderProfileValidationError('target.folder must be a OneDrive item address.')
+  }
+  return folder
+}
+
 const validateGoogleFileName = (value: unknown) => {
   const fileName = requiredText(value, 'target.fileName', 255)
   if (fileName === '.' || fileName === '..' || /[\\/]/.test(fileName)) {
@@ -168,8 +194,8 @@ const validateGoogleFileName = (value: unknown) => {
 export const validateProviderProfileInput = (
   input: ProviderProfileInput,
 ): ValidatedProviderProfileInput => {
-  if (!input || (input.provider !== 'dropbox' && input.provider !== 'google-drive')) {
-    throw new ProviderProfileValidationError('provider must be dropbox or google-drive.')
+  if (!input || !['dropbox', 'google-drive', 'onedrive'].includes(input.provider)) {
+    throw new ProviderProfileValidationError('provider must be dropbox, google-drive or onedrive.')
   }
 
   const base = {
@@ -178,6 +204,7 @@ export const validateProviderProfileInput = (
     providerName: optionalText(input.providerName, 'providerName', 200),
     timeZone: validateTimeZone(input.timeZone),
     refreshToken: requiredText(input.refreshToken, 'refreshToken', 8192),
+    dailyFolderId: optionalText(input.dailyFolderId, 'dailyFolderId', 512),
   }
 
   if (input.provider === 'dropbox') {
@@ -185,6 +212,19 @@ export const validateProviderProfileInput = (
       ...base,
       provider: 'dropbox',
       target: { path: validateDropboxPath(input.target?.path) },
+    }
+  }
+
+  if (input.provider === 'onedrive') {
+    const folder = validateOneDriveFolder(input.target?.folder)
+    return {
+      ...base,
+      provider: 'onedrive',
+      dailyFolderId: folder,
+      target: {
+        folder,
+        folderName: requiredText(input.target?.folderName, 'target.folderName', 255),
+      },
     }
   }
 
@@ -216,11 +256,23 @@ const toMetadata = (row: ProviderProfileRow): ProviderProfileMetadata => {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revokedAt: row.revoked_at,
+    ...(row.daily_folder_id ? { dailyFolderId: row.daily_folder_id } : {}),
   }
 
   if (row.provider === 'dropbox') {
     if (!row.dropbox_path) throw new Error('Dropbox profile has no target path.')
     return { ...base, provider: 'dropbox', target: { path: row.dropbox_path } }
+  }
+
+  if (row.provider === 'onedrive') {
+    if (!row.daily_folder_id || !row.onedrive_folder_name) {
+      throw new Error('OneDrive profile has an incomplete target.')
+    }
+    return {
+      ...base,
+      provider: 'onedrive',
+      target: { folder: row.daily_folder_id, folderName: row.onedrive_folder_name },
+    }
   }
 
   if (!row.google_file_id || !row.google_file_name) {
@@ -258,6 +310,8 @@ export class ProviderProfileRepository {
       profile.provider === 'google-drive' ? profile.target.folderId : null
     const googleFileName =
       profile.provider === 'google-drive' ? profile.target.fileName : null
+    const oneDriveFolderName =
+      profile.provider === 'onedrive' ? profile.target.folderName : null
 
     const row = await this.db
       .prepare(
@@ -275,8 +329,11 @@ export class ProviderProfileRepository {
           encrypted_refresh_token,
           created_at,
           updated_at,
-          revoked_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+          revoked_at,
+          daily_folder_id,
+          onedrive_folder_name,
+          credential_refreshed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
         ON CONFLICT(provider, provider_account_id) DO UPDATE SET
           provider_email = excluded.provider_email,
           provider_name = excluded.provider_name,
@@ -284,14 +341,21 @@ export class ProviderProfileRepository {
           google_file_id = excluded.google_file_id,
           google_folder_id = excluded.google_folder_id,
           google_file_name = excluded.google_file_name,
+          onedrive_folder_name = excluded.onedrive_folder_name,
+          credential_refreshed_at = excluded.credential_refreshed_at,
           time_zone = excluded.time_zone,
           encrypted_refresh_token = excluded.encrypted_refresh_token,
           updated_at = excluded.updated_at,
-          revoked_at = NULL
+          revoked_at = NULL,
+          daily_folder_id = CASE WHEN mcp_provider_profiles.revoked_at IS NULL
+            THEN COALESCE(mcp_provider_profiles.daily_folder_id, excluded.daily_folder_id)
+            ELSE excluded.daily_folder_id END
         WHERE mcp_provider_profiles.revoked_at IS NOT NULL
           OR (
             mcp_provider_profiles.dropbox_path IS excluded.dropbox_path
             AND mcp_provider_profiles.google_file_id IS excluded.google_file_id
+            AND (mcp_provider_profiles.daily_folder_id IS NULL OR excluded.daily_folder_id IS NULL
+              OR mcp_provider_profiles.daily_folder_id IS excluded.daily_folder_id)
           )
         RETURNING ${PROFILE_METADATA_COLUMNS}`,
       )
@@ -309,15 +373,26 @@ export class ProviderProfileRepository {
         encryptedRefreshToken,
         timestamp,
         timestamp,
+        profile.dailyFolderId ?? null,
+        oneDriveFolderName,
+        timestamp,
       )
       .first<ProviderProfileRow>()
 
     if (!row) {
       throw new ProviderProfileValidationError(
-        'Disable Agent access in the browser where it is enabled before selecting a different file. Existing agents must reconnect.',
+        'Disable Agent access in the browser where it is enabled before selecting a different file or folder. Existing agents must reconnect.',
       )
     }
     return toMetadata(row)
+  }
+
+  async setDailyFolder(profile: ProviderProfileMetadata, folder: string): Promise<boolean> {
+    const result = await this.db.prepare(
+      `UPDATE mcp_provider_profiles SET daily_folder_id = ?, updated_at = ?
+       WHERE profile_id = ? AND updated_at = ? AND revoked_at IS NULL AND (daily_folder_id IS NULL OR daily_folder_id = ?)`,
+    ).bind(folder, this.now().toISOString(), validateProfileId(profile.profileId), profile.updatedAt, folder).run()
+    return (result.meta.changes ?? 0) > 0
   }
 
   async getMetadata(profileId: string): Promise<ProviderProfileMetadata | null> {
@@ -347,6 +422,9 @@ export class ProviderProfileRepository {
     return decryptToken(row.encrypted_refresh_token, this.encryptionSecret)
   }
 
+  // Records the refresh in credential_refreshed_at, not updated_at: Settings
+  // uses updated_at to detect concurrent profile changes, and a background
+  // token refresh is not one.
   async updateCredential(profileId: string, refreshToken: string): Promise<void> {
     const credential = requiredText(refreshToken, 'refreshToken', 8192)
     const encryptedRefreshToken = await encryptToken(
@@ -356,7 +434,7 @@ export class ProviderProfileRepository {
     const result = await this.db
       .prepare(
         `UPDATE mcp_provider_profiles
-        SET encrypted_refresh_token = ?, updated_at = ?
+        SET encrypted_refresh_token = ?, credential_refreshed_at = ?
         WHERE profile_id = ? AND revoked_at IS NULL`,
       )
       .bind(

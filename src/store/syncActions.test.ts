@@ -32,6 +32,7 @@ vi.mock('./useSyncStore', () => ({
       setSyncAttention: stores.setSyncAttention,
       syncAttention: stores.syncAttention,
       activeProvider: 'google-drive',
+      status: { daily: false, targetName: '/rivolo/inbox.md' },
     }),
   },
 }))

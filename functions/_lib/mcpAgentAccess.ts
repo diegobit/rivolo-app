@@ -18,6 +18,7 @@ export type McpAgentAccessEnv = {
 
 type DropboxEnableBody = {
   timeZone: string
+  dailyFolderId?: string
   target: {
     path: string
   }
@@ -25,8 +26,16 @@ type DropboxEnableBody = {
 
 type GoogleDriveEnableBody = {
   timeZone: string
+  dailyFolderId?: string
   target: {
     fileId: string
+  }
+}
+
+type OneDriveEnableBody = {
+  timeZone: string
+  target: {
+    folder: string
   }
 }
 
@@ -55,8 +64,15 @@ const validateTimeZone = (value: unknown) => {
   return timeZone
 }
 
+const dailyFolderId = (value: unknown, pattern: RegExp) => {
+  if (value === undefined) return undefined
+  const ref = requiredText(value, 'dailyFolderId', 512)
+  if (!pattern.test(ref)) throw new ProviderProfileValidationError('dailyFolderId is invalid.')
+  return ref
+}
+
 export const parseDropboxEnableBody = (body: unknown): DropboxEnableBody => {
-  const input = body as { timeZone?: unknown; target?: { path?: unknown } } | null
+  const input = body as { timeZone?: unknown; dailyFolderId?: unknown; target?: { path?: unknown } } | null
   const path = requiredText(input?.target?.path, 'target.path', 1024)
   if (
     !path.startsWith('/') ||
@@ -72,16 +88,32 @@ export const parseDropboxEnableBody = (body: unknown): DropboxEnableBody => {
   return {
     timeZone: validateTimeZone(input?.timeZone),
     target: { path },
+    dailyFolderId: dailyFolderId(input?.dailyFolderId, /^id:[A-Za-z0-9_-]+$/),
   }
 }
 
 export const parseGoogleDriveEnableBody = (body: unknown): GoogleDriveEnableBody => {
-  const input = body as { timeZone?: unknown; target?: { fileId?: unknown } } | null
+  const input = body as { timeZone?: unknown; dailyFolderId?: unknown; target?: { fileId?: unknown } } | null
   return {
     timeZone: validateTimeZone(input?.timeZone),
+    dailyFolderId: dailyFolderId(input?.dailyFolderId, /^[A-Za-z0-9_-]+$/),
     target: {
       fileId: requiredText(input?.target?.fileId, 'target.fileId', 512),
     },
+  }
+}
+
+// OneDrive notebooks are always daily: the target is the folder itself, as a
+// canonical Graph item address.
+export const parseOneDriveEnableBody = (body: unknown): OneDriveEnableBody => {
+  const input = body as { timeZone?: unknown; target?: { folder?: unknown } } | null
+  const folder = requiredText(input?.target?.folder, 'target.folder', 1023)
+  if (!/^\/drives\/[A-Za-z0-9!_%.-]+\/items\/[A-Za-z0-9!_%.-]+$/.test(folder)) {
+    throw new ProviderProfileValidationError('target.folder must be a OneDrive item address.')
+  }
+  return {
+    timeZone: validateTimeZone(input?.timeZone),
+    target: { folder },
   }
 }
 

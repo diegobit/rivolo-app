@@ -32,6 +32,7 @@ const stores = vi.hoisted(() => ({
       connected: false,
       targetName: null,
       localDirty: false,
+      daily: false,
     },
     syncing: false,
     syncOperation: null,
@@ -124,6 +125,7 @@ describe('AppShell attention and stale tab states', () => {
     stores.settings.updateThemePreference.mockClear()
     stores.days = { loaded: true, loading: false, days: [{}] }
     stores.sync.activeProvider = null
+    stores.sync.status.daily = false
     stores.sync.syncAttention = null
     stores.ui.mode = 'timeline'
     stores.ui.chatPanelOpen = false
@@ -625,7 +627,11 @@ describe('AppShell attention and stale tab states', () => {
     expect(right).toContainElement(settingsLink)
   })
 
-  it('offers the authors switch beside help only for OneDrive notebooks, and widens the timeline while authors show', () => {
+  it.each([
+    ['onedrive', false],
+    ['dropbox', true],
+    ['google-drive', true],
+  ])('offers the authors switch beside help for %s and widens the timeline while authors show', (provider, daily) => {
     stores.tabSync = { isPrimary: true, databaseStale: false }
     stores.viewport.isNarrow = false
     const shell = (
@@ -643,7 +649,8 @@ describe('AppShell attention and stale tab states', () => {
     expect(first.container.querySelector('.app-shell-root')).toHaveAttribute('data-desktop-authors', 'false')
     first.unmount()
 
-    stores.sync.activeProvider = 'onedrive'
+    stores.sync.activeProvider = provider
+    stores.sync.status.daily = daily
     const { container } = render(shell)
     const authors = screen.getByRole('button', { name: 'Authors' })
     expect(getHeaderSlots().left).toContainElement(authors)

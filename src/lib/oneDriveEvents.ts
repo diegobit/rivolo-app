@@ -1,3 +1,6 @@
+import { authorizedDropboxFetch } from './dropboxAuth'
+import { authorizedGoogleDriveFetch } from './googleDriveAuth'
+import { SYNC_PROVIDER_LABELS } from './syncState'
 import { authorizedOneDriveFetch } from './oneDriveAuth'
 import { assertTarget, acknowledgeDailyEvent, persistDailyCheckpoint, readDailyOutbox, type DailyEvent, type NotebookTarget } from './oneDriveDailyState'
 import { validItemAddress } from './oneDriveGraph'
@@ -63,7 +66,12 @@ export const publishOneDriveChange = (item: string, revision: string) => {
   void flushOutbox()
 }
 
-export const startOneDriveEvents = (item: string, onChanged: (event?: DailyEvent) => void, onError: (message: string) => void, daily?: { target: NotebookTarget; onReady?: () => void }) => {
+type DailyConnection = { target: NotebookTarget; onReady?: () => void; guard?: (target: NotebookTarget) => Promise<void> }
+
+export const startOneDriveEvents = (item: string, onChanged: (event?: DailyEvent) => void, onError: (message: string) => void, daily?: DailyConnection) => {
+  const provider = daily?.target.provider ?? 'onedrive'
+  const label = SYNC_PROVIDER_LABELS[provider]
+  const guard = daily?.guard ?? assertTarget
   let disposed = false
   let generation = 0
   let socket: WebSocket | null = null
@@ -101,21 +109,22 @@ export const startOneDriveEvents = (item: string, onChanged: (event?: DailyEvent
     const scheduleReconnect = (delay?: number, report = true) => {
       if (current !== generation || !active()) return
       if (heartbeat) clearInterval(heartbeat)
-      if (report) onError('OneDrive live updates disconnected. Reconnecting automatically.')
+      if (report) onError(`${label} live updates disconnected. Reconnecting automatically.`)
       reconnect = setTimeout(() => { void connect() }, Math.max(delay ?? 0, Math.min(60_000, 1000 * 2 ** Math.min(failures++, 6))))
     }
-    if (daily) void flushDailyOneDriveEvents(daily.target)
+    if (daily) void flushDailyEvents(daily.target, guard)
     else void flushOutbox()
     abort = new AbortController()
     try {
-      if (daily) await assertTarget(daily.target)
-      const response = daily ? await dailyEventRequest(daily.target, undefined, abort.signal) : await eventRequest(item, 'subscribe', abort.signal)
+      if (daily) await guard(daily.target)
+      const response = daily ? await dailyEventRequest(daily.target, guard, undefined, abort.signal) : await eventRequest(item, 'subscribe', abort.signal)
       const { ticket } = await response.json() as { ticket: string }
       if (current !== generation || !active()) return
-      if (!ticket) throw new Error('OneDrive event service returned an invalid ticket.')
-      const url = new URL(daily ? DAILY_API : API, window.location.origin)
+      if (!ticket) throw new Error(`${label} event service returned an invalid ticket.`)
+      const url = new URL(daily ? dailyApi(provider) : API, window.location.origin)
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
       url.searchParams.set('ticket', ticket)
+      if (provider !== 'onedrive') url.searchParams.set('provider', provider)
       const connected = new WebSocket(url)
       socket = connected
       lastMessageAt = Date.now()
@@ -134,7 +143,7 @@ export const startOneDriveEvents = (item: string, onChanged: (event?: DailyEvent
           } else if (daily && event.sender !== sender && typeof event.revision === 'string') {
             if (event.type === 'inventory-invalidated') {
               onChanged()
-            } else if (event.type === 'day-changed' && typeof event.item === 'string' && validItemAddress(event.item) && typeof event.dayId === 'string' &&
+            } else if (event.type === 'day-changed' && typeof event.item === 'string' && validEventItem(event.item, provider) && typeof event.dayId === 'string' &&
                 /^\d{4}-\d{2}-\d{2}$/.test(event.dayId) && dailyRevisions.get(event.item) !== event.revision) {
               dailyRevisions.set(event.item, event.revision)
               onChanged({ type: 'day-changed', dayId: event.dayId, item: event.item, revision: event.revision })
@@ -154,8 +163,12 @@ export const startOneDriveEvents = (item: string, onChanged: (event?: DailyEvent
       }, 25_000)
     } catch (error) {
       if (current !== generation || !active()) return
-      scheduleReconnect((error as { retryMs?: number }).retryMs)
-      onError(error instanceof Error ? error.message : 'OneDrive live updates could not connect.')
+      // Optional cloud relay. Foreground and interval sync keep working, and
+      // another visibility change can reconnect after configuration is fixed.
+      const problem = error as { retryMs?: number; status?: number; optionalUnavailable?: boolean }
+      if (provider !== 'onedrive' && (problem.status === 404 || problem.optionalUnavailable)) { onError(''); return }
+      scheduleReconnect(problem.retryMs)
+      onError(error instanceof Error ? error.message : `${label} live updates could not connect.`)
     }
   }
 
@@ -177,30 +190,36 @@ export const startOneDriveEvents = (item: string, onChanged: (event?: DailyEvent
   }
 }
 
-const DAILY_API = '/api/onedrive/daily-events'
-const dailyEventRequest = async (target: NotebookTarget, event?: DailyEvent, signal?: AbortSignal) => {
-  await assertTarget(target)
-  const response = await authorizedOneDriveFetch(DAILY_API, { method: 'POST', signal,
+const dailyApi = (provider: NotebookTarget['provider']) =>
+  provider === 'onedrive' ? '/api/onedrive/daily-events' : '/api/sync/daily-events'
+const validEventItem = (item: string, provider: NotebookTarget['provider']) => provider === 'onedrive'
+  ? validItemAddress(item) : item.length <= 512 && (provider === 'dropbox' ? /^id:[a-zA-Z0-9_-]+$/.test(item) : /^[a-zA-Z0-9_-]+$/.test(item))
+const dailyEventRequest = async (target: NotebookTarget, guard: (target: NotebookTarget) => Promise<void>, event?: DailyEvent, signal?: AbortSignal) => {
+  await guard(target)
+  const provider = target.provider ?? 'onedrive'
+  const fetchEvent = provider === 'onedrive' ? authorizedOneDriveFetch
+    : provider === 'dropbox' ? authorizedDropboxFetch : authorizedGoogleDriveFetch
+  const response = await fetchEvent(dailyApi(provider), { method: 'POST', signal,
     headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XmlHttpRequest' },
-    body: JSON.stringify({ folder: target.folder, action: !event ? 'subscribe' : event.type === 'day-changed' ? 'publish' : 'invalidate',
+    body: JSON.stringify({ ...(provider !== 'onedrive' ? { provider } : {}), folder: target.folder, action: !event ? 'subscribe' : event.type === 'day-changed' ? 'publish' : 'invalidate',
       sender, ...(event?.type === 'day-changed' ? { item: event.item } : {}), revision: event?.revision }) })
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { message?: string } | null
-    throw Object.assign(new Error(body?.message ?? 'OneDrive live updates are unavailable. Reconnecting automatically.'),
-      { retryMs: Math.max(0, Number(response.headers.get('Retry-After')) || 0) * 1000, status: response.status })
+    const body = await response.json().catch(() => null) as { message?: string; code?: string } | null
+    throw Object.assign(new Error(body?.message ?? `${SYNC_PROVIDER_LABELS[provider]} live updates are unavailable. Reconnecting automatically.`),
+      { retryMs: Math.max(0, Number(response.headers.get('Retry-After')) || 0) * 1000, status: response.status, optionalUnavailable: body?.code === 'relay_unavailable' })
   }
   return response
 }
 let dailyPublishing = false
 let dailyRetry: ReturnType<typeof setTimeout> | undefined
 let dailyFailures = 0
-export const flushDailyOneDriveEvents = async (target: NotebookTarget) => {
+export const flushDailyEvents = async (target: NotebookTarget, guard: (target: NotebookTarget) => Promise<void>) => {
   if (dailyPublishing || !navigator.onLine) return
   dailyPublishing = true
   clearTimeout(dailyRetry)
   dailyRetry = undefined
   try {
-    await assertTarget(target)
+    await guard(target)
     const rows = await readDailyOutbox(target)
     // Nothing queued: skip the two whole-database saves below.
     if (!rows.length) { dailyFailures = 0; return }
@@ -208,13 +227,15 @@ export const flushDailyOneDriveEvents = async (target: NotebookTarget) => {
     // checkpoint. A restart retries metadata publication without re-uploading.
     await persistDailyCheckpoint()
     for (const row of rows) {
-      try { await dailyEventRequest(target, row.entry.event) }
+      try { await dailyEventRequest(target, guard, row.entry.event) }
       catch (error) {
         // The relay refused this notification for good (invalid, or the file
         // left the notebook). It is only a hint to refresh, so drop it rather
         // than hold back every notification queued after it.
-        if (![400, 403].includes((error as { status?: number }).status ?? 0)) throw error
-        console.warn('[OneDrive] events:dropped', { item: row.item })
+        const { status, optionalUnavailable } = error as { status?: number; optionalUnavailable?: boolean }
+        if (target.provider && target.provider !== 'onedrive' && (status === 404 || optionalUnavailable)) return
+        if (![400, 403].includes(status ?? 0)) throw error
+        console.warn('[Sync] events:dropped', { item: row.item })
       }
       await acknowledgeDailyEvent(row.entry.context, row.item, row.value)
     }
@@ -222,10 +243,15 @@ export const flushDailyOneDriveEvents = async (target: NotebookTarget) => {
     dailyFailures = 0
   } catch (error) {
     try {
-      await assertTarget(target)
-      dailyRetry = setTimeout(() => { void flushDailyOneDriveEvents(target) }, Math.max((error as { retryMs?: number }).retryMs ?? 0, Math.min(60_000, 1000 * 2 ** Math.min(++dailyFailures, 6))))
+      await guard(target)
+      dailyRetry = setTimeout(() => { void flushDailyEvents(target, guard) }, Math.max((error as { retryMs?: number }).retryMs ?? 0, Math.min(60_000, 1000 * 2 ** Math.min(++dailyFailures, 6))))
     } catch { /* A different account/target must never publish this outbox. */ }
   } finally { dailyPublishing = false }
 }
 export const startDailyOneDriveEvents = (target: NotebookTarget, onChanged: (event?: DailyEvent) => void, onError: (message: string) => void, onReady?: () => void) =>
   startOneDriveEvents(target.folder, onChanged, onError, { target, onReady })
+
+export const flushDailyOneDriveEvents = (target: NotebookTarget) => flushDailyEvents(target, assertTarget)
+export const startCloudDailyEvents = (target: NotebookTarget, guard: (target: NotebookTarget) => Promise<void>,
+  onChanged: (event?: DailyEvent) => void, onError: (message: string) => void, onReady: () => void) =>
+  startOneDriveEvents(target.folder, onChanged, onError, { target, guard, onReady })

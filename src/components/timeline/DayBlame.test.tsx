@@ -13,7 +13,7 @@ vi.mock('../../lib/oneDriveDailyState', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../lib/oneDriveDailyState')>(),
   getDailyState: mocks.dailyState,
 }))
-vi.mock('../../store/useSyncStore', () => ({ useSyncStore: (selector: (state: unknown) => unknown) => selector({ status: { lastSyncAt: mocks.lastSyncAt } }) }))
+vi.mock('../../store/useSyncStore', () => ({ useSyncStore: (selector: (state: unknown) => unknown) => selector({ activeProvider: 'onedrive', status: { lastSyncAt: mocks.lastSyncAt } }) }))
 const dayId = '2026-10-01'
 const notebook = (contentMd: string) => exportMarkdown([{ dayId, contentMd, humanTitle: 'Thursday', createdAt: 0, updatedAt: 0 }])
 const timestamp = new Date(2026, 9, 2, 12).getTime()

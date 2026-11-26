@@ -110,8 +110,7 @@ export default function AppShell() {
   const showLauncherButtons = !isNarrowViewportMode
   const launcherSpread = !isNarrowViewportMode
   const showDesktopShortcutsButton = isHome && !isNarrowViewportMode
-  // Only OneDrive records who wrote each line.
-  const showDesktopAuthorsButton = showDesktopShortcutsButton && activeProvider === 'onedrive'
+  const showDesktopAuthorsButton = showDesktopShortcutsButton && (activeProvider === 'onedrive' || syncStatus.daily)
   const showDesktopThemeButton = !isNarrowViewportMode && location.pathname !== '/settings'
   const syncDirection = syncOperation === 'push' ? 'up' : 'down'
   const setupNotices = attentionLoaded

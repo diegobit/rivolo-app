@@ -1,7 +1,7 @@
 # Remote MCP OAuth integration
 
 Rivolo acts as its own OAuth 2.1 authorization server while keeping each
-user's active Dropbox or Google Drive profile as the identity boundary.
+user's active Dropbox, Google Drive, or OneDrive profile as the identity boundary.
 
 ## Public endpoints
 

@@ -1,6 +1,23 @@
+import { hashSyncContent } from '../../src/lib/syncHash'
 const DROPBOX_API = 'https://api.dropboxapi.com/2'
 const GOOGLE_DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const GOOGLE_FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
+const GRAPH_API = 'https://graph.microsoft.com/v1.0'
+const ONEDRIVE_ITEM_ADDRESS = /^\/drives\/[A-Za-z0-9!_%.-]+\/items\/[A-Za-z0-9!_%.-]+$/
+
+type OneDriveUser = {
+  id?: string
+  displayName?: string
+  mail?: string | null
+  userPrincipalName?: string
+}
+
+type OneDriveItem = {
+  id?: string
+  name?: string
+  folder?: object
+  parentReference?: { driveId?: string }
+}
 
 type DropboxAccount = {
   account_id?: string
@@ -11,6 +28,7 @@ type DropboxAccount = {
 }
 
 type DropboxMetadata = {
+  id?: string
   '.tag'?: string
   path_display?: string
   is_downloadable?: boolean
@@ -28,6 +46,7 @@ type GoogleDriveFile = {
   mimeType?: string
   trashed?: boolean
   parents?: string[]
+  appProperties?: Record<string, string>
   capabilities?: {
     canDownload?: boolean
     canEdit?: boolean
@@ -51,7 +70,7 @@ export class ProviderAccessError extends Error {
 
 const providerResponse = async (
   response: Response,
-  provider: 'Dropbox' | 'Google Drive',
+  provider: 'Dropbox' | 'Google Drive' | 'OneDrive',
 ) => {
   if (response.status === 401 || response.status === 403) {
     throw new ProviderAccessError(
@@ -188,4 +207,85 @@ export const fetchGoogleDriveTarget = async (
     folderId: file.parents?.[0] ?? null,
     fileName: file.name,
   }
+}
+
+export const verifyDropboxDailyTarget = async (accessToken: string, folder: string, sourcePath: string) => {
+  const expected = sourcePath.replace(/\.md$/i, '.rivolo-daily')
+  if (expected === sourcePath) throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'Choose the original Dropbox Markdown path.')
+  const load = async (path: string) => {
+    const response = await fetch(`${DROPBOX_API}/files/get_metadata`, {
+      method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    })
+    return response.ok ? await response.json() as DropboxMetadata & { path_lower?: string } : null
+  }
+  const root = await load(folder)
+  if (root?.id !== folder || root['.tag'] !== 'folder' || root.path_lower !== expected.toLowerCase() ||
+      (await load(`${expected}/.rivolo-migrated`))?.['.tag'] !== 'file') {
+    throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'The Dropbox daily folder is not ready for Agent access.')
+  }
+  return { path: sourcePath }
+}
+
+export const verifyGoogleDailyTarget = async (accessToken: string, folder: string,
+  source?: { fileId: string; folderId: string | null; fileName: string }) => {
+  const fields = 'id,name,mimeType,parents,trashed,appProperties,capabilities(canEdit)'
+  const response = await fetch(`${GOOGLE_DRIVE_API}/files/${encodeURIComponent(folder)}?fields=${encodeURIComponent(fields)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } })
+  const item = response.ok ? await response.json() as GoogleDriveFile : null
+  if (!item || item.id !== folder || !item.name || item.trashed || item.mimeType !== GOOGLE_FOLDER_MIME_TYPE ||
+      item.capabilities?.canEdit === false || !item.appProperties?.rivoloDailySource || item.appProperties.rivoloMigrated !== 'true' ||
+      source && (!source.folderId || !item.parents?.includes(source.folderId) ||
+        item.appProperties.rivoloDailySource !== await hashSyncContent(source.fileName))) {
+    throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'The Google Drive daily folder is not ready for Agent access.')
+  }
+  return source ?? { fileId: folder, folderId: item.parents?.[0] ?? null, fileName: item.name }
+}
+
+export const fetchOneDriveAccount = async (accessToken: string) => {
+  const response = await fetch(
+    `${GRAPH_API}/me?$select=id,displayName,mail,userPrincipalName`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  await providerResponse(response, 'OneDrive')
+  const user = (await response.json()) as OneDriveUser
+  if (!user.id) {
+    throw new ProviderAccessError(
+      502,
+      'PROVIDER_IDENTITY_MISSING',
+      'Microsoft account identity could not be verified.',
+    )
+  }
+  const email = user.mail ?? user.userPrincipalName ?? null
+  return {
+    accountId: user.id,
+    // Personal accounts can report a non-address principal name.
+    email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null,
+    name: user.displayName ?? null,
+  }
+}
+
+// The app sends its notebook folder as a canonical Graph address. Agent access
+// is bound to that exact folder, so a shortcut or another address for the same
+// folder is refused rather than resolved.
+export const verifyOneDriveDailyTarget = async (accessToken: string, folder: string) => {
+  if (!ONEDRIVE_ITEM_ADDRESS.test(folder) || folder.length >= 1024) {
+    throw new ProviderAccessError(400, 'INVALID_REQUEST', 'A OneDrive notebook folder is required.')
+  }
+  const response = await fetch(
+    `${GRAPH_API}${folder}?$select=id,name,folder,parentReference`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  if (response.status === 404) {
+    throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'The OneDrive notebook folder was not found.')
+  }
+  await providerResponse(response, 'OneDrive')
+  const item = (await response.json()) as OneDriveItem
+  const canonical = item.id && item.parentReference?.driveId
+    ? `/drives/${encodeURIComponent(item.parentReference.driveId)}/items/${encodeURIComponent(item.id)}`
+    : null
+  if (!item.folder || !item.name || canonical !== folder) {
+    throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'The OneDrive notebook target is not a folder.')
+  }
+  return { folder, folderName: item.name }
 }

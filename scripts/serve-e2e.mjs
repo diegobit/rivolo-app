@@ -19,6 +19,13 @@ const envFor = db => ({
   MCP_DB: db,
   DROPBOX_CLIENT_ID: 'browser-fixture-client',
   DROPBOX_TOKEN_ENCRYPTION_KEY: key,
+  ONEDRIVE_CLIENT_ID: 'browser-onedrive-client',
+  ONEDRIVE_CLIENT_SECRET: 'browser-onedrive-secret',
+  ONEDRIVE_TOKEN_ENCRYPTION_KEY: key,
+  ONEDRIVE_EVENTS: {
+    idFromName: name => name,
+    get: () => ({ fetch: async url => new Response(null, { status: new URL(url).pathname === '/health' ? 204 : 404 }) }),
+  },
   MCP_PROVIDER_TOKEN_ENCRYPTION_KEY: key,
   MCP_PROFILE_SESSION_ENCRYPTION_KEY: key,
   MCP_ALLOWED_ORIGINS: origin,
@@ -31,6 +38,24 @@ const metadata = { '.tag': 'file', name: 'inbox.md', id: 'fixture-file', path_di
 const providerFetch = async (input, init) => {
   const request = new Request(input, init)
   const url = new URL(request.url)
+  if (url.href === 'https://login.microsoftonline.com/common/oauth2/v2.0/token') {
+    const params = new URLSearchParams(await request.text())
+    if (params.get('client_id') !== 'browser-onedrive-client' || params.get('client_secret') !== 'browser-onedrive-secret') {
+      throw new Error('Unexpected Microsoft client')
+    }
+    if (params.get('grant_type') === 'authorization_code') {
+      if (params.get('code') !== 'fixture-onedrive-code' || !params.get('code_verifier')) throw new Error('Unexpected Microsoft code exchange')
+    } else if (params.get('refresh_token') !== 'fixture-onedrive-refresh') throw new Error('Unexpected Microsoft refresh')
+    return Response.json({ access_token: 'fixture-onedrive-access', refresh_token: 'fixture-onedrive-refresh', expires_in: 3600 })
+  }
+  if (url.origin === 'https://graph.microsoft.com') {
+    if (request.headers.get('Authorization') !== 'Bearer fixture-onedrive-access') throw new Error('Unexpected Microsoft bearer')
+    if (url.pathname === '/v1.0/me') return Response.json({ id: 'browser-onedrive-account', displayName: 'Ari Fixture' })
+    if (url.pathname === '/v1.0/drives/fixture-drive/items/fixture-folder') {
+      return Response.json({ id: 'fixture-folder', name: 'Agent test notebook', folder: {}, parentReference: { driveId: 'fixture-drive', id: 'root' } })
+    }
+    throw new Error(`Unexpected Graph route: ${url.pathname}`)
+  }
   if (url.hostname !== 'api.dropboxapi.com' && url.hostname !== 'content.dropboxapi.com') {
     throw new Error(`Unexpected external HTTP: ${url.origin}${url.pathname}`)
   }
@@ -58,6 +83,8 @@ const routes = new Map([
   ['/api/dropbox/token', '/functions/api/dropbox/token.ts'],
   ['/api/dropbox/disconnect', '/functions/api/dropbox/disconnect.ts'],
   ['/api/dropbox/mcp-enable', '/functions/api/dropbox/mcp-enable.ts'],
+  ...['config', 'exchange', 'token', 'disconnect', 'mcp-enable', 'daily-events'].map(action =>
+    [`/api/onedrive/${action}`, `/functions/api/onedrive/${action}.ts`]),
   ['/api/mcp/status', '/functions/api/mcp/status.ts'],
   ['/api/mcp/disable', '/functions/api/mcp/disable.ts'],
   ['/api/mcp/tokens', '/functions/api/mcp/tokens/index.ts'],
