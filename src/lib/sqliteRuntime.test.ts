@@ -87,6 +87,36 @@ describe('official SQLite wasm migration', () => {
     reopened.close()
   })
 
+  // Entries at their date row numbers let a save replace one day's entry
+  // directly instead of scanning the whole index. An index built before that,
+  // or written by an older app version since, is rebuilt once at open; a
+  // rebuild on every open would save the database each time the app starts.
+  it('moves search entries to their date row numbers once, keeping search results', () => {
+    const legacy = openSerializedDatabase(sqlite)
+    ensureDatabaseSchema(legacy)
+    for (const [dayId, content] of [['2026-07-12', 'café with anna'], ['2025-01-03', 'quarterly plan']]) {
+      executeSql(legacy, 'INSERT INTO days VALUES (?, ?, ?, 1, 1)', [dayId, dayId, content])
+      executeSql(legacy, 'INSERT INTO days_fts (day_id, human_title, content_md) VALUES (?, ?, ?)', [dayId, dayId, content])
+    }
+    const legacyBytes = exportSerializedDatabase(sqlite, legacy)
+    legacy.close()
+
+    const migrated = openSerializedDatabase(sqlite, legacyBytes)
+    expect(ensureDatabaseSchema(migrated).ftsRebuilt).toBe(true)
+    expect(queryRows(migrated, 'SELECT rowid, day_id FROM days_fts ORDER BY rowid')).toEqual([
+      { rowid: 20250103, day_id: '2025-01-03' },
+      { rowid: 20260712, day_id: '2026-07-12' },
+    ])
+    expect(migrated.selectValue('SELECT day_id FROM days_fts WHERE days_fts MATCH ?', ['"café"'])).toBe('2026-07-12')
+    expect(migrated.selectValue('SELECT day_id FROM days_fts WHERE days_fts MATCH ?', ['"plan"'])).toBe('2025-01-03')
+    const migratedBytes = exportSerializedDatabase(sqlite, migrated)
+    migrated.close()
+
+    const reopened = openSerializedDatabase(sqlite, migratedBytes)
+    expect(ensureDatabaseSchema(reopened).ftsRebuilt).toBe(false)
+    reopened.close()
+  })
+
   it('keeps representative trigram results identical to substring matching', () => {
     const db = openSerializedDatabase(sqlite)
     ensureDatabaseSchema(db)

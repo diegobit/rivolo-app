@@ -3,6 +3,7 @@ import { authorizedGoogleDriveFetch, disconnectGoogleDriveAuth } from './googleD
 import {
   DEFAULT_GOOGLE_DRIVE_FOLDER_NAME,
   DEFAULT_GOOGLE_DRIVE_FILE_NAME,
+  finalizeGoogleDrivePullState,
   finalizeGoogleDrivePushState,
   getGoogleDriveState,
   getGoogleDrivePath,
@@ -376,17 +377,17 @@ export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
     allowUnsafeImport: options.allowUnsafeImport,
   })
 
+  const contentHash = await hashSyncContent(content)
   await markSyncLocalDirty()
-  await updateGoogleDriveState({
+  await finalizeGoogleDrivePullState(state.localRevision + 1, {
     fileId: metadata.id,
     fileName: metadata.name,
     lastRemoteVersion: metadata.version,
     // Remote content now equals local, so record its hash to suppress an
     // immediate redundant push of what we just pulled.
-    lastPushedHash: await hashSyncContent(content),
+    lastPushedHash: contentHash,
     lastSyncAt: Date.now(),
     lastPullAt: Date.now(),
-    localDirty: false,
   })
   return { status: 'pulled' as const }
 }

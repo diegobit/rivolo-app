@@ -1,3 +1,4 @@
+import { createNoteTokenRegex } from '../../lib/noteTokens'
 import { TODO_INTERACTION_HINT, todoStateLabel, type TodoAction } from '../../lib/editor/todoMarker'
 
 const TODO_LINE_REGEX = /^(\s*-\s+)(\[[ xX-]\])(.*)$/
@@ -65,14 +66,16 @@ export const highlightQueryText = (text: string, query: string, keyPrefix: strin
 }
 
 const renderInlineTokenHighlights = (text: string, query: string, keyPrefix: string) => {
-  const tokenRegex = /[#@][A-Za-z0-9_/-]+/g
+  // The same token rule as the editor and the tag index, so `me@example.com`
+  // is not a mention and `#città` is one whole tag.
+  const tokenRegex = createNoteTokenRegex('#@')
   const nodes: React.ReactNode[] = []
   let cursor = 0
   let tokenMatch = tokenRegex.exec(text)
 
   while (tokenMatch) {
-    const token = tokenMatch[0]
-    const start = tokenMatch.index
+    const token = tokenMatch[2]
+    const start = tokenMatch.index + tokenMatch[1].length
     const end = start + token.length
 
     if (start > cursor) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDayTitle, formatTimeAgo, isValidDayId } from './dates'
+import { formatDayTitle, formatHumanDate, formatTimeAgo, isValidDayId } from './dates'
 
 describe('day IDs', () => {
   it.each([
@@ -36,5 +36,25 @@ describe('formatTimeAgo', () => {
     [new Date(2026, 8, 12, 9, 0).getTime(), 'Sep 12'],
   ])('formats %d', (timestamp, label) => {
     expect(formatTimeAgo(timestamp, now)).toBe(label)
+  })
+})
+
+describe('formatHumanDate', () => {
+  const today = '2026-04-05'
+
+  it.each([
+    ['2026-04-05', 'Today • 5, Sunday'],
+    ['2026-04-04', 'Yesterday • 4, Saturday'],
+    ['2026-04-06', 'Tomorrow • 6, Monday'],
+    ['2026-03-20', '20 Mar, Friday'],
+    ['2025-12-31', '31 Dec 2025, Wednesday'],
+  ])('labels %s relative to today', (dayId, label) => {
+    expect(formatHumanDate(dayId, today)).toBe(label)
+  })
+
+  it('drops the relative label and the weekday when asked', () => {
+    const options = { includeRelativeLabel: false, includeWeekday: false }
+    expect(formatHumanDate('2026-04-05', today, options)).toBe('5')
+    expect(formatHumanDate('2026-03-20', today, options)).toBe('20 Mar')
   })
 })

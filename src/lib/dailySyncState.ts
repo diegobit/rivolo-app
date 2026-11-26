@@ -1,5 +1,5 @@
 import { flushDatabaseSave, queryAll, queryOne, run, runAtomicDatabaseMutation } from './db'
-import { executeSql, queryFirstRow, type RivoloDatabase } from './sqliteRuntime'
+import { dayFtsRowid, executeSql, queryFirstRow, type RivoloDatabase } from './sqliteRuntime'
 import { getPendingEditorDayIds } from './pendingEditorSaves'
 import { decodeNotebookDay } from './notebookDays'
 import { getJsonSetting, setJsonSetting } from './settingsRepository'
@@ -101,17 +101,19 @@ export const commitDailyCheckpoint = async (target: NotebookTarget, assertTarget
   await persistDailyCheckpoint()
 }
 export const writeDayInDatabase = (db: RivoloDatabase, id: string, content: string | null) => {
-  if (content === null) executeSql(db, 'DELETE FROM days WHERE day_id = ?', [id])
+  const day = content === null ? null : decodeNotebookDay(content, id)
+  if (!day) executeSql(db, 'DELETE FROM days WHERE day_id = ?', [id])
   else {
-    const day = decodeNotebookDay(content, id)
     executeSql(db, 'INSERT INTO days VALUES (?, ?, ?, ?, ?) ON CONFLICT(day_id) DO UPDATE SET human_title = excluded.human_title, content_md = excluded.content_md, updated_at = excluded.updated_at',
       [id, day.humanTitle, day.contentMd, Date.now(), Date.now()])
   }
   if (db.selectValue("SELECT name FROM sqlite_master WHERE name = 'days_fts'")) {
-    executeSql(db, 'DELETE FROM days_fts WHERE day_id = ?', [id])
-    if (content !== null) {
-      const day = decodeNotebookDay(content, id)
-      executeSql(db, 'INSERT INTO days_fts VALUES (?, ?, ?)', [id, day.humanTitle, day.contentMd])
+    const rowid = dayFtsRowid(id)
+    executeSql(db, 'DELETE FROM days_fts WHERE rowid = ?', [rowid])
+    if (day) {
+      executeSql(db, 'INSERT INTO days_fts (rowid, day_id, human_title, content_md) VALUES (?, ?, ?, ?)', [
+        rowid, id, day.humanTitle, day.contentMd,
+      ])
     }
   }
 }

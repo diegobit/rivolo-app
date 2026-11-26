@@ -16,6 +16,7 @@ import { onRequestPost as enableOneDrive } from '../../functions/api/onedrive/mc
 import { oneDriveCookieConfig } from '../../functions/_lib/oneDriveOAuth'
 import { decryptToken } from '../../functions/_lib/tokenCookie'
 import { onRequestPost as disableAgentAccess } from '../../functions/api/mcp/disable'
+import { onRequestPost as disconnectGoogleDrive } from '../../functions/api/google-drive/disconnect'
 import { onRequestGet as getAgentAccessStatus } from '../../functions/api/mcp/status'
 
 type TestEnv = McpAgentAccessEnv & {
@@ -459,5 +460,77 @@ describe('OneDrive MCP enable endpoint', () => {
 
     expect(response.status).toBe(400)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('Google Drive disconnect', () => {
+  // Google's revoke ends the app's whole grant for the account, including the
+  // credential an Agent access profile from another browser runs on.
+  const routeGoogle = () => {
+    const revoked: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : input.toString())
+      if (url.href === 'https://oauth2.googleapis.com/token') {
+        return new Response(JSON.stringify({ access_token: 'google-access', expires_in: 3600 }), { status: 200 })
+      }
+      if (url.pathname === '/drive/v3/about') {
+        return new Response(JSON.stringify({ user: { permissionId: 'google-account-1' } }), { status: 200 })
+      }
+      if (url.href.startsWith('https://oauth2.googleapis.com/revoke')) {
+        revoked.push(url.searchParams.get('token') ?? '')
+        return new Response('{}', { status: 200 })
+      }
+      return new Response('unexpected request', { status: 500 })
+    }))
+    return revoked
+  }
+
+  const disconnectFromBrowser = async (env: TestEnv, refreshToken: string) => {
+    const providerCookie = await createTokenCookieHeader(
+      new Request('https://rivolo.app/api/google-drive/disconnect'),
+      googleCookieConfig(env),
+      refreshToken,
+    )
+    return invoke(
+      disconnectGoogleDrive,
+      mutationRequest('/api/google-drive/disconnect', undefined, cookiePair(providerCookie, 'rivolo_gdrive_refresh')),
+      env,
+    )
+  }
+
+  const enableAgentAccess = (env: TestEnv) =>
+    new ProviderProfileRepository(env.MCP_DB, env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY).createOrUpdate({
+      provider: 'google-drive',
+      providerAccountId: 'google-account-1',
+      target: { fileId: 'drive-file-1', folderId: 'drive-folder-1', fileName: 'inbox.md' },
+      timeZone: 'Europe/Rome',
+      refreshToken: 'refresh-from-laptop',
+    })
+
+  it.each(['single-file', 'daily'])('keeps the Google grant for an active %s profile and signs this browser out', async (format) => {
+    const env = createEnv(new SqliteD1())
+    const profile = await enableAgentAccess(env)
+    const repository = new ProviderProfileRepository(env.MCP_DB, env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY)
+    if (format === 'daily') expect(await repository.setDailyFolder(profile, 'daily-folder-1')).toBe(true)
+    const revoked = routeGoogle()
+
+    const response = await disconnectFromBrowser(env, 'refresh-from-phone')
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Set-Cookie')).toMatch(/rivolo_gdrive_refresh=;.*Max-Age=0/)
+    expect(revoked).toEqual([])
+    expect(await repository.decryptCredential(profile.profileId)).toBe('refresh-from-laptop')
+  })
+
+  it('revokes the Google grant when no Agent access uses it', async () => {
+    const env = createEnv(new SqliteD1())
+    const profile = await enableAgentAccess(env)
+    await new ProviderProfileRepository(env.MCP_DB, env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY).revoke(profile.profileId)
+    const revoked = routeGoogle()
+
+    const response = await disconnectFromBrowser(env, 'refresh-from-phone')
+
+    expect(response.status).toBe(200)
+    expect(revoked).toEqual(['refresh-from-phone'])
   })
 })

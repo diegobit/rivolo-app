@@ -5,7 +5,7 @@ import {
   startDropboxAuth,
   completeDropboxAuth,
 } from './dropboxAuth'
-import { finalizeDropboxPushState, getDropboxState, updateDropboxState } from './dropboxState'
+import { finalizeDropboxPullState, finalizeDropboxPushState, getDropboxState, updateDropboxState } from './dropboxState'
 import type { DropboxState } from './dropboxState'
 import { markSyncLocalDirty } from './syncDirty'
 import { createCloudDailyNotebook } from './cloudDailyNotebook'
@@ -218,15 +218,15 @@ export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
     allowUnsafeImport: options.allowUnsafeImport,
   })
 
+  const contentHash = await hashSyncContent(content)
   await markSyncLocalDirty()
-  await updateDropboxState({
+  await finalizeDropboxPullState(state.localRevision + 1, {
     lastRemoteRev: metadata.rev,
     // Remote content now equals local; record its hash so we do not immediately
     // re-push what we just pulled.
-    lastPushedHash: await hashSyncContent(content),
+    lastPushedHash: contentHash,
     lastSyncAt: Date.now(),
     lastPullAt: Date.now(),
-    localDirty: false,
   })
 
   console.info('[Dropbox] pull:ok', { filePath: path, rev: metadata.rev })

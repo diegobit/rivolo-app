@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { renderAssistantMarkdown } from '../../lib/assistantMarkdown'
 import { copyTextToClipboard } from '../../lib/clipboard'
 import type { ChatUiMessage } from '../../store/useChatStore'
@@ -70,6 +70,34 @@ function MessageCopyButton({ text, align }: { text: string; align: 'start' | 'en
   )
 }
 
+const NO_CITATIONS: NonNullable<ChatUiMessage['meta']>['citations'] = []
+
+// The list re-renders with the whole timeline (every streamed chunk, every
+// keystroke in a composer or a note). Only a message whose text or citations
+// changed has its Markdown rendered again.
+function AssistantMarkdown({
+  message,
+  onClick,
+  onKeyDown,
+}: {
+  message: ChatUiMessage
+  onClick: ChatMessageListProps['onAssistantMarkdownClick']
+  onKeyDown: ChatMessageListProps['onAssistantMarkdownKeyDown']
+}) {
+  const content = message.content || ''
+  const citations = message.meta?.citations ?? NO_CITATIONS
+  const html = useMemo(() => ({ __html: renderAssistantMarkdown(content, citations) }), [content, citations])
+
+  return (
+    <div
+      className="assistant-markdown w-full rounded-none bg-transparent px-0 py-0 text-slate-700 shadow-none"
+      onClick={(event) => onClick(message, event)}
+      onKeyDown={(event) => onKeyDown(message, event)}
+      dangerouslySetInnerHTML={html}
+    />
+  )
+}
+
 export default function ChatMessageList({
   messages,
   mobile = false,
@@ -92,11 +120,10 @@ export default function ChatMessageList({
             }`}
           >
             {message.role === 'assistant' ? (
-              <div
-                className="assistant-markdown w-full rounded-none bg-transparent px-0 py-0 text-slate-700 shadow-none"
-                onClick={(event) => onAssistantMarkdownClick(message, event)}
-                onKeyDown={(event) => onAssistantMarkdownKeyDown(message, event)}
-                dangerouslySetInnerHTML={{ __html: renderAssistantMarkdown(message.content || '', message.meta?.citations ?? []) }}
+              <AssistantMarkdown
+                message={message}
+                onClick={onAssistantMarkdownClick}
+                onKeyDown={onAssistantMarkdownKeyDown}
               />
             ) : (
               <div className="max-w-full rounded-[20px] bg-[var(--theme-accent)] px-4 py-3 text-white shadow-[0_0_30px_-0_rgba(0,0,0,0.12)]">

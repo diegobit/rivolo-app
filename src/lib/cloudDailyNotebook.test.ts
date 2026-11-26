@@ -243,11 +243,18 @@ describe.each(['dropbox', 'google-drive'] as const)('%s daily sync', (provider) 
     let sync = await import('./sync')
     await sync.migrateActiveNotebook()
     expect(await sync.getActiveProviderStatus()).toMatchObject({ daily: true, localDirty: false })
+    // Migration writes through the daily sync transaction and must share the
+    // repository's date row IDs before the first local save.
+    expect(await storage.db.queryAll('SELECT rowid, day_id FROM days_fts ORDER BY rowid')).toEqual([
+      { rowid: 20261117, day_id: yesterday },
+      { rowid: 20261118, day_id: today },
+    ])
     expect(cloud.current(today)).toContain('First')
     expect(cloud.current(yesterday)).toContain('History')
     expect(cloud.original.revisions).toHaveLength(1)
 
     await storage.repository.saveDay(today, 'First\n\nMine', 'Notebook')
+    expect((await storage.repository.searchDays('Mine')).map(({ day }) => day.dayId)).toEqual([today])
     cloud.updates.length = 0
     cloud.race()
     await sync.pushToSync()
