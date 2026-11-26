@@ -189,9 +189,9 @@
     --theme-text-rgb: 15 23 42;
     --theme-text-soft: #334155;
     --theme-text-muted: #64748b;
-    --theme-blame-saturation: 55%;
-    --theme-blame-lightness: 94%;
-    --theme-blame-text: #475569;
+    --theme-blame-saturation: 60%;
+    --theme-blame-lightness: 87%;
+    --theme-blame-text-lightness: 30%;
     --theme-text-subtle: #94a3b8;
     --theme-title: #113355;
     --theme-title-muted: #8899aa;
@@ -267,9 +267,9 @@
     --theme-text-rgb: 244 247 251;
     --theme-text-soft: #d8e1ec;
     --theme-text-muted: #a4b3c4;
-    --theme-blame-saturation: 28%;
-    --theme-blame-lightness: 12%;
-    --theme-blame-text: #a4b3c4;
+    --theme-blame-saturation: 32%;
+    --theme-blame-lightness: 26%;
+    --theme-blame-text-lightness: 80%;
     --theme-text-subtle: #718095;
     --theme-title: #d7ecff;
     --theme-title-muted: #8aa3ba;
@@ -958,8 +958,14 @@
       --desktop-chat-sidebar-width: min(66vw, calc(100vw - 360px));
     }
 
+    /* The author gutter takes 36px of every line. Cards grow by as much while
+       it is shown, so a line holds the same text with or without it. */
+    .app-shell-root[data-desktop-authors='true'] {
+      --timeline-width: 756px;
+    }
+
     .app-shell-fixed-header-width {
-      width: min(calc((100vw - var(--desktop-chat-shift, 0px)) * 0.96), 720px);
+      width: min(calc((100vw - var(--desktop-chat-shift, 0px)) * 0.96), var(--timeline-width, 720px));
     }
 
     .app-shell-fixed-tray-width {
@@ -981,11 +987,11 @@
        proportional margins to the panel inset. */
     .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] {
       --desktop-chat-shift: calc(var(--desktop-chat-sidebar-width) + var(--desktop-card-edge) + 24px);
-      --desktop-expanded-timeline-width: min(720px, calc(100% - var(--desktop-chat-shift) - var(--desktop-chat-sidebar-inset)));
+      --desktop-expanded-timeline-width: min(var(--timeline-width, 720px), calc(100% - var(--desktop-chat-shift) - var(--desktop-chat-sidebar-inset)));
     }
 
     .app-shell-root[data-desktop-panel-expanded='true'][data-desktop-card-open='true'] .app-main {
-      width: min(720px, calc(100% - var(--desktop-chat-sidebar-inset)));
+      width: min(var(--timeline-width, 720px), calc(100% - var(--desktop-chat-sidebar-inset)));
       margin-right: 0;
     }
 
@@ -1016,11 +1022,11 @@
       }
 
       .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] .app-main {
-        width: min(720px, calc(100% - 2 * var(--desktop-chat-sidebar-inset)));
+        width: min(var(--timeline-width, 720px), calc(100% - 2 * var(--desktop-chat-sidebar-inset)));
       }
 
       .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] .app-shell-fixed-header-width {
-        width: min(720px, calc(100% - var(--desktop-chat-shift) - 2 * var(--desktop-chat-sidebar-inset)));
+        width: min(var(--timeline-width, 720px), calc(100% - var(--desktop-chat-shift) - 2 * var(--desktop-chat-sidebar-inset)));
       }
 
       .app-shell-root[data-desktop-panel-expanded='false'][data-desktop-card-open='true'] .app-shell-fixed-tray-width {
