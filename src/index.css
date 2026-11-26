@@ -1473,6 +1473,11 @@
         mask-image: linear-gradient(to right, black calc(100% - 1.5rem), transparent);
       }
 
+      /* Leave room for the card edges, filter row, composer and picker title. */
+      .timeline-search-sidebar-pills .search-author-options {
+        max-height: min(45dvh, max(2.75rem, calc(100dvh - 14rem)));
+      }
+
       /* The chat composer sets its height limit and overflow inline. */
       .timeline-chat-sidebar-composer textarea {
         max-height: 4.5rem !important;
@@ -2436,11 +2441,6 @@ html[data-theme='dark'] .focus-visible\:ring-offset-2:focus-visible {
   width: min(14rem, 100%);
   min-width: 0;
   color: var(--theme-text);
-}
-
-.search-author-picker-card {
-  top: 100%;
-  bottom: auto;
 }
 
 .search-author-options {
