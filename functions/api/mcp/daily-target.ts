@@ -20,6 +20,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const profile = profileId ? await repository.getMetadata(profileId) : null
     if (!profile || profile.revokedAt || profile.provider !== body?.provider) return jsonResponse({ message: 'Agent access is not enabled for this provider.' }, 403)
     if (profile.dailyFolderId === folder) return jsonResponse({ enabled: true, profile })
+    if (profile.provider === 'onedrive') {
+      return jsonResponse({ message: 'OneDrive Agent access already uses the daily notebook.' }, 409)
+    }
     const refreshToken = await repository.decryptCredential(profile.profileId)
     if (!refreshToken) return jsonResponse({ message: 'Agent access is not connected.' }, 401)
     if (profile.provider === 'dropbox') {

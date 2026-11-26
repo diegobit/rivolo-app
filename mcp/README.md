@@ -2,7 +2,7 @@
 
 The local MCP server reads a Markdown export or a local daily notebook folder. Set `RIVOLO_NOTES_FILE` to the file or folder path. Daily folders may store files directly or under year and month directories.
 
-OneDrive sync uses a folder with one file per day. This server does not read that folder directly: export the notebook from Rivolo and point `RIVOLO_NOTES_FILE` at the exported file. Export again to make later changes available to the server.
+For OneDrive, set `RIVOLO_NOTES_FILE` to the daily notebook folder synced to your computer or to a manual Markdown export.
 
 ## Build
 
@@ -71,7 +71,7 @@ and Google Drive. Upgrading a notebook in Settings moves its Agent profile
 after the daily files sync and preserves existing OAuth grants and tokens.
 Single-day tools read only that day. On a large daily notebook, use a date range
 for searches if an unbounded scan exceeds the deployment's Worker request budget.
-For OneDrive, point the local server at the synced notebook folder or a manual export.
+OneDrive uses daily folders. After the folder is ready, enable Agent access in Settings. Agent writes notify apps that have the notebook open. If your Microsoft grant expires or is revoked, disable Agent access, reconnect OneDrive, and enable Agent access again.
 
 The hosted endpoint is a separate Cloudflare Worker at `/mcp`. It uses
 Streamable HTTP and reads or additively writes the provider target saved by
@@ -83,18 +83,23 @@ Before deploying:
 1. Create one D1 database and replace the placeholder database id in both
    `wrangler.toml` (Rivolo Pages Settings APIs) and `wrangler.mcp.toml` (hosted
    MCP Worker). Both services must bind the same database as `MCP_DB`.
-2. Apply `migrations/0001` through `0005` to that database.
+2. Apply `migrations/0001` through `0006` to that database.
 3. Set Worker secrets:
    - `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY` — exactly the same value used by Pages.
    - `GOOGLE_CLIENT_SECRET`.
+   - `ONEDRIVE_CLIENT_SECRET` — the same Microsoft client secret used by Pages.
+     The Worker uses it for note requests and for the daily refresh of active
+     Agent access profiles.
 4. Set the Pages secrets already required by Agent access:
    - `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY`.
    - `MCP_PROFILE_SESSION_ENCRYPTION_KEY`.
    - Provider OAuth/cookie secrets used by the existing sync endpoints.
-5. Route `mcp.aitlab.it` to the Worker and keep
+5. Deploy the OneDrive events Worker in the matching environment so the
+   hosted Worker can notify open OneDrive apps through `ONEDRIVE_EVENTS`.
+6. Route `mcp.aitlab.it` to the Worker and keep
    `MCP_ALLOWED_ORIGINS` restricted to trusted browser origins. Native MCP
    clients normally omit `Origin`.
-6. Configure Cloudflare rate-limit or WAF rules for the OAuth registration,
+7. Configure Cloudflare rate-limit or WAF rules for the OAuth registration,
    token, and authorization endpoints before enabling public OAuth. See
    [`docs/mcp-oauth.md`](../docs/mcp-oauth.md).
 

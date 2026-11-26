@@ -29,6 +29,10 @@ export type AgentAccessProfile = AgentAccessProfileBase &
           fileName: string
         }
       }
+    | {
+        provider: 'onedrive'
+        target: { folder: string; folderName: string }
+      }
   )
 
 export type AgentAccessStatus =
@@ -44,6 +48,7 @@ export type AgentAccessViewState =
 export type AgentAccessEnableTarget =
   | { provider: 'dropbox'; path: string; dailyFolderId?: string }
   | { provider: 'google-drive'; fileId: string; dailyFolderId?: string }
+  | { provider: 'onedrive'; folder: string }
 
 type AgentAccessErrorPayload = {
   message?: unknown
@@ -74,7 +79,9 @@ export const enableAgentAccess = async (
   const body =
     target.provider === 'dropbox'
       ? { timeZone, dailyFolderId: target.dailyFolderId, target: { path: target.path } }
-      : { timeZone, dailyFolderId: target.dailyFolderId, target: { fileId: target.fileId } }
+      : target.provider === 'google-drive'
+        ? { timeZone, dailyFolderId: target.dailyFolderId, target: { fileId: target.fileId } }
+        : { timeZone, target: { folder: target.folder } }
   const response = await fetch(`/api/${target.provider}/mcp-enable`, {
     method: 'POST',
     credentials: 'include',
@@ -96,8 +103,13 @@ export const disableAgentAccess = async (): Promise<{ enabled: false }> => {
   return readResponse<{ enabled: false }>(response)
 }
 
-export const agentAccessTargetLabel = (profile: AgentAccessProfile) =>
-  profile.provider === 'dropbox' ? profile.target.path : profile.target.fileName
+export const agentAccessTargetLabel = (profile: AgentAccessProfile) => {
+  switch (profile.provider) {
+    case 'dropbox': return profile.target.path
+    case 'google-drive': return profile.target.fileName
+    case 'onedrive': return profile.target.folderName
+  }
+}
 
 export const moveAgentAccessToDailyNotebook = async (provider: 'dropbox' | 'google-drive', folder: string) => {
   const response = await fetch('/api/mcp/daily-target', {

@@ -304,7 +304,7 @@ const consentPage = (
   <div><dt>Client callback</dt><dd>${escapeHtml(redirectHost)}</dd></div>
   <div><dt>Access requested</dt><dd><ul class="scopes">${scopeItems}</ul></dd></div>
 </dl>
-<p>Only the latest cloud-synced state is available. The client never receives your Dropbox or Google Drive credential.</p>
+<p>The client can access the latest cloud-synced notes. Your cloud provider credential stays with Rivolo.</p>
 <form method="post" action="${escapeHtml(`${issuerUrl}/authorize`)}">
   ${consentFields(authorization, transactionId, profileId)}
   <div class="actions">
@@ -532,7 +532,7 @@ ${cancelForm(issuerUrl, pending.payload.transactionId)}`,
       return continuationPage(
         'Finish connecting',
         `<h1>Finish connecting Rivolo</h1>
-<p>Open Settings in this browser, connect Dropbox or Google Drive, and enable Agent access. Then continue from Settings. Nothing is approved until you review it.</p>
+<p>Open Settings in this browser, connect Dropbox, Google Drive, or OneDrive, and enable Agent access. Then continue from Settings to review the request.</p>
 <div class="actions">
   <a class="button" href="${escapeHtml(settingsContinuationUrl(issuerUrl).href)}">Open Settings</a>
 </div>

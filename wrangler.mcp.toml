@@ -7,6 +7,11 @@ routes = [{ pattern = "mcp.aitlab.it", custom_domain = true }]
 [triggers]
 crons = ["0 3 * * *"]
 
+[[durable_objects.bindings]]
+name = "ONEDRIVE_EVENTS"
+class_name = "OneDriveEvents"
+script_name = "rivolo-onedrive-events"
+
 [[d1_databases]]
 binding = "MCP_DB"
 database_name = "rivolo-mcp"
@@ -16,6 +21,7 @@ migrations_dir = "migrations"
 [vars]
 GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"
 DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
+ONEDRIVE_CLIENT_ID = "f84271d0-b942-4bd6-9a20-5ac66bfb1c2f"
 # ChatGPT's connector can send this origin; the worker otherwise rejects the
 # request with 403 before authentication, so no OAuth challenge is returned.
 MCP_ALLOWED_ORIGINS = "https://mcp.aitlab.it,https://chatgpt.com"
@@ -31,9 +37,15 @@ routes = [{ pattern = "mcp-dev.aitlab.it", custom_domain = true }]
 [env.dev.triggers]
 crons = ["0 3 * * *"]
 
+[[env.dev.durable_objects.bindings]]
+name = "ONEDRIVE_EVENTS"
+class_name = "OneDriveEvents"
+script_name = "rivolo-onedrive-events-dev"
+
 [env.dev.vars]
 GOOGLE_CLIENT_ID = "535138004412-dme8a9sitbamhg00jiln5eang5b7nf8s.apps.googleusercontent.com"
 DROPBOX_CLIENT_ID = "u97wik4j3zxkssp"
+ONEDRIVE_CLIENT_ID = "f84271d0-b942-4bd6-9a20-5ac66bfb1c2f"
 # Same ChatGPT origin allowance as production, against the dev worker.
 MCP_ALLOWED_ORIGINS = "https://mcp-dev.aitlab.it,https://chatgpt.com"
 MCP_OAUTH_ISSUER_URL = "https://rivolo-dev.aitlab.it/api/mcp/oauth"

@@ -1,5 +1,7 @@
 import { createDropboxDailyRemote } from '../src/lib/dropboxDailyRemote'
 import { createGoogleDriveDailyRemote } from '../src/lib/googleDriveDailyRemote'
+import { createOneDriveDailyRemote } from '../src/lib/oneDriveDailyRemote'
+import { createOneDriveGraph, type OneDriveGraphOptions } from '../src/lib/oneDriveGraphApi'
 import { decodeNotebookDay, encodeNotebookDay, type DailyRemoteFile } from '../src/lib/notebookDays'
 import { annotateLocalNotebook } from '../src/lib/oneDriveBlame'
 import { addToDay, type AddToDayInput } from '../src/lib/noteWrites'
@@ -15,7 +17,13 @@ type DailyFiles<File extends DailyRemoteFile> = {
   isConflict(error: unknown): boolean
 }
 
-function createNotes<File extends DailyRemoteFile>(remote: DailyFiles<File>, provider: string, folder: string) {
+function createNotes<File extends DailyRemoteFile>(
+  remote: DailyFiles<File>,
+  provider: string,
+  folder: string,
+  author = 'Agent',
+  onCommitted?: (id: string, file: File) => Promise<void>,
+) {
   const source = { provider, folderId: folder, format: 'daily' }
   const readDay = async (file: File, id: string) => {
     const content = await remote.download(file, id)
@@ -47,32 +55,44 @@ function createNotes<File extends DailyRemoteFile>(remote: DailyFiles<File>, pro
 
   const add = async (input: AddToDayInput) => {
     const id = input.day_id
+    let previouslyExisted = false
+    const preparationFailed = (error: unknown): never => {
+      throw new ProviderWriteNotAppliedError(error instanceof Error ? error.message : 'Could not prepare the day.', { cause: error })
+    }
     for (let attempt = 0; attempt < 3; attempt++) {
-      let file: File | null
+      const file = await remote.stat(folder, id).catch(preparationFailed)
+      if (provider === 'onedrive') {
+        // Keep the operation reserved so replay cannot recreate the deleted day.
+        if (!file && previouslyExisted) {
+          throw new Error('OneDrive deleted or moved this day while the agent was writing. Check the notebook before starting a new operation.')
+        }
+        previouslyExisted ||= Boolean(file)
+      }
       let content: string
       let write: () => Promise<string>
       let mutation: ReturnType<typeof addToDay>
       try {
-        file = await remote.stat(folder, id)
         const prior = file && await readDay(file, id)
         mutation = addToDay(prior ? [prior.day] : [], input)
-        content = await annotateLocalNotebook(encodeNotebookDay(mutation.day), prior ? prior.content : '', 'Agent', mutation.day.updatedAt)
+        content = await annotateLocalNotebook(encodeNotebookDay(mutation.day), prior ? prior.content : '', author, mutation.day.updatedAt)
         const writeHosted = remote.writeHosted
         if (writeHosted) write = () => writeHosted(folder, id, file, content)
         else {
           const commit = await remote.prepareWrite(folder, id, file)
           write = async () => {
-            await commit(content, async () => {})
+            const uploaded = await commit(content, async () => {})
+            await onCommitted?.(id, uploaded)
             return content
           }
         }
       } catch (error) {
-        throw new ProviderWriteNotAppliedError(error instanceof Error ? error.message : 'Could not prepare the day.', { cause: error })
+        return preparationFailed(error)
       }
       try {
         const written = await write()
         if (written !== content) mutation.day = { ...mutation.day, ...decodeNotebookDay(written, id) }
-        return { ...mutation, source, conflictRetries: attempt }
+        const { day, created, position, operation_id } = mutation
+        return { day, created, position, operation_id, source, conflictRetries: attempt }
       } catch (error) {
         if (!remote.isConflict(error)) throw error
         if (attempt === 2) throw new ProviderWriteNotAppliedError('The day changed repeatedly. Retry the write.', { cause: error })
@@ -87,3 +107,10 @@ export const createHostedDailyNotes = (provider: 'dropbox' | 'google-drive', fol
   authorizedFetch: (url: string, init?: RequestInit) => Promise<Response>) => provider === 'dropbox'
   ? createNotes(createDropboxDailyRemote(authorizedFetch), provider, folder)
   : createNotes(createGoogleDriveDailyRemote(authorizedFetch), provider, folder)
+
+export const createHostedOneDriveNotes = (
+  folder: string,
+  graph: OneDriveGraphOptions,
+  author: string,
+  onCommitted: (id: string, file: DailyRemoteFile) => Promise<void>,
+) => createNotes(createOneDriveDailyRemote(createOneDriveGraph(graph)), 'onedrive', folder, author, onCommitted)

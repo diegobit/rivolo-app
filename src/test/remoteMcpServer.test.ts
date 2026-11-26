@@ -1,7 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthenticatedMcpOAuthBearer } from '../../functions/_lib/mcpOAuth'
-import type { AuthenticatedMcpBearer } from '../../functions/_lib/mcpPersonalTokens'
+import { McpPersonalTokenRepository, type AuthenticatedMcpBearer } from '../../functions/_lib/mcpPersonalTokens'
+import { ProviderProfileRepository } from '../../functions/_lib/providerProfiles'
+import { encodeNotebookDay, decodeNotebookDay } from '../lib/notebookDays'
+import { readNotebookAuthors, writeNotebookAuthors } from '../lib/oneDriveBlame'
+import { SqliteD1 } from './helpers/d1'
+import { createGraphFixture } from './oneDriveGraphFixture'
 import {
   authenticateRemoteMcpBearer,
   handleRemoteMcpRequest,
@@ -667,6 +672,157 @@ describe('hosted MCP Streamable HTTP endpoint', () => {
 
     expect(response.status).toBe(503)
     expect(text).not.toContain('secret database detail')
+  })
+})
+
+describe('hosted MCP on a OneDrive notebook', () => {
+  const dayId = '2026-07-16'
+  const doc = (contentMd: string) => encodeNotebookDay({ dayId, humanTitle: 'Jul 16, 2026', contentMd })
+
+  async function fixture() {
+    const graph = createGraphFixture()
+    const db = new SqliteD1()
+    const env = {
+      ...createEnv(),
+      MCP_DB: db as unknown as D1Database,
+      ONEDRIVE_CLIENT_ID: 'onedrive-client',
+      ONEDRIVE_CLIENT_SECRET: 'onedrive-fixture-secret',
+    }
+    const profiles = new ProviderProfileRepository(env.MCP_DB, env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY)
+    const profile = await profiles.createOrUpdate({
+      provider: 'onedrive',
+      providerAccountId: 'fixture-account',
+      providerName: 'Ari',
+      target: { folder: graph.folder, folderName: 'Fixture' },
+      timeZone: 'UTC',
+      refreshToken: 'fixture-refresh',
+    })
+    const tokens = new McpPersonalTokenRepository(env.MCP_DB)
+    const { token } = await tokens.create(profile.profileId, 'Fixture agent')
+    const dependency = {
+      fetch: vi.fn<typeof fetch>(async (url, init) => {
+        const isGraph = String(url).startsWith('https://graph.microsoft.com/v1.0/')
+        expect(new Headers(init?.headers).get('Authorization')).toBe(isGraph ? 'Bearer fixture-access' : null)
+        return graph.fetch(url, init)
+      }),
+      refreshOneDrive: vi.fn<RemoteMcpDependencies['refreshOneDrive']>().mockResolvedValue({
+        access_token: 'fixture-access', expires_in: 3600, refresh_token: 'rotated-refresh',
+      }),
+    }
+    const relay = {
+      idFromName: vi.fn((name: string) => name),
+      get: vi.fn(() => ({ fetch: publish })),
+    }
+    const publish = vi.fn<(url: string, init: RequestInit) => Promise<Response>>()
+      .mockImplementation(async () => new Response(null, { status: 204 }))
+    const call = async (name: string, args: Record<string, unknown>) =>
+      (await responsePayload(await handleRemoteMcpRequest(
+        mcpRequest('tools/call', { name, arguments: args }, { token }),
+        { ...env, ONEDRIVE_EVENTS: relay as unknown as DurableObjectNamespace },
+        dependency,
+      ))).result
+    return { graph, db, profiles, profile, dependency, relay, publish, call }
+  }
+
+  // The hosted HTTP owner checks conditional append and relay output together.
+  // The migrated SQLite repository is the source of truth for replay and rotation.
+  it('rereads after a concurrent edit, preserves attribution, and publishes one committed revision across replay', async () => {
+    const { graph, db, profiles, profile, dependency, relay, publish, call } = await fixture()
+    try {
+      const base = await writeNotebookAuthors(doc('Original'), new Map([[dayId, ['Casey']]]))
+      const race = await writeNotebookAuthors(doc('Original\nConcurrent addition'), new Map([[dayId, ['Casey', 'Sam']]]))
+      graph.addDay(dayId, base)
+      graph.addDay('2026-07-17', 'Unrelated day')
+
+      const read = await call('get_day', { day_id: dayId })
+      expect(JSON.parse(read!.content![0].text)).toMatchObject({
+        source: { provider: 'onedrive', folderId: graph.folder, format: 'daily' },
+        day: { content_md: 'Original' },
+      })
+      expect(graph.counters.downloads).toEqual([`file-${dayId}`])
+      expect(await profiles.decryptCredential(profile.profileId)).toBe('rotated-refresh')
+      expect((await profiles.getMetadata(profile.profileId))?.updatedAt).toBe(profile.updatedAt)
+
+      graph.afterBytes(async () => { graph.addDay(dayId, race, 'v2') })
+      const args = { day_id: dayId, content_md: 'Agent addition', operation_id: 'onedrive-replay' }
+      const written = await call('add_to_day', args)
+      expect(written?.isError, written?.content?.[0].text).not.toBe(true)
+      const compact = JSON.parse(written!.content![0].text)
+      expect(compact).toMatchObject({ day_id: dayId, conflictRetries: 1, operation_id: 'onedrive-replay' })
+      const saved = graph.texts.get(`file-${dayId}`)!
+      expect(decodeNotebookDay(saved, dayId).contentMd).toBe('Original\nConcurrent addition\n\nAgent addition')
+      expect((await readNotebookAuthors(saved)).get(dayId)).toEqual(['Casey', 'Sam', 'Agent · Ari', 'Agent · Ari'])
+      expect(graph.texts.get('file-2026-07-17')).toBe('Unrelated day')
+      expect(graph.counters.commits).toEqual([dayId])
+      expect(dependency.refreshOneDrive).toHaveBeenCalledTimes(2)
+      expect(dependency.refreshOneDrive).toHaveBeenLastCalledWith('rotated-refresh', expect.anything())
+
+      expect(await call('add_to_day', args)).toEqual(written)
+      expect(dependency.refreshOneDrive).toHaveBeenCalledTimes(2)
+      expect(graph.counters.commits).toEqual([dayId])
+      expect(relay.idFromName).toHaveBeenCalledExactlyOnceWith(
+        [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`daily:${graph.folder}`)))]
+          .map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+      )
+      expect(publish).toHaveBeenCalledTimes(1)
+      expect(publish.mock.calls[0][0]).toBe('https://channel/publish')
+      expect(JSON.parse(String(publish.mock.calls[0][1].body))).toEqual({
+        type: 'day-changed', dayId, item: `/drives/drive/items/file-${dayId}`, revision: 'v3', sender: '',
+      })
+    } finally {
+      db.close()
+    }
+  })
+
+  it('releases a rejected refresh for retry and keeps an append replayable when the relay fails', async () => {
+    const { graph, db, dependency, publish, call } = await fixture()
+    try {
+      const args = { day_id: dayId, content_md: 'New day', operation_id: 'onedrive-retry' }
+      dependency.refreshOneDrive.mockRejectedValueOnce(Object.assign(new Error('fixture private details'), { code: 'invalid_grant' }))
+      const failed = await call('add_to_day', args)
+      expect(failed?.isError).toBe(true)
+      expect(failed?.content?.[0].text).toContain('Reconnect OneDrive')
+      expect(failed?.content?.[0].text).not.toContain('fixture private details')
+      expect(dependency.fetch).not.toHaveBeenCalled()
+      expect(publish).not.toHaveBeenCalled()
+
+      publish.mockRejectedValueOnce(new Error('Fixture relay unavailable'))
+      const written = await call('add_to_day', args)
+      expect(written?.isError, written?.content?.[0].text).not.toBe(true)
+      expect(await call('add_to_day', args)).toEqual(written)
+      expect(graph.counters.commits).toEqual([dayId])
+      expect(decodeNotebookDay(graph.texts.get(`file-${dayId}`)!, dayId).contentMd).toBe('New day')
+      expect(publish).toHaveBeenCalledTimes(1)
+    } finally {
+      db.close()
+    }
+  })
+
+  it.each([404, 412])('does not restore a day when its conditional commit returns %i after deletion', async (status) => {
+    const { graph, db, dependency, publish, call } = await fixture()
+    try {
+      graph.addDay(dayId, doc('This day will be deleted'))
+      const itemUrl = `https://graph.microsoft.com/v1.0/drives/drive/items/file-${dayId}`
+      const providerFetch = dependency.fetch.getMockImplementation()!
+      dependency.fetch.mockImplementation(async (url, init) => {
+        const response = await providerFetch(url, init)
+        return String(url) === itemUrl && init?.method === 'PUT' && response.status === 404
+          ? new Response(null, { status })
+          : response
+      })
+      graph.afterBytes(async () => {
+        const deleted = await graph.fetch(itemUrl, { method: 'DELETE', headers: { 'If-Match': 'v1' } })
+        expect(deleted.status).toBe(204)
+      })
+      const args = { day_id: dayId, content_md: 'Racing agent addition', operation_id: 'onedrive-delete-race' }
+      expect((await call('add_to_day', args))?.isError).toBe(true)
+      expect((await call('add_to_day', args))?.isError).toBe(true)
+      expect(graph.texts.has(`file-${dayId}`)).toBe(false)
+      expect(graph.counters.commits).toHaveLength(0)
+      expect(publish).not.toHaveBeenCalled()
+    } finally {
+      db.close()
+    }
   })
 })
 
