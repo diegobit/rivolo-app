@@ -166,8 +166,9 @@ const badgeAlignment = ViewPlugin.fromClass(class {
         top += parseFloat(space) + (view.defaultLineHeight - 20) / 2 + 19
       } else if (cell.querySelector('.cm-blame-rail')) top -= 1 // Overlaps the piece above, see the theme.
       else return [cell, values]
-      // A block of one row has no room under its badge for a rail.
-      values['--blame-mask'] = bottom - top < 12 ? 'none' : piece(top, bottom, end)
+      // Short joins still need a ripple. A curl needs more room.
+      const height = bottom - top
+      values['--blame-mask'] = height <= 0 || (end && height < 12) ? emptyMask : piece(top, bottom, end)
       return [cell, values]
     }),
     write: (cells: Cell[], view: EditorView) => {
@@ -187,7 +188,8 @@ const badgeAlignment = ViewPlugin.fromClass(class {
 // Badge, ripple and curl share one colour, so they read as a single shape. The
 // rail is that colour seen through its line's piece of the ripple.
 const fill = 'hsl(var(--blame-hue) var(--theme-blame-saturation) var(--theme-blame-lightness))'
-const ripple = 'var(--blame-mask, none) 0 0 / 100% 100% no-repeat'
+const emptyMask = 'linear-gradient(transparent, transparent)'
+const ripple = `var(--blame-mask, ${emptyMask}) 0 0 / 100% 100% no-repeat`
 const theme = EditorView.theme({
   '.cm-gutters': { backgroundColor: 'transparent', border: 'none' },
   '.cm-blame-gutter': { width: '36px', minWidth: '36px', maxWidth: '36px', padding: '0', flexShrink: '0' },
