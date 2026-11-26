@@ -26,6 +26,12 @@ import { roomName } from '../functions/_lib/oneDriveNotebook.js'
 import { relayFetch } from '../functions/_lib/oneDriveRelay.js'
 import { createHostedDailyNotes, createHostedOneDriveNotes } from './hostedDailyNotes.js'
 import { createGoogleDriveNotesSource } from './googleDriveNotesSource.js'
+import {
+  createProviderAccessTokenCache,
+  providerAccessTokenKey,
+  type ProviderAccessToken,
+  type ProviderAccessTokenGrant,
+} from './providerAccessTokenCache.js'
 import { ProviderWriteNotAppliedError } from './providerWriteErrors.js'
 import { createDropboxNotesAdapter } from './providers/dropboxNotes.js'
 import { registerReadTools, type LoadNotes } from './readTools.js'
@@ -201,61 +207,101 @@ const toPrincipal = (auth: RemoteMcpAuthResult): RemoteMcpPrincipal => ({
   scopes: 'token' in auth ? auth.token.scopes : auth.scopes,
 })
 
-const authorizedFetch = (
-  getAccessToken: () => Promise<string>,
+// Lives for the isolate, shared by requests that already passed MCP auth.
+const providerAccessTokens = createProviderAccessTokenCache()
+
+type ProviderAccessTokens = {
+  get: () => Promise<ProviderAccessToken>
+  reject: (accessToken: string) => Promise<void>
+}
+
+const cachedProviderAccessTokens = (
+  auth: RemoteMcpPrincipal,
+  load: () => Promise<ProviderAccessTokenGrant>,
+): ProviderAccessTokens => {
+  let key: Promise<string> | undefined
+  const cacheKey = () =>
+    (key ??= providerAccessTokenKey(
+      auth.profile.profileId,
+      auth.providerRefreshToken,
+    ))
+  return {
+    get: async () => providerAccessTokens.get(await cacheKey(), load),
+    reject: async (accessToken) =>
+      providerAccessTokens.reject(await cacheKey(), accessToken),
+  }
+}
+
+const fetchWithAccessToken = (
   providerFetch: typeof fetch,
-) => async (input: string | URL, init: RequestInit = {}) => {
+  accessToken: string,
+  input: string | URL,
+  init: RequestInit,
+) => {
   const headers = new Headers(init.headers)
-  headers.set('Authorization', `Bearer ${await getAccessToken()}`)
+  headers.set('Authorization', `Bearer ${accessToken}`)
   return providerFetch(input, { ...init, headers })
 }
 
-const createDropboxAccessToken = (
-  auth: RemoteMcpPrincipal,
-  env: RemoteMcpEnv,
-  dependencies: RemoteMcpDependencies,
-) => {
-  let accessToken: Promise<string> | undefined
-  return () => {
-    accessToken ??= dependencies
-      .refreshDropbox(auth.providerRefreshToken, env)
-      .then(async (token) => {
-        if (
-          token.refresh_token
-          && token.refresh_token !== auth.providerRefreshToken
-        ) {
-          await new ProviderProfileRepository(
-            env.MCP_DB,
-            env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY,
-          ).updateCredential(auth.profile.profileId, token.refresh_token)
-        }
-        return token.access_token
-      })
-      .catch(() => {
-        throw new Error('Dropbox authorization failed. Reconnect Dropbox in Rivolo.')
-      })
-    return accessToken
-  }
+const authorizedFetch = (
+  accessTokens: ProviderAccessTokens,
+  providerFetch: typeof fetch,
+) => async (input: string | URL, init: RequestInit = {}) => {
+  const send = (accessToken: string) => fetchWithAccessToken(providerFetch, accessToken, input, init)
+
+  const token = await accessTokens.get()
+  const response = await send(token.accessToken)
+  if (response.status !== 401 || !token.cached) return response
+
+  // A cached token can be revoked or expire early. A 401 means the provider
+  // did not apply the request, so refresh once and send it again.
+  await response.body?.cancel().catch(() => undefined)
+  await accessTokens.reject(token.accessToken)
+  return send((await accessTokens.get()).accessToken)
 }
 
-const createGoogleAccessToken = (
+const loadDropboxAccessToken = (
   auth: RemoteMcpPrincipal,
   env: RemoteMcpEnv,
   dependencies: RemoteMcpDependencies,
-) => {
-  let accessToken: Promise<string> | undefined
-  return () => {
-    accessToken ??= dependencies
-      .refreshGoogle(auth.providerRefreshToken, env)
-      .then((token) => token.access_token)
-      .catch(() => {
-        throw new Error(
-          'Google Drive authorization failed. Reconnect Google Drive in Rivolo.',
-        )
-      })
-    return accessToken
-  }
-}
+) => () =>
+  dependencies
+    .refreshDropbox(auth.providerRefreshToken, env)
+    .then(async (token) => {
+      if (
+        token.refresh_token
+        && token.refresh_token !== auth.providerRefreshToken
+      ) {
+        await new ProviderProfileRepository(
+          env.MCP_DB,
+          env.MCP_PROVIDER_TOKEN_ENCRYPTION_KEY,
+        ).updateCredential(auth.profile.profileId, token.refresh_token)
+      }
+      return {
+        accessToken: token.access_token,
+        expiresInSeconds: token.expires_in,
+      }
+    })
+    .catch(() => {
+      throw new Error('Dropbox authorization failed. Reconnect Dropbox in Rivolo.')
+    })
+
+const loadGoogleAccessToken = (
+  auth: RemoteMcpPrincipal,
+  env: RemoteMcpEnv,
+  dependencies: RemoteMcpDependencies,
+) => () =>
+  dependencies
+    .refreshGoogle(auth.providerRefreshToken, env)
+    .then((token) => ({
+      accessToken: token.access_token,
+      expiresInSeconds: token.expires_in,
+    }))
+    .catch(() => {
+      throw new Error(
+        'Google Drive authorization failed. Reconnect Google Drive in Rivolo.',
+      )
+    })
 
 const createOneDriveAccessToken = (
   auth: RemoteMcpPrincipal,
@@ -323,9 +369,9 @@ const createNotesRuntime = (
   if (auth.profile.provider === 'onedrive') {
     const { target: { folder }, providerAccountId, providerName } = auth.profile
     const token = createOneDriveAccessToken(auth, env, dependencies)
-    const graphFetch = authorizedFetch(token, providerFetch)
     const notes = createHostedOneDriveNotes(folder, {
-      authorizedFetch: (url, init) => graphFetch(url, { ...init, redirect: 'manual' }),
+      authorizedFetch: async (url, init) =>
+        fetchWithAccessToken(providerFetch, await token(), url, { ...init, redirect: 'manual' }),
       accountKey: async () => providerAccountId,
       fetch: providerFetch,
     }, providerName ? `Agent · ${providerName}` : 'Agent', async (dayId, file) => {
@@ -336,21 +382,18 @@ const createNotesRuntime = (
     return { loadNotes: notes.loadNotes, addToDay: async (input) => compactProviderResult(await notes.add(input)) }
   }
 
+  const loadToken = auth.profile.provider === 'dropbox'
+    ? loadDropboxAccessToken(auth, env, dependencies)
+    : loadGoogleAccessToken(auth, env, dependencies)
+  const fetchForProfile = authorizedFetch(cachedProviderAccessTokens(auth, loadToken), providerFetch)
+
   if (auth.profile.dailyFolderId) {
-    const token = auth.profile.provider === 'dropbox'
-      ? createDropboxAccessToken(auth, env, dependencies)
-      : createGoogleAccessToken(auth, env, dependencies)
-    const notes = createHostedDailyNotes(auth.profile.provider, auth.profile.dailyFolderId, authorizedFetch(token, providerFetch))
+    const notes = createHostedDailyNotes(auth.profile.provider, auth.profile.dailyFolderId, fetchForProfile)
     return { loadNotes: notes.loadNotes, addToDay: async (input) => compactProviderResult(await notes.add(input)) }
   }
-
-
   if (auth.profile.provider === 'dropbox') {
     const adapter = createDropboxNotesAdapter({
-      authorizedFetch: authorizedFetch(
-        createDropboxAccessToken(auth, env, dependencies),
-        providerFetch,
-      ),
+      authorizedFetch: fetchForProfile,
       path: auth.profile.target.path,
     })
     return {
@@ -359,13 +402,7 @@ const createNotesRuntime = (
     }
   }
 
-  const source = createGoogleDriveNotesSource(
-    authorizedFetch(
-      createGoogleAccessToken(auth, env, dependencies),
-      providerFetch,
-    ),
-    auth.profile.target,
-  )
+  const source = createGoogleDriveNotesSource(fetchForProfile, auth.profile.target)
   return {
     loadNotes: source.read,
     addToDay: async (input) => compactProviderResult(await source.addToDay(input)),

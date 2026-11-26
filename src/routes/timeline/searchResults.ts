@@ -15,6 +15,15 @@ export const keepEditedDayInResults = (
   return index === -1 ? [...next, kept] : [...next.slice(0, index), kept, ...next.slice(index)]
 }
 
+// Called on every keystroke in a note. Returning the same array when no result
+// shows that day keeps the timeline from re-rendering for each character.
+export const patchResultDayContent = (results: DaySearchResult[], dayId: string, contentMd: string) => {
+  if (!results.some((result) => result.day.dayId === dayId && result.day.contentMd !== contentMd)) return results
+  return results.map((result) =>
+    result.day.dayId === dayId ? { ...result, day: { ...result.day, contentMd } } : result,
+  )
+}
+
 export type InteractedTodo = { dayId: string; sourceLineIndex: number }
 
 // A completion can stop matching the open-todos filter. Keep the last task
@@ -27,15 +36,21 @@ export const keepInteractedTodoInResults = (
   if (!interacted) return next
   const kept = previous.find((result) => result.day.dayId === interacted.dayId && result.blockKind === 'line')
   const line = kept?.day.contentMd.split('\n')[interacted.sourceLineIndex]?.trimEnd()
-  if (!kept || line === undefined || !kept.matchedBlocks.includes(line)) return next
+  if (!kept || line === undefined || !(kept.sourceLineIndexes
+    ? kept.sourceLineIndexes.includes(interacted.sourceLineIndex)
+    : kept.matchedBlocks.includes(line))) return next
   const existing = next.find((result) => result.day.dayId === interacted.dayId)
-  if (existing?.matchedBlocks.includes(line)) return next
+  if (existing && (existing.sourceLineIndexes
+    ? existing.sourceLineIndexes.includes(interacted.sourceLineIndex)
+    : existing.matchedBlocks.includes(line))) return next
   if (existing) {
     return next.map((result) => result === existing
-      ? { ...result, day: kept.day, matchedBlocks: [...result.matchedBlocks, line] }
+      ? { ...result, day: kept.day, matchedBlocks: [...result.matchedBlocks, line],
+          ...(result.sourceLineIndexes && { sourceLineIndexes: [...result.sourceLineIndexes, interacted.sourceLineIndex] }) }
       : result)
   }
-  const retained = { ...kept, matchedBlocks: [line] }
+  const retained = { ...kept, matchedBlocks: [line],
+    ...(kept.sourceLineIndexes && { sourceLineIndexes: [interacted.sourceLineIndex] }) }
   const index = next.findIndex((result) => result.day.dayId < interacted.dayId)
   return index === -1 ? [...next, retained] : [...next.slice(0, index), retained, ...next.slice(index)]
 }

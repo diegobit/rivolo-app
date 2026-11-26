@@ -28,12 +28,14 @@ import { SEARCH_FILTER_LABELS } from '../lib/searchFilters'
 import { debugLog, startDebugTimer } from '../lib/debugLogs'
 import type { Day, DaySearchResult, SearchFilter } from '../lib/dayRepository'
 import { appendToDay, searchDays } from '../lib/dayRepository'
+import { searchDaysInMemory } from '../lib/notesCore'
+import { useSearchAuthors } from './timeline/useSearchAuthors'
 import { buttonPrimary } from '../lib/ui'
 import { useCitationNavigation } from './timeline/useCitationNavigation'
 import { focusLauncher } from '../components/app-shell/desktopCards'
 import { useStickToBottom } from './timeline/useStickToBottom'
 import { useDesktopCardMotion } from './timeline/useDesktopCardMotion'
-import { keepEditedDayInResults, keepInteractedTodoInResults, type InteractedTodo } from './timeline/searchResults'
+import { keepEditedDayInResults, keepInteractedTodoInResults, patchResultDayContent, type InteractedTodo } from './timeline/searchResults'
 import { useDaySaveQueue } from './timeline/useDaySaveQueue'
 import { useEditorMountWindow, type PendingEditorFocus } from './timeline/useEditorMountWindow'
 import { useOlderDaysLoader } from './timeline/useOlderDaysLoader'
@@ -576,6 +578,7 @@ export default function Timeline() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [searchFilter, setSearchFilter] = useState<SearchFilter | null>(null)
+  const [authorSelection, setAuthorSelection] = useState<{ name: string; scope: string } | null>(null)
   const [searchResultMode, setSearchResultMode] = useState<SearchResultMode>('whole-day')
   const [dateErrors, setDateErrors] = useState<Record<string, string | null>>({})
   const [highlightedQuote, setHighlightedQuote] = useState<Citation | null>(null)
@@ -640,6 +643,17 @@ export default function Timeline() {
   // Results come from the database, so an edited note changes which blocks
   // match only once it is saved; searching again then keeps the card current.
   const [savedNotesRevision, setSavedNotesRevision] = useState(0)
+  const { scope: authorScope, data: authorData, loading: authorLoading, failed: authorFailed } =
+    useSearchAuthors(mode === 'search', savedNotesRevision, remoteRefreshVersion)
+  const searchAuthor = authorSelection?.scope === authorScope ? authorSelection.name : null
+  const setSearchAuthor = useCallback((name: string | null) => {
+    setAuthorSelection(name ? { scope: authorScope, name } : null)
+    setSearchResults([])
+  }, [authorScope])
+  const authorControl = useMemo(() => ({
+    selected: searchAuthor, names: authorData.names, loading: authorLoading, failed: authorFailed,
+    onChange: setSearchAuthor,
+  }), [authorData.names, authorLoading, authorFailed, searchAuthor, setSearchAuthor])
   const handleDaySaved = useCallback(() => {
     setSavedNotesRevision((revision) => revision + 1)
   }, [])
@@ -703,15 +717,11 @@ export default function Timeline() {
   // filters the timeline; only the narrow-viewport tray search filters it.
   const isDesktopSearchCardOpen = mode === 'search' && !isNarrowViewportMode
   const isMobileSearchMode = mode === 'search' && isNarrowViewportMode
-  const hasSearchIntent = isMobileSearchMode && (Boolean(searchQuery) || Boolean(searchFilter))
+  const hasSearchIntent = isMobileSearchMode && Boolean(searchQuery || searchFilter || searchAuthor)
   // Only the narrow-viewport search ever hides the timeline: hasSearchIntent
   // already implies mode === 'search', so this is simply !hasSearchIntent.
   const isTimelineVisible = !hasSearchIntent
   const hasChatMessages = messages.length > 0
-  const mobileChatContentKey = useMemo(
-    () => messages.map((message) => `${message.id}:${message.content}:${message.meta?.isStreaming ?? false}`).join('\u0000'),
-    [messages],
-  )
   const showDesktopChatMode = mode === 'chat' && !isNarrowViewportMode
   const showDesktopChatPanel = showDesktopChatMode
   const lastChatMessage = messages[messages.length - 1]
@@ -722,7 +732,7 @@ export default function Timeline() {
     showDesktopChatPanel ? 'chat' : isDesktopSearchCardOpen ? 'search' : null,
   )
   const showMobileChatOverlay = mode === 'chat' && isNarrowViewportMode && chatPanelOpen
-  const mobileChatScroll = useMobileChatScroll(showMobileChatOverlay, mobileChatContentKey)
+  const mobileChatScroll = useMobileChatScroll(showMobileChatOverlay, chatContentKey)
   const todayId = getTodayId()
   const yesterdayId = addDays(todayId, -1)
   const tomorrowId = addDays(todayId, 1)
@@ -967,12 +977,12 @@ export default function Timeline() {
 
   useEffect(() => {
     interactedTodoRef.current = null
-  }, [mode, searchQuery, searchFilter, searchResultMode])
+  }, [mode, searchQuery, searchFilter, searchAuthor, searchResultMode])
 
   useEffect(() => {
     if (mode !== 'search') return
 
-    if (!searchQuery && !searchFilter) {
+    if (!searchQuery && !searchFilter && !searchAuthor) {
       setSearchResults([])
       setSearchLoading(false)
       setSearchError(null)
@@ -982,10 +992,17 @@ export default function Timeline() {
     let cancelled = false
     setSearchLoading(true)
     setSearchError(null)
+    if (searchAuthor && authorLoading) return
 
     const runSearch = async () => {
       try {
-        const data = await searchDays(searchQuery, { filter: searchFilter })
+        if (searchAuthor && authorFailed) throw new Error('Could not load authors')
+        const data = searchAuthor
+          ? searchDaysInMemory(authorData.days, searchQuery, {
+              filter: searchFilter,
+              author: { name: searchAuthor, byDay: authorData.byDay },
+            })
+          : await searchDays(searchQuery, { filter: searchFilter })
         if (cancelled) return
         // view.hasFocus is false whenever the window is unfocused, which is
         // exactly when pending edits are saved (switching apps mid-edit), so
@@ -1016,7 +1033,7 @@ export default function Timeline() {
     // savedNotesRevision re-runs the search once an edited note is saved;
     // searchResultMode, so switching Days/Lines never shows a kept day's stale lines;
     // remoteRefreshVersion, so OneDrive pulls refresh visible results.
-  }, [mode, remoteRefreshVersion, savedNotesRevision, searchFilter, searchQuery, searchResultMode])
+  }, [mode, remoteRefreshVersion, savedNotesRevision, searchFilter, searchQuery, searchResultMode, searchAuthor, authorData, authorLoading, authorFailed])
 
   // --- Handlers ---
 
@@ -1313,19 +1330,7 @@ export default function Timeline() {
 
       pinDayForEditorMount(dayId, 'edit', false)
 
-      setSearchResults((state) =>
-        state.map((result) =>
-          result.day.dayId === dayId
-            ? {
-                ...result,
-                day: {
-                  ...result.day,
-                  contentMd: value,
-                },
-              }
-            : result,
-        ),
-      )
+      setSearchResults((state) => patchResultDayContent(state, dayId, value))
       scheduleSave(dayId, value)
     },
     [highlightedQuote, pinDayForEditorMount, scheduleSave, setSearchResults],
@@ -1708,8 +1713,8 @@ export default function Timeline() {
     }
 
     const items: MatchedLineResultItem[] = []
-    for (const { day, matchedBlocks, blockKind } of visibleSearchResults) {
-      const lineIndexes = blockKind === 'line' ? getMatchedBlockLineIndexes(day.contentMd, matchedBlocks) : null
+    for (const { day, matchedBlocks, blockKind, sourceLineIndexes } of visibleSearchResults) {
+      const lineIndexes = blockKind === 'line' ? sourceLineIndexes ?? getMatchedBlockLineIndexes(day.contentMd, matchedBlocks) : null
       // A section opens at its heading, so repeated headings are located the same way.
       const sectionHeadingLineIndexes =
         blockKind === 'section'
@@ -1737,7 +1742,7 @@ export default function Timeline() {
           }
         } else {
           const trimmedBlock = block.trimEnd()
-          if (HEADING_LINE_REGEX.test(trimmedBlock)) {
+          if (sourceLineIndexes === undefined && HEADING_LINE_REGEX.test(trimmedBlock)) {
             const preview = getHeadingPreviewFromDay(day, trimmedBlock)
             if (preview?.displayBlock) {
               displayBlock = preview.displayBlock
@@ -1773,7 +1778,7 @@ export default function Timeline() {
     return items
   }, [isNarrowViewportMode, showMatchedLineResults, visibleSearchResults])
 
-  const hasCardSearchIntent = !isNarrowViewportMode && (Boolean(deferredSearchQuery) || Boolean(searchFilter))
+  const hasCardSearchIntent = !isNarrowViewportMode && Boolean(deferredSearchQuery || searchFilter || searchAuthor)
   const cardNoSearchResults =
     hasCardSearchIntent &&
     !searchLoading &&
@@ -1796,7 +1801,7 @@ export default function Timeline() {
   // Large result sets render a page at a time; the rest load as the list is
   // scrolled to its end. The page count resets only for a new query or filter,
   // so a refresh after an edit does not collapse a list the user has scrolled.
-  const cardResultsKey = `${deferredSearchQuery}\u0000${searchFilter ?? ''}`
+  const cardResultsKey = JSON.stringify([deferredSearchQuery, searchFilter, searchAuthor])
   const [cardResultPage, setCardResultPage] = useState({ key: cardResultsKey, limit: SEARCH_CARD_PAGE_SIZE })
   const cardResultLimit = cardResultPage.key === cardResultsKey ? cardResultPage.limit : SEARCH_CARD_PAGE_SIZE
   const visibleCardResultItems =
@@ -1956,6 +1961,7 @@ export default function Timeline() {
         searchFilter={searchFilter}
         resultMode={searchResultMode}
         layout="card"
+        authorControl={authorControl}
         onSearchFilterChange={setSearchFilter}
         onResultModeChange={setSearchResultMode}
       />
@@ -1970,11 +1976,12 @@ export default function Timeline() {
           searchFilter={searchFilter}
           resultMode={searchResultMode}
           layout="composer"
+          authorControl={authorControl}
           onSearchFilterChange={setSearchFilter}
           onResultModeChange={setSearchResultMode}
         />
       ) : null,
-    [mode, searchFilter, searchResultMode, setSearchFilter, setSearchResultMode],
+    [mode, searchFilter, searchResultMode, authorControl],
   )
 
   const openChatOverlayIfHidden = useCallback(() => {
@@ -2097,17 +2104,19 @@ export default function Timeline() {
           aria-live="polite"
         >
           <p className="text-base font-semibold text-[var(--theme-text-muted)]">
-            {searchFilter
+            {searchAuthor
+              ? `No matches by ${searchAuthor}${searchQuery ? ` for “${searchQuery}”` : ''}`
+              : searchFilter
               ? `No ${SEARCH_FILTER_LABELS[searchFilter]} matches${searchQuery.trim() ? ` for “${searchQuery.trim()}”` : ''}`
               : searchQuery.trim()
                 ? `No results for “${searchQuery.trim()}”`
                 : 'No results'}
           </p>
-          {searchFilter && (
+          {(searchFilter || searchAuthor) && (
             <button
               type="button"
               className="inline-flex min-h-11 items-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm font-semibold text-[var(--theme-text)] shadow-sm transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-hover)]"
-              onClick={() => setSearchFilter(null)}
+              onClick={() => { setSearchFilter(null); setSearchAuthor(null) }}
             >
               Clear filter
             </button>

@@ -462,4 +462,18 @@ export class ProviderProfileRepository {
 
     return result.meta.changes > 0
   }
+
+  async hasActiveProfile(provider: Provider, providerAccountId: string): Promise<boolean> {
+    const row = await this.db
+      .prepare(
+        `SELECT 1 AS active
+        FROM mcp_provider_profiles
+        WHERE provider = ? AND provider_account_id = ? AND revoked_at IS NULL
+        LIMIT 1`,
+      )
+      .bind(provider, providerAccountId)
+      .first<{ active: number }>()
+
+    return row !== null
+  }
 }

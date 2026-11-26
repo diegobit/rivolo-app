@@ -49,10 +49,15 @@ describe('persisted day repository', () => {
     await write('2026-07-12', 'beta edited')
     expect(await ids('alpha')).toEqual([])
     expect(await ids('beta')).toEqual(['2026-07-12'])
+    // Search hides entries without a day, so count them: a leftover entry
+    // grows the stored file on every later save.
+    const indexEntries = () => storage.database.selectValue('SELECT count(*) FROM days_fts')
     await storage.repository.moveDay('2026-07-12', '2026-07-13')
     expect(await ids('beta')).toEqual(['2026-07-13'])
+    expect(indexEntries()).toBe(1)
     await storage.repository.deleteDay('2026-07-13')
     expect(await ids('beta')).toEqual([])
+    expect(indexEntries()).toBe(0)
     await storage.repository.replaceDays([{ dayId: '2026-07-14', humanTitle: 'Replacement', contentMd: 'gamma replacement' }])
     storage = await reopenStorage(storage)
     expect(await ids('gamma')).toEqual(['2026-07-14'])
