@@ -209,6 +209,14 @@ origins. Register `https://rivolo-dev.aitlab.it/auth/dropbox/callback` and
 Browser storage and login cookies belong to each origin: keep the old dev
 domain available until any local-only notes have been exported or synced.
 
+Add `rivolo-dev.aitlab.it` as a custom domain on the same Pages project and
+point its proxied CNAME to `dev.rivolo-app.pages.dev` so it serves the `dev`
+branch. Add `https://rivolo-dev.aitlab.it` to Google’s authorized JavaScript
+origins. Register `https://rivolo-dev.aitlab.it/auth/dropbox/callback` and
+`https://rivolo-dev.aitlab.it/auth/onedrive/callback` with their providers.
+Browser storage and login cookies belong to each origin: keep the old dev
+domain available until any local-only notes have been exported or synced.
+
 The MCP branch preview uses `https://mcp-dev.aitlab.it/mcp` and the separate
 `rivolo-mcp-dev` D1 database. Pages selects `[env.preview]`; Worker commands
 must include `--env dev`. Production keeps its own database and secrets.

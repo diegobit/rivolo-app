@@ -8,10 +8,10 @@ permissions:
 jobs:
   contracts-and-browser:
     # Upstream uses a self-hosted Sengi runner that this organization does not have.
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v4
         with:
           node-version: 24
