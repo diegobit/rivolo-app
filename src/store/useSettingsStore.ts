@@ -346,10 +346,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           }
         : secretsRoot
 
-      const migrations: Array<[string, string]> = [
-        ['llm.providers', JSON.stringify(persistedProviders)],
-        ['llm.schemaVersion', '2'],
-      ]
+      // Write only what differs from storage. A load that changes nothing
+      // must not save: every save tells other tabs they are out of date.
+      const migrations: Array<[string, string]> = []
+      const serializedProviders = JSON.stringify(persistedProviders)
+      if (JSON.stringify(storedProviders) !== serializedProviders) {
+        migrations.push(['llm.providers', serializedProviders])
+      }
+      if (storedLlmSchemaVersion !== '2') migrations.push(['llm.schemaVersion', '2'])
       if (storedProvider !== provider) migrations.push(['llm.provider', provider])
       if (shouldMigrateLegacyGeminiSecret) migrations.push(['llm.secrets', JSON.stringify(persistedSecrets)])
       if (storedAllowWebSearch !== 'true' && storedAllowWebSearch !== 'false') {
@@ -377,7 +381,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
       if (!storedTitleFont || !isTitleFont(storedTitleFont)) migrations.push(['appearance.titleFont', titleFont])
 
-      await setSettings(migrations)
       syncThemePreference(themePreference)
       syncAnimationsPreference(animations)
 
@@ -402,6 +405,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         dismissedSetupNotices,
         loading: false,
       })
+
+      // The settings above stay applied even when this write fails, as it
+      // does in a tab that another tab has made read-only.
+      await setSettings(migrations)
     } catch (error) {
       console.error('[Settings migration failed]', error)
       set({

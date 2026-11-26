@@ -9,6 +9,7 @@ import {
 import {
   ensureDatabaseSchema,
   executeSql,
+  dayFtsRowid,
   exportSerializedDatabase,
   openSerializedDatabase,
   queryFirstRow,
@@ -1076,8 +1077,10 @@ export const upsertFts = async (dayId: string, humanTitle: string, content: stri
   assertDatabaseWritable()
   const db = await getDatabase()
   assertDatabaseWritable()
-  executeSql(db, 'DELETE FROM days_fts WHERE day_id = ?', [dayId])
-  executeSql(db, 'INSERT INTO days_fts (day_id, human_title, content_md) VALUES (?, ?, ?)', [
+  const rowid = dayFtsRowid(dayId)
+  executeSql(db, 'DELETE FROM days_fts WHERE rowid = ?', [rowid])
+  executeSql(db, 'INSERT INTO days_fts (rowid, day_id, human_title, content_md) VALUES (?, ?, ?, ?)', [
+    rowid,
     dayId,
     humanTitle,
     content,

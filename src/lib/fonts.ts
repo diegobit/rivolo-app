@@ -6,7 +6,6 @@ export type BodyFont = 'system'
 
 export type TitleFont =
   | 'system'
-  | 'bree'
   | 'handlee'
 
 export type FontPreference = 'proportional' | 'monospace'
@@ -26,7 +25,6 @@ export const bodyFontFamilies: Record<BodyFont, string> = {
 
 export const titleFontFamilies: Record<TitleFont, string> = {
   system: "'Lato', 'Inter', system-ui, sans-serif",
-  bree: "'Bree Serif', 'Times New Roman', serif",
   handlee: "'Handlee', 'Trebuchet MS', cursive",
 }
 
@@ -66,7 +64,6 @@ export const fontPresetOptions: Array<{
 
 export const titleFontOptions: Array<{ id: TitleFont; label: string }> = [
   { id: 'handlee', label: 'Handlee' },
-  { id: 'bree', label: 'Bree Serif' },
   { id: 'system', label: 'Lato' },
 ]
 
@@ -137,5 +134,4 @@ export const isBodyFont = (value: string | null): value is BodyFont =>
 
 export const isTitleFont = (value: string | null): value is TitleFont =>
   value === 'system' ||
-  value === 'bree' ||
   value === 'handlee'

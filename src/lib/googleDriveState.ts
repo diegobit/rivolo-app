@@ -135,6 +135,23 @@ export const markGoogleDriveLocalDirty = async () => {
   })
 }
 
+// A pull leaves local notes equal to the remote copy, so they are clean again,
+// unless a note was saved while the pull was running. `expectedRevision` is the
+// revision the pull itself leaves behind; a different one means such a save,
+// which must stay dirty or it would never be pushed.
+export const finalizeGoogleDrivePullState = async (
+  expectedRevision: number,
+  updates: Partial<GoogleDriveState>,
+) =>
+  enqueueGoogleDriveStateWrite((current) => {
+    const next = {
+      ...current,
+      ...updates,
+      localDirty: current.localRevision !== expectedRevision,
+    }
+    return { next, result: next }
+  })
+
 export const finalizeGoogleDrivePushState = async (
   fileId: string,
   remoteVersion: string,

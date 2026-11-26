@@ -75,6 +75,18 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
     const [current, migration] = await Promise.all([context ?? config.readContext(), readMigration()])
     return matches(current, migration) ? migration!.target : null
   }
+  // Check the legacy source and pending editor work inside the same
+  // transaction as replacement, after the download and rollback backup.
+  const canReplaceLegacyNotebook = (db: RivoloDatabase, before: Context) => {
+    const current = config.readContextInDatabase(db)
+    return current.connected === before.connected &&
+      current.accountId === before.accountId &&
+      current.sourceKey === before.sourceKey &&
+      current.lastRevision === before.lastRevision &&
+      current.localRevision === before.localRevision &&
+      !matches(current, readMigrationInDatabase(db)) &&
+      !getPendingEditorDayIds().size
+  }
   const readStatus = async (context: Context) => {
     const target = await getTarget(context)
     if (!target) return null
@@ -216,7 +228,7 @@ export function createCloudDailyNotebook<File extends DailyRemoteFile, State ext
   }
 
   return {
-    getTarget, readStatus, migrate,
+    getTarget, readStatus, migrate, canReplaceLegacyNotebook,
     startEvents: (target: NotebookTarget, onChanged: Parameters<typeof startCloudDailyEvents>[2],
       onError: (message: string) => void, onReady: () => void) => startCloudDailyEvents(target, assertTarget, onChanged, onError, onReady),
     pull: async (target: NotebookTarget, options: SyncPullOptions) => {

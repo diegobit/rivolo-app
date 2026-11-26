@@ -15,6 +15,15 @@ export const keepEditedDayInResults = (
   return index === -1 ? [...next, kept] : [...next.slice(0, index), kept, ...next.slice(index)]
 }
 
+// Called on every keystroke in a note. Returning the same array when no result
+// shows that day keeps the timeline from re-rendering for each character.
+export const patchResultDayContent = (results: DaySearchResult[], dayId: string, contentMd: string) => {
+  if (!results.some((result) => result.day.dayId === dayId && result.day.contentMd !== contentMd)) return results
+  return results.map((result) =>
+    result.day.dayId === dayId ? { ...result, day: { ...result.day, contentMd } } : result,
+  )
+}
+
 export type InteractedTodo = { dayId: string; sourceLineIndex: number }
 
 // A completion can stop matching the open-todos filter. Keep the last task

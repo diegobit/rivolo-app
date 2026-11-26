@@ -150,3 +150,48 @@ describe('ChatMessageList copy button', () => {
     expect(setTimeoutSpy).not.toHaveBeenCalledWith(expect.any(Function), 2000)
   })
 })
+
+// Each assistant reply caches its rendered Markdown. These guard against a
+// stale cache: the reply on screen must follow its text and its citations.
+describe('assistant Markdown rendering', () => {
+  const list = (messages: ChatUiMessage[]) => (
+    // New handler functions on every render, as the timeline passes them.
+    <ChatMessageList
+      messages={messages}
+      onAssistantMarkdownClick={() => undefined}
+      onAssistantMarkdownKeyDown={() => undefined}
+      onChatInsert={() => undefined}
+    />
+  )
+  const first: ChatUiMessage = { id: 'a1', role: 'assistant', content: 'First **answer**.', meta: { citations: [] } }
+  const question: ChatUiMessage = { id: 'u1', role: 'user', content: 'And then?' }
+  const streaming = (content: string): ChatUiMessage => ({
+    id: 'a2',
+    role: 'assistant',
+    content,
+    meta: { citations: [], isStreaming: true },
+  })
+
+  it('shows the streaming reply as its text grows and keeps earlier replies', () => {
+    const { rerender, container } = render(list([first, question, streaming('Second')]))
+
+    rerender(list([first, question, streaming('Second *part*')]))
+
+    expect(container.querySelector('strong')).toHaveTextContent('answer')
+    expect(container.querySelector('em')).toHaveTextContent('part')
+  })
+
+  it('shows the new quote when a reply\'s citations change', () => {
+    const cited = (quote: string): ChatUiMessage => ({
+      id: 'a1',
+      role: 'assistant',
+      content: 'See @@CITATION_0@@',
+      meta: { citations: [{ day: '2026-07-02', quote }] },
+    })
+    const { rerender, container } = render(list([cited('milk')]))
+
+    rerender(list([cited('bread')]))
+
+    expect(container.querySelector('[data-citation-index="0"]')).toHaveAttribute('title', expect.stringContaining('bread'))
+  })
+})

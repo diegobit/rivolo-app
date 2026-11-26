@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DaySearchResult } from '../../lib/dayRepository'
-import { keepEditedDayInResults, keepInteractedTodoInResults } from './searchResults'
+import { keepEditedDayInResults, keepInteractedTodoInResults, patchResultDayContent } from './searchResults'
 
 const result = (dayId: string): DaySearchResult => ({
   day: { dayId, humanTitle: '', contentMd: dayId, createdAt: 0, updatedAt: 0 },
@@ -65,5 +65,29 @@ describe('keepInteractedTodoInResults', () => {
     expect(keepInteractedTodoInResults([changed], [changed], interacted)).toEqual([changed])
     const next: DaySearchResult[] = []
     expect(keepInteractedTodoInResults(next, [changed], null)).toBe(next)
+  })
+})
+
+describe('patchResultDayContent', () => {
+  const results = [result('2026-09-26'), result('2026-09-20')]
+
+  it('returns the same array when no result shows the edited day, so nothing re-renders', () => {
+    expect(patchResultDayContent(results, '2026-09-01', 'typed')).toBe(results)
+    const empty: DaySearchResult[] = []
+    expect(patchResultDayContent(empty, '2026-09-26', 'typed')).toBe(empty)
+  })
+
+  it('returns the same array when the content is already current', () => {
+    expect(patchResultDayContent(results, '2026-09-26', '2026-09-26')).toBe(results)
+  })
+
+  it('updates only the edited day and leaves the other results untouched', () => {
+    const next = patchResultDayContent(results, '2026-09-20', 'typed')
+
+    expect(next).not.toBe(results)
+    expect(next[0]).toBe(results[0])
+    expect(next[1].day.contentMd).toBe('typed')
+    expect(next[1].matchedBlocks).toBe(results[1].matchedBlocks)
+    expect(results[1].day.contentMd).toBe('2026-09-20')
   })
 })

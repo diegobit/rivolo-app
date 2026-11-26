@@ -12,7 +12,7 @@ import {
   runAtomicDatabaseMutation,
 } from './db'
 import type { PendingDayDraft } from './db'
-import { executeSql, queryFirstRow, type RivoloDatabase } from './sqliteRuntime'
+import { dayFtsRowid, executeSql, queryFirstRow, type RivoloDatabase } from './sqliteRuntime'
 import { markSyncLocalDirtyInDatabase } from './syncDirty'
 import { searchDaysInMemory, type Day, type DaySearchResult, type SearchFilter } from './notesCore'
 import { isAscii, isAtLeastThreeCodePoints, quoteFtsPhrase } from './sqliteRuntime'
@@ -57,8 +57,10 @@ const readDayFromDatabase = (db: RivoloDatabase, dayId: string) => {
 }
 
 const replaceFtsEntry = (db: RivoloDatabase, dayId: string, humanTitle: string, contentMd: string) => {
-  executeSql(db, 'DELETE FROM days_fts WHERE day_id = ?', [dayId])
-  executeSql(db, 'INSERT INTO days_fts (day_id, human_title, content_md) VALUES (?, ?, ?)', [
+  const rowid = dayFtsRowid(dayId)
+  executeSql(db, 'DELETE FROM days_fts WHERE rowid = ?', [rowid])
+  executeSql(db, 'INSERT INTO days_fts (rowid, day_id, human_title, content_md) VALUES (?, ?, ?, ?)', [
+    rowid,
     dayId,
     humanTitle,
     contentMd,
@@ -290,7 +292,7 @@ export const moveDay = async (fromDayId: string, toDayId: string) => {
       now,
       fromDayId,
     ])
-    executeSql(db, 'DELETE FROM days_fts WHERE day_id = ?', [fromDayId])
+    executeSql(db, 'DELETE FROM days_fts WHERE rowid = ?', [dayFtsRowid(fromDayId)])
     replaceFtsEntry(db, toDayId, humanTitle, existing.contentMd)
     markSyncLocalDirtyInDatabase(db)
     return { result: { day: readDayFromDatabase(db, toDayId), conflict: false }, changed: true }
@@ -341,7 +343,7 @@ export const appendToDay = async (dayId: string, text: string) => {
 export const deleteDay = async (dayId: string) => {
   await runAtomicDatabaseMutation((db) => {
     executeSql(db, 'DELETE FROM days WHERE day_id = ?', [dayId])
-    executeSql(db, 'DELETE FROM days_fts WHERE day_id = ?', [dayId])
+    executeSql(db, 'DELETE FROM days_fts WHERE rowid = ?', [dayFtsRowid(dayId)])
     markSyncLocalDirtyInDatabase(db)
   })
 }
@@ -353,7 +355,10 @@ export const clearDays = async () => {
   })
 }
 
-export const replaceDays = async (days: DayWrite[], options: { markDirty?: boolean } = {}) => {
+export const replaceDays = async (
+  days: DayWrite[],
+  options: { markDirty?: boolean; canReplace?: (db: RivoloDatabase) => boolean } = {},
+) => {
   for (const day of days) {
     assertValidDayId(day.dayId)
   }
@@ -361,7 +366,9 @@ export const replaceDays = async (days: DayWrite[], options: { markDirty?: boole
   const markDirty = options.markDirty ?? true
   const now = Date.now()
 
-  await runAtomicDatabaseMutation((db) => {
+  return runAtomicDatabaseMutation((db) => {
+    if (options.canReplace && !options.canReplace(db)) return false
+
     executeSql(db, 'DELETE FROM days')
     executeSql(db, 'DELETE FROM days_fts')
 
@@ -374,7 +381,8 @@ export const replaceDays = async (days: DayWrite[], options: { markDirty?: boole
         now,
         now,
       ])
-      executeSql(db, 'INSERT INTO days_fts (day_id, human_title, content_md) VALUES (?, ?, ?)', [
+      executeSql(db, 'INSERT INTO days_fts (rowid, day_id, human_title, content_md) VALUES (?, ?, ?, ?)', [
+        dayFtsRowid(day.dayId),
         day.dayId,
         title,
         day.contentMd,
@@ -382,7 +390,8 @@ export const replaceDays = async (days: DayWrite[], options: { markDirty?: boole
     }
 
     if (markDirty) markSyncLocalDirtyInDatabase(db)
-  })
+    return true
+  }, { shouldMarkChanged: (replaced) => replaced })
 }
 
 export const searchDays = async (

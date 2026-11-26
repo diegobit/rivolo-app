@@ -4,6 +4,7 @@ import { runBulkDatabaseMutation } from './db'
 import { formatDayTitle } from './dates'
 import { del, get, set } from 'idb-keyval'
 import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate'
+import type { RivoloDatabase } from './sqliteRuntime'
 
 export const IMPORT_ROLLBACK_BACKUPS_KEY = 'rivolo.import.rollbackBackups'
 // Legacy single-entry key, folded into the retention list on the next backup write.
@@ -135,6 +136,7 @@ export const importMarkdownToDb = async (
     replace?: boolean; markDirty?: boolean; allowUnsafeImport?: boolean
     allowDeletedDays?: boolean
     beforeReplace?: () => Promise<void>
+    canReplace?: (db: RivoloDatabase) => boolean
   } = {},
 ) => {
   const { days, warnings } = parseMarkdown(source)
@@ -213,7 +215,10 @@ export const importMarkdownToDb = async (
 
   await runBulkDatabaseMutation(async () => {
     await options.beforeReplace?.()
-    await replaceDays(normalizedDays, { markDirty })
+    const replaced = await replaceDays(normalizedDays, { markDirty, canReplace: options.canReplace })
+    if (!replaced) {
+      throw new Error('The local notebook or sync target changed during the pull. Let your edits finish saving before retrying.')
+    }
   })
 
   return { imported: days.length, warnings }

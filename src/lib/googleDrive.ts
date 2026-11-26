@@ -3,13 +3,13 @@ import { authorizedGoogleDriveFetch, disconnectGoogleDriveAuth } from './googleD
 import {
   DEFAULT_GOOGLE_DRIVE_FOLDER_NAME,
   DEFAULT_GOOGLE_DRIVE_FILE_NAME,
+  finalizeGoogleDrivePullState,
   finalizeGoogleDrivePushState,
   getGoogleDriveState,
   getGoogleDrivePath,
   updateGoogleDriveState,
 } from './googleDriveState'
 import type { GoogleDriveState } from './googleDriveState'
-import { markSyncLocalDirty } from './syncDirty'
 import { createCloudDailyNotebook } from './cloudDailyNotebook'
 import { createGoogleDriveDailyRemote } from './googleDriveDailyRemote'
 import { getJsonSetting, setJsonSetting } from './settingsRepository'
@@ -372,21 +372,20 @@ export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
   const content = await downloadDriveFile(metadata.id)
   await importMarkdownToDb(content, {
     replace: true,
-    markDirty: false,
     allowUnsafeImport: options.allowUnsafeImport,
+    canReplace: (db) => dailyGoogleDrive.canReplaceLegacyNotebook(db, dailyContext(state)),
   })
 
-  await markSyncLocalDirty()
-  await updateGoogleDriveState({
+  const contentHash = await hashSyncContent(content)
+  await finalizeGoogleDrivePullState(state.localRevision + 1, {
     fileId: metadata.id,
     fileName: metadata.name,
     lastRemoteVersion: metadata.version,
     // Remote content now equals local, so record its hash to suppress an
     // immediate redundant push of what we just pulled.
-    lastPushedHash: await hashSyncContent(content),
+    lastPushedHash: contentHash,
     lastSyncAt: Date.now(),
     lastPullAt: Date.now(),
-    localDirty: false,
   })
   return { status: 'pulled' as const }
 }

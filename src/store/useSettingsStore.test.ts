@@ -494,3 +494,59 @@ describe('useSettingsStore legacy geminiApiKey', () => {
     )
   })
 })
+
+describe('useSettingsStore loading saved settings', () => {
+  const JSON_KEYS = new Set(['llm.providers', 'llm.secrets'])
+
+  beforeEach(() => {
+    installMatchMedia(false)
+    window.localStorage.clear()
+    settingsRepository.getSetting.mockReset()
+    settingsRepository.setSetting.mockReset().mockResolvedValue(undefined)
+    settingsRepository.getJsonSetting.mockReset()
+    settingsRepository.setJsonSetting.mockReset().mockResolvedValue(undefined)
+    settingsRepository.setSettings.mockReset()
+    settingsRepository.updateJsonSetting.mockReset()
+    installRepositoryMutationMocks()
+    useSettingsStore.setState({ themePreference: 'system', settingsView: 'basic', loading: false, settingsError: null })
+  })
+
+  // Every save tells the other open tabs that they are out of date, so just
+  // opening Settings must not save.
+  it('saves nothing when every setting is already stored', async () => {
+    mockLoadSettingsValues()
+    await useSettingsStore.getState().loadSettings()
+    const stored = new Map<string, string>(
+      settingsRepository.setSettings.mock.calls.flatMap(([writes]) => writes as Array<[string, string]>),
+    )
+    expect(stored.get('llm.providers')).toBeDefined()
+    mockLoadSettingsValues(
+      Object.fromEntries([...stored].filter(([key]) => !JSON_KEYS.has(key))),
+      Object.fromEntries([...stored].filter(([key]) => JSON_KEYS.has(key)).map(([key, value]) => [key, JSON.parse(value)])),
+    )
+    settingsRepository.setSettings.mockClear()
+    settingsRepository.setSetting.mockClear()
+
+    await useSettingsStore.getState().loadSettings()
+    await useSettingsStore.getState().loadSettings()
+
+    expect(settingsRepository.setSettings.mock.calls.flatMap(([writes]) => writes as unknown[])).toEqual([])
+    expect(settingsRepository.setSetting).not.toHaveBeenCalled()
+  })
+
+  it('still shows the stored settings when the tab can no longer save', async () => {
+    // `ai.language` is missing, so the load has something to write back.
+    mockLoadSettingsValues({ 'appearance.theme': 'dark', 'settings.view': 'advanced', 'appearance.animations': 'false' })
+    settingsRepository.setSettings.mockRejectedValue(
+      new Error('This tab has older local data. Reload before making changes.'),
+    )
+
+    await useSettingsStore.getState().loadSettings()
+
+    const state = useSettingsStore.getState()
+    expect(state.themePreference).toBe('dark')
+    expect(state.settingsView).toBe('advanced')
+    expect(state.animations).toBe(false)
+    expect(state.loading).toBe(false)
+  })
+})
