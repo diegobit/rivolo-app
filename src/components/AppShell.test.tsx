@@ -15,6 +15,8 @@ const stores = vi.hoisted(() => ({
     dismissSetupNotice: vi.fn().mockResolvedValue(undefined),
     themePreference: 'system' as 'system' | 'light' | 'dark',
     updateThemePreference: vi.fn().mockResolvedValue(undefined),
+    desktopAuthors: true,
+    updateDesktopAuthors: vi.fn().mockResolvedValue(undefined),
     wallpaper: 'thoughts-light',
     highlightInputMode: false,
   },
@@ -30,6 +32,7 @@ const stores = vi.hoisted(() => ({
       connected: false,
       targetName: null,
       localDirty: false,
+      daily: false,
     },
     syncing: false,
     syncOperation: null,
@@ -122,6 +125,7 @@ describe('AppShell attention and stale tab states', () => {
     stores.settings.updateThemePreference.mockClear()
     stores.days = { loaded: true, loading: false, days: [{}] }
     stores.sync.activeProvider = null
+    stores.sync.status.daily = false
     stores.sync.syncAttention = null
     stores.ui.mode = 'timeline'
     stores.ui.chatPanelOpen = false
@@ -621,6 +625,40 @@ describe('AppShell attention and stale tab states', () => {
     expect(left).toContainElement(shortcutsButton)
     expect(right).toContainElement(themeButton)
     expect(right).toContainElement(settingsLink)
+  })
+
+  it.each([
+    ['onedrive', false],
+    ['dropbox', true],
+    ['google-drive', true],
+  ])('offers the authors switch beside help for %s and widens the timeline while authors show', (provider, daily) => {
+    stores.tabSync = { isPrimary: true, databaseStale: false }
+    stores.viewport.isNarrow = false
+    const shell = (
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route index element={<div>Timeline content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    )
+
+    const first = render(shell)
+    expect(screen.queryByRole('button', { name: 'Authors' })).not.toBeInTheDocument()
+    expect(first.container.querySelector('.app-shell-root')).toHaveAttribute('data-desktop-authors', 'false')
+    first.unmount()
+
+    stores.sync.activeProvider = provider
+    stores.sync.status.daily = daily
+    const { container } = render(shell)
+    const authors = screen.getByRole('button', { name: 'Authors' })
+    expect(getHeaderSlots().left).toContainElement(authors)
+    expect(authors).toHaveAttribute('aria-pressed', 'true')
+    expect(container.querySelector('.app-shell-root')).toHaveAttribute('data-desktop-authors', 'true')
+
+    fireEvent.click(authors)
+    expect(stores.settings.updateDesktopAuthors).toHaveBeenCalledWith(false)
   })
 
   it('hides the theme shortcut on Settings and the settings shortcut away from the timeline', () => {
