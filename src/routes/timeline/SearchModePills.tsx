@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react'
 import SegmentedCapsule from '../../components/SegmentedCapsule'
 import type { SearchFilter } from '../../lib/dayRepository'
 import { SEARCH_FILTER_OPTIONS } from '../../lib/searchFilters'
+import { useAuthorSearchControl, type AuthorControl } from './AuthorSearchControl'
 import type { SearchResultMode } from '../Timeline'
 
 const chipFocusClass =
@@ -76,11 +77,13 @@ const removeFilterDisc = (
 const ComposerSearchControls = ({
   searchFilter,
   resultMode,
+  authorControl,
   onSearchFilterChange,
   onResultModeChange,
 }: {
   searchFilter: SearchFilter | null
   resultMode: SearchResultMode
+  authorControl?: AuthorControl
   onSearchFilterChange: (filter: SearchFilter | null) => void
   onResultModeChange: (mode: SearchResultMode) => void
 }) => {
@@ -89,7 +92,8 @@ const ComposerSearchControls = ({
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const activeFilterLabel = SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label
-  const [scrollerRef, overflows] = useOverflowFade(searchFilter)
+  const [scrollerRef, overflows] = useOverflowFade(searchFilter, authorControl?.selected)
+  const { authorChip, authorPicker } = useAuthorSearchControl(authorControl, 'composer')
 
   useLayoutEffect(() => {
     if (!menuOpen) return
@@ -178,7 +182,9 @@ const ComposerSearchControls = ({
             </svg>
           </button>
         )}
+        {authorChip}
       </div>
+      {authorPicker}
       {menuOpen && !searchFilter ? (
         <div
           ref={menuRef}
@@ -220,6 +226,7 @@ const SearchModePills = memo(({
   searchFilter,
   resultMode,
   layout,
+  authorControl,
   onSearchFilterChange,
   onResultModeChange,
 }: {
@@ -229,11 +236,13 @@ const SearchModePills = memo(({
   // no result toggle. 'composer': the row inside the phone search box, where
   // Days | Lines switches the timeline between whole days and matching lines.
   layout: 'card' | 'composer'
+  authorControl?: AuthorControl
   onSearchFilterChange: (filter: SearchFilter | null) => void
   onResultModeChange: (mode: SearchResultMode) => void
 }) => {
   const inComposer = layout === 'composer'
-  const [scrollerRef, overflows] = useOverflowFade(searchFilter, layout)
+  const [scrollerRef, overflows] = useOverflowFade(searchFilter, layout, authorControl?.selected)
+  const { authorChip, authorPicker } = useAuthorSearchControl(inComposer ? undefined : authorControl, 'card')
 
   const activeFilterLabel = SEARCH_FILTER_OPTIONS.find((option) => option.value === searchFilter)?.label
 
@@ -242,6 +251,7 @@ const SearchModePills = memo(({
       <ComposerSearchControls
         searchFilter={searchFilter}
         resultMode={resultMode}
+        authorControl={authorControl}
         onSearchFilterChange={onSearchFilterChange}
         onResultModeChange={onResultModeChange}
       />
@@ -249,37 +259,41 @@ const SearchModePills = memo(({
   }
 
   return (
-    <div
-      ref={scrollerRef}
-      className={`pointer-events-auto -mb-1 gap-2 pb-2 ${chipRowClass} ${
-        overflows ? overflowFadeClass : ''
-      }`}
-    >
-    {searchFilter ? (
-      <button
-        data-active="true"
-        className={`capsule-chip group inline-flex h-11 shrink-0 items-center gap-2 pl-3.5 pr-2 text-xs font-semibold text-[var(--theme-text)] transition hover:border-[var(--theme-border-strong)] sm:h-8 ${chipFocusClass}`}
-        type="button"
-        onClick={() => onSearchFilterChange(null)}
-        aria-label={`Remove ${activeFilterLabel ?? 'filter'} filter`}
+    <div className="relative min-w-0">
+      <div
+        ref={scrollerRef}
+        className={`search-pills-scroll pointer-events-auto -mb-1 gap-2 pb-2 ${chipRowClass} ${
+          overflows ? overflowFadeClass : ''
+        }`}
       >
-        {activeFilterLabel}
-        <span className="capsule-chip-disc flex h-5 w-5 items-center justify-center rounded-full bg-[var(--theme-active)] text-[var(--theme-text-soft)] transition group-hover:bg-[var(--theme-border)] group-hover:text-[var(--theme-text)] sm:h-4 sm:w-4">
-          {removeFilterDisc}
-        </span>
-      </button>
-    ) : (
-      SEARCH_FILTER_OPTIONS.map((option) => (
+      {searchFilter ? (
         <button
-          key={option.value}
-          className={`capsule-chip inline-flex h-11 shrink-0 items-center px-3.5 text-xs font-semibold text-[var(--theme-text-soft)] transition hover:border-[var(--theme-border-strong)] hover:text-[var(--theme-text)] sm:h-8 ${chipFocusClass}`}
+          data-active="true"
+          className={`capsule-chip group inline-flex h-11 shrink-0 items-center gap-2 pl-3.5 pr-2 text-xs font-semibold text-[var(--theme-text)] transition hover:border-[var(--theme-border-strong)] sm:h-8 ${chipFocusClass}`}
           type="button"
-          onClick={() => onSearchFilterChange(option.value)}
+          onClick={() => onSearchFilterChange(null)}
+          aria-label={`Remove ${activeFilterLabel ?? 'filter'} filter`}
         >
-          {option.label}
+          {activeFilterLabel}
+          <span className="capsule-chip-disc flex h-5 w-5 items-center justify-center rounded-full bg-[var(--theme-active)] text-[var(--theme-text-soft)] transition group-hover:bg-[var(--theme-border)] group-hover:text-[var(--theme-text)] sm:h-4 sm:w-4">
+            {removeFilterDisc}
+          </span>
         </button>
-      ))
-    )}
+      ) : (
+        SEARCH_FILTER_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            className={`capsule-chip inline-flex h-11 shrink-0 items-center px-3.5 text-xs font-semibold text-[var(--theme-text-soft)] transition hover:border-[var(--theme-border-strong)] hover:text-[var(--theme-text)] sm:h-8 ${chipFocusClass}`}
+            type="button"
+            onClick={() => onSearchFilterChange(option.value)}
+          >
+            {option.label}
+          </button>
+        ))
+      )}
+      {authorChip}
+      </div>
+    {authorPicker}
     </div>
   )
 })
