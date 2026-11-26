@@ -59,6 +59,7 @@ type SettingsState = {
   highlightInputMode: boolean
   autocorrection: boolean
   mobileAuthors: boolean
+  desktopAuthors: boolean
   animations: boolean
   fontPreference: FontPreference
   bodyFont: BodyFont
@@ -82,6 +83,7 @@ type SettingsState = {
   updateAnimations: (enabled: boolean) => Promise<void>
   updateAutocorrection: (enabled: boolean) => Promise<void>
   updateMobileAuthors: (enabled: boolean) => Promise<void>
+  updateDesktopAuthors: (enabled: boolean) => Promise<void>
   updateFontPreset: (preset: FontPreset) => Promise<void>
   updateTitleFont: (titleFont: TitleFont) => Promise<void>
   updateBodyFontChoice: (choice: BodyFontChoice) => Promise<void>
@@ -212,6 +214,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   highlightInputMode: false,
   autocorrection: true,
   mobileAuthors: false,
+  desktopAuthors: true,
   animations: true,
   fontPreference: 'monospace',
   bodyFont: 'system',
@@ -243,6 +246,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         storedHighlightInputMode,
         storedAutocorrection,
         storedMobileAuthors,
+        storedDesktopAuthors,
         storedAnimations,
         storedFontPreference,
         storedBodyFont,
@@ -265,6 +269,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         getSetting('appearance.highlightInputMode'),
         getSetting('appearance.autocorrection'),
         getSetting('appearance.mobileAuthors'),
+        getSetting('appearance.desktopAuthors'),
         getSetting('appearance.animations'),
         getSetting('appearance.font'),
         getSetting('appearance.bodyFont'),
@@ -310,6 +315,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const highlightInputMode = storedHighlightInputMode === 'true'
       const autocorrection = storedAutocorrection !== 'false'
       const mobileAuthors = storedMobileAuthors === 'true'
+      const desktopAuthors = storedDesktopAuthors !== 'false'
       const animations = storedAnimations !== 'false'
       const fontPreference = (storedFontPreference as FontPreference | null) ?? 'monospace'
       const bodyFont = isBodyFont(storedBodyFont) ? storedBodyFont : 'system'
@@ -387,6 +393,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         highlightInputMode,
         autocorrection,
         mobileAuthors,
+        desktopAuthors,
         animations,
         fontPreference,
         bodyFont,
@@ -554,6 +561,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     return serializeSettingsOperation(async () => {
       await setSetting('appearance.mobileAuthors', enabled ? 'true' : 'false')
       set({ mobileAuthors: enabled })
+    })
+  },
+
+  updateDesktopAuthors: async (enabled) => {
+    return serializeSettingsOperation(async () => {
+      await setSetting('appearance.desktopAuthors', enabled ? 'true' : 'false')
+      set({ desktopAuthors: enabled })
     })
   },
 

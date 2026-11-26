@@ -46,7 +46,10 @@ class Spacer extends GutterMarker {
 class Rail extends GutterMarker {
   readonly author: string | null
   readonly end: boolean
-  constructor(author: string | null, end: boolean) { super(); this.author = author; this.end = end }
+  constructor(author: string | null, end: boolean) {
+    super(); this.author = author; this.end = end
+    if (end) this.elementClass = 'cm-blame-end'
+  }
   eq(other: Rail) { return this.author === other.author && this.end === other.end }
   toDOM() {
     const element = document.createElement('span')
@@ -119,20 +122,59 @@ const authorGutter = gutter({
   initialSpacer: () => new Spacer(),
   markers: (view) => view.state.field(markers),
 })
+// The rail is a ripple that runs from the badge to a curl. Each line draws its own
+// piece, so the wave is a function of the distance from the top of the note: that
+// keeps it unbroken from one line to the next.
+const WAVE = 14, SWING = 1.8, TAIL = 18
+const swing = (y: number) => 5 + SWING * Math.sin((2 * Math.PI * y) / WAVE)
+// One line's piece, from `top` to `bottom` as distances from the top of the note.
+// On a block's last line the wave straightens over the final TAIL pixels, or
+// fewer on a short line, and turns into the curl.
+const piece = (top: number, bottom: number, end: boolean) => {
+  const height = bottom - top, turn = end ? Math.max(height - TAIL, 0) : height
+  const wave = []
+  for (let y = 0; y < turn; y++) wave.push(`${swing(top + y).toFixed(2)} ${y}`)
+  wave.push(`${swing(top + turn).toFixed(2)} ${turn.toFixed(2)}`)
+  let path = `<path d='M${wave.join('L')}`
+  if (end) {
+    const land = height - 9.5, reach = land - turn, lean = SWING * ((2 * Math.PI) / WAVE) * Math.cos((2 * Math.PI * (top + turn)) / WAVE) * reach * 0.35
+    const y = (offset: number) => (land + offset).toFixed(2)
+    path += `C${(swing(top + turn) + lean).toFixed(2)} ${(turn + reach * 0.35).toFixed(2)} 3 ${(turn + reach * 0.6).toFixed(2)} 3 ${y(0)}` +
+      `C3 ${y(4.5)} 3.4 ${y(8)} 6 ${y(8)}C8 ${y(8)} 9 ${y(6.5)} 9 ${y(5)}C9 ${y(3.4)} 7.8 ${y(2.4)} 6.5 ${y(2.4)}C5.3 ${y(2.4)} 4.7 ${y(3.4)} 4.9 ${y(4.5)}`
+  }
+  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='10' height='${height.toFixed(2)}'>` +
+    `<g fill='none' stroke='#000' stroke-width='2' stroke-linecap='round'>${path}'/></g></svg>`)}")`
+}
 // Headings and lists add space above their text. Each badge reads that space
 // from its own line so it sits on the first row of text, not above it.
+type Cell = readonly [cell: HTMLElement, values: Record<string, string>]
 const badgeAlignment = ViewPlugin.fromClass(class {
   readonly request = {
     key: this,
-    read: (view: EditorView) => [...view.dom.querySelectorAll<HTMLElement>('.cm-blame-gutter .cm-blame-start')].map((cell) => {
-      const block = view.lineBlockAtHeight(cell.getBoundingClientRect().top + 1 - view.documentTop)
-      const { node } = view.domAtPos(block.from)
-      const line = (node instanceof Element ? node : node.parentElement)?.closest('.cm-line')
-      return [cell, line ? getComputedStyle(line).paddingTop : '0px'] as const
+    read: (view: EditorView) => [...view.dom.querySelectorAll<HTMLElement>('.cm-blame-gutter .cm-gutterElement')].map((cell): Cell => {
+      const box = cell.getBoundingClientRect()
+      const values: Record<string, string> = {}
+      const end = cell.classList.contains('cm-blame-end')
+      let top = box.top - view.documentTop
+      const bottom = top + box.height - (end ? 7 : 0)
+      if (cell.classList.contains('cm-blame-start')) {
+        const { node } = view.domAtPos(view.lineBlockAtHeight(top + 1).from)
+        const line = (node instanceof Element ? node : node.parentElement)?.closest('.cm-line')
+        const space = line ? getComputedStyle(line).paddingTop : '0px'
+        values['--blame-space'] = space
+        // The rail starts 1px inside the badge's lower edge.
+        top += parseFloat(space) + (view.defaultLineHeight - 20) / 2 + 19
+      } else if (cell.querySelector('.cm-blame-rail')) top -= 1 // Overlaps the piece above, see the theme.
+      else return [cell, values]
+      // A block of one row has no room under its badge for a rail.
+      values['--blame-mask'] = bottom - top < 12 ? 'none' : piece(top, bottom, end)
+      return [cell, values]
     }),
-    write: (cells: (readonly [HTMLElement, string])[], view: EditorView) => {
+    write: (cells: Cell[], view: EditorView) => {
       view.dom.querySelector<HTMLElement>('.cm-blame-gutter')?.style.setProperty('--blame-line', `${view.defaultLineHeight}px`)
-      for (const [cell, space] of cells) if (cell.style.getPropertyValue('--blame-space') !== space) cell.style.setProperty('--blame-space', space)
+      for (const [cell, values] of cells) for (const name in values) {
+        if (cell.style.getPropertyValue(name) !== values[name]) cell.style.setProperty(name, values[name])
+      }
     },
   }
   constructor(view: EditorView) { view.requestMeasure(this.request) }
@@ -142,9 +184,10 @@ const badgeAlignment = ViewPlugin.fromClass(class {
     }
   }
 })
-const railColor = 'hsl(var(--blame-hue) 40% 50% / 0.4)'
-const railLine = `linear-gradient(${railColor}, ${railColor}) center / 2px 100% no-repeat`
-const railFoot = `linear-gradient(${railColor}, ${railColor}) bottom / 8px 2px no-repeat`
+// Badge, ripple and curl share one colour, so they read as a single shape. The
+// rail is that colour seen through its line's piece of the ripple.
+const fill = 'hsl(var(--blame-hue) var(--theme-blame-saturation) var(--theme-blame-lightness))'
+const ripple = 'var(--blame-mask, none) 0 0 / 100% 100% no-repeat'
 const theme = EditorView.theme({
   '.cm-gutters': { backgroundColor: 'transparent', border: 'none' },
   '.cm-blame-gutter': { width: '36px', minWidth: '36px', maxWidth: '36px', padding: '0', flexShrink: '0' },
@@ -153,16 +196,19 @@ const theme = EditorView.theme({
     '--blame-top': 'calc(var(--blame-space, 0px) + (var(--blame-line, 22px) - 20px) / 2)' },
   '.cm-blame-spacer': { display: 'block', width: '28px' },
   '.cm-blame-badge': { display: 'block', width: '28px', height: '20px', margin: 'var(--blame-top) 0 0', padding: '0',
-    border: '1px solid hsl(var(--blame-hue) 40% 50% / 0.65)', borderRadius: '5px', background: 'hsl(var(--blame-hue) var(--theme-blame-saturation) var(--theme-blame-lightness))',
-    color: 'var(--theme-blame-text)', font: '600 11px/18px system-ui, sans-serif', boxSizing: 'border-box', cursor: 'pointer' },
+    border: '1px solid transparent', borderRadius: '10px', background: `${fill} border-box`,
+    color: 'hsl(var(--blame-hue) 45% var(--theme-blame-text-lightness))', font: '600 11px/18px system-ui, sans-serif', boxSizing: 'border-box', cursor: 'pointer' },
   '.cm-blame-badge::before': { content: '""', position: 'absolute', top: 'calc(var(--blame-top) - 2px)', left: '1px', width: '34px', height: '24px' },
   '.cm-blame-badge:hover, .cm-blame-badge:focus-visible': { borderColor: 'var(--theme-accent)', outline: '2px solid var(--theme-accent)', outlineOffset: '1px' },
-  // The rail takes its author's colour and closes with a foot before the block's
-  // last line ends, so it cannot be read as joining two authors.
+  // The rail starts under the badge's edge and it curls up before the block's
+  // last line ends, so it cannot be read as joining two authors. Until a line is
+  // measured it has no piece to show, so its rail stays hidden.
   '.cm-blame-rail, .cm-blame-badge::after': { display: 'block', position: 'absolute', top: '0', bottom: '0', left: '13px',
-    width: '10px', background: railLine, pointerEvents: 'none' },
-  '.cm-blame-badge::after': { content: '""', top: 'calc(var(--blame-top) + 23px)' },
-  '.cm-blame-rail.cm-blame-end, .cm-blame-end .cm-blame-badge::after': { bottom: '7px', background: `${railLine}, ${railFoot}` },
+    width: '10px', background: fill, mask: ripple, WebkitMask: ripple, pointerEvents: 'none' },
+  // Lines have fractional heights, so pieces that only touched would leave a hairline.
+  '.cm-blame-rail': { top: '-1px' },
+  '.cm-blame-badge::after': { content: '""', top: 'calc(var(--blame-top) + 19px)' },
+  '.cm-blame-rail.cm-blame-end, .cm-blame-end .cm-blame-badge::after': { bottom: '7px' },
 })
 
 export const blameGutter = (dayId: string, attribution: LineAttribution[] | null, open: Badge['open']) =>
