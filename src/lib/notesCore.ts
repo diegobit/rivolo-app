@@ -14,6 +14,9 @@ export type DaySearchResult = {
   day: Day
   matchedBlocks: string[]
   blockKind: 'line' | 'section'
+  // Supplied by author searches so identical text on another author's line
+  // never takes the place of the selected occurrence.
+  sourceLineIndexes?: number[]
 }
 
 export type DayFilterOptions = {
@@ -100,19 +103,27 @@ const collectHeadingSections = (lines: string[], normalizedQuery: string) => {
   return sections
 }
 
-const getMatchedBlocks = (day: Day, query: string, filter: SearchFilter | null) => {
+type AuthorSearch = {
+  name: string
+  byDay: ReadonlyMap<string, ReadonlyArray<string | null>>
+}
+
+const getMatchedBlocks = (day: Day, query: string, filter: SearchFilter | null, author?: AuthorSearch) => {
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const lines = day.contentMd.split('\n')
   const matches: string[] = []
+  const sourceLineIndexes: number[] = []
+  const authors = author?.byDay.get(day.dayId)
 
-  if (filter === 'headings') {
+  if (filter === 'headings' && !author) {
     return {
       blockKind: 'section' as const,
       matchedBlocks: collectHeadingSections(lines, normalizedQuery),
     }
   }
 
-  for (const rawLine of lines) {
+  for (const [index, rawLine] of lines.entries()) {
+    if (author && authors?.[index] !== author.name) continue
     const line = rawLine.trimEnd()
     if (!line.trim()) {
       continue
@@ -120,22 +131,25 @@ const getMatchedBlocks = (day: Day, query: string, filter: SearchFilter | null) 
 
     let isMatch = false
 
-    if (filter === 'open-todos') {
+    if (filter === 'headings') {
+      isMatch = HEADING_REGEX.test(line) && (!normalizedQuery || includesText(line, normalizedQuery))
+    } else if (filter === 'open-todos') {
       isMatch = TODO_LINE_REGEX.test(line) && (!normalizedQuery || includesText(line, normalizedQuery))
     } else if (filter === 'tags') {
       isMatch = hasMatchingToken(line, TAG_REGEX, normalizedQuery)
     } else if (filter === 'mentions') {
       isMatch = hasMatchingToken(line, MENTION_REGEX, normalizedQuery)
-    } else if (normalizedQuery) {
-      isMatch = includesText(line, normalizedQuery)
+    } else {
+      isMatch = !normalizedQuery || includesText(line, normalizedQuery)
     }
 
     if (isMatch) {
       matches.push(line)
+      if (author) sourceLineIndexes.push(index)
     }
   }
 
-  if (!filter && normalizedQuery && includesText(day.humanTitle, normalizedQuery) && matches.length === 0) {
+  if (!author && !filter && normalizedQuery && includesText(day.humanTitle, normalizedQuery) && matches.length === 0) {
     const fallbackLine = lines.find((line) => line.trim())
     if (fallbackLine) {
       matches.push(fallbackLine.trimEnd())
@@ -145,6 +159,7 @@ const getMatchedBlocks = (day: Day, query: string, filter: SearchFilter | null) 
   return {
     blockKind: 'line' as const,
     matchedBlocks: matches,
+    ...(author ? { sourceLineIndexes } : {}),
   }
 }
 
@@ -206,25 +221,25 @@ export const filterDays = (days: Day[], options: DayFilterOptions = {}) => {
 export const searchDaysInMemory = (
   days: Day[],
   query: string,
-  options: { filter?: SearchFilter | null } = {},
+  options: { filter?: SearchFilter | null; author?: AuthorSearch } = {},
   limit = 30,
 ) => {
   const trimmed = query.trim()
   const filter = options.filter ?? null
 
-  if (!trimmed && !filter) {
+  if (!trimmed && !filter && !options.author) {
     return []
   }
 
   const results: DaySearchResult[] = []
 
   for (const day of days) {
-    const { matchedBlocks, blockKind } = getMatchedBlocks(day, trimmed, filter)
-    if (!matchedBlocks.length) {
+    const match = getMatchedBlocks(day, trimmed, filter, options.author)
+    if (!match.matchedBlocks.length) {
       continue
     }
 
-    results.push({ day, matchedBlocks, blockKind })
+    results.push({ day, ...match })
     if (results.length >= limit) {
       break
     }

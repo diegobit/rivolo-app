@@ -77,3 +77,31 @@ describe('cancelled todos in open-task queries', () => {
     expect(searchDaysInMemory([note], 'cancelled')[0].matchedBlocks).toEqual(['- [-] cancelled'])
   })
 })
+
+describe('author search', () => {
+  const note = makeDay('2026-10-20', [
+    'same text', 'same text', '- [ ] deploy', '- [ ] deploy #release',
+    'unknown #release', '# Release', 'other author in the section', '',
+  ])
+  const author = { name: 'Anna', byDay: new Map([[note.dayId, [
+    'Luca', 'Anna', 'Luca', 'Anna', null, 'Anna', 'Luca', 'Anna',
+  ]]]) }
+
+  it('returns only attributed nonempty lines and preserves the exact index of a duplicate', () => {
+    expect(searchDaysInMemory([note], '', { author })[0]).toMatchObject({
+      matchedBlocks: ['same text', '- [ ] deploy #release', '# Release'],
+      sourceLineIndexes: [1, 3, 5],
+    })
+    expect(searchDaysInMemory([note], 'same text', { author })[0].sourceLineIndexes).toEqual([1])
+  })
+
+  it('combines author, text, and the existing filter on the same line', () => {
+    expect(searchDaysInMemory([note], 'deploy', { author, filter: 'open-todos' })[0].sourceLineIndexes).toEqual([3])
+    expect(searchDaysInMemory([note], 'release', { author, filter: 'tags' })[0].sourceLineIndexes).toEqual([3])
+    expect(searchDaysInMemory([note], 'unknown', { author })).toEqual([])
+    expect(searchDaysInMemory([note], note.humanTitle, { author })).toEqual([])
+    expect(searchDaysInMemory([note], '', { author, filter: 'headings' })[0]).toMatchObject({
+      blockKind: 'line', matchedBlocks: ['# Release'], sourceLineIndexes: [5],
+    })
+  })
+})
