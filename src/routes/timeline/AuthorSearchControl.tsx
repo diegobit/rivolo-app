@@ -77,7 +77,7 @@ export function useAuthorSearchControl(control: AuthorControl | undefined, layou
     ),
     authorPicker: open && (
       <div ref={menu} id={menuId} role="group" aria-label="Authors"
-        className={`tray-phone-filter-menu search-author-picker ${mobile ? '' : 'search-author-picker-card'}`}
+        className="tray-phone-filter-menu search-author-picker"
         onMouseDown={mobile ? keepFieldFocus : undefined}
         onBlur={(event) => {
           if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget) && event.relatedTarget !== trigger.current) setOpen(false)
