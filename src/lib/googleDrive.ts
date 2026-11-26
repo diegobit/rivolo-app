@@ -10,7 +10,6 @@ import {
   updateGoogleDriveState,
 } from './googleDriveState'
 import type { GoogleDriveState } from './googleDriveState'
-import { markSyncLocalDirty } from './syncDirty'
 import { createCloudDailyNotebook } from './cloudDailyNotebook'
 import { createGoogleDriveDailyRemote } from './googleDriveDailyRemote'
 import { getJsonSetting, setJsonSetting } from './settingsRepository'
@@ -373,12 +372,11 @@ export const pullFromGoogleDrive = async (options: SyncPullOptions = {}) => {
   const content = await downloadDriveFile(metadata.id)
   await importMarkdownToDb(content, {
     replace: true,
-    markDirty: false,
     allowUnsafeImport: options.allowUnsafeImport,
+    canReplace: (db) => dailyGoogleDrive.canReplaceLegacyNotebook(db, dailyContext(state)),
   })
 
   const contentHash = await hashSyncContent(content)
-  await markSyncLocalDirty()
   await finalizeGoogleDrivePullState(state.localRevision + 1, {
     fileId: metadata.id,
     fileName: metadata.name,

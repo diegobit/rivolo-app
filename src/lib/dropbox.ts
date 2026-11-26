@@ -7,7 +7,6 @@ import {
 } from './dropboxAuth'
 import { finalizeDropboxPullState, finalizeDropboxPushState, getDropboxState, updateDropboxState } from './dropboxState'
 import type { DropboxState } from './dropboxState'
-import { markSyncLocalDirty } from './syncDirty'
 import { createCloudDailyNotebook } from './cloudDailyNotebook'
 import { createDropboxDailyRemote } from './dropboxDailyRemote'
 import { queryFirstRow } from './sqliteRuntime'
@@ -214,12 +213,11 @@ export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
   const content = await downloadFile(path)
   const result = await importMarkdownToDb(content, {
     replace: true,
-    markDirty: false,
     allowUnsafeImport: options.allowUnsafeImport,
+    canReplace: (db) => dailyDropbox.canReplaceLegacyNotebook(db, dailyContext(state)),
   })
 
   const contentHash = await hashSyncContent(content)
-  await markSyncLocalDirty()
   await finalizeDropboxPullState(state.localRevision + 1, {
     lastRemoteRev: metadata.rev,
     // Remote content now equals local; record its hash so we do not immediately
