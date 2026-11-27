@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Locator } from 'playwright/test'
+import { devices, test, expect, type Page, type Locator } from 'playwright/test'
 import { waitForPersistedContent } from './helpers/persisted'
 
 const note = (page: Page) => page.locator('.cm-content[contenteditable="true"]').first()
@@ -81,6 +81,84 @@ test('J1: edit, flush through navigation, reopen, and search literal Unicode tex
     await expect(page.getByRole('button', { name: 'TODOs', exact: true })).toBeVisible()
     await expect(note(page)).toBeVisible()
   }
+})
+
+test.describe('narrow desktop editor', () => {
+  test.use({
+    viewport: { width: 510, height: 940 },
+    userAgent: devices['Desktop Safari'].userAgent,
+    isMobile: false,
+    hasTouch: false,
+  })
+
+  test('typing leaves untouched wrapped list items in place', async ({ page }) => {
+    await start(page)
+    const text = 'Some long text in the middle of a numbered list that wraps several times and keeps the hanging indent aligned with the start of its first line.'
+    await note(page).fill(Array.from({ length: 40 }, (_, index) =>
+      `${index + 1}. **Item heading**: ${text}\n   - ${text}`
+    ).join('\n'))
+    await page.evaluate(() => document.fonts.ready)
+    // CodeMirror renders a window of the note around the viewport.
+    await page.evaluate(() => window.scrollTo({ top: 850, behavior: 'instant' }))
+    const activeLine = note(page).locator('.cm-line').filter({ hasText: /^10\. / }).first()
+    const previousLine = note(page).locator('.cm-line').filter({ hasText: /^9\. / }).first()
+    await activeLine.evaluate(element => element.scrollIntoView({ block: 'center', behavior: 'instant' }))
+    await activeLine.click({ position: { x: 120, y: 9 } })
+    await expect.poll(() => previousLine.evaluate(element =>
+      Number.parseFloat(getComputedStyle(element).marginLeft)
+    )).toBeGreaterThan(0)
+    const bodyRows = await previousLine.evaluate(element => {
+      const body = element.lastChild!
+      const range = document.createRange()
+      range.selectNodeContents(body)
+      return new Set(Array.from(range.getClientRects(), rect => rect.top)).size
+    })
+    expect(bodyRows).toBeGreaterThan(1)
+
+    const readPositions = () => previousLine.evaluate(element => new Promise<number[]>(resolve => {
+      const positions: number[] = []
+      const sample = () => {
+        positions.push(element.getBoundingClientRect().left)
+        if (positions.length < 8) requestAnimationFrame(sample)
+        else resolve(positions)
+      }
+      requestAnimationFrame(sample)
+    }))
+    const initialText = await activeLine.innerText()
+    const positions = await readPositions()
+    for (let index = 0; index < 3; index++) {
+      await page.keyboard.press('x')
+      positions.push(...await readPositions())
+      expect(await activeLine.innerText()).toHaveLength(initialText.length + 1)
+      await page.keyboard.press('Backspace')
+      positions.push(...await readPositions())
+    }
+    expect(Math.max(...positions) - Math.min(...positions)).toBeLessThan(0.2)
+    await expect(activeLine).toHaveText(initialText)
+  })
+})
+
+test('wrapped nested todo text aligns on a narrow touch layout', async ({ page }) => {
+  test.skip(!mobile(page), 'Narrow viewport interaction contract')
+  await start(page)
+  await settings(page)
+  await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+  await page.getByLabel('Body font', { exact: true }).selectOption('lato')
+  await waitForPersistedContent(page, ({ settings: saved }) => saved['appearance.font'] === 'proportional')
+  await page.goto('/')
+  const body = 'This nested todo contains enough text to wrap across several rows in the narrow journal editor.'
+  await note(page).fill(` - [ ] ${body}\nAnother line`)
+  await note(page).locator('.cm-line').filter({ hasText: 'Another line' }).tap()
+  await page.evaluate(() => document.fonts.ready)
+  const todo = note(page).locator('.cm-line').filter({ hasText: body })
+  await expect.poll(() => todo.evaluate(element => {
+    const text = element.lastChild!
+    const range = document.createRange()
+    range.setStart(text, text.textContent!.indexOf('This'))
+    range.setEnd(text, text.textContent!.length)
+    const rows = Array.from(range.getClientRects())
+    return rows.length > 1 ? Math.abs(rows[0].left - rows[1].left) : Infinity
+  })).toBeLessThanOrEqual(1)
 })
 
 test('J4: appearance changes persist; fonts render; controls and preview stay contained', async ({ page }) => {

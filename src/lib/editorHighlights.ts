@@ -307,6 +307,27 @@ const listPrefixRegex = /^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX-]\]\s+)?/
 
 const refreshListIndent = StateEffect.define<null>()
 
+const listPrefixWidth = (range: Range, fragment: Range, document: Document) => {
+  const root = range.commonAncestorContainer
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let left = Infinity
+  let right = -Infinity
+  for (let node = root.nodeType === Node.TEXT_NODE ? root : walker.nextNode(); node; node = walker.nextNode()) {
+    if (!range.intersectsNode(node)) continue
+    const start = node === range.startContainer ? range.startOffset : 0
+    const end = node === range.endContainer ? range.endOffset : node.textContent!.length
+    if (start === end) continue
+    fragment.setStart(node, start)
+    fragment.setEnd(node, end)
+    for (const rect of fragment.getClientRects()) {
+      left = Math.min(left, rect.left)
+      right = Math.max(right, rect.right)
+    }
+    if (node === range.endContainer) break
+  }
+  return Number.isFinite(left) ? right - left : null
+}
+
 // Hang wrapped list rows under the item's text rather than under its marker.
 // Marker widths depend on the font, so they're measured from the layout and
 // exposed to the theme below as --list-hang.
@@ -342,13 +363,17 @@ const listIndentPlugin = ViewPlugin.fromClass(
     // Rows are keyed by prefix, and by whether the todo dash is hidden, since
     // that changes the prefix's width.
     visibleListRows() {
-      const rows: Array<{ from: number; prefix: string; key: string }> = []
+      const rows: Array<{ from: number; end: number; key: string }> = []
       const edited = editedLineNumbers(this.view)
       forEachVisibleLine(this.view, (line) => {
         const prefix = listPrefixRegex.exec(line.text)?.[0]
         if (!prefix || inCodeBlock(this.view.state, line.from + prefix.length - 1)) return
         const hidden = isTodoDashHidden(edited, line.number, line.text)
-        rows.push({ from: line.from, prefix, key: hidden ? `hidden:${prefix}` : prefix })
+        rows.push({
+          from: line.from,
+          end: line.from + prefix.length,
+          key: hidden ? `hidden:${prefix}` : prefix,
+        })
       })
       return rows
     }
@@ -369,11 +394,19 @@ const listIndentPlugin = ViewPlugin.fromClass(
         key: this,
         read: (view) => {
           const measured = new Map<string, number>()
-          for (const { from, prefix, key } of this.visibleListRows()) {
+          const document = view.contentDOM.ownerDocument
+          const range = document.createRange()
+          const fragment = document.createRange()
+          for (const { from, end, key } of this.visibleListRows()) {
             if (measured.has(key)) continue
-            const start = view.coordsAtPos(from, 1)
-            const end = view.coordsAtPos(from + prefix.length, -1)
-            if (start && end) measured.set(key, Math.round((end.left - start.left) * 10) / 10)
+            // WebKit can round caret coordinates differently as the DOM changes.
+            // Measure only text fragments so checkbox touch padding cannot widen the indent.
+            const startDOM = view.domAtPos(from, 1)
+            const endDOM = view.domAtPos(end, -1)
+            range.setStart(startDOM.node, startDOM.offset)
+            range.setEnd(endDOM.node, endDOM.offset)
+            const width = listPrefixWidth(range, fragment, document)
+            if (width != null) measured.set(key, Math.round(width * 10) / 10)
           }
           return measured
         },
