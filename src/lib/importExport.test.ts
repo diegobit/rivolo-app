@@ -82,6 +82,28 @@ describe('import/export durable storage boundary', () => {
     expect((await storage.importer.listRollbackBackups())[0].contentMd).toContain('second')
   })
 
+  it('applies remote day deletions with a backup while still rejecting duplicate markers', async () => {
+    await seed()
+    const source = markdownDay('2026-06-30', 'remote')
+    await storage.importer.importMarkdownToDb(source, { replace: true, allowDeletedDays: true })
+    expect(await notes()).toEqual([['2026-06-30', 'remote']])
+    expect((await storage.importer.listRollbackBackups())[0]?.contentMd).toContain('local only')
+    await expect(storage.importer.importMarkdownToDb(`${source}\n\n${source}`, { replace: true, allowDeletedDays: true }))
+      .rejects.toMatchObject({ reasons: ['duplicate-day-markers'] })
+    expect(await notes()).toEqual([['2026-06-30', 'remote']])
+  })
+
+  it('checks for new local edits after saving the backup and before replacement', async () => {
+    await seed()
+    await expect(storage.importer.importMarkdownToDb(markdownDay('2026-06-30', 'remote'), {
+      replace: true,
+      allowDeletedDays: true,
+      beforeReplace: async () => { throw new Error('Local edits arrived') },
+    })).rejects.toThrow('Local edits arrived')
+    expect(await notes()).toEqual([['2026-06-30', 'local current'], ['2026-06-29', 'local only']])
+    expect((await storage.importer.listRollbackBackups())[0]?.contentMd).toContain('local only')
+  })
+
   it('does not replace local notes if the IndexedDB backup write fails', async () => {
     await seed()
     const open = indexedDB.open('keyval-store')

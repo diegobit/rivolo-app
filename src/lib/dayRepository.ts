@@ -355,7 +355,10 @@ export const clearDays = async () => {
   })
 }
 
-export const replaceDays = async (days: DayWrite[], options: { markDirty?: boolean } = {}) => {
+export const replaceDays = async (
+  days: DayWrite[],
+  options: { markDirty?: boolean; canReplace?: (db: RivoloDatabase) => boolean } = {},
+) => {
   for (const day of days) {
     assertValidDayId(day.dayId)
   }
@@ -363,7 +366,9 @@ export const replaceDays = async (days: DayWrite[], options: { markDirty?: boole
   const markDirty = options.markDirty ?? true
   const now = Date.now()
 
-  await runAtomicDatabaseMutation((db) => {
+  return runAtomicDatabaseMutation((db) => {
+    if (options.canReplace && !options.canReplace(db)) return false
+
     executeSql(db, 'DELETE FROM days')
     executeSql(db, 'DELETE FROM days_fts')
 
@@ -385,7 +390,8 @@ export const replaceDays = async (days: DayWrite[], options: { markDirty?: boole
     }
 
     if (markDirty) markSyncLocalDirtyInDatabase(db)
-  })
+    return true
+  }, { shouldMarkChanged: (replaced) => replaced })
 }
 
 export const searchDays = async (

@@ -15,6 +15,7 @@ export const createCloud = async (provider: CloudProvider, storage: Storage) => 
     conflictContent: archive('concurrent remote edit'),
     revisions: [] as { id: string; modifiedTime: string }[],
     rejectBearerOnce: false, uploadConflict: false,
+    beforeDownload: undefined as (() => Promise<void>) | undefined,
     beforeUpload: undefined as (() => Promise<void>) | undefined,
     uploads: [] as string[], tokens: 0,
     calls: [] as { url: URL; method: string; headers: Headers }[],
@@ -38,6 +39,10 @@ export const createCloud = async (provider: CloudProvider, storage: Storage) => 
   })
   const folder = () => ({ id: 'folder-1', name: 'rivolo', mimeType: 'application/vnd.google-apps.folder', version: '1' })
   const metadata = () => ({ rev: `rev-${cloud.version}`, server_modified: '2026-06-21T10:00:00Z' })
+  const download = async () => {
+    await cloud.beforeDownload?.()
+    return new Response(cloud.content)
+  }
   const upload = async (body: string) => {
     await cloud.beforeUpload?.()
     cloud.uploads.push(body)
@@ -71,7 +76,7 @@ export const createCloud = async (provider: CloudProvider, storage: Storage) => 
       if (url.href === 'https://content.dropboxapi.com/2/files/download') {
         expect(method).toBe('POST')
         expect(JSON.parse(headers.get('Dropbox-API-Arg')!)).toEqual({ path: '/inbox.md' })
-        return new Response(cloud.content)
+        return download()
       }
       if (url.href === 'https://content.dropboxapi.com/2/files/upload') {
         expect(method).toBe('POST')
@@ -109,7 +114,7 @@ export const createCloud = async (provider: CloudProvider, storage: Storage) => 
           cloud.parents = ['folder-1']; cloud.version++
           return Response.json(driveFile())
         }
-        if (url.searchParams.get('alt') === 'media') return new Response(cloud.content)
+        if (url.searchParams.get('alt') === 'media') return download()
         return cloud.exists ? Response.json(driveFile()) : new Response('not found', { status: 404 })
       }
       if (url.pathname === '/upload/drive/v3/files/file-1') {

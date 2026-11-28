@@ -18,6 +18,7 @@ type ProviderProfileInputBase = {
   providerName?: string | null
   timeZone: string
   refreshToken: string
+  dailyFolderId?: string | null
 }
 
 export type ProviderProfileInput = ProviderProfileInputBase &
@@ -38,6 +39,7 @@ type ProviderProfileMetadataBase = {
   createdAt: string
   updatedAt: string
   revokedAt: string | null
+  dailyFolderId?: string
 }
 
 export type ProviderProfileMetadata = ProviderProfileMetadataBase &
@@ -69,6 +71,7 @@ type ProviderProfileRow = {
   created_at: string
   updated_at: string
   revoked_at: string | null
+  daily_folder_id: string | null
 }
 
 type ProviderCredentialRow = {
@@ -88,7 +91,8 @@ const PROFILE_METADATA_COLUMNS = `
   time_zone,
   created_at,
   updated_at,
-  revoked_at
+  revoked_at,
+  daily_folder_id
 `
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -178,6 +182,7 @@ export const validateProviderProfileInput = (
     providerName: optionalText(input.providerName, 'providerName', 200),
     timeZone: validateTimeZone(input.timeZone),
     refreshToken: requiredText(input.refreshToken, 'refreshToken', 8192),
+    dailyFolderId: optionalText(input.dailyFolderId, 'dailyFolderId', 512),
   }
 
   if (input.provider === 'dropbox') {
@@ -216,6 +221,7 @@ const toMetadata = (row: ProviderProfileRow): ProviderProfileMetadata => {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revokedAt: row.revoked_at,
+    ...(row.daily_folder_id ? { dailyFolderId: row.daily_folder_id } : {}),
   }
 
   if (row.provider === 'dropbox') {
@@ -275,8 +281,9 @@ export class ProviderProfileRepository {
           encrypted_refresh_token,
           created_at,
           updated_at,
-          revoked_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+          revoked_at,
+          daily_folder_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
         ON CONFLICT(provider, provider_account_id) DO UPDATE SET
           provider_email = excluded.provider_email,
           provider_name = excluded.provider_name,
@@ -287,11 +294,16 @@ export class ProviderProfileRepository {
           time_zone = excluded.time_zone,
           encrypted_refresh_token = excluded.encrypted_refresh_token,
           updated_at = excluded.updated_at,
-          revoked_at = NULL
+          revoked_at = NULL,
+          daily_folder_id = CASE WHEN mcp_provider_profiles.revoked_at IS NULL
+            THEN COALESCE(mcp_provider_profiles.daily_folder_id, excluded.daily_folder_id)
+            ELSE excluded.daily_folder_id END
         WHERE mcp_provider_profiles.revoked_at IS NOT NULL
           OR (
             mcp_provider_profiles.dropbox_path IS excluded.dropbox_path
             AND mcp_provider_profiles.google_file_id IS excluded.google_file_id
+            AND (mcp_provider_profiles.daily_folder_id IS NULL OR excluded.daily_folder_id IS NULL
+              OR mcp_provider_profiles.daily_folder_id IS excluded.daily_folder_id)
           )
         RETURNING ${PROFILE_METADATA_COLUMNS}`,
       )
@@ -309,6 +321,7 @@ export class ProviderProfileRepository {
         encryptedRefreshToken,
         timestamp,
         timestamp,
+        profile.dailyFolderId ?? null,
       )
       .first<ProviderProfileRow>()
 
@@ -318,6 +331,14 @@ export class ProviderProfileRepository {
       )
     }
     return toMetadata(row)
+  }
+
+  async setDailyFolder(profile: ProviderProfileMetadata, folder: string): Promise<boolean> {
+    const result = await this.db.prepare(
+      `UPDATE mcp_provider_profiles SET daily_folder_id = ?, updated_at = ?
+       WHERE profile_id = ? AND updated_at = ? AND revoked_at IS NULL AND (daily_folder_id IS NULL OR daily_folder_id = ?)`,
+    ).bind(folder, this.now().toISOString(), validateProfileId(profile.profileId), profile.updatedAt, folder).run()
+    return (result.meta.changes ?? 0) > 0
   }
 
   async getMetadata(profileId: string): Promise<ProviderProfileMetadata | null> {

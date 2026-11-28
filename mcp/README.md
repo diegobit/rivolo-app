@@ -1,6 +1,6 @@
 # Rivolo Notes MCP
 
-Local read-only MCP server for Rivolo notes. It reads the same single markdown file used by Dropbox sync, with entries separated by `<!-- day:YYYY-MM-DD -->` markers.
+Local read-only MCP server for Rivolo notes. Set `RIVOLO_NOTES_FILE` to a single Markdown notebook, with entries separated by `<!-- day:YYYY-MM-DD -->` markers, or to a local copy of a daily sync folder. Daily folders may hold the day files directly or under year and month directories.
 
 ## Build
 
@@ -64,6 +64,10 @@ The server has no network listener and no write tools. Access is controlled by t
 
 ## Hosted Worker
 
+Hosted Agent access reads both single-file and daily notebooks on Dropbox and
+Google Drive. Single-day tools read only that day; on a large daily notebook,
+search with a date range if an unbounded scan exceeds the Worker's request budget.
+
 The hosted endpoint is a separate Cloudflare Worker at `/mcp`. It uses
 Streamable HTTP and reads or additively writes the provider target saved by
 Rivolo Settings. Clients can authenticate through Rivolo OAuth (`rva_...`
@@ -74,7 +78,7 @@ Before deploying:
 1. Create one D1 database and replace the placeholder database id in both
    `wrangler.toml` (Rivolo Pages Settings APIs) and `wrangler.mcp.toml` (hosted
    MCP Worker). Both services must bind the same database as `MCP_DB`.
-2. Apply `migrations/0001` through `0004` to that database.
+2. Apply `migrations/0001` through `0005` to that database.
 3. Set Worker secrets:
    - `MCP_PROVIDER_TOKEN_ENCRYPTION_KEY` — exactly the same value used by Pages.
    - `GOOGLE_CLIENT_SECRET`.

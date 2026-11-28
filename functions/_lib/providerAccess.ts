@@ -1,3 +1,4 @@
+import { hashSyncContent } from '../../src/lib/syncHash'
 const DROPBOX_API = 'https://api.dropboxapi.com/2'
 const GOOGLE_DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const GOOGLE_FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
@@ -11,6 +12,7 @@ type DropboxAccount = {
 }
 
 type DropboxMetadata = {
+  id?: string
   '.tag'?: string
   path_display?: string
   is_downloadable?: boolean
@@ -28,6 +30,7 @@ type GoogleDriveFile = {
   mimeType?: string
   trashed?: boolean
   parents?: string[]
+  appProperties?: Record<string, string>
   capabilities?: {
     canDownload?: boolean
     canEdit?: boolean
@@ -188,4 +191,37 @@ export const fetchGoogleDriveTarget = async (
     folderId: file.parents?.[0] ?? null,
     fileName: file.name,
   }
+}
+
+export const verifyDropboxDailyTarget = async (accessToken: string, folder: string, sourcePath: string) => {
+  const expected = sourcePath.replace(/\.md$/i, '.rivolo-daily')
+  if (expected === sourcePath) throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'Choose the original Dropbox Markdown path.')
+  const load = async (path: string) => {
+    const response = await fetch(`${DROPBOX_API}/files/get_metadata`, {
+      method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    })
+    return response.ok ? await response.json() as DropboxMetadata & { path_lower?: string } : null
+  }
+  const root = await load(folder)
+  if (root?.id !== folder || root['.tag'] !== 'folder' || root.path_lower !== expected.toLowerCase() ||
+      (await load(`${expected}/.rivolo-migrated`))?.['.tag'] !== 'file') {
+    throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'The Dropbox daily folder is not ready for Agent access.')
+  }
+  return { path: sourcePath }
+}
+
+export const verifyGoogleDailyTarget = async (accessToken: string, folder: string,
+  source?: { fileId: string; folderId: string | null; fileName: string }) => {
+  const fields = 'id,name,mimeType,parents,trashed,appProperties,capabilities(canEdit)'
+  const response = await fetch(`${GOOGLE_DRIVE_API}/files/${encodeURIComponent(folder)}?fields=${encodeURIComponent(fields)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } })
+  const item = response.ok ? await response.json() as GoogleDriveFile : null
+  if (!item || item.id !== folder || !item.name || item.trashed || item.mimeType !== GOOGLE_FOLDER_MIME_TYPE ||
+      item.capabilities?.canEdit === false || !item.appProperties?.rivoloDailySource || item.appProperties.rivoloMigrated !== 'true' ||
+      source && (!source.folderId || !item.parents?.includes(source.folderId) ||
+        item.appProperties.rivoloDailySource !== await hashSyncContent(source.fileName))) {
+    throw new ProviderAccessError(409, 'TARGET_UNAVAILABLE', 'The Google Drive daily folder is not ready for Agent access.')
+  }
+  return source ?? { fileId: folder, folderId: item.parents?.[0] ?? null, fileName: item.name }
 }

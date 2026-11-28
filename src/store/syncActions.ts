@@ -1,8 +1,9 @@
-import { getActiveProviderStatus, pullFromSync, pushToSync } from '../lib/sync'
+import { getActiveProviderStatus, migrateActiveNotebook, pullFromSync, pushToSync } from '../lib/sync'
 import { SYNC_PROVIDER_LABELS } from '../lib/syncState'
 import { claimPrimaryTabForSync, getTabSyncBlockReason } from '../lib/tabSyncCoordinator'
 import { useDaysStore } from './useDaysStore'
 import { useSyncStore } from './useSyncStore'
+import { getPendingEditorDayIds } from '../lib/pendingEditorSaves'
 
 type SyncQueueOperation = 'pull' | 'push'
 
@@ -43,7 +44,14 @@ const activeProviderLabel = () => {
   return providerId ? SYNC_PROVIDER_LABELS[providerId] : 'Sync provider'
 }
 
-export const recordSyncAttention = (operation: 'pull' | 'push', message: string, blocked = false) => {
+// Daily sync keeps one issue per category so clearing one does not hide
+// another; single-file sync keeps a single attention item.
+export const recordSyncAttention = (
+  operation: 'pull' | 'push',
+  message: string,
+  options: { category?: string; blocked?: boolean } = {},
+) => {
+  const { category = 'files', blocked = false } = options
   const state = useSyncStore.getState()
   if (
     state.syncAttention?.operation === operation &&
@@ -52,12 +60,20 @@ export const recordSyncAttention = (operation: 'pull' | 'push', message: string,
   ) {
     return
   }
-  state.setSyncAttention({ operation, message, at: Date.now(), ...(blocked ? { blocked } : {}) })
+  const attention = { operation, message, at: Date.now(), ...(blocked ? { blocked } : {}) }
+  if (state.status.daily) state.setSyncIssue(`${state.activeProvider}:${state.status.targetName}:${category}`, attention)
+  else state.setSyncAttention(attention)
+}
+
+export const clearSyncIssue = (category: string) => {
+  const state = useSyncStore.getState()
+  state.setSyncIssue?.(`${state.activeProvider}:${state.status.targetName}:${category}`, null)
 }
 
 const clearSyncAttention = () => {
   if (useSyncStore.getState().syncAttention) {
-    useSyncStore.getState().setSyncAttention(null)
+    if (usesDailySync()) clearSyncIssue('files')
+    else useSyncStore.getState().setSyncAttention(null)
   }
 }
 
@@ -72,32 +88,47 @@ export const blockedPushMessage = (reason: 'remote_missing' | 'remote_changed') 
 }
 
 export const recordBlockedPush = (reason: 'remote_missing' | 'remote_changed') =>
-  recordSyncAttention('push', blockedPushMessage(reason), true)
+  recordSyncAttention('push', blockedPushMessage(reason), { blocked: true })
 
 export const pullFromSyncAndRefresh = async (options?: {
   force?: boolean
   allowUnsafeImport?: boolean
+  dayIds?: string[]
 }) =>
   enqueueSyncOperation('pull', async () => {
     requirePrimarySyncTab()
     const force = options?.force ?? false
     if (!force) {
       const status = await getActiveProviderStatus()
-      if (status.localDirty) {
+      if (status.localDirty && !status.daily && !usesDailySync()) {
         await useSyncStore.getState().loadState()
         return { status: 'noop' as const }
       }
     }
 
-    const result = await pullFromSync({
+    let result
+    try { result = await pullFromSync({
       force,
       allowUnsafeImport: options?.allowUnsafeImport,
-    })
+      ...(options?.dayIds ? { dayIds: options.dayIds } : {}),
+    }) } catch (error) {
+      if (usesDailySync()) {
+        await useDaysStore.getState().loadTimeline({ preserveWindow: true })
+        await useSyncStore.getState().loadState()
+      }
+      throw error
+    }
     if (result.status === 'pulled') {
-      await useDaysStore.getState().loadTimeline()
+      if (usesDailySync()) {
+        await useDaysStore.getState().loadTimeline({ preserveWindow: true })
+      } else {
+        await useDaysStore.getState().loadTimeline()
+      }
     }
     await useSyncStore.getState().loadState()
-    clearSyncAttention()
+    if (result.status === 'pulled' || (!getPendingEditorDayIds().size && !(await getActiveProviderStatus()).localDirty)) {
+      clearSyncAttention()
+    }
     return result
   })
 
@@ -105,10 +136,15 @@ export const pushToSyncAndRefresh = async (force = false) =>
   enqueueSyncOperation('push', async () => {
     requirePrimarySyncTab()
     const result = await pushToSync(force)
+    if (result.status === 'pushed' && result.localUpdated) {
+      await useDaysStore.getState().loadTimeline({ preserveWindow: true })
+    }
     await useSyncStore.getState().loadState()
     if (result.status === 'pushed' && result.attention) {
       recordSyncAttention('push', result.attention)
-    } else if (result.status !== 'blocked') {
+    } else if (result.status === 'pushed' ||
+      (result.status === 'clean' && useSyncStore.getState().syncAttention?.operation !== 'pull' &&
+        !getPendingEditorDayIds().size && !(await getActiveProviderStatus()).localDirty)) {
       clearSyncAttention()
     }
     return result
@@ -185,3 +221,20 @@ export const flushAutoPushToSync = async () => {
   autoPushTimer = null
   await runAutoPush()
 }
+
+const usesDailySync = () => {
+  return Boolean(useSyncStore.getState().status.daily)
+}
+
+export const migrateActiveNotebookAndRefresh = () =>
+  enqueueSyncOperation('push', async () => {
+    requirePrimarySyncTab()
+    try {
+      const result = await migrateActiveNotebook()
+      if (result.status === 'pushed' && result.attention) recordSyncAttention('push', result.attention)
+      return result
+    } finally {
+      await useDaysStore.getState().loadTimeline({ preserveWindow: true })
+      await useSyncStore.getState().loadState()
+    }
+  })
