@@ -14,6 +14,28 @@ const makeDay = (contentMd: string): Day => ({
 })
 
 describe('Markdown day markers', () => {
+  it.each(['Body\n', 'Body\n\n\n', 'Body  ', '\n\n', ' \t\n\n', '\nBody\n \t'])(
+    'preserves draft whitespace %j across repeated export/import cycles',
+    (contentMd) => {
+      let day = makeDay(contentMd)
+      for (let cycle = 0; cycle < 3; cycle++) {
+        const parsed = parseMarkdown(exportMarkdown([day]))
+        expect(parsed.warnings).toEqual([])
+        expect(parsed.days[0].contentMd).toBe(contentMd)
+        day = { ...day, ...parsed.days[0] }
+      }
+    },
+  )
+
+  it('separates notebook days without trimming their content or accumulating separators', () => {
+    const days = [makeDay('First\n\n'), { ...makeDay('\nSecond  \n'), dayId: '2026-07-10' },
+      { ...makeDay(''), dayId: '2026-07-09' }]
+    const source = exportMarkdown(days)
+    const parsed = parseMarkdown(source)
+    expect(parsed.days.map((day) => day.contentMd)).toEqual(days.map((day) => day.contentMd))
+    expect(exportMarkdown(parsed.days.map((day) => ({ ...day, createdAt: 0, updatedAt: 0 })))).toBe(source)
+  })
+
   it('round-trips literal marker examples without treating them as day boundaries', () => {
     const contentMd = [
       'Example:',

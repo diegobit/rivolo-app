@@ -8,6 +8,7 @@ import {
 } from '../../lib/db'
 import { commitDayDraftInDatabase } from '../../lib/dayRepository'
 import { flushAutoPushToSync } from '../../store/syncActions'
+import { noteEditorChange, registerPendingEditorSaves } from '../../lib/pendingEditorSaves'
 
 type UseDaySaveQueueOptions = {
   canSync: boolean
@@ -26,6 +27,10 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
   const pendingSaveContentRef = useRef(new Map<string, { content: string; generation: number }>())
   const daySaveQueueRef = useRef(new Map<string, Promise<void>>())
   const daySaveTokensRef = useRef(new Map<string, number>())
+
+  useEffect(() => registerPendingEditorSaves(() => [
+    ...pendingSaveContentRef.current.keys(), ...daySaveQueueRef.current.keys(),
+  ]), [])
 
   const clearPendingSaveTimeout = useCallback((dayId: string) => {
     const existing = saveTimeouts.current.get(dayId)
@@ -50,6 +55,7 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
   }, [])
 
   const setPendingSaveContent = useCallback((dayId: string, content: string) => {
+    noteEditorChange()
     const generation = registerPendingDayDraft(dayId, content, commitDayDraftInDatabase)
     pendingSaveContentRef.current.set(dayId, { content, generation })
   }, [])
@@ -106,6 +112,7 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
 
   const scheduleSave = useCallback(
     (dayId: string, content: string) => {
+      noteEditorChange()
       const generation = registerPendingDayDraft(dayId, content, commitDayDraftInDatabase)
       pendingSaveContentRef.current.set(dayId, { content, generation })
       const existing = saveTimeouts.current.get(dayId)
@@ -144,6 +151,7 @@ export const useDaySaveQueue = ({ canSync, updateDayContent, onAutoPush, onDaySa
 
   const saveDayImmediately = useCallback(
     (dayId: string, content: string) => {
+      noteEditorChange()
       clearPendingSaveTimeout(dayId)
       const generation = registerPendingDayDraft(dayId, content, commitDayDraftInDatabase)
       pendingSaveContentRef.current.set(dayId, { content, generation })

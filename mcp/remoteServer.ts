@@ -22,6 +22,7 @@ import {
   refreshGoogleAccessToken,
 } from '../functions/_lib/googleOAuth.js'
 import { createGoogleDriveNotesSource } from './googleDriveNotesSource.js'
+import { createHostedDailyNotes } from './hostedDailyNotes.js'
 import {
   createProviderAccessTokenCache,
   providerAccessTokenKey,
@@ -299,16 +300,20 @@ const createNotesRuntime = (
   addToDay: AddToDayWriter<RemoteCompactWriteResult>
 } => {
   const providerFetch = dependencies.fetch
+  const loadToken = auth.profile.provider === 'dropbox'
+    ? loadDropboxAccessToken(auth, env, dependencies)
+    : loadGoogleAccessToken(auth, env, dependencies)
+  const fetchForProfile = authorizedFetch(cachedProviderAccessTokens(auth, loadToken), providerFetch)
+
+  // A profile moved to daily sync reads and writes one file per day.
+  if (auth.profile.dailyFolderId) {
+    const notes = createHostedDailyNotes(auth.profile.provider, auth.profile.dailyFolderId, fetchForProfile)
+    return { loadNotes: notes.loadNotes, addToDay: async (input) => compactProviderResult(await notes.add(input)) }
+  }
 
   if (auth.profile.provider === 'dropbox') {
     const adapter = createDropboxNotesAdapter({
-      authorizedFetch: authorizedFetch(
-        cachedProviderAccessTokens(
-          auth,
-          loadDropboxAccessToken(auth, env, dependencies),
-        ),
-        providerFetch,
-      ),
+      authorizedFetch: fetchForProfile,
       path: auth.profile.target.path,
     })
     return {
@@ -317,16 +322,7 @@ const createNotesRuntime = (
     }
   }
 
-  const source = createGoogleDriveNotesSource(
-    authorizedFetch(
-      cachedProviderAccessTokens(
-        auth,
-        loadGoogleAccessToken(auth, env, dependencies),
-      ),
-      providerFetch,
-    ),
-    auth.profile.target,
-  )
+  const source = createGoogleDriveNotesSource(fetchForProfile, auth.profile.target)
   return {
     loadNotes: source.read,
     addToDay: async (input) => compactProviderResult(await source.addToDay(input)),

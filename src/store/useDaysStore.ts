@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { getPendingEditorDayIds } from '../lib/pendingEditorSaves'
 import {
   appendLineToDay,
   deleteDay,
@@ -22,7 +23,8 @@ type DaysState = {
   loadingMore: boolean
   hasMorePast: boolean
   loadError: string | null
-  loadTimeline: () => Promise<void>
+  remoteRefreshVersion: number
+  loadTimeline: (options?: { preserveWindow?: boolean }) => Promise<void>
   loadOlderDays: () => Promise<void>
   loadDay: (dayId: string) => Promise<{ created: boolean }>
   appendToToday: (line: string) => Promise<void>
@@ -80,18 +82,22 @@ export const useDaysStore = create<DaysState>((set, get) => ({
   loadingMore: false,
   hasMorePast: false,
   loadError: null,
+  remoteRefreshVersion: 0,
 
-  loadTimeline: async () => {
+  loadTimeline: async (options) => {
     const loadTimer = startDebugTimer(LOG_SCOPE, 'loadTimeline', {
       recentWindowDays: RECENT_WINDOW_DAYS,
       initialMinDays: INITIAL_MIN_DAYS,
       olderPageSize: OLDER_PAGE_SIZE,
     })
 
-    set({ loading: true, loadError: null })
+    set({ ...(options?.preserveWindow ? {} : { loading: true }), loadError: null })
     try {
       const todayId = getTodayId()
-      const cutoffDayId = addDays(todayId, -RECENT_WINDOW_DAYS)
+      const oldestLoaded = get().days.at(-1)?.dayId
+      const recentCutoff = addDays(todayId, -RECENT_WINDOW_DAYS)
+      const cutoffDayId = options?.preserveWindow && oldestLoaded && oldestLoaded < recentCutoff
+        ? oldestLoaded : recentCutoff
 
       const recentTimer = startDebugTimer(LOG_SCOPE, 'loadTimeline:queryRecent', {
         cutoffDayId,
@@ -140,8 +146,13 @@ export const useDaysStore = create<DaysState>((set, get) => ({
         hasMorePast,
       })
 
+      const pending = options?.preserveWindow ? getPendingEditorDayIds() : new Set<string>()
+      const current = get()
+      const refreshedDays = mergeDays(nextDays, current.days.filter((day) => pending.has(day.dayId)))
       set({
-        days: nextDays,
+        days: refreshedDays,
+        remoteRefreshVersion: current.remoteRefreshVersion + (options?.preserveWindow ? 1 : 0),
+        activeDay: current.activeDay ? refreshedDays.find((day) => day.dayId === current.activeDay?.dayId) ?? null : null,
         loaded: true,
         loading: false,
         loadingMore: false,

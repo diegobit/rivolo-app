@@ -19,10 +19,12 @@ export type SyncViewState = {
   syncing: boolean
   syncOperation: SyncOperation
   syncAttention: SyncAttention | null
+  syncIssues: Record<string, SyncAttention>
   loadState: () => Promise<void>
   setActiveProvider: (providerId: SyncProviderId | null) => Promise<void>
   setSyncing: (syncing: boolean, operation?: SyncOperation) => void
   setSyncAttention: (attention: SyncAttention | null) => void
+  setSyncIssue: (id: string, attention: SyncAttention | null) => void
 }
 
 export const useSyncStore = create<SyncViewState>((set) => ({
@@ -31,17 +33,24 @@ export const useSyncStore = create<SyncViewState>((set) => ({
   syncing: false,
   syncOperation: null,
   syncAttention: null,
+  syncIssues: {},
 
   loadState: async () => {
     const activeProvider = await getActiveProviderId()
     const status = await getActiveProviderStatus()
-    set({ activeProvider, status })
+    set((current) => ({ activeProvider, status,
+      syncAttention: current.activeProvider === activeProvider && current.status.targetName === status.targetName ? current.syncAttention : null,
+      syncIssues: current.activeProvider === activeProvider && current.status.targetName === status.targetName ? current.syncIssues : {},
+    }))
   },
 
   setActiveProvider: async (providerId: SyncProviderId | null) => {
     await setActiveProviderId(providerId)
     const status = providerId ? await getActiveProviderStatus() : getEmptySyncStatus()
-    set({ activeProvider: providerId, status })
+    set((current) => ({ activeProvider: providerId, status,
+      syncAttention: current.activeProvider === providerId && current.status.targetName === status.targetName ? current.syncAttention : null,
+      syncIssues: current.activeProvider === providerId && current.status.targetName === status.targetName ? current.syncIssues : {},
+    }))
   },
 
   setSyncing: (syncing: boolean, operation?: SyncOperation) => {
@@ -50,5 +59,14 @@ export const useSyncStore = create<SyncViewState>((set) => ({
 
   setSyncAttention: (attention: SyncAttention | null) => {
     set({ syncAttention: attention })
+  },
+  setSyncIssue: (id: string, attention: SyncAttention | null) => {
+    set((current) => {
+      const syncIssues = { ...current.syncIssues }
+      if (attention) syncIssues[id] = attention
+      else delete syncIssues[id]
+      const issues = Object.values(syncIssues)
+      return { syncIssues, syncAttention: issues.length ? { ...issues[0], message: issues.map((issue) => issue.message).join(' ') } : null }
+    })
   },
 }))

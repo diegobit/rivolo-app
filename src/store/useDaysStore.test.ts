@@ -70,4 +70,20 @@ describe('useDaysStore loadTimeline error state', () => {
     expect(state.loadError).toBeNull()
     expect(state.days).toEqual([existingDay])
   })
+
+  it('refreshes visible content and the active day without hiding the editor or dropping older loaded days', async () => {
+    const updated = { ...existingDay, contentMd: 'Remote paragraph' }
+    const older = { ...existingDay, dayId: '2020-01-01' }
+    useDaysStore.setState({ days: [existingDay, older], activeDay: existingDay, loaded: true })
+    mocks.listDaysSince.mockImplementationOnce(async () => {
+      expect(useDaysStore.getState().loading).toBe(false)
+      return [updated, older]
+    })
+    mocks.listDaysBefore.mockResolvedValueOnce([])
+    mocks.hasDaysBefore.mockResolvedValueOnce(true)
+    await useDaysStore.getState().loadTimeline({ preserveWindow: true })
+    expect(mocks.listDaysSince).toHaveBeenCalledWith('2020-01-01')
+    expect(useDaysStore.getState().days).toEqual([updated, older])
+    expect(useDaysStore.getState().activeDay).toEqual(updated)
+  })
 })

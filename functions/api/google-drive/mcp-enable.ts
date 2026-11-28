@@ -16,6 +16,7 @@ import {
   fetchGoogleDriveAccount,
   fetchGoogleDriveTarget,
   ProviderAccessError,
+  verifyGoogleDailyTarget,
 } from '../../_lib/providerAccess'
 import { ProviderProfileValidationError } from '../../_lib/providerProfiles'
 import {
@@ -77,7 +78,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const nextRefreshToken = token.refresh_token ?? refreshToken
     const [account, target] = await Promise.all([
       fetchGoogleDriveAccount(token.access_token),
-      fetchGoogleDriveTarget(token.access_token, input.target.fileId),
+      (async () => {
+        const source = input.dailyFolderId === input.target.fileId
+          ? undefined : await fetchGoogleDriveTarget(token.access_token, input.target.fileId)
+        return input.dailyFolderId
+          ? verifyGoogleDailyTarget(token.access_token, input.dailyFolderId, source)
+          : source!
+      })(),
     ])
     const profile = await mcpProfileRepository(env).createOrUpdate({
       provider: 'google-drive',
@@ -87,6 +94,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       target,
       timeZone: input.timeZone,
       refreshToken: nextRefreshToken,
+      dailyFolderId: input.dailyFolderId,
     })
     return jsonResponse(
       { enabled: true, profile },

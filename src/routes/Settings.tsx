@@ -1,3 +1,5 @@
+import { moveAgentAccessToDailyNotebook } from '../lib/agentAccess'
+import { migrateActiveNotebookAndRefresh } from '../store/syncActions'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import SegmentedControl from '../components/SegmentedControl'
@@ -189,9 +191,10 @@ export default function Settings() {
       remoteVersion: dropboxRemoteRev ?? '—',
       dirty: dropboxLocalDirty,
       account: dropboxAccount,
-      target: savedDropboxPath,
+      target: activeProvider === 'dropbox' && activeSyncStatus.daily ? activeSyncStatus.targetName ?? savedDropboxPath : savedDropboxPath,
     }),
     [
+      activeProvider, activeSyncStatus.daily, activeSyncStatus.targetName,
       dropboxAccount,
       dropboxHasAuth,
       dropboxLastSyncAt,
@@ -215,9 +218,10 @@ export default function Settings() {
       remoteVersion: googleDriveRemoteVersion ?? '—',
       dirty: googleDriveLocalDirty,
       account: googleDriveAccount,
-      target: getGoogleDrivePath(savedGoogleDriveFileName),
+      target: activeProvider === 'google-drive' && activeSyncStatus.daily ? activeSyncStatus.targetName ?? getGoogleDrivePath(savedGoogleDriveFileName) : getGoogleDrivePath(savedGoogleDriveFileName),
     }),
     [
+      activeProvider, activeSyncStatus.daily, activeSyncStatus.targetName,
       googleDriveAccount,
       googleDriveConnected,
       googleDriveLastSyncAt,
@@ -357,6 +361,7 @@ export default function Settings() {
       activeProvider,
       connected: selectedSummary.connected,
       localDirty: selectedSummary.dirty,
+      daily: activeProvider === selectedSyncProvider && activeSyncStatus.daily,
       online,
       setStatus: setSyncStatus,
       loadProviderStates,
@@ -366,6 +371,41 @@ export default function Settings() {
         await oauthPending.continueAfterEnable()
       },
     })
+
+  const finishAgentUpgrade = async () => {
+    const { activeProvider: active, status } = useSyncStore.getState()
+    if (!active || active !== selectedSyncProvider ||
+        !status.daily || !status.notebookChannel) return
+    if (status.localDirty || !status.offlineReady) throw new Error('Finish syncing your days before moving Agent access.')
+    await moveAgentAccessToDailyNotebook(active, status.notebookChannel)
+    await agentAccess.load()
+  }
+
+  const handleDailyUpgrade = async () => {
+    if (activeProvider !== selectedSyncProvider || !online) return
+    setSyncStatus(null)
+    try {
+      const result = await migrateActiveNotebookAndRefresh()
+      if (result.status === 'pushed' && result.attention) {
+        setSyncStatus(result.attention)
+        return
+      }
+      if (agentAccessBoundToSelectedProvider) await finishAgentUpgrade()
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : 'Daily sync upgrade failed. Retry when online.')
+    } finally {
+      await loadProviderStates()
+    }
+  }
+
+  const handleAgentUpgrade = async () => {
+    try {
+      await finishAgentUpgrade()
+      setSyncStatus('Agent access now uses the daily notebook.')
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : 'Agent access could not be updated.')
+    }
+  }
 
   const handleDisconnectWithAgentSafety = async () => {
     if (activeProvider !== selectedSyncProvider && !agentAccessBoundToSelectedProvider) {
@@ -384,15 +424,13 @@ export default function Settings() {
   }
 
   const handleEnableAgentAccess = async () => {
-    const enabled =
-      selectedSyncProvider === 'dropbox'
-        ? await agentAccess.enable({ provider: 'dropbox', path: savedDropboxPath })
-        : googleDriveFileId
-          ? await agentAccess.enable({
-              provider: 'google-drive',
-              fileId: googleDriveFileId,
-            })
-          : false
+    const dailyFolderId = activeSyncStatus.daily ? activeSyncStatus.notebookChannel ?? undefined : undefined
+    const googleFile = googleDriveFileId ?? dailyFolderId
+    const enabled = selectedSyncProvider === 'dropbox'
+      ? await agentAccess.enable({ provider: 'dropbox', path: savedDropboxPath, dailyFolderId })
+      : selectedSyncProvider === 'google-drive' && googleFile
+        ? await agentAccess.enable({ provider: 'google-drive', fileId: googleFile, dailyFolderId })
+        : false
     if (enabled) await oauthPending.continueAfterEnable()
   }
 
@@ -521,6 +559,10 @@ export default function Settings() {
           syncBusy={syncing}
           status={syncStatus}
           advanced={showAdvanced}
+          daily={activeProvider === selectedSyncProvider && activeSyncStatus.daily}
+          onMigrate={handleDailyUpgrade}
+          onMigrateAgent={activeSyncStatus.daily && agentAccessBoundToSelectedProvider &&
+            agentAccess.view.state === 'enabled' && !agentAccess.view.profile.dailyFolderId ? handleAgentUpgrade : undefined}
           showForcePull={pullRefused || selectedAttention?.operation === 'pull'}
           showForcePush={pushBlocked || selectedAttention?.operation === 'push'}
           onProviderChange={(nextProvider) => {
@@ -545,7 +587,7 @@ export default function Settings() {
             targetReady:
               selectedSyncProvider === 'dropbox'
                 ? Boolean(savedDropboxPath.trim())
-                : Boolean(googleDriveFileId),
+                : Boolean(googleDriveFileId || activeSyncStatus.daily && activeSyncStatus.notebookChannel),
             statusKnown: agentAccess.statusKnown,
             enabled: agentAccess.enabled,
             boundToProvider: agentAccessBoundToSelectedProvider,

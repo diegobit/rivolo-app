@@ -15,15 +15,20 @@ export type SyncStatus = {
   localDirty: boolean
   accountName: string | null
   accountEmail: string | null
+  notebookChannel?: string | null
+  offlineReady?: boolean
+  daily?: boolean
 }
 
 export type SyncPullResult = {
   status: 'noop' | 'pulled'
+  deferredDayIds?: string[]
 }
 
 export type SyncPullOptions = {
   force?: boolean
   allowUnsafeImport?: boolean
+  dayIds?: string[]
 }
 
 export type SyncPushResult =
@@ -37,6 +42,7 @@ export type SyncPushResult =
   | {
       status: 'pushed'
       attention?: string
+      localUpdated?: boolean
     }
 
 export type SyncProvider = {
@@ -45,6 +51,7 @@ export type SyncProvider = {
   pull: (options?: SyncPullOptions) => Promise<SyncPullResult>
   push: (force?: boolean) => Promise<SyncPushResult>
   disconnect: () => Promise<void>
+  migrate?: () => Promise<void>
 }
 
 let pushInFlight: Promise<SyncPushResult> | null = null
@@ -153,3 +160,11 @@ export const disconnectProvider = async (providerId: SyncProviderId) => {
 }
 
 export const getEmptySyncStatus = () => EMPTY_STATUS
+
+export const migrateActiveNotebook = async () => {
+  const provider = await getActiveProvider()
+  if (!provider?.migrate) throw new Error('This provider does not need a daily sync upgrade.')
+  await provider.migrate()
+  await provider.pull()
+  return provider.push()
+}

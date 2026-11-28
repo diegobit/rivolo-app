@@ -10,7 +10,7 @@ Try it here: [rivolo.app](https://rivolo.app)
 
 Rivolo is a local-first PWA deployed on Cloudflare Pages. Notes, settings, AI requests, and cloud file transfers normally run in the browser. Same-origin Pages Functions exchange and refresh Google Drive and Dropbox OAuth credentials; normal browser sync does not send note contents through Rivolo's backend. AI prompts and relevant notes are sent only when you ask, directly to the provider you select: Gemini, Anthropic, OpenAI, or your own OpenAI-compatible endpoint. Dropbox or Google Drive receives notes only if you enable that sync provider. Custom endpoints must be reachable from the device and allow Rivolo's browser origin, headers, and HTTPS connection; on a phone, `localhost` refers to the phone itself.
 
-Hosted MCP Agent access is optional and changes that boundary: when a user enables it in Settings, Rivolo stores an encrypted provider credential and target metadata in Cloudflare D1. The authenticated MCP Worker then downloads and, for additive tools, uploads that user's configured cloud Markdown file. D1 stores credentials, profiles, tokens, and operation metadata—not the notes themselves.
+Hosted MCP Agent access is optional and changes that boundary: when a user enables it in Settings, Rivolo stores an encrypted provider credential and target metadata in Cloudflare D1. The authenticated MCP Worker then downloads and, for additive tools, uploads that user's configured cloud Markdown file or daily files. D1 stores credentials, profiles, tokens, and operation metadata—not the notes themselves.
 
 > [!NOTE]
 > The app was completely developed with coding agents. I use it daily. I wrote about this [here](https://diegobit.com/post/rivolo).
@@ -19,7 +19,7 @@ Hosted MCP Agent access is optional and changes that boundary: when a user enabl
 
 Rivolo supports two MCP modes:
 
-- **Local:** a read-only stdio server that queries a local Rivolo Markdown file. Build it with `npm run mcp:build`, then point your MCP client at `dist-mcp/mcp/index.js` with `RIVOLO_NOTES_FILE` set to the file.
+- **Local:** a read-only stdio server that queries a local Rivolo Markdown file or a synced daily notebook folder. Build it with `npm run mcp:build`, then point your MCP client at `dist-mcp/mcp/index.js` with `RIVOLO_NOTES_FILE` set to the file or folder.
 - **Hosted:** a multi-user Streamable HTTP server at `https://mcp.rivolo.app/mcp`. Each user enables Agent access for their active Dropbox or Google Drive profile in Rivolo Settings. Clients authenticate with Rivolo OAuth or a personal access token created in Settings. Hosted writes are additive: append by default, with optional prepend; they never replace or delete a day.
 
 The hosted server reads only the last cloud-synced state. It exposes the local read tools plus `add_to_day` and `add_to_today`, and uses durable `operation_id` replay protection for writes. See [the MCP guide](mcp/README.md) for tools and local client configuration, and [the OAuth notes](docs/mcp-oauth.md) for the hosted authorization design.
@@ -60,7 +60,7 @@ Both providers work the same way. Two kinds of values:
 
 ### Google Drive
 
-Create a Google Cloud OAuth web client, enable the Google Drive API, and list your app's origins (`localhost` and your domain) as authorized JavaScript origins. Rivolo asks only for the `drive.file` scope and manages a single `/rivolo/inbox.md` file.
+Create a Google Cloud OAuth web client, enable the Google Drive API, and list your app's origins (`localhost` and your domain) as authorized JavaScript origins. Rivolo asks only for the `drive.file` scope and manages a single `/rivolo/inbox.md` file, or a daily folder next to it after the upgrade below. Daily sync works across devices on the same Google account.
 
 Secrets you'll need:
 
@@ -78,6 +78,30 @@ Create a Dropbox app with `files.content.read` and `files.content.write` access,
 ```bash
 DROPBOX_TOKEN_ENCRYPTION_KEY=...
 ```
+
+### Upgrade Dropbox or Google Drive to daily sync
+
+Open **Settings → Cloud sync**, select the connected provider, then choose
+**Upgrade to daily sync**. Rivolo stores one Markdown file per day in a folder
+named after the original file, such as `inbox.rivolo-daily`. Dropbox organizes
+days by year and month; Google Drive stores them directly in the folder. The
+original Markdown file stays in place, and the daily folder keeps a snapshot of
+it, so edits that older devices still make to the original file are merged
+during full sync. Upgrade your other devices too.
+
+Daily sync uploads only the days you change and merges concurrent line edits
+on the same day. It checks the provider when the app starts, every few minutes
+while it is open, and when you return to it.
+
+Dropbox writes are revision-checked. Google Drive checks revision history after
+each write and keeps the day pending when it cannot verify the result. If two
+devices create the same Drive day at once, Rivolo keeps both files and reports
+the duplicate: merge the copies and move the extra file out of the folder
+before retrying.
+
+If hosted Agent access is enabled, Rivolo moves its profile to the daily folder
+after the first sync. If that step is interrupted, choose **Move Agent access to
+daily sync** in Settings. Manual export still produces one Markdown notebook.
 
 ## Hosted MCP deployment
 

@@ -1,10 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAutoSync } from './useAutoSync'
+import { registerPendingEditorSaves } from '../../lib/pendingEditorSaves'
 
 const coordinator = vi.hoisted(() => ({
   getTabSyncBlockReason: vi.fn(),
 }))
+const providerState = vi.hoisted(() => ({ getActiveProviderStatus: vi.fn() }))
+vi.mock('../../lib/sync', () => providerState)
 const syncActions = vi.hoisted(() => ({
   pullFromSyncAndRefresh: vi.fn(),
   pushToSyncAndRefresh: vi.fn(),
@@ -15,10 +18,13 @@ const syncActions = vi.hoisted(() => ({
 vi.mock('../../lib/tabSyncCoordinator', () => coordinator)
 vi.mock('../../store/syncActions', () => syncActions)
 
+const daily = { connected: true, targetName: '/inbox.rivolo-daily', notebookChannel: 'id:daily-folder', localDirty: false, daily: true }
+
 describe('useAutoSync tab coordination', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     coordinator.getTabSyncBlockReason.mockReturnValue(null)
+    providerState.getActiveProviderStatus.mockResolvedValue({ localDirty: false })
     syncActions.pullFromSyncAndRefresh.mockResolvedValue({ status: 'noop' })
     syncActions.pushToSyncAndRefresh.mockResolvedValue({ status: 'pushed' })
   })
@@ -26,6 +32,66 @@ describe('useAutoSync tab coordination', () => {
   afterEach(() => {
     vi.clearAllTimers()
     vi.useRealTimers()
+  })
+
+  it('waits for a draft without checking the cloud, then pushes it and pulls only the deferred day', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    let pending = ['2026-10-01']
+    const unregister = registerPendingEditorSaves(() => pending)
+    syncActions.pullFromSyncAndRefresh.mockResolvedValueOnce({ status: 'noop', deferredDayIds: ['2026-10-01'] })
+    const hook = renderHook(() => useAutoSync(daily, 'dropbox'))
+    try {
+      await act(async () => Promise.resolve())
+      expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+      expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+      expect(syncActions.pushToSyncAndRefresh).not.toHaveBeenCalled()
+      pending = []
+      providerState.getActiveProviderStatus.mockResolvedValue({ localDirty: true })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+      expect(syncActions.pushToSyncAndRefresh).toHaveBeenCalledWith(false)
+      expect(syncActions.pullFromSyncAndRefresh).toHaveBeenLastCalledWith({ force: false, dayIds: ['2026-10-01'] })
+    } finally { unregister(); hook.unmount(); vi.restoreAllMocks() }
+  })
+
+  it('does not check a daily notebook while idle and refreshes on return', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-30T12:00:00Z'))
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    renderHook(() => useAutoSync(daily, 'dropbox'))
+    await act(async () => Promise.resolve())
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+    visibility.mockReturnValue('hidden')
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+    visibility.mockReturnValue('visible')
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    await act(async () => Promise.resolve())
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(2)
+    online.mockReturnValue(false)
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(2)
+    visibility.mockRestore()
+    online.mockRestore()
+  })
+
+  it('retries a failed daily reconciliation, then stays idle after recovery', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-30T12:00:00Z'))
+    syncActions.pullFromSyncAndRefresh.mockRejectedValueOnce(new Error('Network failed'))
+    renderHook(() => useAutoSync(daily, 'dropbox'))
+    await act(async () => Promise.resolve())
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(2)
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(syncActions.pullFromSyncAndRefresh).toHaveBeenCalledTimes(2)
   })
 
   it('does not auto-pull when another tab owns the lease', () => {

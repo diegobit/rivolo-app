@@ -7,7 +7,9 @@ import {
 } from './dropboxAuth'
 import { finalizeDropboxPullState, finalizeDropboxPushState, getDropboxState, updateDropboxState } from './dropboxState'
 import type { DropboxState } from './dropboxState'
-import { markSyncLocalDirty } from './syncDirty'
+import { createCloudDailyNotebook } from './cloudDailyNotebook'
+import { createDropboxDailyRemote } from './dropboxDailyRemote'
+import { queryFirstRow } from './sqliteRuntime'
 import { hashSyncContent } from './syncHash'
 import type { SyncProvider, SyncPullOptions, SyncStatus } from './sync'
 
@@ -125,6 +127,32 @@ const resolveUploadMode = (expectedRev: string | null, force: boolean): DropboxU
   }
 }
 
+const dropboxDailyRemote = createDropboxDailyRemote(authorizedDropboxFetch)
+
+const dailyContext = (state: DropboxState) => ({
+  ...state, localRevision: state.localRevision ?? 0, sourceKey: state.filePath?.trim() || DEFAULT_DROPBOX_PATH, lastRevision: state.lastRemoteRev,
+})
+
+const dailyDropbox = createCloudDailyNotebook({
+  provider: 'dropbox',
+  readContext: async () => dailyContext(await getDropboxState()),
+  readContextInDatabase: (db) => {
+    const row = queryFirstRow<{ value: string }>(db, 'SELECT value FROM settings WHERE key = ?', ['dropbox.state'])
+    return dailyContext(JSON.parse(row?.value ?? '{}') as DropboxState)
+  },
+  resolveSource: async ({ sourceKey }) => {
+    const file = await fetchMetadata(sourceKey)
+    return file ? { ref: sourceKey, revision: file.rev, download: () => dropboxDailyRemote.readDropboxRevision(sourceKey, file.rev) } : null
+  },
+  resolveFolder: ({ sourceKey }) => dropboxDailyRemote.prepareDropboxDailyFolder(sourceKey),
+  updateSummary: (localDirty) => updateDropboxState({ localDirty, lastSyncAt: Date.now() }),
+  remote: dropboxDailyRemote,
+  migrationComplete: dropboxDailyRemote.migrationComplete,
+  completeMigration: dropboxDailyRemote.completeMigration,
+})
+
+export const getDropboxDailyTarget = dailyDropbox.getTarget
+
 export const disconnectDropbox = async () => {
   await disconnectDropboxAuth()
   await updateDropboxState({
@@ -142,9 +170,10 @@ export const disconnectDropbox = async () => {
 
 export const getDropboxStatus = async (): Promise<SyncStatus> => {
   const state = await getDropboxState()
+  const daily = await dailyDropbox.readStatus(dailyContext(state))
   return {
     connected: state.connected,
-    targetName: state.filePath,
+    targetName: daily ? `${dailyContext(state).sourceKey.slice(0, -3)}.rivolo-daily` : state.filePath,
     lastRemoteVersion: state.lastRemoteRev,
     lastSyncAt: state.lastSyncAt,
     lastPullAt: state.lastPullAt,
@@ -152,11 +181,14 @@ export const getDropboxStatus = async (): Promise<SyncStatus> => {
     localDirty: state.localDirty,
     accountName: state.accountName,
     accountEmail: state.accountEmail,
+    ...daily,
   }
 }
 
 export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
   const state = await getDropboxState()
+  const target = await dailyDropbox.getTarget(dailyContext(state))
+  if (target) return dailyDropbox.pull(target, options)
   const path = await resolveDropboxPath(state)
   const force = options.force ?? false
 
@@ -180,12 +212,11 @@ export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
   const content = await downloadFile(path)
   const result = await importMarkdownToDb(content, {
     replace: true,
-    markDirty: false,
     allowUnsafeImport: options.allowUnsafeImport,
+    canReplace: (db) => dailyDropbox.canReplaceLegacyNotebook(db, dailyContext(state)),
   })
 
   const contentHash = await hashSyncContent(content)
-  await markSyncLocalDirty()
   await finalizeDropboxPullState(state.localRevision + 1, {
     lastRemoteRev: metadata.rev,
     // Remote content now equals local; record its hash so we do not immediately
@@ -201,6 +232,8 @@ export const pullFromDropbox = async (options: SyncPullOptions = {}) => {
 
 export const pushToDropbox = async (force = false) => {
   const state = await getDropboxState()
+  const target = await dailyDropbox.getTarget(dailyContext(state))
+  if (target) return dailyDropbox.push(target, force)
   const path = await resolveDropboxPath(state)
 
   const wantUpload = state.localDirty || force
@@ -265,6 +298,7 @@ export const pushToDropbox = async (force = false) => {
 
 export const dropboxProvider = {
   id: 'dropbox',
+  migrate: dailyDropbox.migrate,
   getStatus: getDropboxStatus,
   pull: pullFromDropbox,
   push: pushToDropbox,

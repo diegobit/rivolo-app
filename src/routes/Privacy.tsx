@@ -84,7 +84,7 @@ export default function Privacy() {
             <span className="font-semibold text-slate-700">Other technical browser storage</span>
             <br />
             IndexedDB stores the local notes database, chat history, settings, optional AI API keys, and sync
-            metadata. Session storage temporarily holds Dropbox OAuth validation data and the timeline scroll
+            metadata, including per-day sync baselines and the snapshot taken when you upgrade to daily sync. Session storage temporarily holds Dropbox OAuth validation data and the timeline scroll
             position. Local storage holds the optional debug-logging preference and technical tab-coordination
             entries (a random per-tab identifier and a data-revision counter, with no notes content or personal
             data) that let multiple open Rivolo tabs agree which one runs sync. The PWA service

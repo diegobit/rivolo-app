@@ -775,6 +775,34 @@ describe('hosted MCP provider access token cache', () => {
     expect(seen.map(({ token }) => token)).toEqual(['access-1', 'access-1'])
   })
 
+  it('reads from the migrated Dropbox folder with the same cached provider token', async () => {
+    const { env, profiles, profile, createBearer } = await linkProfile()
+    expect(await profiles.setDailyFolder(profile, 'id:daily-folder')).toBe(true)
+    const bearer = await createBearer()
+    const rootPath = '/inbox.rivolo-daily'
+    const notePath = `${rootPath}/2026/07/2026-07-16.md`
+    const providerFetch = vi.fn<typeof fetch>(async (input, init) => {
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer access-1')
+      if (String(input) === 'https://api.dropboxapi.com/2/files/get_metadata') {
+        const { path } = JSON.parse(String(init?.body)) as { path: string }
+        if (path === 'id:daily-folder') return json({ '.tag': 'folder', id: path, path_display: rootPath })
+        if (path === notePath) return json({ '.tag': 'file', id: 'id:day', rev: 'rev-1', path_lower: path })
+      }
+      if (String(input) === 'https://content.dropboxapi.com/2/files/download') {
+        expect(new Headers(init?.headers).get('Dropbox-API-Arg')).toBe('{"path":"rev:rev-1"}')
+        return new Response(markdown)
+      }
+      throw new Error(`Unexpected provider request: ${String(input)}`)
+    })
+    const refreshDropbox = vi.fn().mockResolvedValue(providerGrant('access-1'))
+    const dependencies = { fetch: providerFetch, refreshDropbox }
+
+    const expected = { ...foundDay, source: { format: 'daily', folderId: 'id:daily-folder' } }
+    await expect(toolResult(await getDay(env, bearer, dependencies))).resolves.toMatchObject(expected)
+    await expect(toolResult(await getDay(env, bearer, dependencies))).resolves.toMatchObject(expected)
+    expect(refreshDropbox).toHaveBeenCalledTimes(1)
+  })
+
   // In Workers, waiting on another request's refresh can hang forever if
   // that request is cancelled, so a cache miss must never wait on one.
   it('answers a request even while another request\'s refresh never finishes', async () => {

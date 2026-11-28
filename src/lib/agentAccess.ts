@@ -10,6 +10,7 @@ type AgentAccessProfileBase = {
   createdAt: string
   updatedAt: string
   revokedAt: string | null
+  dailyFolderId?: string
 }
 
 export type AgentAccessProfile = AgentAccessProfileBase &
@@ -39,8 +40,8 @@ export type AgentAccessViewState =
   | { state: 'error'; profile: null; message: string }
 
 export type AgentAccessEnableTarget =
-  | { provider: 'dropbox'; path: string }
-  | { provider: 'google-drive'; fileId: string }
+  | { provider: 'dropbox'; path: string; dailyFolderId?: string }
+  | { provider: 'google-drive'; fileId: string; dailyFolderId?: string }
 
 type AgentAccessErrorPayload = {
   message?: unknown
@@ -70,8 +71,8 @@ export const enableAgentAccess = async (
 ): Promise<Extract<AgentAccessStatus, { enabled: true }>> => {
   const body =
     target.provider === 'dropbox'
-      ? { timeZone, target: { path: target.path } }
-      : { timeZone, target: { fileId: target.fileId } }
+      ? { timeZone, dailyFolderId: target.dailyFolderId, target: { path: target.path } }
+      : { timeZone, dailyFolderId: target.dailyFolderId, target: { fileId: target.fileId } }
   const response = await fetch(`/api/${target.provider}/mcp-enable`, {
     method: 'POST',
     credentials: 'include',
@@ -95,3 +96,13 @@ export const disableAgentAccess = async (): Promise<{ enabled: false }> => {
 
 export const agentAccessTargetLabel = (profile: AgentAccessProfile) =>
   profile.provider === 'dropbox' ? profile.target.path : profile.target.fileName
+
+export const moveAgentAccessToDailyNotebook = async (provider: 'dropbox' | 'google-drive', folder: string) => {
+  const response = await fetch('/api/mcp/daily-target', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XmlHttpRequest' },
+    body: JSON.stringify({ provider, folder }),
+  })
+  return readResponse<Extract<AgentAccessStatus, { enabled: true }>>(response)
+}

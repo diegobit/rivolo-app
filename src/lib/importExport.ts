@@ -4,6 +4,7 @@ import { runBulkDatabaseMutation } from './db'
 import { formatDayTitle } from './dates'
 import { del, get, set } from 'idb-keyval'
 import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate'
+import type { RivoloDatabase } from './sqliteRuntime'
 
 export const IMPORT_ROLLBACK_BACKUPS_KEY = 'rivolo.import.rollbackBackups'
 // Legacy single-entry key, folded into the retention list on the next backup write.
@@ -131,7 +132,12 @@ const DUPLICATE_MARKERS_PROBLEM = 'the file contains duplicate day markers (the 
 
 export const importMarkdownToDb = async (
   source: string,
-  options: { replace?: boolean; markDirty?: boolean; allowUnsafeImport?: boolean } = {},
+  options: {
+    replace?: boolean; markDirty?: boolean; allowUnsafeImport?: boolean
+    allowDeletedDays?: boolean
+    beforeReplace?: () => Promise<void>
+    canReplace?: (db: RivoloDatabase) => boolean
+  } = {},
 ) => {
   const { days, warnings } = parseMarkdown(source)
   const markDirty = options.markDirty ?? true
@@ -192,7 +198,7 @@ export const importMarkdownToDb = async (
     reasons.push('duplicate-day-markers')
     problems.push(DUPLICATE_MARKERS_PROBLEM)
   }
-  if (deletedDayIds.length > 0) {
+  if (deletedDayIds.length > 0 && !options.allowDeletedDays) {
     reasons.push('would-delete-local-days')
     problems.push(`it would delete ${deletedDayIds.length} local day(s)`)
   }
@@ -208,7 +214,11 @@ export const importMarkdownToDb = async (
   await saveRollbackBackup(exportMarkdown(currentDays))
 
   await runBulkDatabaseMutation(async () => {
-    await replaceDays(normalizedDays, { markDirty })
+    await options.beforeReplace?.()
+    const replaced = await replaceDays(normalizedDays, { markDirty, canReplace: options.canReplace })
+    if (!replaced) {
+      throw new Error('The local notebook or sync target changed during the pull. Let your edits finish saving before retrying.')
+    }
   })
 
   return { imported: days.length, warnings }

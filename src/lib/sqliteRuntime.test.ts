@@ -25,6 +25,30 @@ describe('official SQLite wasm migration', () => {
     sqlite = await initSqlite()
   })
 
+  it('upgrades daily checkpoints and persists note revisions, moves and deletions in the same database', () => {
+    const db = openSerializedDatabase(sqlite)
+    db.exec(`CREATE TABLE onedrive_daily_state (target TEXT, day_id TEXT, revision INTEGER, value TEXT, PRIMARY KEY(target, day_id));
+      INSERT INTO onedrive_daily_state VALUES ('original-target', '2026-10-01', 7, 'saved-baseline');`)
+    ensureDatabaseSchema(db)
+    expect(db.selectValue('SELECT value FROM onedrive_daily_state')).toBe('saved-baseline')
+    expect(db.selectValue("SELECT value FROM settings WHERE key = 'onedrive.daily.schema'")).toBe('1')
+    db.exec("INSERT INTO days VALUES ('2026-10-01', 'Title', '', 1, 1)")
+    expect(db.selectValue('SELECT COUNT(*) FROM onedrive_day_changes')).toBe(0)
+    db.exec("UPDATE days SET content_md = 'Draft' WHERE day_id = '2026-10-01'")
+    db.exec("UPDATE days SET day_id = '2026-10-02' WHERE day_id = '2026-10-01'")
+    const bytes = exportSerializedDatabase(sqlite, db)
+    db.close()
+    const reopened = openSerializedDatabase(sqlite, bytes)
+    ensureDatabaseSchema(reopened)
+    expect(queryRows(reopened, 'SELECT * FROM onedrive_day_changes ORDER BY day_id')).toEqual([
+      { day_id: '2026-10-01', revision: 2, deleted: 1 },
+      { day_id: '2026-10-02', revision: 1, deleted: 0 },
+    ])
+    reopened.exec("DELETE FROM days WHERE day_id = '2026-10-02'")
+    expect(reopened.selectObject("SELECT * FROM onedrive_day_changes WHERE day_id = '2026-10-02'")).toEqual({ day_id: '2026-10-02', revision: 2, deleted: 1 })
+    reopened.close()
+  })
+
   it('opens, migrates, exports, and reopens a database produced by sql.js 1.13.0', () => {
     const db = openSerializedDatabase(sqlite, decodeFixture())
     const migration = ensureDatabaseSchema(db)

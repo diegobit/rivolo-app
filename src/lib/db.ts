@@ -683,6 +683,8 @@ export const getPendingDayDraft = (dayId: string) => {
   return { dayId: pendingDayId, contentMd, generation, baseContentMd, baseUpdatedAt, baseRowWasUnsaved }
 }
 
+export const getPendingDayDraftIds = () => [...pendingDayDrafts.keys()]
+
 export const getLatestDayDraftGeneration = (dayId: string) =>
   latestDayDraftGeneration.get(dayId) ?? 0
 

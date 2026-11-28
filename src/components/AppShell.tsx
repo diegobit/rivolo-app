@@ -383,7 +383,7 @@ export default function AppShell() {
   }, [isMobileHome, mode, setMode])
 
   useKeyboardOffsetCssVar()
-  useAutoSync(syncStatus)
+  useAutoSync(syncStatus, activeProvider)
 
   useEffect(() => {
     if (!showShortcuts) return
